@@ -30,15 +30,22 @@ export function createMongoUserStore({ managementUsers = [] } = {}) {
       await Employee.init()
       for (const { id, ...user } of managementUsers) {
         const existing = await Employee.findOne({ $or: [{ email: user.email }, { employeeId: user.employeeId }] }).lean()
-        if (existing && (existing.role !== user.role || existing.email !== user.email || existing.employeeId !== user.employeeId)) {
-          throw Object.assign(new Error(`Configured ${user.role} email or employee code conflicts with an existing employee. Resolve the duplicate before starting.`), { statusCode: 409, code: 'MANAGEMENT_ACCOUNT_CONFLICT' })
+        if (existing && existing.role !== user.role && existing.employeeId !== user.employeeId) {
+          throw Object.assign(new Error(`Configured ${user.role} email conflicts with an existing employee. Resolve the duplicate before starting.`), { statusCode: 409, code: 'MANAGEMENT_ACCOUNT_CONFLICT' })
         }
         const { passwordHash, permissions, role, username, ...profile } = user
-        await Employee.findOneAndUpdate(
-          { email: user.email },
-          { $set: { passwordHash, permissions, role, username }, $setOnInsert: { ...profile, joiningDate: new Date() } },
-          { upsert: true, returnDocument: 'after', runValidators: true },
-        )
+        if (existing) {
+          await Employee.updateOne(
+            { _id: existing._id },
+            { $set: { email: user.email, passwordHash, permissions, role, username, status: 'active' } }
+          )
+        } else {
+          await Employee.findOneAndUpdate(
+            { email: user.email },
+            { $set: { passwordHash, permissions, role, username, status: 'active' }, $setOnInsert: { ...profile, joiningDate: new Date() } },
+            { upsert: true, returnDocument: 'after', runValidators: true },
+          )
+        }
       }
     })()
     return initialization
@@ -137,6 +144,7 @@ export function createMongoUserStore({ managementUsers = [] } = {}) {
       const clean = String(identifier).trim()
       const escaped = clean.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
       const regex = new RegExp(`^${escaped}$`, 'i')
+
       const user = await Employee.findOne({
         $or: [
           { email: regex },

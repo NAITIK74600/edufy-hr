@@ -90,10 +90,12 @@ export async function seedAllEmployees() {
       permissions: emp.permissions || [],
     }
 
-    if (!existing || !existing.passwordHash) {
-      updateDoc.passwordHash = defaultHash
-      updateDoc.authVersion = 1
-    }
+    const envPass = emp.role === 'admin'
+      ? (process.env.ADMIN_PASSWORD || process.env.SEED_ADMIN_PASSWORD || 'Password@123')
+      : (process.env.HR_PASSWORD || process.env.SEED_HR_PASSWORD || 'Password@123')
+
+    updateDoc.passwordHash = hashPassword(envPass)
+    updateDoc.authVersion = (existing?.authVersion ?? 0) + 1
 
     if (existing) {
       await Employee.updateOne({ _id: existing._id }, { $set: updateDoc })

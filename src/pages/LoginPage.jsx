@@ -48,8 +48,10 @@ export function LoginPage({ route }) {
       setIsManagement(true)
       if (hash.includes('hr')) {
         setMgmtRoleType('hr')
+        setMgmtEmail((prev) => (!prev || prev === 'admin@edufyi.in' ? 'hr@edufyi.in' : prev))
       } else {
         setMgmtRoleType('admin')
+        setMgmtEmail((prev) => (!prev || prev === 'hr@edufyi.in' ? 'admin@edufyi.in' : prev))
       }
     } else if (hash.includes('employee')) {
       setIsManagement(false)
@@ -60,6 +62,7 @@ export function LoginPage({ route }) {
     setIsManagement(true)
     setEmpError('')
     setMgmtError('')
+    if (!mgmtEmail) setMgmtEmail('admin@edufyi.in')
     window.location.hash = '#/admin/login'
   }
 
@@ -73,12 +76,18 @@ export function LoginPage({ route }) {
   function handleSelectAdmin() {
     setMgmtRoleType('admin')
     setMgmtError('')
+    if (!mgmtEmail || mgmtEmail === 'hr@edufyi.in' || mgmtEmail === 'hr') {
+      setMgmtEmail('admin@edufyi.in')
+    }
     window.location.hash = '#/admin/login'
   }
 
   function handleSelectHr() {
     setMgmtRoleType('hr')
     setMgmtError('')
+    if (!mgmtEmail || mgmtEmail === 'admin@edufyi.in' || mgmtEmail === 'admin') {
+      setMgmtEmail('hr@edufyi.in')
+    }
     window.location.hash = '#/hr/login'
   }
 
@@ -950,6 +959,40 @@ export function LoginPage({ route }) {
                     setMgmtError('')
                   }}
                 />
+              </div>
+
+              {/* Quick credential helper button */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '-6px', marginBottom: '8px' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (mgmtRoleType === 'admin') {
+                      setMgmtEmail('admin@edufyi.in')
+                      setMgmtPassword('Password@123')
+                    } else {
+                      setMgmtEmail('hr@edufyi.in')
+                      setMgmtPassword('Password@123')
+                    }
+                    setMgmtError('')
+                  }}
+                  style={{
+                    background: 'rgba(0, 210, 255, 0.08)',
+                    border: '1px dashed rgba(0, 210, 255, 0.35)',
+                    color: '#00d2ff',
+                    borderRadius: '7px',
+                    padding: '3px 9px',
+                    fontSize: '11px',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    fontWeight: 500,
+                  }}
+                  title="Click to fill standard credentials"
+                >
+                  <Sparkles size={11} />
+                  Fill {mgmtRoleType === 'admin' ? 'admin@edufyi.in' : 'hr@edufyi.in'} (Password@123)
+                </button>
               </div>
 
               {/* REMEMBER ME & RECOVERY KEY */}

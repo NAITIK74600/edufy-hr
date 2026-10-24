@@ -8,7 +8,11 @@ const INVALID_LOGIN_MESSAGE = 'Invalid email or password.'
 export function createAuthService({ userStore, jwtSecret, issuer = 'edufyi-hr-api', audience = 'edufyi-ess', accessTokenTtl = process.env.ACCESS_TOKEN_TTL || '30d', revokedTokens }) {
   async function login(email, password) {
     const user = await userStore.findByEmail(email)
-    if (!user || user.status === 'inactive' || !verifyPassword(password, user.passwordHash)) {
+    const passwordValid = user && user.passwordHash && (
+      verifyPassword(password, user.passwordHash) ||
+      (typeof password === 'string' && verifyPassword(password.trim(), user.passwordHash))
+    )
+    if (!user || user.status === 'inactive' || !passwordValid) {
       const error = new Error(INVALID_LOGIN_MESSAGE)
       error.statusCode = 401
       error.code = 'INVALID_CREDENTIALS'
