@@ -54,7 +54,7 @@ function allowedBody(body, fields) {
 }
 function string(body, field, required = true, max = 10000) {
   const value = body[field]
-  if (value === undefined && !required) return ''
+  if ((value === undefined || value === null || value === '') && !required) return ''
   if (typeof value !== 'string' || value.trim().length > max || (required && !value.trim())) throw fail(`Enter a valid ${field}.`)
   return value.trim()
 }
@@ -231,10 +231,10 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
             date: date(body, 'date'),
             comments: string(body, 'comments', false),
             status: 'submitted',
-            attachmentUrl: string(body, 'attachmentUrl', false, 25000000),
-            attachmentName: string(body, 'attachmentName', false),
-            attachmentType: string(body, 'attachmentType', false),
-            attachmentSize: string(body, 'attachmentSize', false),
+            attachmentUrl: (body.attachmentUrl && typeof body.attachmentUrl === 'string') ? string(body, 'attachmentUrl', false, 25000000) : '',
+            attachmentName: (body.attachmentName && typeof body.attachmentName === 'string') ? string(body, 'attachmentName', false, 500) : '',
+            attachmentType: (body.attachmentType && typeof body.attachmentType === 'string') ? string(body, 'attachmentType', false, 100) : '',
+            attachmentSize: (body.attachmentSize && typeof body.attachmentSize === 'string') ? string(body, 'attachmentSize', false, 100) : '',
           }
           break
         }
@@ -306,7 +306,7 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
       const record = await models[resource].create(values)
 
       if (resource === 'expenses') {
-        const formattedAmt = amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })
+        const formattedAmt = Number(values.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })
         // Confirmation for employee
         await models.notifications.create({
           ownerId: id(actor),

@@ -2235,10 +2235,10 @@ function ESSExpensesView({ user }) {
       comments: claimNotes.trim(),
       notes: claimNotes.trim(),
       status: 'submitted',
-      attachmentUrl: claimAttachment?.url || null,
-      attachmentName: claimAttachment?.name || null,
-      attachmentType: claimAttachment?.type || null,
-      attachmentSize: claimAttachment?.size || null,
+      attachmentUrl: claimAttachment?.url || '',
+      attachmentName: claimAttachment?.name || '',
+      attachmentType: claimAttachment?.type || '',
+      attachmentSize: claimAttachment?.size || '',
     })
 
     setModalOpen(false)
