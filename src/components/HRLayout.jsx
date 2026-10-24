@@ -51,6 +51,7 @@ import { workspaceAction } from '../services/workspaceStore'
 import { getTimeOfDayGreeting, getRoleBadgeLabel, resolveUserDisplayName } from '../utils/greeting'
 import { apiClient } from '../services/apiClient'
 import { AIHRAssistant } from './AIHRAssistant'
+import { isSoundMuted, toggleSoundMuted, playNotificationSound } from '../utils/soundHelper'
 
 
 class RouteErrorBoundary extends React.Component {
