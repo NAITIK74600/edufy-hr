@@ -2251,7 +2251,13 @@ function ESSExpensesView({ user }) {
     setTimeout(() => setFeedback(''), 4500)
   })
 
+  const isAdmin = user?.role === 'admin'
+
   const handleDeleteExpense = workspaceAction(hrStore, async (expenseId) => {
+    if (!isAdmin) {
+      alert('Only administrators have access to delete expense claims.')
+      return
+    }
     if (!window.confirm('Are you sure you want to delete this expense claim record? This action cannot be undone.')) return
     await hrStore.deleteExpense(expenseId)
     setFeedback('Expense reimbursement claim deleted successfully.')
@@ -2391,13 +2397,13 @@ function ESSExpensesView({ user }) {
                 <th>Justification</th>
                 <th>Proof Receipt</th>
                 <th>Status</th>
-                <th style={{ textAlign: 'right' }}>Action</th>
+                {isAdmin && <th style={{ textAlign: 'right' }}>Action</th>}
               </tr>
             </thead>
             <tbody>
               {filteredExpenses.length === 0 ? (
                 <tr>
-                  <td colSpan={9} style={{ textAlign: 'center', padding: '36px', color: 'var(--muted)' }}>
+                  <td colSpan={isAdmin ? 9 : 8} style={{ textAlign: 'center', padding: '36px', color: 'var(--muted)' }}>
                     <Receipt size={28} style={{ opacity: 0.4, margin: '0 auto 8px', display: 'block' }} />
                     <strong style={{ fontSize: '13px', display: 'block', color: 'var(--ink)' }}>No expense claims found</strong>
                     <span style={{ fontSize: '11.5px' }}>Click "Submit Expense Claim" above to log a new reimbursement.</span>
@@ -2451,29 +2457,31 @@ function ESSExpensesView({ user }) {
                           {s === 'submitted' ? 'pending review' : s}
                         </StatusBadge>
                       </td>
-                      <td style={{ textAlign: 'right' }}>
-                        <button
-                          type="button"
-                          className="icon-button"
-                          onClick={() => handleDeleteExpense(exp.id)}
-                          title="Delete Claim"
-                          style={{
-                            color: 'var(--coral)',
-                            background: 'rgba(220, 38, 38, 0.08)',
-                            borderRadius: '6px',
-                            padding: '4px 7px',
-                            border: 0,
-                            cursor: 'pointer',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '4px',
-                            fontSize: '11px',
-                          }}
-                        >
-                          <Trash2 size={13} />
-                          <span>Delete</span>
-                        </button>
-                      </td>
+                      {isAdmin && (
+                        <td style={{ textAlign: 'right' }}>
+                          <button
+                            type="button"
+                            className="icon-button"
+                            onClick={() => handleDeleteExpense(exp.id)}
+                            title="Delete Claim"
+                            style={{
+                              color: 'var(--coral)',
+                              background: 'rgba(220, 38, 38, 0.08)',
+                              borderRadius: '6px',
+                              padding: '4px 7px',
+                              border: 0,
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              fontSize: '11px',
+                            }}
+                          >
+                            <Trash2 size={13} />
+                            <span>Delete</span>
+                          </button>
+                        </td>
+                      )}
                     </tr>
                   )
                 })

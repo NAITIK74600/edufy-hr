@@ -613,14 +613,23 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
         }
         return res.json({ success: true, data: { id: recordId, deleted } })
       }
-      if (resource === 'dailyReports' || resource === 'expenses') {
+      if (resource === 'expenses') {
+        if (req.auth.user.role !== 'admin') {
+          throw fail('Only administrators have access to delete expense claims.', 403)
+        }
+        const query = mongoose.isValidObjectId(recordId) ? { $or: [{ _id: recordId }, { id: recordId }] } : { id: recordId }
+        const result = await models.expenses.deleteOne(query)
+        if (!result.deletedCount) throw fail('Expense claim record not found.', 404)
+        return res.json({ success: true, data: { id: recordId } })
+      }
+      if (resource === 'dailyReports') {
         const actorId = id(req.auth.user)
         const isMgmt = management(req.auth.user)
         const query = {
           ...(mongoose.isValidObjectId(recordId) ? { $or: [{ _id: recordId }, { id: recordId }] } : { id: recordId }),
           ...(isMgmt ? {} : { ownerId: actorId }),
         }
-        const result = await models[resource].deleteOne(query)
+        const result = await models.dailyReports.deleteOne(query)
         if (!result.deletedCount) throw fail('Record not found or deletion not permitted.', 404)
         return res.json({ success: true, data: { id: recordId } })
       }

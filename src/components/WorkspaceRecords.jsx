@@ -80,6 +80,8 @@ export function PerformanceWorkspace() {
 
 export function WorkspaceReports() {
   const state = useWorkspaceState()
+  const { user } = useAuth()
+  const isAdmin = user?.role === 'admin'
   const [activeTab, setActiveTab] = useState('dailyReports') // 'dailyReports' | 'expenses'
   const [searchTerm, setSearchTerm] = useState('')
   const [expenseFilter, setExpenseFilter] = useState('all') // 'all' | 'submitted' | 'approved' | 'rejected'
@@ -136,6 +138,10 @@ export function WorkspaceReports() {
   })
 
   const handleDeleteExpense = action(async (id) => {
+    if (!isAdmin) {
+      alert('Only administrators have access to delete expense claims.')
+      return
+    }
     if (!window.confirm('Are you sure you want to delete this expense claim? This cannot be undone.')) return
     await hrStore.deleteExpense(id)
     showNotice('Expense claim record deleted successfully.')
@@ -526,27 +532,29 @@ export function WorkspaceReports() {
                                 </button>
                               </>
                             )}
-                            <button
-                              type="button"
-                              className="icon-button"
-                              onClick={() => handleDeleteExpense(e.id)}
-                              title="Delete Expense Record"
-                              style={{
-                                color: 'var(--coral)',
-                                background: 'rgba(220, 38, 38, 0.08)',
-                                borderRadius: '6px',
-                                padding: '4px 7px',
-                                border: 0,
-                                cursor: 'pointer',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '3px',
-                                fontSize: '11px',
-                              }}
-                            >
-                              <Trash2 size={13} />
-                              <span>Delete</span>
-                            </button>
+                            {isAdmin && (
+                              <button
+                                type="button"
+                                className="icon-button"
+                                onClick={() => handleDeleteExpense(e.id)}
+                                title="Delete Expense Record (Admin Only)"
+                                style={{
+                                  color: 'var(--coral)',
+                                  background: 'rgba(220, 38, 38, 0.08)',
+                                  borderRadius: '6px',
+                                  padding: '4px 7px',
+                                  border: 0,
+                                  cursor: 'pointer',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '3px',
+                                  fontSize: '11px',
+                                }}
+                              >
+                                <Trash2 size={13} />
+                                <span>Delete</span>
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
