@@ -446,36 +446,15 @@ export function CompanyPoliciesView({
                     style={{
                       flex: 1,
                       fontSize: '11.5px',
-                      padding: '7px 12px',
+                      padding: '8px 12px',
                       justifyContent: 'center',
                       display: 'inline-flex',
                       alignItems: 'center',
                       gap: '6px',
                     }}
                   >
-                    <Eye size={13} /> Read PDF
+                    <Eye size={13} /> Read Official Policy
                   </button>
-
-                  {/* Direct Download */}
-                  <a
-                    href={policy.downloadUrl}
-                    download={policy.fileName}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="ui-button secondary"
-                    style={{
-                      fontSize: '11.5px',
-                      padding: '7px 12px',
-                      justifyContent: 'center',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                      textDecoration: 'none',
-                    }}
-                    title="Download PDF to computer"
-                  >
-                    <Download size={13} /> Download
-                  </a>
                 </div>
 
                 {/* Consent Action for Employee */}
@@ -587,26 +566,6 @@ export function CompanyPoliciesView({
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <a
-                  href={activePdfModal.downloadUrl}
-                  download={activePdfModal.fileName}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="ui-button secondary"
-                  style={{
-                    background: 'rgba(255,255,255,0.15)',
-                    borderColor: 'rgba(255,255,255,0.25)',
-                    color: '#ffffff',
-                    fontSize: '11.5px',
-                    padding: '6px 12px',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    textDecoration: 'none',
-                  }}
-                >
-                  <Download size={13} /> Download
-                </a>
                 <button
                   type="button"
                   onClick={() => setActivePdfModal(null)}
@@ -628,7 +587,7 @@ export function CompanyPoliciesView({
             {/* Embedded PDF iframe */}
             <div style={{ flex: 1, background: '#525659', position: 'relative' }}>
               <iframe
-                src={`${activePdfModal.downloadUrl}#toolbar=1&navpanes=0`}
+                src={`${activePdfModal.downloadUrl}#toolbar=0&navpanes=0`}
                 title={activePdfModal.title}
                 style={{ width: '100%', height: '100%', border: 'none' }}
               />

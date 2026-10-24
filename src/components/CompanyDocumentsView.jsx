@@ -319,22 +319,12 @@ export function CompanyDocumentsView({ employee: propEmployee, user: propUser })
                 <div style={{ display: 'flex', gap: '10px', paddingTop: '12px', borderTop: '1px solid #f1f5f9' }}>
                   <button
                     type="button"
-                    onClick={() => setViewingPdf(doc)}
+                    onClick={() => setViewingPdf({ ...doc, isCompanyDoc: true })}
                     className="ui-button secondary"
-                    style={{ flex: 1, fontSize: '11.5px', padding: '7px 12px', justifyContent: 'center', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                    style={{ flex: 1, fontSize: '11.5px', padding: '8px 12px', justifyContent: 'center', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
                   >
-                    <Eye size={13} /> Read / Preview
+                    <Eye size={13} /> Read / Preview Document
                   </button>
-                  <a
-                    href={doc.downloadUrl}
-                    download={doc.fileName}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="ui-button secondary"
-                    style={{ fontSize: '11.5px', padding: '7px 12px', justifyContent: 'center', display: 'inline-flex', alignItems: 'center', gap: '6px', textDecoration: 'none' }}
-                  >
-                    <Download size={13} /> Download
-                  </a>
                 </div>
               </div>
             ))}
@@ -474,7 +464,7 @@ export function CompanyDocumentsView({ employee: propEmployee, user: propUser })
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                {viewingPdf.downloadUrl && (
+                {viewingPdf.downloadUrl && activeSection !== 'company_docs' && !viewingPdf.isCompanyDoc && (
                   <a
                     href={viewingPdf.downloadUrl}
                     download={viewingPdf.fileName}
@@ -522,7 +512,7 @@ export function CompanyDocumentsView({ employee: propEmployee, user: propUser })
                 </div>
               ) : (
                 <iframe
-                  src={`${viewingPdf.url || viewingPdf.downloadUrl}#toolbar=1&navpanes=0`}
+                  src={`${viewingPdf.url || viewingPdf.downloadUrl}#toolbar=${activeSection === 'company_docs' || viewingPdf.isCompanyDoc ? '0' : '1'}&navpanes=0`}
                   title={viewingPdf.title}
                   style={{ width: '100%', height: '100%', border: 'none' }}
                 />

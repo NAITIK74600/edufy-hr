@@ -26,6 +26,7 @@ import {
   UserX,
 } from 'lucide-react'
 import { OnboardingDossierView } from '../components/OnboardingDossierView'
+import { EmployeeComplianceStatusCard } from '../components/EmployeeComplianceStatusCard'
 import { SalaryBreakdownFields } from '../components/common/SalaryBreakdownFields'
 import { normalizeSalaryStructure } from '../utils/salaryCalculator'
 import { useAuth } from '../auth/AuthContext'
@@ -2662,6 +2663,11 @@ function EmployeeDetail({ id }) {
           )}
         </div>
       </section>
+
+      {/* POLICY CONSENT, DOCUMENT POLICY & NDA COMPLIANCE AUDIT (HR & ADMIN ONLY) */}
+      {['admin', 'hr', 'superadmin'].includes(String(user?.role || '').toLowerCase()) && (
+        <EmployeeComplianceStatusCard employee={employee} />
+      )}
 
       {/* ONBOARDING DOCUMENTS & STATUTORY DOSSIER */}
       <section className="panel" style={{ padding: '20px', marginTop: '20px' }}>
