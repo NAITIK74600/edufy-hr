@@ -3,7 +3,9 @@ import { Employee } from '../models/Employee.js'
 import { attachOnboardingDocs } from '../models/onboardingDocsCache.js'
 
 function toAuthUser(user) {
-  return user ? { ...user, id: String(user._id) } : null
+  if (!user) return null
+  const displayName = user.displayName || user.name || user.username || (user.email ? user.email.split('@')[0] : 'Employee')
+  return { ...user, id: String(user._id), displayName, name: user.name || displayName }
 }
 
 function toPublicUser(user) {
@@ -11,7 +13,8 @@ function toPublicUser(user) {
   const source = user.toObject ? user.toObject() : user
   delete source.passwordHash
   delete source.authVersion
-  return source
+  const displayName = source.displayName || source.name || source.username || (source.email ? source.email.split('@')[0] : 'Employee')
+  return { ...source, displayName, name: source.name || displayName }
 }
 
 export function createMongoUserStore({ managementUsers = [] } = {}) {

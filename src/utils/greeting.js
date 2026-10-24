@@ -11,8 +11,46 @@ export function getTimeOfDayGreeting(customHour = null) {
   return 'Welcome back'
 }
 
-export function formatUserGreeting(userOrName, customHour = null) {
-  let name = typeof userOrName === 'object' ? userOrName?.displayName || userOrName?.name : userOrName
+export function resolveUserDisplayName(user, employees = []) {
+  if (!user) return 'Colleague'
+
+  // If user object has a valid name that is not generic
+  const isGeneric = (val) => !val || !val.trim() || ['team member', 'colleague', 'user', 'member'].includes(val.trim().toLowerCase())
+
+  if (user.displayName && !isGeneric(user.displayName)) {
+    return user.displayName.trim()
+  }
+  if (user.name && !isGeneric(user.name)) {
+    return user.name.trim()
+  }
+  if (user.fullName && !isGeneric(user.fullName)) {
+    return user.fullName.trim()
+  }
+
+  // Cross-reference with employee roster
+  if (Array.isArray(employees) && employees.length > 0) {
+    const matched = employees.find(
+      (e) =>
+        (user.id && (e.id === user.id || e._id === user.id || e.userId === user.id)) ||
+        (user.employeeId && (e.employeeId === user.employeeId || e.id === user.employeeId)) ||
+        (user.email && e.email && e.email.toLowerCase() === user.email.toLowerCase())
+    )
+    if (matched?.name && !isGeneric(matched.name)) return matched.name.trim()
+    if (matched?.displayName && !isGeneric(matched.displayName)) return matched.displayName.trim()
+  }
+
+  if (user.username && !isGeneric(user.username)) {
+    return user.username.trim()
+  }
+  if (user.email && typeof user.email === 'string') {
+    const handle = user.email.split('@')[0]
+    return handle.replace(/[._-]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+  }
+  return 'Colleague'
+}
+
+export function formatUserGreeting(userOrName, customHour = null, employees = []) {
+  let name = typeof userOrName === 'object' ? resolveUserDisplayName(userOrName, employees) : userOrName
   if (typeof userOrName === 'object') {
     if (userOrName?.role === 'admin') name = 'Admin'
     else if (userOrName?.role === 'hr') name = 'HR'

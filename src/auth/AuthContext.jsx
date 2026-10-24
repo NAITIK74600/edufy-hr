@@ -22,7 +22,14 @@ export function AuthProvider({ children }) {
   useEffect(() => hrStore.subscribe((state) => {
     setUser((current) => {
       if (!current || ['admin', 'hr'].includes(current.role)) return current
-      return state.employees.find((employee) => employee.id === current.id) ?? current
+      const found = state.employees.find((e) =>
+        (current.id && (e.id === current.id || e._id === current.id)) ||
+        (current.employeeId && (e.employeeId === current.employeeId || e.id === current.employeeId)) ||
+        (current.email && e.email && e.email.toLowerCase() === current.email.toLowerCase())
+      )
+      if (!found) return current
+      const displayName = found.name || found.displayName || current.displayName || current.name || current.username
+      return { ...current, ...found, displayName, name: found.name || current.name || displayName }
     })
   }), [])
 

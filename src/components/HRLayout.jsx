@@ -43,7 +43,7 @@ import { useAuth } from '../auth/AuthContext'
 import { hasPermission } from '../auth/permissions'
 import { hrStore } from '../services/hrStore'
 import { workspaceAction } from '../services/workspaceStore'
-import { getTimeOfDayGreeting, getRoleBadgeLabel } from '../utils/greeting'
+import { getTimeOfDayGreeting, getRoleBadgeLabel, resolveUserDisplayName } from '../utils/greeting'
 import { AIHRAssistant } from './AIHRAssistant'
 
 
@@ -394,11 +394,11 @@ export function HRLayout({ route, children }) {
 
           <div className="topbar-actions">
             {/* Personalized Greeting with Role-Based Title */}
-            <div className="topbar-greeting-pill" title={`Logged in as ${isAdmin ? 'Admin' : isHR ? 'HR' : (user?.displayName || 'User')} (${user?.role})`}>
+            <div className="topbar-greeting-pill" title={`Logged in as ${isAdmin ? 'Admin' : isHR ? 'HR' : resolveUserDisplayName(user, storeState?.employees || [])} (${user?.role})`}>
               <span className="greeting-sparkle">👋</span>
               <span className="greeting-text">
                 {getTimeOfDayGreeting()},{' '}
-                <strong className="greeting-name">{isAdmin ? 'Admin' : isHR ? 'HR' : (user?.displayName ?? user?.name ?? 'User')}</strong>
+                <strong className="greeting-name">{isAdmin ? 'Admin' : isHR ? 'HR' : resolveUserDisplayName(user, storeState?.employees || [])}</strong>
               </span>
               <span className={`role-badge role-${user?.role ?? 'hr'}`}>
                 {isAdmin ? 'Admin' : isHR ? 'HR' : getRoleBadgeLabel(user?.role)}

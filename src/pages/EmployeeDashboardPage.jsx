@@ -70,7 +70,7 @@ import { workspaceAction } from '../services/workspaceStore'
 import { PerformanceWorkspace } from '../components/WorkspaceRecords'
 import { apiClient } from '../services/apiClient'
 import { todayKey, currentPayrollMonth } from '../services/connectedStore'
-import { getTimeOfDayGreeting, getRoleBadgeLabel } from '../utils/greeting'
+import { getTimeOfDayGreeting, getRoleBadgeLabel, resolveUserDisplayName } from '../utils/greeting'
 import { formatINR, formatINRRaw, amountInWordsINR } from '../utils/currency'
 import { PayslipPreviewModal } from '../components/payroll/PayslipPreviewModal'
 import { doesPayrollMatchUser, unmaskBankAccount, findEmployeeForUser } from '../utils/payrollMatcher'
@@ -826,7 +826,7 @@ function ESSOverview({ user }) {
     <div style={{ display: 'grid', gap: '22px' }}>
       <PageHeader
         eyebrow="Employee Self-Service (ESS)"
-        title={`${getTimeOfDayGreeting()}, ${user?.displayName || 'Team Member'} 👋`}
+        title={`${getTimeOfDayGreeting()}, ${resolveUserDisplayName(user, storeState.employees)} 👋`}
         description="Welcome to your personal work portal. Track daily attendance, view salary breakdown, request leaves, and review company bulletins."
       >
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
