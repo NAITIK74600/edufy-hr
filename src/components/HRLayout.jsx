@@ -170,6 +170,7 @@ export function HRLayout({ route, children }) {
   const [aiAssistantOpen, setAiAssistantOpen] = useState(false)
   const [soundMuted, setSoundMutedState] = useState(() => isSoundMuted())
   const [incomingAlert, setIncomingAlert] = useState(null)
+  const [storeState, setStoreState] = useState(() => hrStore.getState())
   const [notifications, setNotifications] = useState(() => (hrStore.getUserNotifications ? hrStore.getUserNotifications(user) : hrStore.getNotifications()))
   const navRef = useRef(null)
   const fileInputRef = useRef(null)
@@ -177,6 +178,12 @@ export function HRLayout({ route, children }) {
   const profileRef = useRef(null)
   const prevNotifIdsRef = useRef(new Set())
   const isFirstLoadRef = useRef(true)
+
+  useEffect(() => {
+    return hrStore.subscribe((state) => {
+      setStoreState(state)
+    })
+  }, [])
 
   useEffect(() => {
     function handleClickOutside(event) {
