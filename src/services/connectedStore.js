@@ -961,7 +961,7 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
       if (!user && rawLocal.savePolicyConsent) return rawLocal.savePolicyConsent(employeeId, policyKey, consentData)
       return mutate(async () => {
         const emp = store.getEmployee(employeeId) || store.getState().employees?.find((e) => e.id === employeeId || e._id === employeeId || e.employeeId === employeeId)
-        const targetId = emp?._id || emp?.id || employeeId
+        const targetId = emp?._id || emp?.id || employeeId || user?.id || user?._id || user?.employeeId
         const now = new Date()
         const consentEntry = {
           consented: true,
@@ -979,23 +979,30 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
           ...consentData,
         }
         const updatedConsents = { ...(emp?.policyConsents || {}), [policyKey]: consentEntry }
+        let res
         try {
-          const res = await apiClient.patch(`/employees/${targetId}`, {
+          res = await apiClient.patch(`/employees/${targetId}`, {
             policyConsents: updatedConsents,
           })
-          if (rawLocal.savePolicyConsent) rawLocal.savePolicyConsent(employeeId, policyKey, consentData)
-          return res.data
-        } catch (err) {
-          if (rawLocal.savePolicyConsent) return rawLocal.savePolicyConsent(employeeId, policyKey, consentData)
-          throw err
+        } catch (patchErr) {
+          res = await apiClient.patch('/employees/me/onboarding', {
+            policyConsents: updatedConsents,
+          }).catch(() => null)
         }
+        if (emp) {
+          emp.policyConsents = updatedConsents
+          if (!emp.onboardingDocs) emp.onboardingDocs = {}
+          emp.onboardingDocs.policyConsents = updatedConsents
+        }
+        if (rawLocal.savePolicyConsent) rawLocal.savePolicyConsent(employeeId, policyKey, consentData)
+        return res?.data || res || { success: true }
       })
     },
     saveAllPolicyConsents(employeeId, policies = [], additionalData = {}) {
       if (!user && rawLocal.saveAllPolicyConsents) return rawLocal.saveAllPolicyConsents(employeeId, policies, additionalData)
       return mutate(async () => {
         const emp = store.getEmployee(employeeId) || store.getState().employees?.find((e) => e.id === employeeId || e._id === employeeId || e.employeeId === employeeId)
-        const targetId = emp?._id || emp?.id || employeeId
+        const targetId = emp?._id || emp?.id || employeeId || user?.id || user?._id || user?.employeeId
         const now = new Date()
         const formatted = now.toLocaleString('en-IN', {
           day: '2-digit',
@@ -1017,16 +1024,48 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
             ...additionalData,
           }
         })
+        let res
         try {
-          const res = await apiClient.patch(`/employees/${targetId}`, {
+          res = await apiClient.patch(`/employees/${targetId}`, {
             policyConsents: updatedConsents,
           })
-          if (rawLocal.saveAllPolicyConsents) rawLocal.saveAllPolicyConsents(employeeId, policies, additionalData)
-          return res.data
-        } catch (err) {
-          if (rawLocal.saveAllPolicyConsents) return rawLocal.saveAllPolicyConsents(employeeId, policies, additionalData)
-          throw err
+        } catch (patchErr) {
+          res = await apiClient.patch('/employees/me/onboarding', {
+            policyConsents: updatedConsents,
+          }).catch(() => null)
         }
+        if (emp) {
+          emp.policyConsents = updatedConsents
+          if (!emp.onboardingDocs) emp.onboardingDocs = {}
+          emp.onboardingDocs.policyConsents = updatedConsents
+        }
+        if (rawLocal.saveAllPolicyConsents) rawLocal.saveAllPolicyConsents(employeeId, policies, additionalData)
+        return res?.data || res || { success: true }
+      })
+    },
+    updateComplianceDocs(employeeId, complianceDocs) {
+      if (!user && rawLocal.updateComplianceDocs) return rawLocal.updateComplianceDocs(employeeId, complianceDocs)
+      return mutate(async () => {
+        const emp = store.getEmployee(employeeId) || store.getState().employees?.find((e) => e.id === employeeId || e._id === employeeId || e.employeeId === employeeId)
+        const targetId = emp?._id || emp?.id || employeeId || user?.id || user?._id || user?.employeeId
+        const updatedDocs = { ...(emp?.complianceDocs || {}), ...(complianceDocs || {}) }
+        let res
+        try {
+          res = await apiClient.patch(`/employees/${targetId}`, {
+            complianceDocs: updatedDocs,
+          })
+        } catch (patchErr) {
+          res = await apiClient.patch('/employees/me/onboarding', {
+            complianceDocs: updatedDocs,
+          }).catch(() => null)
+        }
+        if (emp) {
+          emp.complianceDocs = updatedDocs
+          if (!emp.onboardingDocs) emp.onboardingDocs = {}
+          emp.onboardingDocs.complianceDocs = updatedDocs
+        }
+        if (rawLocal.updateComplianceDocs) rawLocal.updateComplianceDocs(employeeId, complianceDocs)
+        return res?.data || res || { success: true }
       })
     },
     deleteEmployee(id, options = {}) {

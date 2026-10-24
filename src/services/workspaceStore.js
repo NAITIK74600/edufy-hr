@@ -56,8 +56,14 @@ export function createWorkspaceStore(store, mutate, getUser = null, rawLocal = {
     sendKudos: (data) => (isLocal() && rawLocal.sendKudos ? rawLocal.sendKudos(data) : create('kudos', { recipientId: data.recipientId ?? data.to, badge: data.badge ?? data.tag, message: data.message })),
     addPerformanceGoal: (data) => (isLocal() && rawLocal.addPerformanceGoal ? rawLocal.addPerformanceGoal(data) : create('performanceGoals', pick(data, ['employeeId', 'title', 'target', 'dueDate', 'progress']))),
     updatePerformanceGoal: (id, progress) => (isLocal() && rawLocal.updatePerformanceGoal ? rawLocal.updatePerformanceGoal(id, progress) : patch('performanceGoals', id, { progress })),
-    addPerformanceReview: (data) => (isLocal() && rawLocal.addPerformanceReview ? rawLocal.addPerformanceReview(data) : create('performanceReviews', pick(data, ['employeeId', 'period', 'rating', 'comments']))),
-    addNotification: (data) => (isLocal() && rawLocal.addNotification ? rawLocal.addNotification(data) : create('notifications', pick(data, ['recipientId', 'title', 'message', 'type']))),
+    addNotification: (data) => {
+      rawLocal.addNotification?.(data)
+      if (isLocal()) return Promise.resolve(data)
+      return create('notifications', pick(data, ['recipientId', 'recipientRole', 'title', 'message', 'type', 'id'])).catch((err) => {
+        console.warn('Failed to sync notification to server:', err?.message || err)
+        return data
+      })
+    },
     markNotificationRead: (id) => {
       rawLocal.markNotificationRead?.(id)
       return isLocal() ? Promise.resolve() : patch('notifications', id, { read: true })

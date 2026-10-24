@@ -274,9 +274,32 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
           values = { ...values, title: string(body, 'title', true, 200), department: string(body, 'department', true, 200), location: string(body, 'location', true, 200), openings: number(body, 'openings', 1, 10000, true), status: 'Active' }
           break
         case 'notifications': {
-          allowedBody(body, ['recipientId', 'title', 'message', 'type'])
-          const recipient = await employee(body.recipientId)
-          values = { ownerId: String(recipient._id), title: string(body, 'title', true, 200), message: string(body, 'message'), type: string(body, 'type', true, 100), read: false }
+          allowedBody(body, ['recipientId', 'recipientRole', 'title', 'message', 'type', 'id'])
+          let owner = id(actor)
+          let role = (typeof body.recipientRole === 'string' && body.recipientRole.trim()) ? body.recipientRole.trim().toLowerCase() : null
+          const rawRecipient = body.recipientId
+          if (typeof rawRecipient === 'string' && rawRecipient.trim()) {
+            const clean = rawRecipient.trim()
+            if (['admin', 'hr', 'management', 'all'].includes(clean.toLowerCase())) {
+              role = clean.toLowerCase()
+            } else {
+              try {
+                const recipient = await employee(clean)
+                if (recipient) owner = String(recipient._id)
+              } catch {
+                owner = id(actor)
+                if (!role) role = 'all'
+              }
+            }
+          }
+          values = {
+            ownerId: owner,
+            recipientRole: role,
+            title: string(body, 'title', true, 200),
+            message: (body.message && typeof body.message === 'string') ? string(body, 'message', false, 10000) : '',
+            type: (body.type && typeof body.type === 'string') ? string(body, 'type', false, 100) : 'notification',
+            read: false,
+          }
           break
         }
         case 'roles':

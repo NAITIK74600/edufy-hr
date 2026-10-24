@@ -340,7 +340,10 @@ export function createEmployeeService({ repository }) {
         error.code = 'EMPLOYEE_NOT_FOUND'
         throw error
       }
-      const isSelf = String(actor.id) === String(employee.id ?? employee._id) || String(actor.employeeId) === String(employee.employeeId)
+      const isSelf = String(actor.id) === String(employee.id ?? employee._id) ||
+        String(actor._id) === String(employee.id ?? employee._id) ||
+        (actor.employeeId && employee.employeeId && String(actor.employeeId).toUpperCase() === String(employee.employeeId).toUpperCase()) ||
+        (actor.email && employee.email && String(actor.email).toLowerCase() === String(employee.email).toLowerCase())
       const canManage = ['admin', 'hr'].includes(actor.role) || hasPermission(actor, 'employees.write')
       if (!isSelf && !canManage) {
         const error = new Error('Not authorized to upload documents for this employee.')

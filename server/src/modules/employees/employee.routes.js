@@ -1,5 +1,5 @@
 import express from 'express'
-import { PERMISSIONS } from '../../auth/permissions.js'
+import { PERMISSIONS, hasPermission } from '../../auth/permissions.js'
 
 function parseListQuery(query) {
   return {
@@ -80,7 +80,8 @@ export function createEmployeeRouter({ auth, service }) {
         payload.onboardingDocs = sanitized
       }
 
-      const updated = await service.update(targetId, payload, request.auth.user)
+      const empId = currentEmployee?.id || currentEmployee?._id || request.auth.user.employeeId || targetId
+      const updated = await service.update(empId, payload, request.auth.user)
       return response.json({ success: true, data: updated })
     } catch (error) { return next(error) }
   })
@@ -108,11 +109,24 @@ export function createEmployeeRouter({ auth, service }) {
   router.post('/', auth.authenticate, auth.requirePermission(PERMISSIONS.EMPLOYEES_WRITE), async (request, response, next) => {
     try { const employee = await service.create(request.body ?? {}, request.auth.user); return response.status(201).json({ success: true, data: employee }) } catch (error) { return next(error) }
   })
+  async function checkIsSelf(user, targetIdentifier) {
+    if (!user) return false
+    const idStr = String(targetIdentifier)
+    if (idStr === String(user.id) || idStr === String(user._id) || idStr === String(user.employeeId)) return true
+    try {
+      const targetEmp = await service.get(targetIdentifier).catch(() => null)
+      if (targetEmp) {
+        if (user.employeeId && targetEmp.employeeId && String(user.employeeId).toUpperCase() === String(targetEmp.employeeId).toUpperCase()) return true
+        if (user.email && targetEmp.email && String(user.email).toLowerCase() === String(targetEmp.email).toLowerCase()) return true
+        if (String(targetEmp.id || targetEmp._id) === String(user.id || user._id)) return true
+      }
+    } catch {}
+    return false
+  }
+
   router.get('/:id/audit', auth.authenticate, async (request, response, next) => {
     try {
-      const isSelf = String(request.params.id) === String(request.auth.user.id) ||
-                     String(request.params.id) === String(request.auth.user._id) ||
-                     String(request.params.id) === String(request.auth.user.employeeId)
+      const isSelf = await checkIsSelf(request.auth.user, request.params.id)
       if (!isSelf && !hasPermission(request.auth.user, PERMISSIONS.EMPLOYEES_READ)) {
         return response.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'You do not have permission to view audit history.' } })
       }
@@ -121,9 +135,7 @@ export function createEmployeeRouter({ auth, service }) {
   })
   router.get('/:id', auth.authenticate, async (request, response, next) => {
     try {
-      const isSelf = String(request.params.id) === String(request.auth.user.id) ||
-                     String(request.params.id) === String(request.auth.user._id) ||
-                     String(request.params.id) === String(request.auth.user.employeeId)
+      const isSelf = await checkIsSelf(request.auth.user, request.params.id)
       if (!isSelf && !hasPermission(request.auth.user, PERMISSIONS.EMPLOYEES_READ)) {
         return response.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'You do not have permission to view this employee.' } })
       }
@@ -132,13 +144,16 @@ export function createEmployeeRouter({ auth, service }) {
   })
   router.patch('/:id', auth.authenticate, async (request, response, next) => {
     try {
-      const isSelf = String(request.params.id) === String(request.auth.user.id) ||
-                     String(request.params.id) === String(request.auth.user._id) ||
-                     String(request.params.id) === String(request.auth.user.employeeId)
+      const isSelf = await checkIsSelf(request.auth.user, request.params.id)
       if (!isSelf && !hasPermission(request.auth.user, PERMISSIONS.EMPLOYEES_WRITE)) {
         return response.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'You do not have permission to update this employee.' } })
       }
-      return response.json({ success: true, data: await service.update(request.params.id, request.body ?? {}, request.auth.user) })
+      let updateBody = request.body ?? {}
+      if (isSelf && !hasPermission(request.auth.user, PERMISSIONS.EMPLOYEES_WRITE)) {
+        const allowedSelfFields = ['identity', 'parentsContact', 'emergencyContact', 'bankDetails', 'onboardingDocs', 'phone', 'financeDetails', 'complianceDocs', 'policyConsents', 'avatarUrl', 'onboardingStatus']
+        updateBody = Object.fromEntries(Object.entries(updateBody).filter(([key]) => allowedSelfFields.includes(key)))
+      }
+      return response.json({ success: true, data: await service.update(request.params.id, updateBody, request.auth.user) })
     } catch (error) { return next(error) }
   })
   router.post('/:id/invite', auth.authenticate, auth.requirePermission(PERMISSIONS.EMPLOYEES_WRITE), async (request, response, next) => {

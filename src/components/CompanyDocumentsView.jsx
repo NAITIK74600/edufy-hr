@@ -113,15 +113,21 @@ export function CompanyDocumentsView({ employee: propEmployee, user: propUser })
         })
       }
 
-      // Add audit notification
-      hrStore.addNotification?.({
-        id: `notif-compliance-${Date.now()}`,
-        type: 'compliance_uploaded',
-        title: `Signed Agreement Uploaded: ${template.title}`,
-        message: `${currentEmployee?.name || 'Employee'} uploaded signed copy of ${template.title}.`,
-        time: 'Just now',
-        read: false,
-      })
+      // Add audit notification (non-blocking)
+      try {
+        await hrStore.addNotification?.({
+          id: `notif-compliance-${Date.now()}`,
+          recipientRole: 'hr',
+          recipientId: empId,
+          type: 'compliance_uploaded',
+          title: `Signed Agreement Uploaded: ${template.title}`,
+          message: `${currentEmployee?.name || 'Employee'} uploaded signed copy of ${template.title}.`,
+          time: 'Just now',
+          read: false,
+        })
+      } catch (notifErr) {
+        console.warn('Audit notification skipped:', notifErr)
+      }
 
       setFeedback(`✓ Successfully uploaded signed copy of "${template.title}"!`)
       setTimeout(() => setFeedback(''), 5000)
