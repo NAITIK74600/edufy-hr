@@ -1,0 +1,169 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Payslip - {{employeeName}} - {{payrollMonth}}</title>
+  <style>
+    {{inlineStyles}}
+  </style>
+</head>
+<body>
+  <div class="payslip-page" style="--primary: {{primaryColor}}; --secondary: {{secondaryColor}};">
+    <!-- Header -->
+    <header class="ps-header">
+      <div class="ps-header-left">
+        {{#if logoUrl}}
+        <img src="{{logoUrl}}" alt="Company Logo" class="ps-logo" />
+        {{/if}}
+      </div>
+      <div class="ps-header-right">
+        <h1 class="ps-company-name" style="color: {{primaryColor}};">{{companyName}}</h1>
+        <div class="ps-company-address">{{companyAddress}}</div>
+        {{#if companyContacts}}
+        <div class="ps-company-contacts">{{companyContacts}}</div>
+        {{/if}}
+      </div>
+    </header>
+
+    <!-- Sub-header -->
+    <div class="ps-subheader">
+      <div class="ps-month-title" style="color: {{secondaryColor}};">
+        Payslip for the month of {{payrollMonth}}
+      </div>
+      <div class="ps-currency-note">
+        All amounts in {{currency}}
+      </div>
+    </div>
+
+    <!-- Employee Details Box -->
+    <section class="ps-emp-box">
+      <div class="ps-emp-grid">
+        <div class="ps-emp-col">
+          <div class="ps-info-row">
+            <span class="ps-info-label">Emp Code</span>
+            <span class="ps-info-colon">:</span>
+            <span class="ps-info-val">{{employeeCode}}</span>
+          </div>
+          <div class="ps-info-row">
+            <span class="ps-info-label">Emp Name</span>
+            <span class="ps-info-colon">:</span>
+            <span class="ps-info-val">{{employeeName}}</span>
+          </div>
+          <div class="ps-info-row">
+            <span class="ps-info-label">Location</span>
+            <span class="ps-info-colon">:</span>
+            <span class="ps-info-val">{{location}}</span>
+          </div>
+          <div class="ps-info-row">
+            <span class="ps-info-label">Designation</span>
+            <span class="ps-info-colon">:</span>
+            <span class="ps-info-val">{{designation}}</span>
+          </div>
+          <div class="ps-info-row">
+            <span class="ps-info-label">Bank AC No</span>
+            <span class="ps-info-colon">:</span>
+            <span class="ps-info-val">{{maskedBankAccount}}</span>
+          </div>
+          <div class="ps-info-row">
+            <span class="ps-info-label">Bank AC Name</span>
+            <span class="ps-info-colon">:</span>
+            <span class="ps-info-val">{{bankName}}</span>
+          </div>
+        </div>
+
+        <div class="ps-emp-col">
+          <div class="ps-info-row">
+            <span class="ps-info-label">Join Date</span>
+            <span class="ps-info-colon">:</span>
+            <span class="ps-info-val">{{joinDate}}</span>
+          </div>
+          <div class="ps-info-row">
+            <span class="ps-info-label">DOB</span>
+            <span class="ps-info-colon">:</span>
+            <span class="ps-info-val">{{dob}}</span>
+          </div>
+          <div class="ps-info-row">
+            <span class="ps-info-label">Gender</span>
+            <span class="ps-info-colon">:</span>
+            <span class="ps-info-val">{{gender}}</span>
+          </div>
+          <div class="ps-info-row">
+            <span class="ps-info-label">PAN</span>
+            <span class="ps-info-colon">:</span>
+            <span class="ps-info-val">{{pan}}</span>
+          </div>
+          <div class="ps-info-row">
+            <span class="ps-info-label">PF No</span>
+            <span class="ps-info-colon">:</span>
+            <span class="ps-info-val">{{pfNo}}</span>
+          </div>
+          <div class="ps-info-row">
+            <span class="ps-info-label">PF UAN</span>
+            <span class="ps-info-colon">:</span>
+            <span class="ps-info-val">{{uan}}</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Attendance Bar -->
+    <section class="ps-attendance-bar">
+      <div class="ps-att-item">Standard Days: <span>{{standardDays}}</span></div>
+      <div class="ps-att-item">Payable Days: <span>{{payableDays}}</span></div>
+      <div class="ps-att-item">Loss of Pay Days: <span>{{lopDays}}</span></div>
+      <div class="ps-att-item">LOP Reversal Days: <span>{{lopReversalDays}}</span></div>
+      <div class="ps-att-item">Arrear Days: <span>{{arrearDays}}</span></div>
+    </section>
+
+    <!-- Earnings & Deductions Table -->
+    <section class="ps-table-container" style="border-color: {{primaryColor}};">
+      <table class="ps-table">
+        <thead>
+          <tr>
+            <th style="background: {{primaryColor}}; width: 28%;">EARNINGS</th>
+            <th class="num" style="background: {{primaryColor}}; width: 14%;">MONTHLY RATE</th>
+            <th class="num" style="background: {{primaryColor}}; width: 14%;">CURRENT MONTH</th>
+            <th class="num" style="background: {{primaryColor}}; width: 12%;">ARREAR (+/-)</th>
+            <th class="num ps-border-right-thick" style="background: {{primaryColor}}; width: 14%;">TOTAL</th>
+            <th style="background: {{primaryColor}}; width: 22%;">DEDUCTIONS</th>
+            <th class="num" style="background: {{primaryColor}}; width: 14%;">TOTAL</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{tableRowsHtml}}
+          <tr class="total-row">
+            <td style="font-weight: 800;">GROSS EARNINGS</td>
+            <td class="num" style="font-weight: 800;">{{grossRate}}</td>
+            <td class="num" style="font-weight: 800;">{{grossCurrent}}</td>
+            <td class="num" style="font-weight: 800;">{{grossArrear}}</td>
+            <td class="num ps-border-right-thick" style="font-weight: 800;">{{grossTotal}}</td>
+            <td style="font-weight: 800;">TOTAL DEDUCTIONS</td>
+            <td class="num" style="font-weight: 800;">{{totalDeductions}}</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- Net Pay Box -->
+    <section class="ps-netpay-box" style="border-color: {{primaryColor}};">
+      <div class="ps-netpay-top">
+        <span class="ps-netpay-title" style="color: {{secondaryColor}};">NET PAY</span>
+        <span class="ps-netpay-amount" style="color: {{secondaryColor}};">{{netPay}}</span>
+      </div>
+      <div class="ps-netpay-words">
+        ({{netPayInWords}})
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="ps-footer">
+      <div class="ps-footer-line" style="background: {{primaryColor}};"></div>
+      <div class="ps-footer-text">{{footerText}}</div>
+      {{#if generatedMeta}}
+      <div class="ps-footer-meta">{{generatedMeta}}</div>
+      {{/if}}
+    </footer>
+  </div>
+</body>
+</html>

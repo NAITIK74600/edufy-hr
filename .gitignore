@@ -1,0 +1,51 @@
+# Dependencies
+node_modules/
+
+# Build tools & IDE
+.vite/
+.vscode/
+.21st/
+.agents/
+brain/
+scratch/
+
+# System & temp files
+*.log
+startup_error.log
+cloudflared.exe
+_webuzo_build/
+
+# Old zips
+*.zip
+
+# Sensitive env (use .env.example as template)
+.env
+
+# Unnecessary root files
+clean_store_teams.cjs
+fix_member_managers.cjs
+test_teams_hierarchy.mjs
+update_hrstore_teams.cjs
+skills-lock.json
+run.bat
+run.ps1
+start.bat
+
+# Documentation (not needed for hosting)
+AUTHENTICATION.md
+HR_PANEL_AUDIT.md
+HR_PANEL_DEPLOYMENT_CHECKLIST.md
+HR_PANEL_FIX_LOG.md
+HR_PANEL_TEST_PLAN.md
+
+# Images at root (not needed)
+1.jpeg
+2.jpeg
+*.pub
+WhatsApp*.jpeg
+
+# GitHub workflows
+.github/
+
+# Test files
+test/

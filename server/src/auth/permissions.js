@@ -1,0 +1,187 @@
+export const ROLES = [
+  'admin',
+  'managing_director',
+  'co_founder',
+  'vertical_head',
+  'revenue_growth_manager',
+  'manager',
+  'team_leader',
+  'hr_executive',
+  'operations_executive',
+  'business_development_executive',
+  'business_development_intern',
+  'marketing_executive',
+  'marketing_intern',
+  'seo_executive',
+  'seo_intern',
+  'post_sales_executive',
+  'post_sales_intern',
+  'director',
+  'hr',
+  'team_lead',
+  'employee',
+]
+
+export const PERMISSIONS = Object.freeze({
+  DASHBOARD_READ: 'dashboard.read',
+  HR_DASHBOARD_READ: 'hr.dashboard.read',
+  EMPLOYEES_READ: 'employees.read',
+  EMPLOYEES_WRITE: 'employees.write',
+  EMPLOYEES_MANAGER_ASSIGN: 'employees.manager.assign',
+  LEAVE_SELF_READ: 'leave.self.read',
+  LEAVE_SELF_WRITE: 'leave.self.write',
+  LEAVE_TEAM_READ: 'leave.team.read',
+  LEAVE_TEAM_APPROVE: 'leave.team.approve',
+  LEAVE_HR_READ: 'leave.hr.read',
+  LEAVE_HR_REVIEW: 'leave.hr.review',
+  LEAVE_POLICY_ADMIN: 'leave.policy.admin',
+  ATTENDANCE_SELF_READ: 'attendance.self.read',
+  ATTENDANCE_SELF_WRITE: 'attendance.self.write',
+  ATTENDANCE_TEAM_READ: 'attendance.team.read',
+  PAYROLL_SELF_READ: 'payroll.self.read',
+  PAYROLL_READ: 'payroll.read',
+  PAYROLL_WRITE: 'payroll.write',
+  ATTENDANCE_READ: 'attendance.read',
+  ATTENDANCE_WRITE: 'attendance.write',
+  REPORTS_READ: 'reports.read',
+  RECRUITMENT_READ: 'recruitment.read',
+  PERFORMANCE_READ: 'performance.read',
+  TASKS_READ: 'tasks.read',
+  TRAINING_READ: 'training.read',
+  HELPDESK_READ: 'helpdesk.read',
+  ANNOUNCEMENTS_READ: 'announcements.read',
+  HOLIDAYS_READ: 'holidays.read',
+  DOCUMENTS_READ: 'documents.read',
+  HR_SETTINGS_READ: 'settings.hr.read',
+})
+
+const SELF_WORKSPACE_READ = [PERMISSIONS.TASKS_READ, PERMISSIONS.TRAINING_READ, PERMISSIONS.HELPDESK_READ, PERMISSIONS.ANNOUNCEMENTS_READ, PERMISSIONS.HOLIDAYS_READ, PERMISSIONS.DOCUMENTS_READ]
+
+const HR_DEFAULT_PERMISSIONS = [
+  PERMISSIONS.DASHBOARD_READ,
+  PERMISSIONS.HR_DASHBOARD_READ,
+  PERMISSIONS.EMPLOYEES_READ,
+  PERMISSIONS.EMPLOYEES_WRITE,
+  PERMISSIONS.EMPLOYEES_MANAGER_ASSIGN,
+  PERMISSIONS.LEAVE_SELF_READ,
+  PERMISSIONS.LEAVE_SELF_WRITE,
+  PERMISSIONS.LEAVE_TEAM_READ,
+  PERMISSIONS.LEAVE_HR_READ,
+  PERMISSIONS.LEAVE_HR_REVIEW,
+  PERMISSIONS.LEAVE_POLICY_ADMIN,
+  PERMISSIONS.ATTENDANCE_SELF_READ,
+  PERMISSIONS.ATTENDANCE_SELF_WRITE,
+  PERMISSIONS.ATTENDANCE_TEAM_READ,
+  PERMISSIONS.ATTENDANCE_READ,
+  PERMISSIONS.ATTENDANCE_WRITE,
+  PERMISSIONS.PAYROLL_READ,
+  PERMISSIONS.PAYROLL_WRITE,
+  PERMISSIONS.PAYROLL_SELF_READ,
+  PERMISSIONS.REPORTS_READ,
+  PERMISSIONS.RECRUITMENT_READ,
+  PERMISSIONS.PERFORMANCE_READ,
+  ...SELF_WORKSPACE_READ,
+  PERMISSIONS.HR_SETTINGS_READ,
+]
+
+const LEADERSHIP_PERMISSIONS = [
+  PERMISSIONS.DASHBOARD_READ,
+  PERMISSIONS.HR_DASHBOARD_READ,
+  PERMISSIONS.EMPLOYEES_READ,
+  PERMISSIONS.EMPLOYEES_WRITE,
+  PERMISSIONS.EMPLOYEES_MANAGER_ASSIGN,
+  PERMISSIONS.LEAVE_SELF_READ,
+  PERMISSIONS.LEAVE_SELF_WRITE,
+  PERMISSIONS.ATTENDANCE_SELF_READ,
+  PERMISSIONS.LEAVE_TEAM_READ,
+  PERMISSIONS.LEAVE_TEAM_APPROVE,
+  PERMISSIONS.ATTENDANCE_TEAM_READ,
+  PERMISSIONS.ATTENDANCE_READ,
+  PERMISSIONS.ATTENDANCE_WRITE,
+  PERMISSIONS.PAYROLL_READ,
+  PERMISSIONS.PAYROLL_WRITE,
+  PERMISSIONS.PAYROLL_SELF_READ,
+  PERMISSIONS.REPORTS_READ,
+  PERMISSIONS.PERFORMANCE_READ,
+  ...SELF_WORKSPACE_READ,
+]
+
+const MANAGER_PERMISSIONS = [
+  PERMISSIONS.DASHBOARD_READ,
+  PERMISSIONS.EMPLOYEES_READ,
+  PERMISSIONS.LEAVE_SELF_READ,
+  PERMISSIONS.LEAVE_SELF_WRITE,
+  PERMISSIONS.ATTENDANCE_SELF_READ,
+  PERMISSIONS.LEAVE_TEAM_READ,
+  PERMISSIONS.LEAVE_TEAM_APPROVE,
+  PERMISSIONS.ATTENDANCE_TEAM_READ,
+  PERMISSIONS.PAYROLL_SELF_READ,
+  PERMISSIONS.REPORTS_READ,
+  PERMISSIONS.PERFORMANCE_READ,
+  ...SELF_WORKSPACE_READ,
+]
+
+const TEAM_LEAD_PERMISSIONS = [
+  PERMISSIONS.DASHBOARD_READ,
+  PERMISSIONS.EMPLOYEES_READ,
+  PERMISSIONS.LEAVE_SELF_READ,
+  PERMISSIONS.LEAVE_SELF_WRITE,
+  PERMISSIONS.ATTENDANCE_SELF_READ,
+  PERMISSIONS.LEAVE_TEAM_READ,
+  PERMISSIONS.LEAVE_TEAM_APPROVE,
+  PERMISSIONS.ATTENDANCE_TEAM_READ,
+  PERMISSIONS.PAYROLL_SELF_READ,
+  PERMISSIONS.PERFORMANCE_READ,
+  ...SELF_WORKSPACE_READ,
+]
+
+const ESS_PERMISSIONS = [
+  PERMISSIONS.DASHBOARD_READ,
+  PERMISSIONS.LEAVE_SELF_READ,
+  PERMISSIONS.LEAVE_SELF_WRITE,
+  PERMISSIONS.ATTENDANCE_SELF_READ,
+  PERMISSIONS.PAYROLL_SELF_READ,
+  ...SELF_WORKSPACE_READ,
+]
+
+export const ROLE_DEFAULT_PERMISSIONS = Object.freeze({
+  admin: ['*'],
+  managing_director: LEADERSHIP_PERMISSIONS,
+  director: LEADERSHIP_PERMISSIONS,
+  co_founder: LEADERSHIP_PERMISSIONS,
+  vertical_head: LEADERSHIP_PERMISSIONS,
+  revenue_growth_manager: MANAGER_PERMISSIONS,
+  manager: MANAGER_PERMISSIONS,
+  team_leader: TEAM_LEAD_PERMISSIONS,
+  team_lead: TEAM_LEAD_PERMISSIONS,
+  hr_executive: HR_DEFAULT_PERMISSIONS,
+  hr: HR_DEFAULT_PERMISSIONS,
+  operations_executive: ESS_PERMISSIONS,
+  business_development_executive: ESS_PERMISSIONS,
+  business_development_intern: ESS_PERMISSIONS,
+  marketing_executive: ESS_PERMISSIONS,
+  marketing_intern: ESS_PERMISSIONS,
+  sde: ESS_PERMISSIONS,
+  sde_intern: ESS_PERMISSIONS,
+  seo_executive: ESS_PERMISSIONS,
+  seo_intern: ESS_PERMISSIONS,
+  post_sales_executive: ESS_PERMISSIONS,
+  post_sales_intern: ESS_PERMISSIONS,
+  employee: ESS_PERMISSIONS,
+})
+
+export function getUserPermissions(user) {
+  if (user?.role === 'admin') return ['*']
+  if (Array.isArray(user?.permissions) && user.permissions.length > 0) {
+    return user.permissions
+  }
+  return ROLE_DEFAULT_PERMISSIONS[user?.role] ?? []
+}
+
+export function hasPermission(user, permission) {
+  return getUserPermissions(user).includes('*') || getUserPermissions(user).includes(permission)
+}
+
+export function hasAnyPermission(user, permissions) {
+  return permissions.some((permission) => hasPermission(user, permission))
+}

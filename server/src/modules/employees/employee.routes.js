@@ -1,0 +1,176 @@
+import express from 'express'
+import { PERMISSIONS } from '../../auth/permissions.js'
+
+function parseListQuery(query) {
+  return {
+    page: query.page,
+    limit: query.limit,
+    search: query.search,
+    department: query.department,
+    designation: query.designation,
+    status: query.status,
+    managerId: query.managerId,
+    sort: query.sort,
+    direction: query.direction,
+  }
+}
+
+export function createEmployeeRouter({ auth, service }) {
+  const router = express.Router()
+  router.get('/me/onboarding', auth.authenticate, async (request, response, next) => {
+    try {
+      const employee = (await service.get(request.auth.user.id)) || (await service.get(request.auth.user.employeeId))
+      return response.json({
+        success: true,
+        data: {
+          identity: employee?.identity || {},
+          parentsContact: employee?.parentsContact || {},
+          emergencyContact: employee?.emergencyContact || {},
+          bankDetails: employee?.bankDetails || {},
+          onboardingDocs: employee?.onboardingDocs || {},
+          avatarUrl: employee?.avatarUrl || null,
+        },
+      })
+    } catch (error) { return next(error) }
+  })
+
+  router.post('/me/request-revision', auth.authenticate, async (request, response, next) => {
+    try {
+      const targetId = request.auth.user.id || request.auth.user._id
+      const currentEmployee = (await service.get(targetId).catch(() => null)) ||
+        (request.auth.user.employeeId ? await service.get(request.auth.user.employeeId).catch(() => null) : null)
+      const empId = currentEmployee?.id || currentEmployee?._id || targetId
+      const result = await service.requestRevision(empId, request.body?.reason, request.auth.user)
+      return response.json({ success: true, data: result })
+    } catch (error) { return next(error) }
+  })
+
+  router.patch('/me/onboarding', auth.authenticate, async (request, response, next) => {
+    try {
+      const targetId = request.auth.user.id || request.auth.user._id
+      const currentEmployee = (await service.get(targetId).catch(() => null)) ||
+        (request.auth.user.employeeId ? await service.get(request.auth.user.employeeId).catch(() => null) : null)
+      const payload = {}
+      const allowed = ['identity', 'parentsContact', 'emergencyContact', 'bankDetails', 'onboardingDocs', 'phone', 'financeDetails', 'complianceDocs', 'policyConsents', 'avatarUrl']
+      for (const key of allowed) {
+        if (request.body && request.body[key] !== undefined) payload[key] = request.body[key]
+      }
+      // If passportPhoto is uploaded, sync to avatarUrl automatically
+      if (!payload.avatarUrl && payload.onboardingDocs?.passportPhoto?.url) {
+        payload.avatarUrl = payload.onboardingDocs.passportPhoto.url
+      }
+      // Force status to submitted on self-update, never verified or action_required
+      payload.onboardingStatus = 'submitted'
+      payload.onboardingSubmittedAt = new Date()
+
+      // Sanitize documents so an employee cannot self-verify documents
+      if (payload.onboardingDocs && typeof payload.onboardingDocs === 'object') {
+        const existingDocs = currentEmployee?.onboardingDocs || {}
+        const sanitized = { ...existingDocs }
+        for (const [k, doc] of Object.entries(payload.onboardingDocs)) {
+          if (doc && typeof doc === 'object') {
+            sanitized[k] = {
+              ...doc,
+              status: doc.status === 'verified' ? 'submitted' : (doc.status || 'submitted'),
+              verifiedAt: null,
+              verifiedBy: null,
+            }
+          }
+        }
+        payload.onboardingDocs = sanitized
+      }
+
+      const updated = await service.update(targetId, payload, request.auth.user)
+      return response.json({ success: true, data: updated })
+    } catch (error) { return next(error) }
+  })
+
+  router.patch('/me/avatar', auth.authenticate, async (request, response, next) => {
+    try {
+      const { avatarUrl } = request.body ?? {}
+      if (typeof avatarUrl !== 'string' || !avatarUrl.trim()) {
+        return response.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'Valid avatarUrl string is required.' } })
+      }
+      const targetId = request.auth.user.id || request.auth.user._id
+      const updated = await service.update(targetId, { avatarUrl: avatarUrl.trim() }, request.auth.user)
+      return response.json({ success: true, data: updated })
+    } catch (error) { return next(error) }
+  })
+
+  router.get('/', auth.authenticate, auth.requirePermission(PERMISSIONS.EMPLOYEES_READ), async (request, response, next) => {
+    try { const result = await service.list(parseListQuery(request.query)); return response.json({ success: true, data: result.records, meta: result.meta }) } catch (error) { return next(error) }
+  })
+  router.post('/', auth.authenticate, auth.requirePermission(PERMISSIONS.EMPLOYEES_WRITE), async (request, response, next) => {
+    try { const employee = await service.create(request.body ?? {}, request.auth.user); return response.status(201).json({ success: true, data: employee }) } catch (error) { return next(error) }
+  })
+  router.get('/:id/audit', auth.authenticate, auth.requirePermission(PERMISSIONS.EMPLOYEES_READ), async (request, response, next) => {
+    try { return response.json({ success: true, data: await service.audit(request.params.id) }) } catch (error) { return next(error) }
+  })
+  router.get('/:id', auth.authenticate, auth.requirePermission(PERMISSIONS.EMPLOYEES_READ), async (request, response, next) => {
+    try { return response.json({ success: true, data: await service.get(request.params.id) }) } catch (error) { return next(error) }
+  })
+  router.patch('/:id', auth.authenticate, auth.requirePermission(PERMISSIONS.EMPLOYEES_WRITE), async (request, response, next) => {
+    try { return response.json({ success: true, data: await service.update(request.params.id, request.body ?? {}, request.auth.user) }) } catch (error) { return next(error) }
+  })
+  router.post('/:id/invite', auth.authenticate, auth.requirePermission(PERMISSIONS.EMPLOYEES_WRITE), async (request, response, next) => {
+    try { return response.json({ success: true, data: await service.setStatus(request.params.id, 'invited', request.auth.user) }) } catch (error) { return next(error) }
+  })
+  router.post('/:id/activate', auth.authenticate, auth.requirePermission(PERMISSIONS.EMPLOYEES_WRITE), async (request, response, next) => {
+    try { return response.json({ success: true, data: await service.setStatus(request.params.id, 'active', request.auth.user) }) } catch (error) { return next(error) }
+  })
+  router.post('/:id/documents/:docKey/approve', auth.authenticate, auth.requirePermission(PERMISSIONS.EMPLOYEES_WRITE), async (request, response, next) => {
+    try {
+      return response.json({ success: true, data: await service.approveDocument(request.params.id, request.params.docKey, request.auth.user, request.body) })
+    } catch (error) { return next(error) }
+  })
+  router.post('/:id/documents/:docKey/reject', auth.authenticate, auth.requirePermission(PERMISSIONS.EMPLOYEES_WRITE), async (request, response, next) => {
+    try {
+      return response.json({ success: true, data: await service.rejectDocument(request.params.id, request.params.docKey, request.body?.reason, request.auth.user, request.body) })
+    } catch (error) { return next(error) }
+  })
+  router.post('/:id/documents/:docKey/upload', auth.authenticate, async (request, response, next) => {
+    try {
+      return response.json({ success: true, data: await service.uploadDocument(request.params.id, request.params.docKey, request.body, request.auth.user) })
+    } catch (error) { return next(error) }
+  })
+  router.post('/:id/onboarding/approve', auth.authenticate, auth.requirePermission(PERMISSIONS.EMPLOYEES_WRITE), async (request, response, next) => {
+    try {
+      return response.json({ success: true, data: await service.approveOnboarding(request.params.id, request.auth.user) })
+    } catch (error) { return next(error) }
+  })
+  router.post('/:id/onboarding/reject', auth.authenticate, auth.requirePermission(PERMISSIONS.EMPLOYEES_WRITE), async (request, response, next) => {
+    try {
+      return response.json({ success: true, data: await service.rejectOnboarding(request.params.id, request.body?.reason, request.auth.user) })
+    } catch (error) { return next(error) }
+  })
+  router.post('/:id/exit/initiate', auth.authenticate, auth.requirePermission(PERMISSIONS.EMPLOYEES_WRITE), async (request, response, next) => {
+    try {
+      return response.json({ success: true, data: await service.initiateExit(request.params.id, request.body ?? {}, request.auth.user) })
+    } catch (error) { return next(error) }
+  })
+  router.post('/:id/exit/cancel', auth.authenticate, auth.requirePermission(PERMISSIONS.EMPLOYEES_WRITE), async (request, response, next) => {
+    try {
+      return response.json({ success: true, data: await service.cancelExit(request.params.id, request.auth.user) })
+    } catch (error) { return next(error) }
+  })
+  router.post('/:id/exit/finalize', auth.authenticate, auth.requirePermission(PERMISSIONS.EMPLOYEES_WRITE), async (request, response, next) => {
+    try {
+      return response.json({ success: true, data: await service.finalizeExit(request.params.id, request.auth.user) })
+    } catch (error) { return next(error) }
+  })
+  router.post('/:id/offboarding/checklist/:key/toggle', auth.authenticate, auth.requirePermission(PERMISSIONS.EMPLOYEES_WRITE), async (request, response, next) => {
+    try {
+      return response.json({ success: true, data: await service.toggleOffboardingItem(request.params.id, request.params.key, request.auth.user) })
+    } catch (error) { return next(error) }
+  })
+  router.post('/:id/deactivate', auth.authenticate, auth.requirePermission(PERMISSIONS.EMPLOYEES_WRITE), async (request, response, next) => {
+    try { return response.json({ success: true, data: await service.setStatus(request.params.id, 'inactive', request.auth.user) }) } catch (error) { return next(error) }
+  })
+  router.delete('/:id', auth.authenticate, auth.requirePermission(PERMISSIONS.EMPLOYEES_WRITE), async (request, response, next) => {
+    try {
+      if (!['admin', 'hr'].includes(request.auth.user.role)) return response.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Only an administrator or HR can permanently delete an employee.' } })
+      return response.json({ success: true, data: await service.remove(request.params.id, request.auth.user) })
+    } catch (error) { return next(error) }
+  })
+  return router
+}

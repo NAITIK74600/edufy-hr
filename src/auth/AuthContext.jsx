@@ -1,0 +1,241 @@
+import { createContext, useContext, useEffect, useMemo, useState } from 'react'
+import { apiClient, setAccessToken } from '../services/apiClient'
+import { hrStore } from '../services/hrStore'
+import { connectLiveUpdates } from '../services/liveUpdates'
+
+const AuthContext = createContext(null)
+const SESSION_KEY = 'edufyi.accessToken'
+const USER_KEY = 'edufyi.authUser'
+
+function readStoredToken() {
+  try {
+    return window.sessionStorage.getItem(SESSION_KEY)
+  } catch {
+    return null
+  }
+}
+
+export function AuthProvider({ children }) {
+  const [token, setToken] = useState(readStoredToken)
+  const [user, setUser] = useState(null)
+  const [status, setStatus] = useState(() => (readStoredToken() ? 'loading' : 'signed-out'))
+  useEffect(() => hrStore.subscribe((state) => {
+    setUser((current) => {
+      if (!current || ['admin', 'hr'].includes(current.role)) return current
+      return state.employees.find((employee) => employee.id === current.id) ?? current
+    })
+  }), [])
+
+  useEffect(() => {
+    if (status !== 'authenticated' || !user?.id) return
+    let active = true
+    const failed = (error) => {
+      if (!active) return
+      if (error.status === 401) clearSession()
+      else hrStore.reportError(error)
+    }
+    hrStore.connectUser(user).catch(failed)
+    const refresh = () => hrStore.refresh().catch(failed)
+    const disconnect = connectLiveUpdates(token, refresh, failed)
+    const timer = window.setInterval(refresh, 15000)
+    window.addEventListener('focus', refresh)
+    return () => {
+      active = false
+      window.clearInterval(timer)
+      disconnect()
+      window.removeEventListener('focus', refresh)
+    }
+  }, [status, user?.id, token])
+
+  useEffect(() => {
+    let active = true
+    setAccessToken(token)
+    if (token) {
+      const timeoutId = setTimeout(() => {
+        if (!active) return
+        console.warn('Session validation timed out, falling back to sign-in.')
+        clearSession()
+      }, 7000)
+
+      apiClient
+        .get('/auth/me')
+        .then((result) => {
+          clearTimeout(timeoutId)
+          if (!active) return
+          if (result?.data?.user) {
+            setUser(result.data.user)
+            persistUser(result.data.user)
+            setStatus('authenticated')
+          } else {
+            clearSession()
+          }
+        })
+        .catch((error) => {
+          clearTimeout(timeoutId)
+          if (!active) return
+          console.warn('Session validation failed:', error.message)
+          clearSession()
+        })
+    } else {
+      setStatus('signed-out')
+    }
+    return () => { active = false }
+  }, [token])
+
+  function persistToken(nextToken) {
+    try {
+      if (nextToken) {
+        window.sessionStorage.setItem(SESSION_KEY, nextToken)
+      } else {
+        window.sessionStorage.removeItem(SESSION_KEY)
+      }
+    } catch {
+      /* no-op */
+    }
+    setToken(nextToken)
+  }
+
+  function persistUser(nextUser) {
+    try {
+      if (nextUser) {
+        window.sessionStorage.setItem(USER_KEY, JSON.stringify(nextUser))
+      } else {
+        window.sessionStorage.removeItem(USER_KEY)
+      }
+    } catch {
+      /* no-op */
+    }
+    setUser(nextUser)
+  }
+
+  function updateUser(updates) {
+    setUser((prev) => {
+      const updated = { ...prev, ...updates }
+      persistUser(updated)
+      return updated
+    })
+  }
+
+  function clearSession() {
+    try {
+      window.sessionStorage.removeItem(SESSION_KEY)
+      window.sessionStorage.removeItem(USER_KEY)
+      window.sessionStorage.removeItem('edufyi.activePersona')
+    } catch {
+      /* no-op */
+    }
+    setAccessToken(null)
+    setToken(null)
+    setUser(null)
+    setStatus('signed-out')
+    hrStore.connectUser(null).catch(() => {})
+  }
+
+  async function login(identifier, password, portal) {
+    if (!identifier || !identifier.trim()) {
+      throw new Error('Please enter your work email, username, or employee ID.')
+    }
+    if (!password) {
+      throw new Error('Please enter your password.')
+    }
+
+    const cleanIdentifier = identifier.trim()
+
+    // Server-side authentication only. There is no client-side/offline bypass:
+    // every login must be verified by the API against the user store.
+    let result = null
+
+    try {
+      result = await apiClient.post('/auth/login', {
+        email: cleanIdentifier,
+        username: cleanIdentifier,
+        identifier: cleanIdentifier,
+        password,
+        portal,
+      })
+    } catch (apiErr) {
+      if (apiErr?.code === 'PORTAL_ACCESS_DENIED' || apiErr?.status === 403) {
+        throw new Error(apiErr.message || 'Access denied for this portal.')
+      }
+      if (apiErr?.status === 401 || apiErr?.code === 'INVALID_CREDENTIALS') {
+        throw new Error('Invalid email or password.')
+      }
+      throw new Error(apiErr?.message || 'Unable to reach the authentication server. Please try again in a moment.')
+    }
+
+    if (result?.data?.token && result?.data?.user) {
+      const loggedUser = result.data.user
+
+      // Client-side portal role enforcement guarantee
+      if (portal === 'admin' && loggedUser.role !== 'admin') {
+        clearSession()
+        throw new Error('Access denied: Employee credentials cannot be used to log into the Admin portal. Please use Employee Self-Service.')
+      }
+      if (portal === 'hr' && !['hr', 'admin'].includes(loggedUser.role)) {
+        clearSession()
+        throw new Error('Access denied: Employee credentials cannot be used to log into the HR portal. Please use Employee Self-Service.')
+      }
+      if (portal === 'management' && !['hr', 'admin'].includes(loggedUser.role)) {
+        clearSession()
+        throw new Error('Access denied: Employee credentials cannot be used to log into the Management Console. Please use Employee Self-Service.')
+      }
+      if (portal === 'employee' && ['admin', 'hr'].includes(loggedUser.role)) {
+        clearSession()
+        throw new Error('Access denied: Administrative accounts must sign into the Management Console. Please switch to the Management portal.')
+      }
+
+      setAccessToken(result.data.token)
+      persistToken(result.data.token)
+      persistUser(result.data.user)
+      setStatus('authenticated')
+      hrStore.addAuditLog(
+        result.data.user.name,
+        'USER_LOGIN',
+        `Authenticated via API as ${result.data.user.role.toUpperCase()} (${cleanIdentifier})`
+      )
+      return result.data.user
+    }
+
+    throw new Error('Invalid email or password.')
+  }
+
+  async function logout() {
+    try {
+      if (token) await apiClient.post('/auth/logout', undefined)
+    } catch {
+      /* no-op */
+    } finally {
+      clearSession()
+      window.location.hash = '#/login'
+    }
+  }
+
+  const value = useMemo(
+    () => ({
+      token,
+      user,
+      status,
+      login,
+      logout,
+      updateUser,
+    }),
+    [token, user, status]
+  )
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
+}
+
+export function useAuth() {
+  const context = useContext(AuthContext)
+  if (!context) {
+    return {
+      user: null,
+      status: 'loading',
+      token: null,
+      login: async () => {},
+      logout: async () => {},
+      updateUser: () => {},
+    }
+  }
+  return context
+}

@@ -1,0 +1,36 @@
+{
+  "name": "orbit-hr-panel",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "main": "server.js",
+  "engines": {
+    "node": ">=20.12.0"
+  },
+  "scripts": {
+    "start": "node --env-file-if-exists=.env server/src/server.js",
+    "dev": "vite --host",
+    "dev:server": "node --env-file=.env --watch-path=server/src server/src/server.js",
+    "build": "vite build",
+    "preview": "vite preview",
+    "start:server": "node --env-file=.env --watch-path=server/src server/src/server.js",
+    "test:server": "node --test server/test/*.test.js",
+    "test:ui": "node --test test/*.test.js",
+    "dev:all": "node scripts/dev-all.mjs",
+    "dev:full": "node scripts/dev-all.mjs",
+    "build:zips": "node scripts/create-separate-zips.mjs"
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "latest",
+    "express": "^5.1.0",
+    "html2canvas": "^1.4.1",
+    "jsonwebtoken": "^9.0.3",
+    "jspdf": "^4.2.1",
+    "lucide-react": "latest",
+    "mongoose": "^9.10.2",
+    "motion": "^13.4.4",
+    "react": "latest",
+    "react-dom": "latest",
+    "vite": "latest"
+  }
+}
