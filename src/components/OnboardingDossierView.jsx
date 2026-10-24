@@ -677,6 +677,8 @@ export function OnboardingDossierView({ employee, canEdit = false, canVerify = f
     }
   }
 
+  const handleVerifyByHR = handleApproveByHR
+
   // HR / Admin Rejects Dossier and Requests Revision with Reason
   async function handleRejectByHR(reason) {
     if (!isHRorAdmin) {
