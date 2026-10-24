@@ -21,6 +21,7 @@ import {
   Calendar,
   Briefcase,
   AlertCircle,
+  ShieldAlert,
   X,
   Edit2,
   Layers,
@@ -1492,21 +1493,71 @@ export function OrgHierarchyPage() {
     })
   }, [])
 
+  const isHRorAdmin = user?.role === 'admin' || user?.role === 'hr'
+
+  // Restrict completely for non-admin/HR users (Employees have no access to hierarchy management)
+  if (!isHRorAdmin) {
+    return (
+      <div style={{ padding: '40px 20px', textAlign: 'center' }}>
+        <div
+          style={{
+            maxWidth: '500px',
+            margin: '40px auto',
+            padding: '36px 28px',
+            background: 'var(--surface)',
+            border: '1px solid var(--border)',
+            borderRadius: '16px',
+            boxShadow: '0 8px 30px rgba(0,0,0,0.06)',
+          }}
+        >
+          <div
+            style={{
+              width: '60px',
+              height: '60px',
+              borderRadius: '50%',
+              background: '#fee2e2',
+              color: '#ef4444',
+              display: 'grid',
+              placeItems: 'center',
+              margin: '0 auto 16px',
+            }}
+          >
+            <ShieldAlert size={32} />
+          </div>
+          <h3 style={{ fontSize: '18px', fontWeight: 700, margin: '0 0 10px', color: 'var(--foreground)' }}>
+            Access Restricted to Admin & HR
+          </h3>
+          <p style={{ fontSize: '13px', color: 'var(--muted)', margin: '0 0 24px', lineHeight: 1.6 }}>
+            Organization hierarchy, adding employees, reassigning reporting lines, and department transfers are exclusively available in the Admin and HR management portals. Employee self-service accounts do not have access to this module.
+          </p>
+          <a
+            href="#/employee"
+            className="ui-button primary"
+            style={{
+              display: 'inline-block',
+              textDecoration: 'none',
+              padding: '10px 24px',
+              fontWeight: 600,
+              borderRadius: '8px',
+            }}
+          >
+            Return to Employee Dashboard
+          </a>
+        </div>
+      </div>
+    )
+  }
+
   const allEmployees = storeState.employees || []
-  const canManageEmployees = user?.role === 'admin' || user?.role === 'hr' || hasPermission(user, 'employees.write')
+  const canManageEmployees = isHRorAdmin
 
   // Determine effective viewer for role-based scoping:
-  // Non-admin/HR users always see their scoped tree (upward line to Director + squad).
-  // Admin and HR see the full tree by default, or can preview as any employee/TL/manager.
   const effectiveViewer = useMemo(() => {
     if (canManageEmployees && activeViewerId) {
       return allEmployees.find((e) => String(e.id || e._id) === activeViewerId || e.employeeId === activeViewerId) || null
     }
-    if (user && user.role !== 'admin' && user.role !== 'hr') {
-      return user
-    }
     return null
-  }, [canManageEmployees, activeViewerId, user, allEmployees])
+  }, [canManageEmployees, activeViewerId, allEmployees])
 
   // Build hierarchy tree based on department filter and viewer scope
   const { roots, stats, scoped, chain, reportingLine, targetEmployee } = useMemo(() => {

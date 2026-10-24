@@ -66,7 +66,6 @@ export const employeeRoutes = [
   { path: '/employee/profile', label: 'My Profile', group: 'Organization', description: 'Personal, employment, and emergency info', permission: 'dashboard.read' },
   { path: '/employee/team-leave', label: 'Team Approvals', group: 'Manager Controls', description: 'Review and approve direct reports leave', permission: 'leave.team.read' },
   { path: '/employee/my-team', label: 'My Team', group: 'Manager Controls', description: 'Direct reports roster and contact details', permission: 'leave.team.read' },
-  { path: '/employee/organization', label: 'Org Hierarchy', group: 'Organization', description: 'Company organization structure, my reporting line & team', permission: 'dashboard.read' },
 ]
 
 export const authRoutes = [

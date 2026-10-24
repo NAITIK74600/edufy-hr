@@ -242,12 +242,19 @@ export function createHierarchyRouter({ auth, repository }) {
     } catch (error) { next(error) }
   })
 
-  // 1. Get Organization Hierarchy (Role-scoped: Admin/HR see full, others see upward reporting chain & subordinates)
+  // 1. Get Organization Hierarchy (Strictly Admin and HR only)
   router.get('/', auth.authenticate, async (req, res, next) => {
     try {
-      const employees = await directory(repository)
       const user = req.auth?.user || {}
-      const isAdminOrHr = user.role === 'admin' || user.role === 'hr' || (user.permissions && user.permissions.includes('*'))
+      const isAdminOrHr = user.role === 'admin' || user.role === 'hr'
+      if (!isAdminOrHr) {
+        return res.status(403).json({
+          success: false,
+          error: { code: 'FORBIDDEN', message: 'Organization hierarchy and employee management are exclusively available to Admin and HR roles.' },
+        })
+      }
+
+      const employees = await directory(repository)
 
       // Allow Admin/HR to preview viewAs scope if requested
       const simulatedEmpId = (isAdminOrHr && (req.query.viewAs || req.query.scopeUser)) ? String(req.query.viewAs || req.query.scopeUser) : null
@@ -262,17 +269,11 @@ export function createHierarchyRouter({ auth, repository }) {
         roots = scopedResult.roots
         isScoped = true
         chain = scopedResult.chain
-      } else if (isAdminOrHr) {
+      } else {
         // Admin and HR see full organization tree
         const result = buildHierarchyTree(employees)
         roots = result.roots
         isScoped = false
-      } else {
-        // Employee, TL, Manager see their upward chain to Director and their team reports
-        const scopedResult = buildScopedHierarchy(employees, user)
-        roots = scopedResult.roots
-        isScoped = true
-        chain = scopedResult.chain
       }
 
       // Gather department statistics
@@ -406,13 +407,20 @@ export function createHierarchyRouter({ auth, repository }) {
     }
   })
 
-  // 4. Update Employee Manager (with Circular Reporting Prevention)
+  // 4. Update Employee Manager (Strictly Admin and HR only)
   router.patch(
     '/manager',
     auth.authenticate,
-    auth.requirePermission(PERMISSIONS.EMPLOYEES_WRITE),
     async (req, res, next) => {
       try {
+        const user = req.auth?.user || {}
+        if (user.role !== 'admin' && user.role !== 'hr') {
+          return res.status(403).json({
+            success: false,
+            error: { code: 'FORBIDDEN', message: 'Reporting manager updates are restricted to Admin and HR roles only.' },
+          })
+        }
+
         const { employeeId, newManagerId } = req.body || {}
         if (!employeeId) {
           return res.status(400).json({
@@ -474,13 +482,20 @@ export function createHierarchyRouter({ auth, repository }) {
     }
   )
 
-  // 5. Transfer Department
+  // 5. Transfer Department (Strictly Admin and HR only)
   router.patch(
     '/department',
     auth.authenticate,
-    auth.requirePermission(PERMISSIONS.EMPLOYEES_WRITE),
     async (req, res, next) => {
       try {
+        const user = req.auth?.user || {}
+        if (user.role !== 'admin' && user.role !== 'hr') {
+          return res.status(403).json({
+            success: false,
+            error: { code: 'FORBIDDEN', message: 'Department transfers are restricted to Admin and HR roles only.' },
+          })
+        }
+
         const { employeeId, newDepartment, newManagerId } = req.body || {}
         if (!employeeId || !newDepartment) {
           return res.status(400).json({
