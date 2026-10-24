@@ -125,7 +125,10 @@ function serialize(resource, record, actor, people = new Map()) {
   if (resource === 'dailyReports') { data.summary = data.tasksSummary; data.submittedAt = data.createdAt }
   if (resource === 'kudos') { data.fromName = data.from; data.toName = data.to; data.tag = data.badge }
   if (resource === 'tickets') data.responses = [{ sender: data.employeeName, text: data.description, time: data.createdAt }, ...(data.responses ?? [])]
-  if (resource === 'notifications') data.time = data.createdAt
+  if (resource === 'notifications') {
+    data.time = data.createdAt
+    data.recipientId = record.recipientId || String(record.ownerId)
+  }
   return data
 }
 
@@ -228,7 +231,7 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
             date: date(body, 'date'),
             comments: string(body, 'comments', false),
             status: 'submitted',
-            attachmentUrl: string(body, 'attachmentUrl', false),
+            attachmentUrl: string(body, 'attachmentUrl', false, 25000000),
             attachmentName: string(body, 'attachmentName', false),
             attachmentType: string(body, 'attachmentType', false),
             attachmentSize: string(body, 'attachmentSize', false),
@@ -307,6 +310,7 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
         // Confirmation for employee
         await models.notifications.create({
           ownerId: id(actor),
+          recipientId: id(actor),
           title: 'Expense Claim Submitted',
           message: `Your claim for ₹${formattedAmt} (${values.category}) has been submitted for approval.`,
           type: 'expense',
@@ -332,6 +336,7 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
         // Confirmation for employee
         await models.notifications.create({
           ownerId: id(actor),
+          recipientId: id(actor),
           title: 'Support Ticket Submitted',
           message: `Your ticket "${values.subject}" has been received. Our support team will assist you shortly.`,
           type: 'ticket',
@@ -458,7 +463,6 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
           allowedBody(req.body, ['status', 'rejectionReason'])
           const status = choice(req.body, 'status', ['approved', 'rejected'])
           query.status = 'submitted'
-          query.ownerId = { $ne: id(actor) }
           update = { $set: { status, reviewerId: id(actor), rejectionReason: string(req.body, 'rejectionReason', status === 'rejected') } }
         } else if (resource === 'enrollments') {
           allowedBody(req.body, ['progress'])
@@ -510,6 +514,7 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
         const isApproved = record.status === 'approved'
         await models.notifications.create({
           ownerId: record.ownerId,
+          recipientId: record.ownerId,
           title: isApproved ? 'Expense Claim Approved' : 'Expense Claim Rejected',
           message: isApproved
             ? `Your expense claim of ₹${formattedAmt} was approved by ${actor.name || actor.displayName || 'HR/Admin'}.`
@@ -540,6 +545,7 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
             // Management replied -> notify employee
             await models.notifications.create({
               ownerId: record.ownerId,
+              recipientId: record.ownerId,
               title: `Support Reply: ${record.subject}`,
               message: `${actor.name || actor.displayName || 'Support Team'} replied to your ticket "${record.subject}".`,
               type: 'ticket',
@@ -550,6 +556,7 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
           // Status updated -> notify employee
           await models.notifications.create({
             ownerId: record.ownerId,
+            recipientId: record.ownerId,
             title: `Ticket Status Updated: ${record.status}`,
             message: `Your support ticket "${record.subject}" is now marked as ${record.status}.`,
             type: 'ticket',

@@ -1495,59 +1495,6 @@ export function OrgHierarchyPage() {
 
   const isHRorAdmin = user?.role === 'admin' || user?.role === 'hr'
 
-  // Restrict completely for non-admin/HR users (Employees have no access to hierarchy management)
-  if (!isHRorAdmin) {
-    return (
-      <div style={{ padding: '40px 20px', textAlign: 'center' }}>
-        <div
-          style={{
-            maxWidth: '500px',
-            margin: '40px auto',
-            padding: '36px 28px',
-            background: 'var(--surface)',
-            border: '1px solid var(--border)',
-            borderRadius: '16px',
-            boxShadow: '0 8px 30px rgba(0,0,0,0.06)',
-          }}
-        >
-          <div
-            style={{
-              width: '60px',
-              height: '60px',
-              borderRadius: '50%',
-              background: '#fee2e2',
-              color: '#ef4444',
-              display: 'grid',
-              placeItems: 'center',
-              margin: '0 auto 16px',
-            }}
-          >
-            <ShieldAlert size={32} />
-          </div>
-          <h3 style={{ fontSize: '18px', fontWeight: 700, margin: '0 0 10px', color: 'var(--foreground)' }}>
-            Access Restricted to Admin & HR
-          </h3>
-          <p style={{ fontSize: '13px', color: 'var(--muted)', margin: '0 0 24px', lineHeight: 1.6 }}>
-            Organization hierarchy, adding employees, reassigning reporting lines, and department transfers are exclusively available in the Admin and HR management portals. Employee self-service accounts do not have access to this module.
-          </p>
-          <a
-            href="#/employee"
-            className="ui-button primary"
-            style={{
-              display: 'inline-block',
-              textDecoration: 'none',
-              padding: '10px 24px',
-              fontWeight: 600,
-              borderRadius: '8px',
-            }}
-          >
-            Return to Employee Dashboard
-          </a>
-        </div>
-      </div>
-    )
-  }
-
   const allEmployees = storeState.employees || []
   const canManageEmployees = isHRorAdmin
 
@@ -1817,31 +1764,6 @@ export function OrgHierarchyPage() {
               </div>
             </div>
           </div>
-
-          {canManageEmployees && (
-            <button
-              type="button"
-              className="ui-button primary"
-              onClick={() => setAddEmpModalOpen(true)}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '8px',
-                padding: '10px 18px',
-                fontSize: '13px',
-                fontWeight: 700,
-                borderRadius: '10px',
-                background: 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)',
-                color: '#ffffff',
-                border: 'none',
-                boxShadow: '0 4px 12px rgba(2, 132, 199, 0.3)',
-                cursor: 'pointer',
-              }}
-            >
-              <Plus size={16} />
-              <span>Add Employee</span>
-            </button>
-          )}
         </div>
       </div>
 
@@ -2590,55 +2512,9 @@ export function OrgHierarchyPage() {
                 )}
               </div>
 
-              {/* QUICK ACTIONS */}
-              {canManageEmployees && (
+              {/* DOSSIER LINK FOR ADMIN/HR */}
+              {isHRorAdmin && (
                 <div style={{ borderTop: '1px solid var(--border)', paddingTop: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <button
-                    type="button"
-                    onClick={() => setChangeMgrModalOpen(true)}
-                    style={{
-                      width: '100%',
-                      padding: '8px 12px',
-                      borderRadius: '8px',
-                      border: '1px solid var(--border)',
-                      backgroundColor: 'var(--surface-sunken)',
-                      color: 'var(--foreground)',
-                      fontSize: '12px',
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '6px',
-                    }}
-                  >
-                    <UserCheck size={14} />
-                    <span>Change Reporting Manager</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setTransferDeptModalOpen(true)}
-                    style={{
-                      width: '100%',
-                      padding: '8px 12px',
-                      borderRadius: '8px',
-                      border: '1px solid var(--border)',
-                      backgroundColor: 'var(--surface-sunken)',
-                      color: 'var(--foreground)',
-                      fontSize: '12px',
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '6px',
-                    }}
-                  >
-                    <Building2 size={14} />
-                    <span>Transfer Department</span>
-                  </button>
-
                   <a
                     href={`#/hr/people/${selectedNode.id}`}
                     style={{
@@ -2667,31 +2543,6 @@ export function OrgHierarchyPage() {
           </aside>
         )}
       </div>
-
-      {/* POPUP MODALS */}
-      <ChangeManagerModal
-        employee={selectedNode}
-        allEmployees={allEmployees}
-        isOpen={changeMgrModalOpen}
-        onClose={() => setChangeMgrModalOpen(false)}
-        onSave={handleSaveManager}
-      />
-
-      <TransferDepartmentModal
-        employee={selectedNode}
-        allEmployees={allEmployees}
-        isOpen={transferDeptModalOpen}
-        onClose={() => setTransferDeptModalOpen(false)}
-        onSave={handleSaveDepartmentTransfer}
-      />
-
-      <QuickAddEmployeeModal
-        allEmployees={allEmployees}
-        defaultManagerId={selectedNode?.id}
-        isOpen={addEmpModalOpen}
-        onClose={() => setAddEmpModalOpen(false)}
-        onCreated={handleEmployeeCreated}
-      />
     </div>
   )
 }

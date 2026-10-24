@@ -49,7 +49,7 @@ import { hasPermission } from '../auth/permissions'
 import { hrStore } from '../services/hrStore'
 import { workspaceAction } from '../services/workspaceStore'
 import { getTimeOfDayGreeting, getRoleBadgeLabel, resolveUserDisplayName } from '../utils/greeting'
-import { playNotificationSound, isSoundMuted, toggleSoundMuted } from '../utils/soundHelper'
+import { apiClient } from '../services/apiClient'
 import { AIHRAssistant } from './AIHRAssistant'
 
 
@@ -135,6 +135,7 @@ const icons = {
   Announcements: Megaphone,
   'Holiday Calendar': CalendarDays,
   'Holiday calendar': CalendarDays,
+  'Org Hierarchy': Network,
   'Company Documents': FolderOpen,
   'Company documents': FolderOpen,
   'Company Policy': ShieldCheck,
@@ -256,10 +257,19 @@ export function HRLayout({ route, children }) {
     const file = e.target.files?.[0]
     if (!file) return
     const reader = new FileReader()
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       const dataUrl = event.target.result
-      if (dataUrl && updateUser) {
-        updateUser({ avatarUrl: dataUrl })
+      if (dataUrl) {
+        try {
+          if (hrStore.updateMyAvatar) {
+            await hrStore.updateMyAvatar(dataUrl)
+          } else {
+            await apiClient.patch('/employees/me/avatar', { avatarUrl: dataUrl })
+          }
+        } catch (err) {
+          console.warn('Failed to persist profile picture to database:', err.message)
+        }
+        if (updateUser) updateUser({ avatarUrl: dataUrl })
         setPhotoNotice(true)
         setTimeout(() => setPhotoNotice(false), 3500)
       }

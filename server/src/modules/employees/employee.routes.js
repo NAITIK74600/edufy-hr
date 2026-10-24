@@ -91,8 +91,13 @@ export function createEmployeeRouter({ auth, service }) {
       if (typeof avatarUrl !== 'string' || !avatarUrl.trim()) {
         return response.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'Valid avatarUrl string is required.' } })
       }
-      const targetId = request.auth.user.id || request.auth.user._id
-      const updated = await service.update(targetId, { avatarUrl: avatarUrl.trim() }, request.auth.user)
+      const user = request.auth.user
+      const targetId = user.id || user._id || user.employeeId
+      let currentEmployee = await service.get(targetId).catch(() => null)
+      if (!currentEmployee && user.employeeId) currentEmployee = await service.get(user.employeeId).catch(() => null)
+      if (!currentEmployee && user.email) currentEmployee = await service.get(user.email).catch(() => null)
+      const empId = currentEmployee?.id || currentEmployee?._id || targetId
+      const updated = await service.update(empId, { avatarUrl: avatarUrl.trim() }, request.auth.user)
       return response.json({ success: true, data: updated })
     } catch (error) { return next(error) }
   })

@@ -308,10 +308,8 @@ function App() {
       ? <LeaveManagementPage mode="hr" />
       : route.path === '/admin/attendance'
       ? <WorkspaceModulePage route={{ ...route, path: '/hr/attendance' }} />
-      : route.path === '/admin/hierarchy' || route.path === '/hr/hierarchy'
-      ? (user?.role === 'admin' || user?.role === 'hr'
-          ? <OrgHierarchyPage />
-          : <AccessDeniedPage title="Admin & HR Only" message="Organization hierarchy and employee management are exclusively available in Admin and HR panels." />)
+      : route.path === '/admin/hierarchy' || route.path === '/hr/hierarchy' || route.path === '/employee/hierarchy'
+      ? <OrgHierarchyPage />
       : route.workspace
       ? <WorkspaceModulePage route={route} />
       : route.path.startsWith('/admin')

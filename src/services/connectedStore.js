@@ -164,8 +164,7 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
 
       const deletedRaw = typeof window !== 'undefined' ? window.localStorage.getItem('edufyi_deleted_notifications_v2') : null
       const deletedIds = new Set(deletedRaw ? JSON.parse(deletedRaw) : [])
-      const isCleared = typeof window !== 'undefined' ? window.localStorage.getItem('edufyi_notifications_cleared_v2') === 'true' : false
-      const serverNotifs = isCleared ? [] : (data.workspace?.notifications ?? []).filter((n) => n && n.id && !deletedIds.has(n.id))
+      const serverNotifs = (data.workspace?.notifications ?? []).filter((n) => n && n.id && !deletedIds.has(n.id))
 
       Object.assign(state(), {
         ...Object.fromEntries(workspaceKeys.map((key) => [key, data.workspace[key] ?? []])),
@@ -245,6 +244,9 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
   }
   return {
     ...createWorkspaceStore(store, mutate, () => user, rawLocal),
+    updateMyAvatar(avatarUrl) {
+      return mutate(() => apiClient.patch('/employees/me/avatar', { avatarUrl }))
+    },
     restoreDataJSON(data) {
       if (!user && rawLocal.restoreDataJSON) return rawLocal.restoreDataJSON(data)
       throw new Error('Browser JSON cannot restore MongoDB records. Use a verified database backup and restore procedure.')

@@ -3532,38 +3532,53 @@ const localStore = {
   },
 
   // Expenses Approval Flow
-  approveExpense(id, reviewerRole = 'Manager') {
+  async approveExpense(id, reviewerRole = 'Manager') {
     storeState.expenses = (storeState.expenses || []).map((e) => {
-      if (e.id === id) {
+      if (e.id === id || e._id === id) {
         return { ...e, status: 'approved' }
       }
       return e
     })
-    const exp = (storeState.expenses || []).find((e) => e.id === id)
+    const exp = (storeState.expenses || []).find((e) => e.id === id || e._id === id)
     this.addNotification({
       title: 'Expense Claim Approved',
       message: `Claim ${id} for ₹${exp?.amount || ''} (${exp?.category || ''}) has been approved.`,
       type: 'expense',
+      recipientId: exp?.employeeId,
     })
     this.addAuditLog(reviewerRole, 'EXPENSE_APPROVE', `Approved expense claim ${id}`)
     notifyListeners()
-    return (storeState.expenses || []).find((e) => e.id === id)
+    try {
+      await apiClient.patch(`/workspace/expenses/${encodeURIComponent(id)}`, { status: 'approved' })
+      await this.refresh?.()
+    } catch (err) {
+      console.warn('Backend expense approve sync:', err.message)
+    }
+    return (storeState.expenses || []).find((e) => e.id === id || e._id === id)
   },
-  rejectExpense(id, reviewerRole = 'Manager', reason = 'Insufficient invoice receipt') {
+  async rejectExpense(id, reviewerRole = 'Manager', reason = 'Insufficient invoice receipt') {
     storeState.expenses = (storeState.expenses || []).map((e) => {
-      if (e.id === id) {
+      if (e.id === id || e._id === id) {
         return { ...e, status: 'rejected', rejectionReason: reason }
       }
       return e
     })
+    const exp = (storeState.expenses || []).find((e) => e.id === id || e._id === id)
     this.addNotification({
       title: 'Expense Claim Declined',
       message: `Claim ${id} was rejected: ${reason}`,
       type: 'expense',
+      recipientId: exp?.employeeId,
     })
     this.addAuditLog(reviewerRole, 'EXPENSE_REJECT', `Rejected expense claim ${id}: ${reason}`)
     notifyListeners()
-    return (storeState.expenses || []).find((e) => e.id === id)
+    try {
+      await apiClient.patch(`/workspace/expenses/${encodeURIComponent(id)}`, { status: 'rejected', rejectionReason: reason })
+      await this.refresh?.()
+    } catch (err) {
+      console.warn('Backend expense reject sync:', err.message)
+    }
+    return (storeState.expenses || []).find((e) => e.id === id || e._id === id)
   },
 
   // Backup and Restore
@@ -5359,11 +5374,17 @@ const localStore = {
     notifyListeners()
     return newTicket
   },
-  updateTicketStatus(ticketId, status) {
+  async updateTicketStatus(ticketId, status) {
     storeState.tickets = (storeState.tickets || []).map((t) => (t.id === ticketId || t._id === ticketId) ? { ...t, status } : t)
     notifyListeners()
+    try {
+      await apiClient.patch(`/workspace/tickets/${encodeURIComponent(ticketId)}`, { status })
+      await this.refresh?.()
+    } catch (err) {
+      console.warn('Backend ticket status sync:', err.message)
+    }
   },
-  replyToTicket(ticketId, responseText, senderName = 'HR Support') {
+  async replyToTicket(ticketId, responseText, senderName = 'HR Support') {
     storeState.tickets = (storeState.tickets || []).map((t) => {
       if (t.id === ticketId || t._id === ticketId) {
         const responses = Array.isArray(t.responses) ? [...t.responses] : []
@@ -5377,6 +5398,12 @@ const localStore = {
       return t
     })
     notifyListeners()
+    try {
+      await apiClient.patch(`/workspace/tickets/${encodeURIComponent(ticketId)}`, { response: responseText })
+      await this.refresh?.()
+    } catch (err) {
+      console.warn('Backend ticket reply sync:', err.message)
+    }
   },
 
   // Announcements
@@ -5543,22 +5570,26 @@ const localStore = {
     const role = viewerUser.role
     const uid = String(viewerUser.id || viewerUser._id || '')
     const empId = String(viewerUser.employeeId || '')
+    const isStaff = ['admin', 'hr', 'hr_executive', 'director', 'managing_director', 'co_founder'].includes(role)
 
     return storeState.notifications.filter((n) => {
-      // If notification explicitly excludes this role (e.g. ['admin'] for employee/TL leave)
+      if (!n) return false
+      // If notification explicitly excludes this role
       if (Array.isArray(n.excludeRoles) && n.excludeRoles.includes(role)) {
         return false
       }
-      // If notification has a specific recipient ID
-      if (n.recipientId) {
-        const rId = String(n.recipientId)
+      // If notification has a specific recipient ID or ownerId
+      const targetId = n.recipientId || n.ownerId
+      if (targetId) {
+        const rId = String(targetId)
         if (rId === uid || rId === empId) return true
-        if (n.recipientRole && n.recipientRole === role) return true
-        return false
+        if (n.recipientRole && (n.recipientRole === role || (isStaff && ['admin', 'hr', 'management'].includes(n.recipientRole)))) return true
+        // If it was targeted at a specific person and we didn't match, don't show
+        if (!n.recipientRole) return false
       }
       // If notification is scoped to a specific recipient role
       if (n.recipientRole) {
-        return n.recipientRole === role
+        return n.recipientRole === role || (isStaff && ['admin', 'hr', 'management'].includes(n.recipientRole))
       }
       // Broadcast / global notification (unless excluded)
       return true
@@ -5622,7 +5653,7 @@ const localStore = {
     storeState.notifications = []
     if (typeof window !== 'undefined' && window.localStorage) {
       try {
-        window.localStorage.setItem(STORAGE_CLEARED_NOTIFICATIONS_KEY, 'true')
+        window.localStorage.removeItem(STORAGE_CLEARED_NOTIFICATIONS_KEY)
         window.localStorage.setItem(STORAGE_PERSISTED_NOTIFICATIONS_KEY, JSON.stringify([]))
       } catch (err) {
         console.warn(err)

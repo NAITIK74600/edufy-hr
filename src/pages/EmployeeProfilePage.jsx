@@ -1,21 +1,52 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useAuth } from '../auth/AuthContext'
 import { hrStore } from '../services/hrStore'
 import { PageHeader } from '../components/ui'
 import { formatINR } from '../utils/currency'
 import { OnboardingDossierView } from '../components/OnboardingDossierView'
 import { EmployeeComplianceStatusCard } from '../components/EmployeeComplianceStatusCard'
-import { User, Mail, Phone, Building2, Calendar, ShieldCheck, Briefcase } from 'lucide-react'
+import { User, Mail, Phone, Building2, Calendar, ShieldCheck, Briefcase, Camera, Check } from 'lucide-react'
+import { apiClient } from '../services/apiClient'
 
 export function EmployeeProfilePage() {
-  const { user } = useAuth()
+  const { user, updateUser } = useAuth()
   const [state, setState] = useState(() => hrStore.getState())
+  const [photoNotice, setPhotoNotice] = useState(false)
+  const [uploadingPhoto, setUploadingPhoto] = useState(false)
+  const fileInputRef = useRef(null)
   useEffect(() => hrStore.subscribe(setState), [])
 
   const employee = state.employees.find((record) => record.id === user?.id || record.employeeId === user?.employeeId) || state.employees[0]
   if (!employee) return <p role="alert">Your employee record is unavailable. Contact HR.</p>
 
-  const passportPhotoUrl = employee?.onboardingDocs?.passportPhoto?.url
+  const avatarUrl = user?.avatarUrl || employee?.avatarUrl || employee?.onboardingDocs?.passportPhoto?.url
+
+  function handlePhotoUpload(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploadingPhoto(true)
+    const reader = new FileReader()
+    reader.onload = async (event) => {
+      const dataUrl = event.target.result
+      if (dataUrl) {
+        try {
+          if (hrStore.updateMyAvatar) {
+            await hrStore.updateMyAvatar(dataUrl)
+          } else {
+            await apiClient.patch('/employees/me/avatar', { avatarUrl: dataUrl })
+          }
+        } catch (err) {
+          console.warn('Failed to persist profile picture:', err.message)
+        }
+        if (updateUser) updateUser({ avatarUrl: dataUrl })
+        setPhotoNotice(true)
+        setTimeout(() => setPhotoNotice(false), 4000)
+      }
+      setUploadingPhoto(false)
+    }
+    reader.onerror = () => setUploadingPhoto(false)
+    reader.readAsDataURL(file)
+  }
 
   return (
     <div style={{ display: 'grid', gap: '22px' }}>
@@ -25,23 +56,73 @@ export function EmployeeProfilePage() {
         description="View and manage your official employment record, identity credentials, statutory numbers, and onboarding verification documents."
       />
 
+      {photoNotice && (
+        <div style={{
+          padding: '10px 16px',
+          background: '#dcfce7',
+          border: '1px solid #86efac',
+          borderRadius: '8px',
+          color: '#15803d',
+          fontSize: '13px',
+          fontWeight: 600,
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+        }}>
+          <Check size={16} />
+          Profile picture updated and saved successfully!
+        </div>
+      )}
+
       {/* Main Profile Summary Card */}
       <section className="panel" style={{ padding: '22px' }}>
         <div style={{ display: 'flex', gap: '20px', alignItems: 'center', flexWrap: 'wrap' }}>
-          {passportPhotoUrl ? (
-            <img
-              src={passportPhotoUrl}
-              alt={employee.name}
-              style={{ width: '74px', height: '74px', borderRadius: '50%', objectFit: 'cover', border: '3px solid var(--teal)' }}
+          <div style={{ position: 'relative', width: '78px', height: '78px' }}>
+            {avatarUrl ? (
+              <img
+                src={avatarUrl}
+                alt={employee.name}
+                style={{ width: '78px', height: '78px', borderRadius: '50%', objectFit: 'cover', border: '3px solid var(--teal)' }}
+              />
+            ) : (
+              <div style={{
+                width: '78px', height: '78px', borderRadius: '50%', background: 'linear-gradient(135deg, #0d9488 0%, #115e59 100%)',
+                color: '#ffffff', display: 'grid', placeItems: 'center', fontSize: '24px', fontWeight: 700
+              }}>
+                {employee.name.split(' ').map((p) => p[0]).join('').slice(0, 2).toUpperCase()}
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              title="Change profile picture"
+              disabled={uploadingPhoto}
+              style={{
+                position: 'absolute',
+                bottom: '-2px',
+                right: '-2px',
+                width: '26px',
+                height: '26px',
+                borderRadius: '50%',
+                background: 'var(--teal)',
+                display: 'grid',
+                placeItems: 'center',
+                color: '#fff',
+                cursor: 'pointer',
+                boxShadow: '0 2px 6px rgba(0,0,0,0.25)',
+                border: '2px solid #fff',
+              }}
+            >
+              <Camera size={13} />
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              style={{ display: 'none' }}
+              onChange={handlePhotoUpload}
             />
-          ) : (
-            <div style={{
-              width: '74px', height: '74px', borderRadius: '50%', background: 'linear-gradient(135deg, #0d9488 0%, #115e59 100%)',
-              color: '#ffffff', display: 'grid', placeItems: 'center', fontSize: '24px', fontWeight: 700
-            }}>
-              {employee.name.split(' ').map((p) => p[0]).join('').slice(0, 2).toUpperCase()}
-            </div>
-          )}
+          </div>
 
           <div style={{ flex: 1, minWidth: '220px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
