@@ -5462,11 +5462,16 @@ const localStore = {
       date: expenseData.date || new Date().toISOString().split('T')[0],
       status: 'submitted',
       comments: expenseData.comments,
+      notes: expenseData.notes || expenseData.comments,
+      attachmentUrl: expenseData.attachmentUrl || null,
+      attachmentName: expenseData.attachmentName || null,
+      attachmentType: expenseData.attachmentType || null,
+      attachmentSize: expenseData.attachmentSize || null,
     }
     storeState.expenses = [newExp, ...storeState.expenses]
     this.addNotification({
       title: 'Expense Claim Submitted',
-      message: `Claim for $${newExp.amount.toFixed(2)} (${newExp.category}) submitted for approval.`,
+      message: `Claim for ₹${newExp.amount.toFixed(2)} (${newExp.category}) submitted for approval with proof attachment.`,
       type: 'expense',
     })
     notifyListeners()

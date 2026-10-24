@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useRef } from 'react'
 import {
   AlertCircle,
   ArrowRight,
@@ -29,6 +29,7 @@ import {
   MessageSquare,
   Navigation,
   Network,
+  Paperclip,
   Pause,
   Phone,
   Play,
@@ -43,6 +44,7 @@ import {
   ShieldCheck,
   Sparkles,
   Target,
+  Upload,
   Ticket,
   TrendingUp,
   User,
@@ -1988,6 +1990,10 @@ function ESSExpensesView({ user }) {
   const [claimMerchant, setClaimMerchant] = useState('')
   const [claimDate, setClaimDate] = useState(() => new Date().toISOString().split('T')[0])
   const [claimNotes, setClaimNotes] = useState('')
+  const [claimAttachment, setClaimAttachment] = useState(null)
+  const [attachmentError, setAttachmentError] = useState('')
+  const [previewAttachmentModal, setPreviewAttachmentModal] = useState(null)
+  const fileInputRef = useRef(null)
   const [statusTab, setStatusTab] = useState('all') // 'all' | 'submitted' | 'approved' | 'rejected'
   const [searchTerm, setSearchTerm] = useState('')
   const [feedback, setFeedback] = useState('')
@@ -1995,6 +2001,26 @@ function ESSExpensesView({ user }) {
   useEffect(() => {
     return hrStore.subscribe((state) => setStoreState(state))
   }, [])
+
+  const handleFileChange = (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (file.size > 8 * 1024 * 1024) {
+      setAttachmentError('Attachment size must be under 8MB.')
+      return
+    }
+    setAttachmentError('')
+    const reader = new FileReader()
+    reader.onload = () => {
+      setClaimAttachment({
+        name: file.name,
+        type: file.type,
+        size: (file.size / 1024).toFixed(1) + ' KB',
+        url: reader.result,
+      })
+    }
+    reader.readAsDataURL(file)
+  }
 
   const myExpenses = (storeState.expenses || []).filter((e) => {
     if (!user) return true
@@ -2045,13 +2071,19 @@ function ESSExpensesView({ user }) {
       comments: claimNotes.trim(),
       notes: claimNotes.trim(),
       status: 'submitted',
+      attachmentUrl: claimAttachment?.url || null,
+      attachmentName: claimAttachment?.name || null,
+      attachmentType: claimAttachment?.type || null,
+      attachmentSize: claimAttachment?.size || null,
     })
 
     setModalOpen(false)
     setClaimAmount('')
     setClaimMerchant('')
     setClaimNotes('')
-    setFeedback('Reimbursement claim submitted successfully! Assigned to finance review queue.')
+    setClaimAttachment(null)
+    if (fileInputRef.current) fileInputRef.current.value = ''
+    setFeedback('Reimbursement claim submitted successfully with proof attachment! Assigned to finance review queue.')
     setTimeout(() => setFeedback(''), 4500)
   })
 
@@ -2193,6 +2225,7 @@ function ESSExpensesView({ user }) {
                 <th>Merchant</th>
                 <th>Amount</th>
                 <th>Justification</th>
+                <th>Proof Receipt</th>
                 <th>Status</th>
                 <th style={{ textAlign: 'right' }}>Action</th>
               </tr>
@@ -2200,7 +2233,7 @@ function ESSExpensesView({ user }) {
             <tbody>
               {filteredExpenses.length === 0 ? (
                 <tr>
-                  <td colSpan={8} style={{ textAlign: 'center', padding: '36px', color: 'var(--muted)' }}>
+                  <td colSpan={9} style={{ textAlign: 'center', padding: '36px', color: 'var(--muted)' }}>
                     <Receipt size={28} style={{ opacity: 0.4, margin: '0 auto 8px', display: 'block' }} />
                     <strong style={{ fontSize: '13px', display: 'block', color: 'var(--ink)' }}>No expense claims found</strong>
                     <span style={{ fontSize: '11.5px' }}>Click "Submit Expense Claim" above to log a new reimbursement.</span>
@@ -2220,8 +2253,34 @@ function ESSExpensesView({ user }) {
                       </td>
                       <td><strong style={{ color: 'var(--ink)' }}>{exp.merchant || 'Merchant'}</strong></td>
                       <td><strong style={{ fontSize: '13px', color: 'var(--ink)' }}>{formatINR(exp.amount)}</strong></td>
-                      <td style={{ maxWidth: '240px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={exp.comments || exp.notes}>
+                      <td style={{ maxWidth: '200px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={exp.comments || exp.notes}>
                         {exp.comments || exp.notes || 'No description provided'}
+                      </td>
+                      <td>
+                        {exp.attachmentUrl ? (
+                          <button
+                            type="button"
+                            onClick={() => setPreviewAttachmentModal(exp)}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              padding: '3px 8px',
+                              borderRadius: '6px',
+                              background: '#eaf4f1',
+                              border: '1px solid #c7ded7',
+                              color: 'var(--teal)',
+                              fontSize: '11px',
+                              fontWeight: 600,
+                              cursor: 'pointer',
+                            }}
+                          >
+                            <Paperclip size={12} />
+                            <span>View Proof</span>
+                          </button>
+                        ) : (
+                          <span style={{ fontSize: '11px', color: 'var(--muted)' }}>No proof</span>
+                        )}
                       </td>
                       <td>
                         <StatusBadge tone={s === 'approved' || s === 'reimbursed' ? 'success' : s === 'rejected' ? 'danger' : 'warning'}>
@@ -2271,7 +2330,7 @@ function ESSExpensesView({ user }) {
                 </div>
                 <div>
                   <h3 className="modal-title-text">File Expense Claim</h3>
-                  <p className="modal-subtitle-text">Submit an official reimbursement claim for business expenses</p>
+                  <p className="modal-subtitle-text">Submit an official reimbursement claim with proof bill or receipt</p>
                 </div>
               </div>
               <button type="button" className="icon-button" onClick={() => setModalOpen(false)} aria-label="Close modal">
@@ -2352,9 +2411,75 @@ function ESSExpensesView({ user }) {
                     placeholder="Explain the purpose of the business expenditure (e.g. Travel to client site for deployment demo)..."
                     value={claimNotes}
                     onChange={(e) => setClaimNotes(e.target.value)}
-                    style={{ width: '100%', minHeight: '80px', maxHeight: '160px', resize: 'vertical', fontSize: '12.5px' }}
+                    style={{ width: '100%', minHeight: '70px', maxHeight: '140px', resize: 'vertical', fontSize: '12.5px' }}
                     required
                   />
+                </div>
+
+                {/* ATTACHMENT / PROOF UPLOAD */}
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                    <label style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--ink)' }}>Proof / Receipt Attachment</label>
+                    <span style={{ fontSize: '10px', color: 'var(--muted)' }}>Bill, receipt or invoice (JPG, PNG, PDF up to 8MB)</span>
+                  </div>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp,application/pdf"
+                    onChange={handleFileChange}
+                    style={{ display: 'none' }}
+                    id="employee-claim-file-upload"
+                  />
+                  {claimAttachment ? (
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', overflow: 'hidden' }}>
+                        <div style={{ width: '32px', height: '32px', borderRadius: '6px', background: '#eaf4f1', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--teal)', flexShrink: 0 }}>
+                          {claimAttachment.type?.includes('pdf') ? <FileText size={18} /> : <Paperclip size={18} />}
+                        </div>
+                        <div style={{ overflow: 'hidden' }}>
+                          <strong style={{ fontSize: '12px', display: 'block', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '240px', color: 'var(--ink)' }}>
+                            {claimAttachment.name}
+                          </strong>
+                          <span style={{ fontSize: '10.5px', color: 'var(--muted)' }}>{claimAttachment.size}</span>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setClaimAttachment(null)
+                          if (fileInputRef.current) fileInputRef.current.value = ''
+                        }}
+                        style={{ border: 0, background: 'transparent', color: '#dc2626', cursor: 'pointer', fontSize: '11.5px', fontWeight: 600, padding: '4px 8px' }}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ) : (
+                    <label
+                      htmlFor="employee-claim-file-upload"
+                      style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        padding: '16px',
+                        border: '2px dashed #cbd5e1',
+                        borderRadius: '10px',
+                        cursor: 'pointer',
+                        background: '#f8fafc',
+                        transition: 'border-color 0.2s',
+                        textAlign: 'center',
+                        gap: '4px'
+                      }}
+                    >
+                      <Upload size={20} style={{ color: 'var(--teal)', marginBottom: '2px' }} />
+                      <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--ink)' }}>Click to upload bill / receipt</span>
+                      <span style={{ fontSize: '10.5px', color: 'var(--muted)' }}>Supports PNG, JPG, JPEG, WEBP or PDF</span>
+                    </label>
+                  )}
+                  {attachmentError && (
+                    <span style={{ color: '#dc2626', fontSize: '11px', display: 'block', marginTop: '4px' }}>{attachmentError}</span>
+                  )}
                 </div>
 
                 <div
@@ -2372,7 +2497,7 @@ function ESSExpensesView({ user }) {
                 >
                   <Receipt size={15} style={{ flexShrink: 0 }} />
                   <span>
-                    Keep original receipts accessible for finance verification. Reimbursements are settled upon manager & finance approval.
+                    Receipt proof will be verified by HR and Accounts before reimbursement is disbursed.
                   </span>
                 </div>
               </div>
@@ -2386,6 +2511,77 @@ function ESSExpensesView({ user }) {
                 </Button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* PROOF RECEIPT PREVIEW MODAL */}
+      {previewAttachmentModal && (
+        <div className="payslip-voucher-overlay" onClick={() => setPreviewAttachmentModal(null)}>
+          <div className="payslip-voucher" style={{ maxWidth: '640px', width: '92%' }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header-premium">
+              <div className="modal-title-group">
+                <div className="modal-icon-badge" style={{ background: '#eaf4f1', color: 'var(--teal)' }}>
+                  <Receipt size={20} />
+                </div>
+                <div>
+                  <h3 className="modal-title-text">Proof of Expense: {previewAttachmentModal.merchant || previewAttachmentModal.category}</h3>
+                  <p className="modal-subtitle-text">
+                    Amount: {formatINR(previewAttachmentModal.amount)} • Date: {previewAttachmentModal.date ? new Date(previewAttachmentModal.date).toLocaleDateString() : 'Recent'}
+                  </p>
+                </div>
+              </div>
+              <button type="button" className="icon-button" onClick={() => setPreviewAttachmentModal(null)} aria-label="Close modal">
+                <X size={16} />
+              </button>
+            </div>
+            <div className="modal-body-premium" style={{ maxHeight: '70vh', overflowY: 'auto' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', background: '#f8fafc', padding: '10px 14px', borderRadius: '8px', fontSize: '12px' }}>
+                <div>
+                  <strong>File: </strong> {previewAttachmentModal.attachmentName || 'Receipt Document'}
+                  {previewAttachmentModal.attachmentSize && <span style={{ color: 'var(--muted)', marginLeft: '6px' }}>({previewAttachmentModal.attachmentSize})</span>}
+                </div>
+                <a
+                  href={previewAttachmentModal.attachmentUrl}
+                  download={previewAttachmentModal.attachmentName || 'expense_receipt'}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="ui-button secondary"
+                  style={{ padding: '4px 10px', fontSize: '11.5px', height: '28px', textDecoration: 'none' }}
+                >
+                  Open Full Size
+                </a>
+              </div>
+
+              {/* PREVIEW CONTAINER */}
+              <div style={{ textAlign: 'center', background: '#f1f5f9', borderRadius: '8px', padding: '12px', minHeight: '200px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {previewAttachmentModal.attachmentType?.includes('pdf') || previewAttachmentModal.attachmentUrl?.startsWith('data:application/pdf') ? (
+                  <iframe
+                    src={previewAttachmentModal.attachmentUrl}
+                    title="Receipt PDF"
+                    style={{ width: '100%', height: '480px', border: 0, borderRadius: '6px' }}
+                  />
+                ) : (
+                  <img
+                    src={previewAttachmentModal.attachmentUrl}
+                    alt="Expense Proof"
+                    style={{ maxWidth: '100%', maxHeight: '480px', objectFit: 'contain', borderRadius: '6px', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}
+                  />
+                )}
+              </div>
+
+              {previewAttachmentModal.comments && (
+                <div style={{ marginTop: '14px', padding: '10px 12px', background: '#fff', border: '1px solid var(--line)', borderRadius: '8px', fontSize: '12px' }}>
+                  <strong style={{ display: 'block', color: 'var(--muted)', fontSize: '10.5px', textTransform: 'uppercase', marginBottom: '4px' }}>Justification</strong>
+                  <span>{previewAttachmentModal.comments || previewAttachmentModal.notes}</span>
+                </div>
+              )}
+            </div>
+            <div className="modal-footer-premium" style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+              <button type="button" className="ui-button secondary" onClick={() => setPreviewAttachmentModal(null)}>
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}

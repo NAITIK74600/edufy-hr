@@ -197,10 +197,24 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
           values = { ...values, employeeId: actor.employeeId, employeeName: actorName, subject: string(body, 'subject', true, 200), description: string(body, 'description'), category: string(body, 'category'), priority: choice(body, 'priority', ['Low', 'Medium', 'High', 'Urgent']), status: 'open' }
           break
         case 'expenses': {
-          allowedBody(body, ['category', 'amount', 'merchant', 'date', 'comments'])
+          allowedBody(body, ['category', 'amount', 'merchant', 'date', 'comments', 'attachmentUrl', 'attachmentName', 'attachmentType', 'attachmentSize'])
           const amount = number(body, 'amount', 0.01, 100000000)
           if (Math.abs(amount * 100 - Math.round(amount * 100)) > 0.00001) throw fail('Use at most two decimal places for amount.')
-          values = { ...values, employeeId: actor.employeeId, employeeName: actorName, category: string(body, 'category'), amount, merchant: string(body, 'merchant'), date: date(body, 'date'), comments: string(body, 'comments', false), status: 'submitted' }
+          values = {
+            ...values,
+            employeeId: actor.employeeId,
+            employeeName: actorName,
+            category: string(body, 'category'),
+            amount,
+            merchant: string(body, 'merchant'),
+            date: date(body, 'date'),
+            comments: string(body, 'comments', false),
+            status: 'submitted',
+            attachmentUrl: string(body, 'attachmentUrl', false),
+            attachmentName: string(body, 'attachmentName', false),
+            attachmentType: string(body, 'attachmentType', false),
+            attachmentSize: string(body, 'attachmentSize', false),
+          }
           break
         }
         case 'dailyReports':

@@ -91,7 +91,7 @@ export function createApp(options = {}) {
   const jwtSecret = options.jwtSecret ?? process.env.JWT_SECRET ?? (process.env.NODE_ENV === 'production' ? null : crypto.randomBytes(32).toString('hex'))
   if (!jwtSecret) throw new Error('JWT_SECRET is required in production')
   const auth = createAuthMiddleware({ userStore, jwtSecret, revokedTokens: options.revokedTokens ?? new Set() })
-  const authService = createAuthService({ userStore, jwtSecret, revokedTokens: auth.revokedTokens })
+  const authService = createAuthService({ userStore, jwtSecret, accessTokenTtl: process.env.ACCESS_TOKEN_TTL || '30d', revokedTokens: auth.revokedTokens })
   app.disable('x-powered-by')
   app.use((request, response, next) => {
     response.setHeader('X-Content-Type-Options', 'nosniff')

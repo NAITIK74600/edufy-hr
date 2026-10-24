@@ -5,7 +5,7 @@ import { getUserPermissions } from '../../auth/permissions.js'
 
 const INVALID_LOGIN_MESSAGE = 'Invalid email or password.'
 
-export function createAuthService({ userStore, jwtSecret, issuer = 'edufyi-hr-api', audience = 'edufyi-ess', accessTokenTtl = '15m', revokedTokens }) {
+export function createAuthService({ userStore, jwtSecret, issuer = 'edufyi-hr-api', audience = 'edufyi-ess', accessTokenTtl = process.env.ACCESS_TOKEN_TTL || '30d', revokedTokens }) {
   async function login(email, password) {
     const user = await userStore.findByEmail(email)
     if (!user || user.status === 'inactive' || !verifyPassword(password, user.passwordHash)) {

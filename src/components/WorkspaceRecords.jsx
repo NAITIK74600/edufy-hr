@@ -17,6 +17,8 @@ import {
   AlertCircle,
   TrendingUp,
   Check,
+  Paperclip,
+  X,
 } from 'lucide-react'
 import { hrStore } from '../services/hrStore'
 import { workspaceAction } from '../services/workspaceStore'
@@ -81,6 +83,7 @@ export function WorkspaceReports() {
   const [searchTerm, setSearchTerm] = useState('')
   const [expenseFilter, setExpenseFilter] = useState('all') // 'all' | 'submitted' | 'approved' | 'rejected'
   const [notice, setNotice] = useState('')
+  const [viewingReceiptModal, setViewingReceiptModal] = useState(null)
 
   const showNotice = (msg) => {
     setNotice(msg)
@@ -411,6 +414,7 @@ export function WorkspaceReports() {
                   <th>Merchant</th>
                   <th>Amount</th>
                   <th>Justification / Notes</th>
+                  <th>Proof / Receipt</th>
                   <th>Status</th>
                   <th style={{ textAlign: 'right' }}>Review Actions</th>
                 </tr>
@@ -418,7 +422,7 @@ export function WorkspaceReports() {
               <tbody>
                 {filteredExpenses.length === 0 ? (
                   <tr>
-                    <td colSpan={8} style={{ textAlign: 'center', padding: '36px', color: 'var(--muted)' }}>
+                    <td colSpan={9} style={{ textAlign: 'center', padding: '36px', color: 'var(--muted)' }}>
                       <Receipt size={28} style={{ opacity: 0.4, margin: '0 auto 8px', display: 'block' }} />
                       <strong style={{ fontSize: '13px', display: 'block', color: 'var(--ink)' }}>No expense claims found</strong>
                       <span style={{ fontSize: '11.5px' }}>Submitted employee claims will appear here for audit.</span>
@@ -441,12 +445,38 @@ export function WorkspaceReports() {
                         </td>
                         <td><strong style={{ color: 'var(--ink)' }}>{e.merchant || '—'}</strong></td>
                         <td><strong style={{ fontSize: '13px', color: 'var(--teal)' }}>{formatINR(e.amount)}</strong></td>
-                        <td style={{ maxWidth: '220px', fontSize: '11.5px', color: 'var(--ink)' }} title={e.comments || e.notes}>
+                        <td style={{ maxWidth: '200px', fontSize: '11.5px', color: 'var(--ink)' }} title={e.comments || e.notes}>
                           {e.comments || e.notes || '—'}
                           {e.rejectionReason && (
                             <span style={{ display: 'block', color: '#dc2626', fontSize: '10px', marginTop: '2px' }}>
                               Reason: {e.rejectionReason}
                             </span>
+                          )}
+                        </td>
+                        <td>
+                          {e.attachmentUrl ? (
+                            <button
+                              type="button"
+                              onClick={() => setViewingReceiptModal(e)}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                padding: '3px 8px',
+                                borderRadius: '6px',
+                                background: '#eaf4f1',
+                                border: '1px solid #c7ded7',
+                                color: 'var(--teal)',
+                                fontSize: '11px',
+                                fontWeight: 600,
+                                cursor: 'pointer',
+                              }}
+                            >
+                              <Paperclip size={12} />
+                              <span>View Proof</span>
+                            </button>
+                          ) : (
+                            <span style={{ fontSize: '11px', color: 'var(--muted)' }}>No proof</span>
                           )}
                         </td>
                         <td>
@@ -526,6 +556,77 @@ export function WorkspaceReports() {
             </table>
           </div>
         </section>
+      )}
+
+      {/* RECEIPT / PROOF PREVIEW MODAL */}
+      {viewingReceiptModal && (
+        <div className="payslip-voucher-overlay" onClick={() => setViewingReceiptModal(null)}>
+          <div className="payslip-voucher" style={{ maxWidth: '640px', width: '92%' }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header-premium">
+              <div className="modal-title-group">
+                <div className="modal-icon-badge" style={{ background: '#eaf4f1', color: 'var(--teal)' }}>
+                  <Receipt size={20} />
+                </div>
+                <div>
+                  <h3 className="modal-title-text">Proof of Expense: {viewingReceiptModal.merchant || viewingReceiptModal.category}</h3>
+                  <p className="modal-subtitle-text">
+                    Claimed by {viewingReceiptModal.employeeName} ({viewingReceiptModal.employeeId}) • {formatINR(viewingReceiptModal.amount)}
+                  </p>
+                </div>
+              </div>
+              <button type="button" className="icon-button" onClick={() => setViewingReceiptModal(null)} aria-label="Close modal">
+                <X size={16} />
+              </button>
+            </div>
+            <div className="modal-body-premium" style={{ maxHeight: '70vh', overflowY: 'auto' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', background: '#f8fafc', padding: '10px 14px', borderRadius: '8px', fontSize: '12px' }}>
+                <div>
+                  <strong>File: </strong> {viewingReceiptModal.attachmentName || 'Receipt Document'}
+                  {viewingReceiptModal.attachmentSize && <span style={{ color: 'var(--muted)', marginLeft: '6px' }}>({viewingReceiptModal.attachmentSize})</span>}
+                </div>
+                <a
+                  href={viewingReceiptModal.attachmentUrl}
+                  download={viewingReceiptModal.attachmentName || 'expense_receipt'}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="ui-button secondary"
+                  style={{ padding: '4px 10px', fontSize: '11.5px', height: '28px', textDecoration: 'none' }}
+                >
+                  Open Full Size
+                </a>
+              </div>
+
+              {/* PREVIEW CONTAINER */}
+              <div style={{ textAlign: 'center', background: '#f1f5f9', borderRadius: '8px', padding: '12px', minHeight: '200px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {viewingReceiptModal.attachmentType?.includes('pdf') || viewingReceiptModal.attachmentUrl?.startsWith('data:application/pdf') ? (
+                  <iframe
+                    src={viewingReceiptModal.attachmentUrl}
+                    title="Receipt PDF"
+                    style={{ width: '100%', height: '480px', border: 0, borderRadius: '6px' }}
+                  />
+                ) : (
+                  <img
+                    src={viewingReceiptModal.attachmentUrl}
+                    alt="Expense Proof"
+                    style={{ maxWidth: '100%', maxHeight: '480px', objectFit: 'contain', borderRadius: '6px', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}
+                  />
+                )}
+              </div>
+
+              {viewingReceiptModal.comments && (
+                <div style={{ marginTop: '14px', padding: '10px 12px', background: '#fff', border: '1px solid var(--line)', borderRadius: '8px', fontSize: '12px' }}>
+                  <strong style={{ display: 'block', color: 'var(--muted)', fontSize: '10.5px', textTransform: 'uppercase', marginBottom: '4px' }}>Justification / Notes</strong>
+                  <span>{viewingReceiptModal.comments || viewingReceiptModal.notes}</span>
+                </div>
+              )}
+            </div>
+            <div className="modal-footer-premium" style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+              <button type="button" className="ui-button secondary" onClick={() => setViewingReceiptModal(null)}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

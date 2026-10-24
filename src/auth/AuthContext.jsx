@@ -9,7 +9,16 @@ const USER_KEY = 'edufyi.authUser'
 
 function readStoredToken() {
   try {
-    return window.sessionStorage.getItem(SESSION_KEY)
+    return window.localStorage.getItem(SESSION_KEY) || window.sessionStorage.getItem(SESSION_KEY)
+  } catch {
+    return null
+  }
+}
+
+function readStoredUser() {
+  try {
+    const raw = window.localStorage.getItem(USER_KEY) || window.sessionStorage.getItem(USER_KEY)
+    return raw ? JSON.parse(raw) : null
   } catch {
     return null
   }
@@ -17,8 +26,8 @@ function readStoredToken() {
 
 export function AuthProvider({ children }) {
   const [token, setToken] = useState(readStoredToken)
-  const [user, setUser] = useState(null)
-  const [status, setStatus] = useState(() => (readStoredToken() ? 'loading' : 'signed-out'))
+  const [user, setUser] = useState(readStoredUser)
+  const [status, setStatus] = useState(() => (readStoredToken() ? (readStoredUser() ? 'authenticated' : 'loading') : 'signed-out'))
   useEffect(() => hrStore.subscribe((state) => {
     setUser((current) => {
       if (!current || ['admin', 'hr'].includes(current.role)) return current
@@ -60,9 +69,15 @@ export function AuthProvider({ children }) {
     if (token) {
       const timeoutId = setTimeout(() => {
         if (!active) return
-        console.warn('Session validation timed out, falling back to sign-in.')
-        clearSession()
-      }, 7000)
+        const cachedUser = readStoredUser()
+        if (cachedUser) {
+          console.warn('Session validation took longer than expected; using local cached session.')
+          setUser(cachedUser)
+          setStatus('authenticated')
+        } else {
+          clearSession()
+        }
+      }, 20000)
 
       apiClient
         .get('/auth/me')
@@ -80,8 +95,17 @@ export function AuthProvider({ children }) {
         .catch((error) => {
           clearTimeout(timeoutId)
           if (!active) return
-          console.warn('Session validation failed:', error.message)
-          clearSession()
+          if (error?.status === 401) {
+            console.warn('Session authentication expired (401). Signing out.')
+            clearSession()
+          } else {
+            console.warn('Network issue during /auth/me verification:', error.message)
+            const cachedUser = readStoredUser()
+            if (cachedUser) {
+              setUser(cachedUser)
+              setStatus('authenticated')
+            }
+          }
         })
     } else {
       setStatus('signed-out')
@@ -92,8 +116,10 @@ export function AuthProvider({ children }) {
   function persistToken(nextToken) {
     try {
       if (nextToken) {
+        window.localStorage.setItem(SESSION_KEY, nextToken)
         window.sessionStorage.setItem(SESSION_KEY, nextToken)
       } else {
+        window.localStorage.removeItem(SESSION_KEY)
         window.sessionStorage.removeItem(SESSION_KEY)
       }
     } catch {
@@ -105,8 +131,11 @@ export function AuthProvider({ children }) {
   function persistUser(nextUser) {
     try {
       if (nextUser) {
-        window.sessionStorage.setItem(USER_KEY, JSON.stringify(nextUser))
+        const str = JSON.stringify(nextUser)
+        window.localStorage.setItem(USER_KEY, str)
+        window.sessionStorage.setItem(USER_KEY, str)
       } else {
+        window.localStorage.removeItem(USER_KEY)
         window.sessionStorage.removeItem(USER_KEY)
       }
     } catch {
@@ -125,6 +154,9 @@ export function AuthProvider({ children }) {
 
   function clearSession() {
     try {
+      window.localStorage.removeItem(SESSION_KEY)
+      window.localStorage.removeItem(USER_KEY)
+      window.localStorage.removeItem('edufyi.activePersona')
       window.sessionStorage.removeItem(SESSION_KEY)
       window.sessionStorage.removeItem(USER_KEY)
       window.sessionStorage.removeItem('edufyi.activePersona')
