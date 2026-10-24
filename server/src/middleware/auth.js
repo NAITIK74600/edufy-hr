@@ -11,7 +11,10 @@ export function createAuthMiddleware({ userStore, jwtSecret, issuer = 'edufyi-hr
       const claims = jwt.verify(token, jwtSecret, { algorithms: ['HS256'], issuer, audience })
       if (revokedTokens.has(claims.jti)) return response.status(401).json({ success: false, error: { code: 'AUTH_REQUIRED', message: 'Authentication is required.' } })
       return userStore.findById(claims.sub).then((user) => {
-        if (!user || user.status !== 'active' || (claims.version ?? 0) !== (user.authVersion ?? 0)) return response.status(401).json({ success: false, error: { code: 'AUTH_REQUIRED', message: 'Authentication is required.' } })
+        const tokenVersion = claims.version ?? 0
+        const userVersion = user?.authVersion ?? 0
+        const isRevoked = userVersion > 0 && tokenVersion < userVersion
+        if (!user || user.status !== 'active' || isRevoked) return response.status(401).json({ success: false, error: { code: 'AUTH_REQUIRED', message: 'Authentication is required.' } })
         request.auth = { user, claims }
         return next()
       }).catch(next)

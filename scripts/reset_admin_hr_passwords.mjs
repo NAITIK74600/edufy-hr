@@ -22,7 +22,6 @@ async function syncPasswords() {
         passwordHash: adminHash,
         updatedAt: new Date(),
       },
-      $inc: { authVersion: 1 }
     },
     { upsert: false }
   )
@@ -41,7 +40,6 @@ async function syncPasswords() {
         passwordHash: hrHash,
         updatedAt: new Date(),
       },
-      $inc: { authVersion: 1 }
     },
     { upsert: false }
   )
