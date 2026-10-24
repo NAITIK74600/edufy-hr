@@ -821,34 +821,6 @@ export function LoginPage({ route }) {
                 />
               </div>
 
-              {/* Quick credential helper button for employee */}
-              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '-6px', marginBottom: '8px' }}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEmpEmail('naitik@edufyi.in')
-                    setEmpPassword('Password@123')
-                    setEmpError('')
-                  }}
-                  style={{
-                    background: 'rgba(0, 210, 255, 0.08)',
-                    border: '1px dashed rgba(0, 210, 255, 0.35)',
-                    color: '#00d2ff',
-                    borderRadius: '7px',
-                    padding: '3px 9px',
-                    fontSize: '11px',
-                    cursor: 'pointer',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                    fontWeight: 500,
-                  }}
-                  title="Click to fill test employee credentials"
-                >
-                  <Sparkles size={11} />
-                  Fill naitik@edufyi.in (Password@123)
-                </button>
-              </div>
 
               {/* REMEMBER ME & FORGOT PASSWORD */}
               <div className="ely-options-row">
@@ -990,39 +962,6 @@ export function LoginPage({ route }) {
                 />
               </div>
 
-              {/* Quick credential helper button */}
-              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '-6px', marginBottom: '8px' }}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (mgmtRoleType === 'admin') {
-                      setMgmtEmail('admin@edufyi.in')
-                      setMgmtPassword('Password@123')
-                    } else {
-                      setMgmtEmail('hr@edufyi.in')
-                      setMgmtPassword('Password@123')
-                    }
-                    setMgmtError('')
-                  }}
-                  style={{
-                    background: 'rgba(0, 210, 255, 0.08)',
-                    border: '1px dashed rgba(0, 210, 255, 0.35)',
-                    color: '#00d2ff',
-                    borderRadius: '7px',
-                    padding: '3px 9px',
-                    fontSize: '11px',
-                    cursor: 'pointer',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                    fontWeight: 500,
-                  }}
-                  title="Click to fill standard credentials"
-                >
-                  <Sparkles size={11} />
-                  Fill {mgmtRoleType === 'admin' ? 'admin@edufyi.in' : 'hr@edufyi.in'} (Password@123)
-                </button>
-              </div>
 
               {/* REMEMBER ME & RECOVERY KEY */}
               <div className="ely-options-row">
