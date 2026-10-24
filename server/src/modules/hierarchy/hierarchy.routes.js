@@ -168,20 +168,10 @@ function buildScopedHierarchy(rawEmployees, user) {
   }
   collectSubordinates(String(targetEmp._id ?? targetEmp.id))
 
-  // 3. For individual employees: include immediate team peers under same TL
-  const peerIds = new Set()
-  if (targetEmp.managerId && (user.role === 'employee' || !user.role)) {
-    const directMgrId = String(targetEmp.managerId)
-    employees.forEach((e) => {
-      if (String(e.managerId) === directMgrId) {
-        peerIds.add(String(e._id ?? e.id))
-      }
-    })
-  }
-
-  // 4. Allowed node IDs: all nodes in the upward chain + all subordinates + immediate peers
+  // 3. User specification: "as manager I can see whom under I am and under me who is all tree will see not see another part"
+  // Sibling branches and parallel peers are excluded. Only the direct upward chain + downward subordinates are visible.
   const chainIds = new Set(chain.map((c) => String(c._id ?? c.id)))
-  const allowedIds = new Set([...chainIds, ...subordinateIds, ...peerIds])
+  const allowedIds = new Set([...chainIds, ...subordinateIds])
 
   // Filter employees to only allowed nodes
   const filteredEmployees = employees.filter((e) => allowedIds.has(String(e._id ?? e.id)))
@@ -242,17 +232,11 @@ export function createHierarchyRouter({ auth, repository }) {
     } catch (error) { next(error) }
   })
 
-  // 1. Get Organization Hierarchy (Strictly Admin and HR only)
+  // 1. Get Organization Hierarchy (Full tree for Admin/HR, scoped upward-chain + downward-reports for Manager/Employee)
   router.get('/', auth.authenticate, async (req, res, next) => {
     try {
       const user = req.auth?.user || {}
       const isAdminOrHr = user.role === 'admin' || user.role === 'hr'
-      if (!isAdminOrHr) {
-        return res.status(403).json({
-          success: false,
-          error: { code: 'FORBIDDEN', message: 'Organization hierarchy and employee management are exclusively available to Admin and HR roles.' },
-        })
-      }
 
       const employees = await directory(repository)
 
@@ -263,7 +247,13 @@ export function createHierarchyRouter({ auth, repository }) {
       let isScoped = false
       let chain = []
 
-      if (simulatedEmpId) {
+      if (!isAdminOrHr) {
+        // Manager / Team Lead / Employee: strictly scoped to upward management chain + downward subordinates
+        const scopedResult = buildScopedHierarchy(employees, user)
+        roots = scopedResult.roots
+        isScoped = true
+        chain = scopedResult.chain
+      } else if (simulatedEmpId) {
         const simulatedUser = { id: simulatedEmpId, role: 'employee' }
         const scopedResult = buildScopedHierarchy(employees, simulatedUser)
         roots = scopedResult.roots
@@ -276,9 +266,22 @@ export function createHierarchyRouter({ auth, repository }) {
         isScoped = false
       }
 
-      // Gather department statistics
+      // Gather department statistics (scoped to visible employees if scoped)
+      const visibleEmployees = isScoped && roots.length > 0
+        ? (() => {
+            const list = []
+            function traverse(node) {
+              if (!node) return
+              list.push(node)
+              ;(node.children || []).forEach(traverse)
+            }
+            roots.forEach(traverse)
+            return list
+          })()
+        : employees
+
       const deptMap = new Map()
-      employees.forEach((e) => {
+      visibleEmployees.forEach((e) => {
         const dept = e.department || 'General'
         if (!deptMap.has(dept)) {
           deptMap.set(dept, { name: dept, employeeCount: 0, activeCount: 0, head: null })
@@ -292,8 +295,8 @@ export function createHierarchyRouter({ auth, repository }) {
       })
 
       const stats = {
-        totalEmployees: employees.length,
-        activeEmployees: employees.filter((e) => e.status === 'active').length,
+        totalEmployees: visibleEmployees.length,
+        activeEmployees: visibleEmployees.filter((e) => e.status === 'active').length,
         totalDepartments: deptMap.size,
         departments: Array.from(deptMap.values()),
       }

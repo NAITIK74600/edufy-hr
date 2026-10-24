@@ -6167,17 +6167,11 @@ const localStore = {
         }
         collectSubordinates(targetId)
 
-        // 3. Immediate squad peers if viewer is an employee
-        const peerIds = new Set()
-        if (target.managerId && (viewerUser.role === 'employee' || !viewerUser.role)) {
-          const directKids = childrenMap.get(String(target.managerId)) || []
-          directKids.forEach((kidId) => peerIds.add(kidId))
-        }
-
+        // 3. User request: "for the org hirarchy tree as manegr i can see whom under i am and under me who is all tree will see not see another part like this for all make it"
+        // Sibling departments and parallel peers are excluded. Only the direct upward chain + downward subordinates are visible.
         const allowedIds = new Set([
           ...chain.map((c) => String(c.id || c._id)),
           ...subordinateIds,
-          ...peerIds,
         ])
 
         // Filter childrenMap to only allowed nodes
@@ -6214,8 +6208,9 @@ const localStore = {
           },
           scoped: true,
           chain,
-          reportingLine: chain.map((c) => `${c.name} (${c.displayName || ''} ${c.designation || ''})`).join(' -> '),
+          reportingLine: chain.map((c) => `${c.name}${c.designation ? ` (${c.designation})` : ''}`).join(' ➔ '),
           targetEmployee: target,
+          allowedIds: Array.from(allowedIds),
         }
       }
     }

@@ -1500,16 +1500,31 @@ export function OrgHierarchyPage() {
 
   // Determine effective viewer for role-based scoping:
   const effectiveViewer = useMemo(() => {
-    if (canManageEmployees && activeViewerId) {
-      return allEmployees.find((e) => String(e.id || e._id) === activeViewerId || e.employeeId === activeViewerId) || null
+    if (canManageEmployees) {
+      if (activeViewerId) {
+        return allEmployees.find((e) => String(e.id || e._id) === activeViewerId || e.employeeId === activeViewerId) || null
+      }
+      return null // Admin / HR default: full company view
     }
-    return null
-  }, [canManageEmployees, activeViewerId, allEmployees])
+    // Non-admin (Manager, Team Lead, Employee): strictly scope to logged-in user
+    const emp = allEmployees.find(
+      (e) =>
+        (user?.id && (String(e.id) === String(user.id) || String(e._id) === String(user.id))) ||
+        (user?.employeeId && (e.employeeId === user.employeeId || e.id === user.employeeId)) ||
+        (user?.email && e.email && e.email.toLowerCase() === user.email.toLowerCase())
+    )
+    return emp || user || null
+  }, [canManageEmployees, activeViewerId, allEmployees, user])
 
   // Build hierarchy tree based on department filter and viewer scope
-  const { roots, stats, scoped, chain, reportingLine, targetEmployee } = useMemo(() => {
+  const { roots, stats, scoped, chain, reportingLine, targetEmployee, allowedIds } = useMemo(() => {
     return hrStore.getOrganizationHierarchy(null, departmentFilter || null, effectiveViewer)
   }, [storeState.employees, departmentFilter, effectiveViewer])
+
+  const allowedIdSet = useMemo(() => {
+    if (!scoped || !allowedIds) return null
+    return new Set(allowedIds.map(String))
+  }, [scoped, allowedIds])
 
   // Get active reporting chain for selected employee
   const reportingChain = useMemo(() => {
@@ -1527,7 +1542,7 @@ export function OrgHierarchyPage() {
     return hrStore.getDirectReports(selectedNode.id)
   }, [selectedNode, storeState.employees])
 
-  // Search logic with live auto-complete
+  // Search logic with live auto-complete (scoped to visible employees if role-scoped)
   useEffect(() => {
     if (!searchQuery.trim()) {
       setSearchResults([])
@@ -1535,7 +1550,10 @@ export function OrgHierarchyPage() {
       return
     }
     const q = searchQuery.toLowerCase().trim()
-    const matches = allEmployees.filter(
+    const pool = allowedIdSet
+      ? allEmployees.filter((e) => allowedIdSet.has(String(e.id || e._id)))
+      : allEmployees
+    const matches = pool.filter(
       (e) =>
         e.name.toLowerCase().includes(q) ||
         (e.employeeId && e.employeeId.toLowerCase().includes(q)) ||
@@ -1544,7 +1562,7 @@ export function OrgHierarchyPage() {
     )
     setSearchResults(matches.slice(0, 8))
     setSearchOpen(true)
-  }, [searchQuery, allEmployees])
+  }, [searchQuery, allEmployees, allowedIdSet])
 
   function showNotification(msg) {
     setFeedback(msg)
@@ -1857,28 +1875,30 @@ export function OrgHierarchyPage() {
             )}
           </div>
 
-          {/* Department Filter */}
-          <select
-            value={departmentFilter}
-            onChange={(e) => setDepartmentFilter(e.target.value)}
-            style={{
-              padding: '7px 12px',
-              borderRadius: '8px',
-              border: '1px solid var(--border)',
-              backgroundColor: 'var(--surface-sunken)',
-              fontSize: '12px',
-              fontWeight: 600,
-              color: 'var(--foreground)',
-              cursor: 'pointer',
-            }}
-          >
-            <option value="">Full Company (All Departments)</option>
-            {hrStore.getDepartments().map((dept) => (
-              <option key={dept.id || dept.name} value={dept.name}>
-                {dept.name} {dept.head && dept.head !== 'Unassigned' ? `(${dept.head})` : ''}
-              </option>
-            ))}
-          </select>
+          {/* Department Filter (Admin & HR) */}
+          {canManageEmployees && (
+            <select
+              value={departmentFilter}
+              onChange={(e) => setDepartmentFilter(e.target.value)}
+              style={{
+                padding: '7px 12px',
+                borderRadius: '8px',
+                border: '1px solid var(--border)',
+                backgroundColor: 'var(--surface-sunken)',
+                fontSize: '12px',
+                fontWeight: 600,
+                color: 'var(--foreground)',
+                cursor: 'pointer',
+              }}
+            >
+              <option value="">Full Company (All Departments)</option>
+              {hrStore.getDepartments().map((dept) => (
+                <option key={dept.id || dept.name} value={dept.name}>
+                  {dept.name} {dept.head && dept.head !== 'Unassigned' ? `(${dept.head})` : ''}
+                </option>
+              ))}
+            </select>
+          )}
 
           {/* Admin & HR Scope Simulation / "View As" Selector */}
           {canManageEmployees && (
