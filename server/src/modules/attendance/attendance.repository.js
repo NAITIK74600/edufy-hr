@@ -66,6 +66,7 @@ export function createMongoAttendanceRepository() {
             currentBreak: record.currentBreak ?? null,
             breaks: record.breaks ?? [],
             totalBreakMinutes: record.totalBreakMinutes ?? 0,
+            offCampusDurationMinutes: record.offCampusDurationMinutes ?? 0,
             autoPunchOut: record.autoPunchOut ?? false,
             punchOutReason: record.punchOutReason ?? '',
             punchOutType: record.punchOutType ?? 'manual',

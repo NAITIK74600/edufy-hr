@@ -302,6 +302,73 @@ function GPSAttendanceStation({ user, todayRecord, onPunch, onStartBreak, onEndB
   const primaryLocation = settings?.locations?.[0] || null
   const nearestOfficeName = verification.nearestLocation || primaryLocation?.name || 'Office'
 
+  // Inside campus requires office Wi-Fi / IP verification OR verified GPS geofence (<=200m)
+  const isInsideCampus = Boolean(
+    serverVerification &&
+    (serverVerification.isGpsVerified || serverVerification.isWifiVerified || serverVerification.isIpVerified)
+  )
+  const isOutsideCampus = Boolean(isCheckedIn && !isCompleted && serverVerification && !isInsideCampus)
+
+  const empKey = user?.employeeId || user?.id || 'STAFF'
+  const todayDate = todayRecord?.date || todayKey()
+  const offCampusAccumKey = `att_offcampus_accum_${empKey}_${todayDate}`
+  const offCampusStartKey = `att_offcampus_start_${empKey}_${todayDate}`
+
+  const [accumulatedOffCampusSec, setAccumulatedOffCampusSec] = useState(() => {
+    if (typeof localStorage === 'undefined') return 0
+    return Number(localStorage.getItem(offCampusAccumKey)) || 0
+  })
+
+  const [offCampusStartEpoch, setOffCampusStartEpoch] = useState(() => {
+    if (typeof localStorage === 'undefined') return null
+    const raw = localStorage.getItem(offCampusStartKey)
+    return raw ? Number(raw) : null
+  })
+
+  // Track off-campus transitions to freeze/pause timer when outside campus or disconnected
+  useEffect(() => {
+    if (!isCheckedIn || isCompleted) {
+      if (isCompleted && typeof localStorage !== 'undefined') {
+        localStorage.removeItem(offCampusStartKey)
+      }
+      return
+    }
+
+    if (isOutsideCampus) {
+      if (!offCampusStartEpoch) {
+        const now = Date.now()
+        setOffCampusStartEpoch(now)
+        if (typeof localStorage !== 'undefined') {
+          localStorage.setItem(offCampusStartKey, String(now))
+        }
+      }
+    } else if (isInsideCampus) {
+      if (offCampusStartEpoch) {
+        const now = Date.now()
+        const added = Math.max(0, Math.floor((now - offCampusStartEpoch) / 1000))
+        const currentAccum = Number(localStorage.getItem(offCampusAccumKey)) || 0
+        const updatedTotal = currentAccum + added
+        setAccumulatedOffCampusSec(updatedTotal)
+        setOffCampusStartEpoch(null)
+        if (typeof localStorage !== 'undefined') {
+          localStorage.setItem(offCampusAccumKey, String(updatedTotal))
+          localStorage.removeItem(offCampusStartKey)
+        }
+      }
+    }
+  }, [isCheckedIn, isCompleted, isOutsideCampus, isInsideCampus, offCampusStartEpoch, offCampusStartKey, offCampusAccumKey])
+
+  const currentOffCampusSeconds = useMemo(() => {
+    if (!isOutsideCampus || !offCampusStartEpoch) return 0
+    return Math.max(0, Math.floor((currentTime.getTime() - offCampusStartEpoch) / 1000))
+  }, [isOutsideCampus, offCampusStartEpoch, currentTime])
+
+  const totalOffCampusSec = accumulatedOffCampusSec + currentOffCampusSeconds
+
+  // Minimum attendance qualification standards: Full Day = 8 hours, Half Day = 4 hours
+  const FULL_DAY_SECS = 8 * 3600 // 28,800s (8h)
+  const HALF_DAY_SECS = 4 * 3600 // 14,400s (4h)
+
   // Net active work & break timers calculation
   const checkInEpoch = useMemo(() => {
     if (!todayRecord?.checkIn) return null
@@ -341,17 +408,24 @@ function GPSAttendanceStation({ user, todayRecord, onPunch, onStartBreak, onEndB
     return currentTime.getTime()
   }, [isOnBreak, currentBreak?.startAt, currentTime])
 
+  // Net work timer: Pauses when on break AND pauses/freezes when outside campus or disconnected
   const netWorkSeconds = useMemo(() => {
     if (!checkInEpoch) return 0
     if (isCompleted && todayRecord?.checkOutAt) {
       const endEpoch = new Date(todayRecord.checkOutAt).getTime()
-      return Math.max(0, Math.floor((endEpoch - checkInEpoch) / 1000) - completedBreaksDurationSec)
+      const recOffCampusSec = todayRecord.offCampusMinutes ? (todayRecord.offCampusMinutes * 60) : 0
+      return Math.max(0, Math.floor((endEpoch - checkInEpoch) / 1000) - completedBreaksDurationSec - recOffCampusSec)
     }
     if (isOnBreak && currentBreakStartEpoch) {
-      return Math.max(0, Math.floor((currentBreakStartEpoch - checkInEpoch) / 1000) - completedBreaksDurationSec)
+      return Math.max(0, Math.floor((currentBreakStartEpoch - checkInEpoch) / 1000) - completedBreaksDurationSec - accumulatedOffCampusSec)
     }
-    return Math.max(0, Math.floor((currentTime.getTime() - checkInEpoch) / 1000) - completedBreaksDurationSec)
-  }, [checkInEpoch, isCompleted, todayRecord?.checkOutAt, isOnBreak, currentBreakStartEpoch, currentTime, completedBreaksDurationSec])
+    // While outside campus, totalOffCampusSec increments synchronously with currentTime, freezing the output!
+    return Math.max(0, Math.floor((currentTime.getTime() - checkInEpoch) / 1000) - completedBreaksDurationSec - totalOffCampusSec)
+  }, [checkInEpoch, isCompleted, todayRecord?.checkOutAt, todayRecord?.offCampusMinutes, isOnBreak, currentBreakStartEpoch, currentTime, completedBreaksDurationSec, totalOffCampusSec, accumulatedOffCampusSec])
+
+  const isFullDayQualified = netWorkSeconds >= FULL_DAY_SECS
+  const isHalfDayQualified = netWorkSeconds >= HALF_DAY_SECS && netWorkSeconds < FULL_DAY_SECS
+  const isBelowHalfDay = netWorkSeconds < HALF_DAY_SECS
 
   const currentBreakSeconds = useMemo(() => {
     if (!isOnBreak || !currentBreakStartEpoch) return 0
@@ -411,7 +485,12 @@ function GPSAttendanceStation({ user, todayRecord, onPunch, onStartBreak, onEndB
     setGpsError('')
 
     if (isCheckedIn) {
-      try { await onPunch({}) } catch (error) { setGpsError(error.message) }
+      try {
+        const offCampusMinutes = Math.round(totalOffCampusSec / 60)
+        await onPunch({
+          offCampusDurationMinutes: offCampusMinutes,
+        })
+      } catch (error) { setGpsError(error.message) }
       finally { setIsPunching(false) }
       return
     }
@@ -559,13 +638,94 @@ function GPSAttendanceStation({ user, todayRecord, onPunch, onStartBreak, onEndB
             </div>
 
             {isCheckedIn && (
-              <div style={{ padding: '6px 12px', background: isOnBreak ? '#fffbeb' : '#eaf4f1', border: `1px solid ${isOnBreak ? '#fde68a' : '#c7ded7'}`, borderRadius: '8px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: 700, color: isOnBreak ? '#92400e' : 'var(--teal)' }}>
-                  {isOnBreak ? <Pause size={12} /> : <Play size={12} />}
-                  <span>{isOnBreak ? 'Active Work (Paused)' : 'Active Net Work Time'}</span>
+              <div
+                style={{
+                  padding: '6px 12px',
+                  background: isOnBreak ? '#fffbeb' : isOutsideCampus ? '#fff7ed' : '#eaf4f1',
+                  border: `1px solid ${isOnBreak ? '#fde68a' : isOutsideCampus ? '#fed7aa' : '#c7ded7'}`,
+                  borderRadius: '8px',
+                }}
+              >
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    color: isOnBreak ? '#92400e' : isOutsideCampus ? '#c2410c' : 'var(--teal)',
+                  }}
+                >
+                  {isOnBreak ? <Pause size={12} /> : isOutsideCampus ? <Pause size={12} /> : <Play size={12} />}
+                  <span>
+                    {isOnBreak
+                      ? 'Active Work (Paused — Break)'
+                      : isOutsideCampus
+                      ? 'Active Work (Paused — Outside Campus / Off Wi-Fi)'
+                      : 'Active Net Work Time'}
+                  </span>
                 </div>
-                <div style={{ fontFamily: 'monospace', fontSize: '20px', fontWeight: 800, color: isOnBreak ? '#b45309' : 'var(--teal)', marginTop: '2px' }}>
+                <div
+                  style={{
+                    fontFamily: 'monospace',
+                    fontSize: '20px',
+                    fontWeight: 800,
+                    color: isOnBreak ? '#b45309' : isOutsideCampus ? '#c2410c' : 'var(--teal)',
+                    marginTop: '2px',
+                  }}
+                >
                   {formatTimerSeconds(netWorkSeconds)}
+                </div>
+              </div>
+            )}
+
+            {/* ATTENDANCE TARGET QUALIFICATION CARD */}
+            {isCheckedIn && (
+              <div
+                style={{
+                  padding: '6px 12px',
+                  background: '#f8fafc',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: '8px',
+                  minWidth: '220px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '3px',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '10.5px' }}>
+                  <span style={{ color: 'var(--muted)', fontWeight: 600 }}>Shift Qualification</span>
+                  <span
+                    style={{
+                      fontSize: '9.5px',
+                      fontWeight: 700,
+                      padding: '1px 6px',
+                      borderRadius: '4px',
+                      background: isFullDayQualified ? '#dcfce7' : isHalfDayQualified ? '#fef3c7' : '#fee2e2',
+                      color: isFullDayQualified ? '#15803d' : isHalfDayQualified ? '#b45309' : '#b91c1c',
+                      border: `1px solid ${isFullDayQualified ? '#86efac' : isHalfDayQualified ? '#fde68a' : '#fca5a5'}`,
+                    }}
+                  >
+                    {isFullDayQualified
+                      ? 'Full Day Qualified (8+ hrs)'
+                      : isHalfDayQualified
+                      ? 'Half Day Qualified (4+ hrs)'
+                      : 'Below Min Half Day (<4 hrs)'}
+                  </span>
+                </div>
+                <div style={{ width: '100%', height: '5px', background: '#e2e8f0', borderRadius: '3px', overflow: 'hidden', marginTop: '2px' }}>
+                  <div
+                    style={{
+                      height: '100%',
+                      width: `${Math.min(100, Math.round((netWorkSeconds / FULL_DAY_SECS) * 100))}%`,
+                      background: isFullDayQualified ? '#16a34a' : isHalfDayQualified ? '#f59e0b' : '#ef4444',
+                      transition: 'width 0.4s ease',
+                    }}
+                  />
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9.5px', color: 'var(--muted)' }}>
+                  <span>Min Half Day: <strong>4h</strong></span>
+                  <span>Full Day: <strong>8h</strong></span>
                 </div>
               </div>
             )}
@@ -709,6 +869,16 @@ function GPSAttendanceStation({ user, todayRecord, onPunch, onStartBreak, onEndB
           <AlertCircle size={16} style={{ flexShrink: 0, color: '#b45309' }} />
           <div>
             <strong>Auto Punched Out:</strong> Device GPS and Office Wi-Fi were disconnected for 2 hours, so attendance was automatically closed.
+          </div>
+        </div>
+      )}
+
+      {/* OUTSIDE CAMPUS / DISCONNECTED TIMER PAUSED BANNER */}
+      {isCheckedIn && !isCompleted && isOutsideCampus && (
+        <div style={{ marginTop: '12px', background: '#fff7ed', border: '1px solid #fed7aa', color: '#9a3412', padding: '9px 13px', borderRadius: '8px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <Pause size={16} style={{ flexShrink: 0, color: '#ea580c' }} />
+          <div>
+            <strong>Work Timer Paused (Outside Campus / Off-Network):</strong> You are outside the office geofence and not connected to verified office Wi-Fi. The active work counter timer has stopped and will automatically resume once you return within campus (≤200m) or reconnect to office Wi-Fi.
           </div>
         </div>
       )}
@@ -1303,10 +1473,12 @@ function ESSAttendanceView({ user }) {
       })
       setPunchNotice(`Successfully punched in at ${rec?.checkIn || 'now'}! (${rec?.ipVerified ? 'Office network verified' : rec?.gpsVerified ? 'GPS Geofence verified' : 'Recorded'}, Shift: ${rec?.shift || shift})`)
     } else if (isCheckedIn) {
+      const offCampusMinutes = Number(opts.offCampusDurationMinutes) || 0
       await hrStore.checkOut({
         employeeId: empId,
         employeeName: user?.displayName || 'Employee',
         date: todayStr,
+        offCampusDurationMinutes: offCampusMinutes,
       })
       setPunchNotice('Successfully punched out at ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }))
     }
@@ -1439,9 +1611,10 @@ function ESSAttendanceView({ user }) {
               style={{ padding: '4px 8px', fontSize: '11px', borderRadius: '6px' }}
             >
               <option value="all">All Statuses</option>
-              <option value="present">Present Only</option>
-              <option value="late">Late In Only</option>
-              <option value="half-day">Half Day</option>
+              <option value="present">Present (Full Day 8h+)</option>
+              <option value="late">Late In (Full Day 8h+)</option>
+              <option value="half-day">Half Day (Min 4h)</option>
+              <option value="short-hours">Short Hours (&lt;4h)</option>
               <option value="on-leave">On Leave</option>
             </select>
           </div>
@@ -1473,12 +1646,24 @@ function ESSAttendanceView({ user }) {
                       ? 'success'
                       : row.status === 'late'
                       ? 'warning'
-                      : row.status === 'half_day'
+                      : (row.status === 'half-day' || row.status === 'half_day')
                       ? 'info'
-                      : 'danger'
+                      : row.status === 'short-hours'
+                      ? 'danger'
+                      : 'neutral'
                   }
                 >
-                  {row.status === 'present' ? 'Present' : row.status === 'late' ? 'Late In' : row.status === 'half_day' ? 'Half Day' : 'On Leave'}
+                  {row.status === 'present'
+                    ? 'Present (Full Day)'
+                    : row.status === 'late'
+                    ? 'Late In (Full Day)'
+                    : (row.status === 'half-day' || row.status === 'half_day')
+                    ? 'Half Day (4h+)'
+                    : row.status === 'short-hours'
+                    ? 'Short Hours (<4h)'
+                    : row.status === 'on-leave'
+                    ? 'On Leave'
+                    : 'Absent'}
                 </StatusBadge>
               </div>
 
@@ -1560,12 +1745,24 @@ function ESSAttendanceView({ user }) {
                             ? 'success'
                             : row.status === 'late'
                             ? 'warning'
-                            : row.status === 'half_day'
+                            : (row.status === 'half-day' || row.status === 'half_day')
                             ? 'info'
-                            : 'danger'
+                            : row.status === 'short-hours'
+                            ? 'danger'
+                            : 'neutral'
                         }
                       >
-                        {row.status === 'present' ? 'Present' : row.status === 'late' ? 'Late In' : row.status === 'half_day' ? 'Half Day' : 'On Leave'}
+                        {row.status === 'present'
+                          ? 'Present (Full Day)'
+                          : row.status === 'late'
+                          ? 'Late In (Full Day)'
+                          : (row.status === 'half-day' || row.status === 'half_day')
+                          ? 'Half Day (4h+)'
+                          : row.status === 'short-hours'
+                          ? 'Short Hours (<4h)'
+                          : row.status === 'on-leave'
+                          ? 'On Leave'
+                          : 'Absent'}
                       </StatusBadge>
                     </td>
                   </tr>

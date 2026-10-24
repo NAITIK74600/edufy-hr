@@ -263,7 +263,7 @@ export function createAttendanceRouter({ auth, service, useDatabase = false, per
       }
       const employeeId = (!isPrivileged || !requestedEmployeeId) ? (user.employeeId || user.id) : requestedEmployeeId
       const employeeName = (!isPrivileged || !request.body?.employeeName) ? (user.displayName || user.name || 'Employee') : request.body.employeeName
-      const { date, autoPunchOut, punchOutReason } = request.body || {}
+      const { date, autoPunchOut, punchOutReason, offCampusDurationMinutes } = request.body || {}
 
       const record = await service.checkOut({
         employeeId,
@@ -271,6 +271,7 @@ export function createAttendanceRouter({ auth, service, useDatabase = false, per
         date,
         autoPunchOut: Boolean(autoPunchOut),
         punchOutReason: punchOutReason || null,
+        offCampusDurationMinutes: Number(offCampusDurationMinutes) || 0,
       })
       return response.status(200).json({ success: true, data: record })
     } catch (error) {

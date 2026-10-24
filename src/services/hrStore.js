@@ -4497,11 +4497,12 @@ const localStore = {
     }
   },
   checkOut(...args) {
-    let employeeId, employeeName, date
+    let employeeId, employeeName, date, offCampusDurationMinutes = 0
     if (typeof args[0] === 'object' && args[0] !== null) {
       employeeId = args[0].employeeId
       employeeName = args[0].employeeName
       date = args[0].date || '2026-09-30'
+      offCampusDurationMinutes = Number(args[0].offCampusDurationMinutes) || 0
     } else {
       [employeeId, employeeName, date = '2026-09-30'] = args
     }
@@ -4522,7 +4523,41 @@ const localStore = {
             durationMinutes: autoMins,
           })
         }
+
+        let elapsedMins = 0
+        if (att.checkInAt) {
+          elapsedMins = Math.max(0, Math.floor((now.getTime() - new Date(att.checkInAt).getTime()) / 60000))
+        } else if (att.checkIn) {
+          const match = /(\d+):(\d+)(?::(\d+))?\s*(AM|PM)?/i.exec(att.checkIn)
+          if (match) {
+            let h = parseInt(match[1], 10)
+            const m = parseInt(match[2], 10)
+            const meridiem = match[4]?.toUpperCase()
+            if (meridiem === 'PM' && h < 12) h += 12
+            if (meridiem === 'AM' && h === 12) h = 0
+            const inDate = new Date(now)
+            inDate.setHours(h, m, 0, 0)
+            elapsedMins = Math.max(0, Math.floor((now.getTime() - inDate.getTime()) / 60000))
+          }
+        }
+
+        const netWorkMinutes = Math.max(0, elapsedMins - totalBreak - offCampusDurationMinutes)
+        const hours = Math.floor(netWorkMinutes / 60)
+        const mins = netWorkMinutes % 60
         const breakStr = totalBreak > 0 ? ` · ${totalBreak}m Break` : ''
+        const offCampusStr = offCampusDurationMinutes > 0 ? ` · ${offCampusDurationMinutes}m Off-Campus` : ''
+
+        let newStatus = att.status || 'present'
+        if (att.status !== 'on-leave') {
+          if (netWorkMinutes >= 480) { // 8 hours minimum for full day
+            newStatus = att.status === 'late' ? 'late' : 'present'
+          } else if (netWorkMinutes >= 240) { // 4 hours minimum for half day
+            newStatus = 'half-day'
+          } else { // Below half day minimum
+            newStatus = 'short-hours'
+          }
+        }
+
         return {
           ...att,
           checkOut: timeStr,
@@ -4531,7 +4566,9 @@ const localStore = {
           currentBreak: null,
           breaks,
           totalBreakMinutes: totalBreak,
-          totalHours: `8.5 hrs (Completed)${breakStr}`,
+          offCampusMinutes: offCampusDurationMinutes,
+          status: newStatus,
+          totalHours: `${hours}h ${mins}m (Completed)${breakStr}${offCampusStr}`,
         }
       }
       return att

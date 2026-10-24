@@ -596,7 +596,7 @@ export function createAttendanceService({ repository, companySettings = {} }) {
       return repository.save(updated)
     },
 
-    async checkOut({ employeeId, employeeName, date, autoPunchOut = false, punchOutReason = null }) {
+    async checkOut({ employeeId, employeeName, date, autoPunchOut = false, punchOutReason = null, offCampusDurationMinutes = 0 }) {
       const workDate = date || getTodayString()
       if (workDate !== getTodayString()) throw Object.assign(new Error('Self-service attendance can only be recorded for today. Ask HR to correct historical attendance.'), { statusCode: 400, code: 'INVALID_ATTENDANCE_DATE' })
       let existing = await repository.findByEmployeeAndDate(employeeId, workDate)
@@ -635,16 +635,24 @@ export function createAttendanceService({ repository, companySettings = {} }) {
       let totalHoursStr = 'Duration unavailable (HR correction required)'
       let newStatus = existing.status
 
+      const offCampusMinutes = Math.max(0, Math.round(Number(offCampusDurationMinutes) || 0))
       const elapsed = existing.checkInAt ? Math.floor((now - new Date(existing.checkInAt)) / 60000) : (inMins !== null && outMins !== null ? outMins - inMins : null)
       if (elapsed !== null && Number.isFinite(elapsed) && elapsed >= 0) {
-        const netWorkMinutes = Math.max(0, elapsed - totalBreakMinutes)
+        const netWorkMinutes = Math.max(0, elapsed - totalBreakMinutes - offCampusMinutes)
         const hours = Math.floor(netWorkMinutes / 60)
         const mins = netWorkMinutes % 60
         const breakPart = totalBreakMinutes > 0 ? ` · ${totalBreakMinutes}m Break` : ''
+        const offCampusPart = offCampusMinutes > 0 ? ` · ${offCampusMinutes}m Off-Campus` : ''
         const tag = autoPunchOut ? 'Auto Punch Out' : 'Completed'
-        totalHoursStr = `${hours}h ${mins}m (${tag})${breakPart}`
-        if (netWorkMinutes < 240 && existing.status !== 'on-leave') {
-          newStatus = 'half-day'
+        totalHoursStr = `${hours}h ${mins}m (${tag})${breakPart}${offCampusPart}`
+        if (existing.status !== 'on-leave') {
+          if (netWorkMinutes >= 480) {
+            newStatus = existing.status === 'late' ? 'late' : 'present'
+          } else if (netWorkMinutes >= 240) {
+            newStatus = 'half-day'
+          } else {
+            newStatus = 'short-hours'
+          }
         }
       }
 
@@ -661,6 +669,7 @@ export function createAttendanceService({ repository, companySettings = {} }) {
         currentBreak: null,
         breaks: breaksList,
         totalBreakMinutes,
+        offCampusDurationMinutes: offCampusMinutes,
         autoPunchOut: Boolean(autoPunchOut),
         punchOutReason: reasonToSet,
         punchOutType: autoPunchOut ? 'auto' : 'manual',
