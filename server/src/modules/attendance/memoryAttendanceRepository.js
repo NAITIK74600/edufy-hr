@@ -101,6 +101,21 @@ export function createMemoryAttendanceRepository(seedRecords = []) {
       const existing = await this.findByEmployeeAndDate(record.employeeId, record.date)
       return existing?.checkOut ? existing : this.save(record)
     },
+    async updatePresence(employeeId, date, isConnected) {
+      const rec = await this.findByEmployeeAndDate(employeeId, date)
+      if (rec && !rec.checkOut) {
+        const now = new Date()
+        if (isConnected) {
+          rec.lastConnectedAt = now
+          rec.disconnectedSince = null
+        } else if (!rec.disconnectedSince) {
+          rec.disconnectedSince = now
+        }
+      }
+    },
+    async findActiveTodayRecords(date) {
+      return records.filter((r) => r.date === date && r.checkIn && !r.checkOut)
+    },
     async findByEmployeeAndDate(employeeId, date) {
       return records.find((r) => r.employeeId?.toUpperCase() === employeeId?.toUpperCase() && r.date === date) ?? null
     },

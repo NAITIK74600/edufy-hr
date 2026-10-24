@@ -88,6 +88,14 @@ export function createApp(options = {}) {
   const leaveService = options.leaveService ?? createLeaveService({ repository: leaveRepository, employeeRepository, notificationService: options.notificationService })
   const attendanceRepository = options.attendanceRepository ?? (useDatabase ? createMongoAttendanceRepository() : createMemoryAttendanceRepository())
   const attendanceService = options.attendanceService ?? createAttendanceService({ repository: attendanceRepository, companySettings: options.companySettings })
+
+  // Automated punch-out background daemon: checks active records every 60s for 2-hour disconnection
+  if (typeof setInterval !== 'undefined') {
+    const autoPunchInterval = setInterval(() => {
+      attendanceService.autoPunchOutDisconnectedRecords?.().catch(() => {})
+    }, 60000)
+    if (autoPunchInterval?.unref) autoPunchInterval.unref()
+  }
   const jwtSecret = options.jwtSecret ?? process.env.JWT_SECRET ?? (process.env.NODE_ENV === 'production' ? null : crypto.randomBytes(32).toString('hex'))
   if (!jwtSecret) throw new Error('JWT_SECRET is required in production')
   const auth = createAuthMiddleware({ userStore, jwtSecret, revokedTokens: options.revokedTokens ?? new Set() })

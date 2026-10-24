@@ -21,13 +21,21 @@ export function createMongoAttendanceRepository() {
     async punchIn(record) {
       const data = await punchIdentity(record)
       const filter = { employeeId: data.employeeId, date: data.date }
+      const now = new Date()
+      const dataWithPresence = {
+        ...data,
+        lastConnectedAt: data.lastConnectedAt || data.checkInAt || now,
+        disconnectedSince: null,
+        autoPunchOut: false,
+        punchOutType: 'manual',
+      }
       let doc = await AttendanceRecord.findOneAndUpdate(
         { ...filter, checkIn: { $in: [null, ''] } },
-        { $set: data }, { returnDocument: 'after', runValidators: true },
+        { $set: dataWithPresence }, { returnDocument: 'after', runValidators: true },
       ).lean()
       if (!doc) {
         try {
-          doc = await AttendanceRecord.findOneAndUpdate(filter, { $setOnInsert: data }, { upsert: true, returnDocument: 'after', runValidators: true }).lean()
+          doc = await AttendanceRecord.findOneAndUpdate(filter, { $setOnInsert: dataWithPresence }, { upsert: true, returnDocument: 'after', runValidators: true }).lean()
         } catch (error) {
           if (error.code !== 11000) throw error
           doc = await AttendanceRecord.findOne(filter).lean()
@@ -58,11 +66,45 @@ export function createMongoAttendanceRepository() {
             currentBreak: record.currentBreak ?? null,
             breaks: record.breaks ?? [],
             totalBreakMinutes: record.totalBreakMinutes ?? 0,
+            autoPunchOut: record.autoPunchOut ?? false,
+            punchOutReason: record.punchOutReason ?? '',
+            punchOutType: record.punchOutType ?? 'manual',
+            notes: record.notes || '',
           },
         },
         { returnDocument: 'after', runValidators: true },
       ).lean()
       return doc ? { ...doc, id: String(doc._id) } : this.findByEmployeeAndDate(record.employeeId, record.date)
+    },
+    async updatePresence(employeeId, date, isConnected) {
+      const empCode = String(employeeId || '').trim()
+      const isObjectId = /^[0-9a-fA-F]{24}$/.test(empCode)
+      const filter = {
+        $or: [
+          { employeeId: { $regex: new RegExp(`^${empCode}$`, 'i') } },
+          ...(isObjectId ? [{ userId: empCode }] : []),
+        ],
+        date,
+        checkOut: { $in: [null, ''] },
+      }
+      const now = new Date()
+      if (isConnected) {
+        await AttendanceRecord.updateOne(filter, {
+          $set: { lastConnectedAt: now, disconnectedSince: null },
+        })
+      } else {
+        await AttendanceRecord.updateOne(
+          { ...filter, disconnectedSince: null },
+          { $set: { disconnectedSince: now } },
+        )
+      }
+    },
+    async findActiveTodayRecords(date) {
+      return AttendanceRecord.find({
+        date,
+        checkIn: { $nin: [null, ''] },
+        checkOut: { $in: [null, ''] },
+      }).lean()
     },
     async findByEmployeeAndDate(employeeId, date) {
       const empCode = String(employeeId || '').trim()

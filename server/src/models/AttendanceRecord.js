@@ -47,6 +47,11 @@ const attendanceRecordSchema = new mongoose.Schema({
   },
   totalHours: { type: String, default: 'Active (Live)' },
   notes: { type: String, trim: true, default: '' },
+  autoPunchOut: { type: Boolean, default: false },
+  punchOutReason: { type: String, trim: true, default: '' },
+  punchOutType: { type: String, trim: true, default: 'manual' }, // 'manual' | 'auto'
+  lastConnectedAt: { type: Date, default: null },
+  disconnectedSince: { type: Date, default: null },
 }, { timestamps: true, strict: true })
 
 attendanceRecordSchema.index({ employeeId: 1, date: 1 }, { unique: true })

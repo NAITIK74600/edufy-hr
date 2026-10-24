@@ -113,11 +113,21 @@ function GPSAttendanceStation({ user, todayRecord, onPunch, onStartBreak, onEndB
   const [publicIp, setPublicIp] = useState(null)
   const [ipLoading, setIpLoading] = useState(true)
   const [serverVerification, setServerVerification] = useState(null)
+  const [disconnectedMinutes, setDisconnectedMinutes] = useState(0)
+  const [isAutoPunchedOut, setIsAutoPunchedOut] = useState(false)
 
   const isCheckedIn = !!todayRecord?.checkIn && !todayRecord?.checkOut
   const isCompleted = !!todayRecord?.checkIn && !!todayRecord?.checkOut
   const isOnBreak = Boolean(todayRecord?.isOnBreak)
   const currentBreak = todayRecord?.currentBreak
+
+  const hasAutoPunchedOut = Boolean(
+    isAutoPunchedOut ||
+    todayRecord?.autoPunchOut ||
+    todayRecord?.punchOutType === 'auto' ||
+    todayRecord?.totalHours?.includes('Auto Punch Out') ||
+    todayRecord?.notes?.includes('Auto Punch Out')
+  )
 
   // Query location permissions if supported
   useEffect(() => {
@@ -184,6 +194,96 @@ function GPSAttendanceStation({ user, todayRecord, onPunch, onStartBreak, onEndB
       .finally(() => { if (active) setIpLoading(false) })
     return () => { active = false }
   }, [customCoords, settings])
+
+  // Presence Heartbeat & Auto Punch-Out Detection (2 hours disconnected threshold)
+  useEffect(() => {
+    if (!isCheckedIn || isCompleted) {
+      setDisconnectedMinutes(0)
+      return
+    }
+
+    const empKey = user?.employeeId || user?.id || 'STAFF'
+    const storageKey = `att_disc_since_${empKey}`
+
+    async function evaluatePresence() {
+      let coords = customCoords
+      if (typeof navigator !== 'undefined' && navigator.geolocation) {
+        try {
+          coords = await getFreshCoordinates()
+          setCustomCoords(coords)
+          setGpsLive(true)
+        } catch {}
+      }
+
+      try {
+        const res = await apiClient.post('/attendance/presence', {
+          ...coords,
+        })
+        const data = res.data?.data || res.data || {}
+        setServerVerification(data)
+        if (data.clientIp) setPublicIp(data.clientIp)
+
+        if (data.autoPunchedOut) {
+          setIsAutoPunchedOut(true)
+          if (typeof localStorage !== 'undefined') localStorage.removeItem(storageKey)
+          return
+        }
+
+        const isOfficeConnected = Boolean(data.isGpsVerified || data.isWifiVerified || data.isIpVerified)
+        if (isOfficeConnected) {
+          if (typeof localStorage !== 'undefined') localStorage.removeItem(storageKey)
+          setDisconnectedMinutes(0)
+        } else {
+          let since = typeof localStorage !== 'undefined' ? localStorage.getItem(storageKey) : null
+          if (!since) {
+            since = String(Date.now())
+            if (typeof localStorage !== 'undefined') localStorage.setItem(storageKey, since)
+          }
+          const elapsedMins = Math.floor((Date.now() - Number(since)) / 60000)
+          setDisconnectedMinutes(elapsedMins)
+
+          if (elapsedMins >= 120) {
+            if (typeof localStorage !== 'undefined') localStorage.removeItem(storageKey)
+            try {
+              await onPunch({
+                autoPunchOut: true,
+                punchOutReason: 'Auto Punch Out (GPS & WiFi disconnected for 2 hrs)',
+              })
+              setIsAutoPunchedOut(true)
+            } catch (err) {
+              setGpsError(err.message)
+            }
+          }
+        }
+      } catch (err) {
+        let since = typeof localStorage !== 'undefined' ? localStorage.getItem(storageKey) : null
+        if (!since) {
+          since = String(Date.now())
+          if (typeof localStorage !== 'undefined') localStorage.setItem(storageKey, since)
+        }
+        const elapsedMins = Math.floor((Date.now() - Number(since)) / 60000)
+        setDisconnectedMinutes(elapsedMins)
+        if (elapsedMins >= 120) {
+          if (typeof localStorage !== 'undefined') localStorage.removeItem(storageKey)
+          try {
+            await onPunch({
+              autoPunchOut: true,
+              punchOutReason: 'Auto Punch Out (GPS & WiFi disconnected for 2 hrs)',
+            })
+            setIsAutoPunchedOut(true)
+          } catch {}
+        }
+      }
+    }
+
+    const timer = setInterval(evaluatePresence, 60000)
+    const initTimer = setTimeout(evaluatePresence, 8000)
+
+    return () => {
+      clearInterval(timer)
+      clearTimeout(initTimer)
+    }
+  }, [isCheckedIn, isCompleted, customCoords, user])
 
   const matchedOfficeNet = { label: serverVerification?.matchedNetworkLabel }
   const isRealOfficeIp = Boolean(serverVerification?.isIpVerified)
@@ -432,6 +532,21 @@ function GPSAttendanceStation({ user, todayRecord, onPunch, onStartBreak, onEndB
             >
               GPS: {permissionStatus.toUpperCase()}
             </span>
+            {hasAutoPunchedOut && (
+              <span
+                style={{
+                  fontSize: '10px',
+                  fontWeight: 700,
+                  padding: '2px 8px',
+                  borderRadius: '4px',
+                  background: '#fef3e2',
+                  color: '#b45309',
+                  border: '1px solid #fbd38d',
+                }}
+              >
+                Auto Punched Out
+              </span>
+            )}
           </div>
 
           {/* DUAL DISPLAY: LIVE WALL CLOCK + LIVE WORK / BREAK TIMER */}
@@ -478,7 +593,27 @@ function GPSAttendanceStation({ user, todayRecord, onPunch, onStartBreak, onEndB
           <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
             <div style={{ textAlign: 'right', fontSize: '11px', color: 'var(--muted)', paddingRight: '4px' }}>
               <div>In: <strong>{todayRecord?.checkIn || '–'}</strong></div>
-              <div>Out: <strong>{todayRecord?.checkOut || '–'}</strong></div>
+              <div>
+                Out: <strong>{todayRecord?.checkOut || '–'}</strong>
+                {hasAutoPunchedOut && (
+                  <span
+                    style={{
+                      display: 'inline-block',
+                      marginLeft: '4px',
+                      fontSize: '8.5px',
+                      fontWeight: 700,
+                      textTransform: 'uppercase',
+                      padding: '1px 4px',
+                      borderRadius: '3px',
+                      background: '#fef3e2',
+                      color: '#b45309',
+                      border: '1px solid #fbd38d',
+                    }}
+                  >
+                    Auto Out
+                  </span>
+                )}
+              </div>
               {todayRecord?.totalBreakMinutes ? (
                 <div style={{ color: '#b45309' }}>Breaks: <strong>{todayRecord.totalBreakMinutes}m</strong></div>
               ) : null}
@@ -568,6 +703,25 @@ function GPSAttendanceStation({ user, todayRecord, onPunch, onStartBreak, onEndB
         </div>
       )}
 
+      {/* AUTO PUNCHED OUT NOTICE BANNER */}
+      {hasAutoPunchedOut && (
+        <div style={{ marginTop: '12px', background: '#fef3e2', border: '1px solid #fbd38d', color: '#92400e', padding: '9px 13px', borderRadius: '8px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <AlertCircle size={16} style={{ flexShrink: 0, color: '#b45309' }} />
+          <div>
+            <strong>Auto Punched Out:</strong> Device GPS and Office Wi-Fi were disconnected for 2 hours, so attendance was automatically closed.
+          </div>
+        </div>
+      )}
+
+      {/* DISCONNECTED WARNING BANNER (WHEN ACTIVE) */}
+      {isCheckedIn && !isCompleted && disconnectedMinutes > 0 && (
+        <div style={{ marginTop: '12px', background: '#fffbeb', border: '1px solid #fde68a', color: '#92400e', padding: '9px 13px', borderRadius: '8px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <AlertCircle size={16} style={{ flexShrink: 0, color: '#b45309' }} />
+          <div>
+            <strong>Office GPS & Wi-Fi Disconnected:</strong> Disconnected for <strong>{disconnectedMinutes} min{disconnectedMinutes === 1 ? '' : 's'}</strong>. If not reconnected within <strong>{Math.max(0, 120 - disconnectedMinutes)} mins</strong> (2 hours total), the system will automatically punch you out.
+          </div>
+        </div>
+      )}
 
       {/* DUAL GEOFENCE & WI-FI VERIFICATION RADAR */}
       <div style={{ marginTop: '16px', paddingTop: '14px', borderTop: '1px solid rgba(29, 138, 122, 0.15)', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '12px' }}>
@@ -776,14 +930,24 @@ function ESSOverview({ user }) {
       })
       setPunchNotice(`Successfully punched in at ${rec?.checkIn || 'now'}! (${rec?.ipVerified ? 'Office network verified' : rec?.gpsVerified ? 'GPS Geofence verified' : 'Recorded'})`)
     } else if (isCheckedIn) {
+      const isAuto = Boolean(opts.autoPunchOut)
       await hrStore.checkOut({
         employeeId: empId,
         employeeName: user?.displayName || 'Employee',
         date: todayStr,
+        autoPunchOut: isAuto,
+        punchOutReason: opts.punchOutReason || (isAuto ? 'Auto Punch Out (GPS & WiFi disconnected for 2 hrs)' : null),
       })
-      setPunchNotice('Successfully punched out at ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }))
+      if (typeof localStorage !== 'undefined') {
+        localStorage.removeItem(`att_disc_since_${empId}`)
+      }
+      setPunchNotice(
+        isAuto
+          ? 'Auto Punched Out: GPS and Office Wi-Fi were disconnected for 2 hours.'
+          : 'Successfully punched out at ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      )
     }
-    setTimeout(() => setPunchNotice(''), 5500)
+    setTimeout(() => setPunchNotice(''), 6000)
   }
 
   async function handleStartBreak(type = 'lunch') {

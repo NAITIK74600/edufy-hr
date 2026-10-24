@@ -461,6 +461,25 @@ function AttendanceModule() {
                       <div>
                         <span style={{ color: 'var(--muted)', display: 'block', fontSize: '10px' }}>Check Out</span>
                         <strong>{r.checkOut || (r.status === 'present' ? 'Active' : '—')}</strong>
+                        {(r.autoPunchOut || r.punchOutType === 'auto' || r.totalHours?.includes('Auto Punch Out')) && (
+                          <span
+                            title={r.punchOutReason || 'Auto punched out: GPS and WiFi disconnected for 2 hours'}
+                            style={{
+                              display: 'inline-block',
+                              marginLeft: '4px',
+                              fontSize: '8.5px',
+                              fontWeight: 700,
+                              textTransform: 'uppercase',
+                              padding: '1px 4px',
+                              borderRadius: '3px',
+                              background: '#fef3e2',
+                              color: '#b45309',
+                              border: '1px solid #fbd38d',
+                            }}
+                          >
+                            Auto Out
+                          </span>
+                        )}
                       </div>
                       <div>
                         <span style={{ color: 'var(--muted)', display: 'block', fontSize: '10px' }}>Duration</span>
@@ -549,7 +568,27 @@ function AttendanceModule() {
                   label: 'Check-Out',
                   render: (r) =>
                     r.checkOut ? (
-                      r.checkOut
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span>{r.checkOut}</span>
+                        {(r.autoPunchOut || r.punchOutType === 'auto' || r.totalHours?.includes('Auto Punch Out')) && (
+                          <span
+                            title={r.punchOutReason || 'Auto punched out: GPS and WiFi disconnected for 2 hours'}
+                            style={{
+                              fontSize: '9px',
+                              fontWeight: 700,
+                              textTransform: 'uppercase',
+                              padding: '2px 5px',
+                              borderRadius: '4px',
+                              background: '#fef3e2',
+                              color: '#b45309',
+                              border: '1px solid #fbd38d',
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            Auto Punch Out
+                          </span>
+                        )}
+                      </div>
                     ) : r.status === 'present' || r.status === 'late' ? (
                       <span style={{ color: 'var(--teal)', fontWeight: 600 }}>Active (Live)</span>
                     ) : (

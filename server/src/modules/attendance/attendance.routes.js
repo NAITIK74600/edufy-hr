@@ -223,6 +223,32 @@ export function createAttendanceRouter({ auth, service, useDatabase = false, per
     }
   })
 
+  // 3d. Periodic Presence Verification & Auto Punch-Out Heartbeat
+  router.post('/presence', auth.authenticate, async (request, response, next) => {
+    try {
+      const user = request.auth.user
+      const employeeId = user.employeeId || user.id
+      const { latitude, longitude, wifiSSID, bssid, accuracy, gpsData } = request.body || {}
+      const lat = latitude !== undefined ? latitude : gpsData?.latitude
+      const lng = longitude !== undefined ? longitude : gpsData?.longitude
+      const acc = accuracy !== undefined ? accuracy : gpsData?.accuracy
+      const clientIp = getClientIp(request)
+
+      const result = await service.updatePresence({
+        employeeId,
+        latitude: lat,
+        longitude: lng,
+        wifiSSID,
+        clientIp,
+        bssid,
+        accuracy: acc,
+      })
+      return response.json({ success: true, data: { ...result, clientIp } })
+    } catch (error) {
+      return next(error)
+    }
+  })
+
   // 4. Employee Self-Service Punch Out
   router.post('/check-out', auth.authenticate, async (request, response, next) => {
     try {
@@ -237,12 +263,14 @@ export function createAttendanceRouter({ auth, service, useDatabase = false, per
       }
       const employeeId = (!isPrivileged || !requestedEmployeeId) ? (user.employeeId || user.id) : requestedEmployeeId
       const employeeName = (!isPrivileged || !request.body?.employeeName) ? (user.displayName || user.name || 'Employee') : request.body.employeeName
-      const { date } = request.body || {}
+      const { date, autoPunchOut, punchOutReason } = request.body || {}
 
       const record = await service.checkOut({
         employeeId,
         employeeName,
         date,
+        autoPunchOut: Boolean(autoPunchOut),
+        punchOutReason: punchOutReason || null,
       })
       return response.status(200).json({ success: true, data: record })
     } catch (error) {

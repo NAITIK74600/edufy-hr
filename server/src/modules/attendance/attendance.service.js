@@ -413,19 +413,27 @@ export function createAttendanceService({ repository, companySettings = {} }) {
     },
 
     async getTodayRecord(employeeId, date = getTodayString()) {
+      if (date === getTodayString()) {
+        await this.autoPunchOutDisconnectedRecords().catch(() => {})
+      }
       return repository.findByEmployeeAndDate(employeeId, date)
     },
 
     async listSelf(user, filters = {}) {
+      await this.autoPunchOutDisconnectedRecords().catch(() => {})
       const employeeId = user.employeeId || user.id
       return repository.list({ ...filters, employeeId })
     },
 
     async listAll(filters = {}) {
+      await this.autoPunchOutDisconnectedRecords().catch(() => {})
       return repository.list(filters)
     },
 
     async getSummary(date = getTodayString()) {
+      if (date === getTodayString()) {
+        await this.autoPunchOutDisconnectedRecords().catch(() => {})
+      }
       return repository.getSummary(date)
     },
 
@@ -588,7 +596,7 @@ export function createAttendanceService({ repository, companySettings = {} }) {
       return repository.save(updated)
     },
 
-    async checkOut({ employeeId, employeeName, date }) {
+    async checkOut({ employeeId, employeeName, date, autoPunchOut = false, punchOutReason = null }) {
       const workDate = date || getTodayString()
       if (workDate !== getTodayString()) throw Object.assign(new Error('Self-service attendance can only be recorded for today. Ask HR to correct historical attendance.'), { statusCode: 400, code: 'INVALID_ATTENDANCE_DATE' })
       let existing = await repository.findByEmployeeAndDate(employeeId, workDate)
@@ -633,11 +641,15 @@ export function createAttendanceService({ repository, companySettings = {} }) {
         const hours = Math.floor(netWorkMinutes / 60)
         const mins = netWorkMinutes % 60
         const breakPart = totalBreakMinutes > 0 ? ` · ${totalBreakMinutes}m Break` : ''
-        totalHoursStr = `${hours}h ${mins}m (Completed)${breakPart}`
+        const tag = autoPunchOut ? 'Auto Punch Out' : 'Completed'
+        totalHoursStr = `${hours}h ${mins}m (${tag})${breakPart}`
         if (netWorkMinutes < 240 && existing.status !== 'on-leave') {
           newStatus = 'half-day'
         }
       }
+
+      const defaultReason = autoPunchOut ? 'Auto Punch Out (GPS & WiFi disconnected for 2 hrs)' : ''
+      const reasonToSet = punchOutReason || defaultReason
 
       const updated = {
         ...existing,
@@ -649,9 +661,94 @@ export function createAttendanceService({ repository, companySettings = {} }) {
         currentBreak: null,
         breaks: breaksList,
         totalBreakMinutes,
+        autoPunchOut: Boolean(autoPunchOut),
+        punchOutReason: reasonToSet,
+        punchOutType: autoPunchOut ? 'auto' : 'manual',
+        notes: autoPunchOut
+          ? (existing.notes ? `${existing.notes} | ${reasonToSet}` : reasonToSet)
+          : (existing.notes || ''),
       }
 
       return repository.punchOut(updated)
+    },
+
+    async updatePresence({ employeeId, latitude, longitude, wifiSSID, clientIp, bssid, accuracy }) {
+      const verification = verifyLocation(latitude, longitude, wifiSSID, clientIp, bssid, accuracy)
+      const isConnected = Boolean(verification.isGpsVerified || verification.isWifiVerified || verification.isIpVerified)
+      const workDate = getTodayString()
+      if (repository.updatePresence) {
+        await repository.updatePresence(employeeId, workDate, isConnected)
+      }
+      let autoPunchedOut = false
+      if (!isConnected) {
+        const existing = await repository.findByEmployeeAndDate(employeeId, workDate)
+        if (existing && existing.checkIn && !existing.checkOut) {
+          const disconnectedSince = existing.disconnectedSince ? new Date(existing.disconnectedSince).getTime() : Date.now()
+          const diffMs = Date.now() - disconnectedSince
+          const TWO_HOURS_MS = 2 * 60 * 60 * 1000
+          if (diffMs >= TWO_HOURS_MS) {
+            await this.checkOut({
+              employeeId,
+              employeeName: existing.employeeName,
+              date: workDate,
+              autoPunchOut: true,
+              punchOutReason: 'Auto Punch Out (GPS & WiFi disconnected for 2 hrs)',
+            })
+            autoPunchedOut = true
+          }
+        }
+      }
+      return {
+        ...verification,
+        isConnected,
+        autoPunchedOut,
+      }
+    },
+
+    async autoPunchOutDisconnectedRecords() {
+      if (!repository.findActiveTodayRecords) return []
+      const workDate = getTodayString()
+      const activeRecords = await repository.findActiveTodayRecords(workDate)
+      const TWO_HOURS_MS = 2 * 60 * 60 * 1000
+      const punchedOut = []
+      const now = Date.now()
+
+      for (const record of activeRecords) {
+        if (!record.checkIn || record.checkOut) continue
+        let shouldAutoPunch = false
+        const reason = 'Auto Punch Out (GPS & WiFi disconnected for 2 hrs)'
+
+        if (record.disconnectedSince) {
+          const diff = now - new Date(record.disconnectedSince).getTime()
+          if (diff >= TWO_HOURS_MS) {
+            shouldAutoPunch = true
+          }
+        } else {
+          const lastKnown = record.lastConnectedAt || record.checkInAt
+          if (lastKnown) {
+            const diff = now - new Date(lastKnown).getTime()
+            if (diff >= TWO_HOURS_MS) {
+              shouldAutoPunch = true
+            }
+          }
+        }
+
+        if (shouldAutoPunch) {
+          try {
+            const res = await this.checkOut({
+              employeeId: record.employeeId,
+              employeeName: record.employeeName,
+              date: record.date,
+              autoPunchOut: true,
+              punchOutReason: reason,
+            })
+            punchedOut.push(res)
+          } catch (err) {
+            // continue
+          }
+        }
+      }
+      return punchedOut
     },
 
     async saveRecord(recordData) {
