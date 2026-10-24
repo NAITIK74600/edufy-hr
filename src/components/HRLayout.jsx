@@ -36,6 +36,11 @@ import {
   Users,
   WalletCards,
   X,
+  Volume2,
+  VolumeX,
+  Receipt,
+  LifeBuoy,
+  BellRing,
 } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
 import { adminRoutes, hrRoutes, employeeRoutes } from '../app/routes'
@@ -44,6 +49,7 @@ import { hasPermission } from '../auth/permissions'
 import { hrStore } from '../services/hrStore'
 import { workspaceAction } from '../services/workspaceStore'
 import { getTimeOfDayGreeting, getRoleBadgeLabel, resolveUserDisplayName } from '../utils/greeting'
+import { playNotificationSound, isSoundMuted, toggleSoundMuted } from '../utils/soundHelper'
 import { AIHRAssistant } from './AIHRAssistant'
 
 
@@ -162,11 +168,15 @@ export function HRLayout({ route, children }) {
   const [profileOpen, setProfileOpen] = useState(false)
   const [photoNotice, setPhotoNotice] = useState(false)
   const [aiAssistantOpen, setAiAssistantOpen] = useState(false)
+  const [soundMuted, setSoundMutedState] = useState(() => isSoundMuted())
+  const [incomingAlert, setIncomingAlert] = useState(null)
   const [notifications, setNotifications] = useState(() => (hrStore.getUserNotifications ? hrStore.getUserNotifications(user) : hrStore.getNotifications()))
   const navRef = useRef(null)
   const fileInputRef = useRef(null)
   const notifRef = useRef(null)
   const profileRef = useRef(null)
+  const prevNotifIdsRef = useRef(new Set())
+  const isFirstLoadRef = useRef(true)
 
   useEffect(() => {
     function handleClickOutside(event) {
@@ -190,11 +200,50 @@ export function HRLayout({ route, children }) {
   }, [route.path])
 
   useEffect(() => {
-    setNotifications(hrStore.getUserNotifications(user))
+    if (!incomingAlert) return
+    const timer = setTimeout(() => setIncomingAlert(null), 6000)
+    return () => clearTimeout(timer)
+  }, [incomingAlert])
+
+  useEffect(() => {
+    const initialList = hrStore.getUserNotifications ? hrStore.getUserNotifications(user) : hrStore.getNotifications()
+    setNotifications(initialList)
+    const initialUnread = (initialList || []).filter((n) => !n.read)
+    prevNotifIdsRef.current = new Set(initialUnread.map((n) => n.id))
+
     return hrStore.subscribe(() => {
-      setNotifications(hrStore.getUserNotifications(user))
+      const fresh = hrStore.getUserNotifications ? hrStore.getUserNotifications(user) : hrStore.getNotifications()
+      setNotifications(fresh)
+      const freshUnread = (fresh || []).filter((n) => !n.read)
+      const newArrivals = freshUnread.filter((n) => !prevNotifIdsRef.current.has(n.id))
+
+      if (newArrivals.length > 0 && !isFirstLoadRef.current) {
+        // Trigger notification bell chime sound
+        try {
+          playNotificationSound('notification')
+        } catch (err) {
+          console.debug('Sound error:', err)
+        }
+        // Trigger visual floating banner alert
+        setIncomingAlert(newArrivals[0])
+      }
+      isFirstLoadRef.current = false
+      prevNotifIdsRef.current = new Set(freshUnread.map((n) => n.id))
     })
   }, [user])
+
+  function handleNotificationNavigation(n) {
+    const portal = isAdmin ? 'admin' : (isHR ? 'hr' : 'employee')
+    if (n.type === 'salary') window.location.hash = `#/${portal === 'employee' ? 'employee/salary' : portal + '/payroll'}`
+    else if (n.type === 'announcement') window.location.hash = `#/${portal}/announcements`
+    else if (n.type === 'onboarding' || n.type === 'onboarding_submitted') window.location.hash = `#/${portal}/people`
+    else if (n.type === 'leave') window.location.hash = `#/${portal}/leave`
+    else if (n.type === 'expense' || n.type === 'expenses') {
+      window.location.hash = portal === 'employee' ? '#/employee/expenses' : (isAdmin ? '#/admin/reports' : '#/hr/reports')
+    } else if (n.type === 'ticket' || n.type === 'tickets' || n.type === 'helpdesk') {
+      window.location.hash = `#/${portal}/helpdesk`
+    }
+  }
 
   function handlePhotoUpload(e) {
     const file = e.target.files?.[0]
@@ -419,7 +468,7 @@ export function HRLayout({ route, children }) {
             {/* Notifications Button with Badge */}
             <div ref={notifRef} style={{ position: 'relative' }}>
               <button
-                className="topbar-badge-btn"
+                className={`topbar-badge-btn ${unreadCount > 0 ? 'has-unread' : ''}`}
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation()
@@ -427,8 +476,9 @@ export function HRLayout({ route, children }) {
                   setProfileOpen(false)
                 }}
                 aria-label="View notifications"
+                title={`${unreadCount} unread notification${unreadCount === 1 ? '' : 's'}`}
               >
-                <Bell size={18} />
+                <Bell size={18} className={unreadCount > 0 ? 'bell-icon-pulse' : ''} />
                 {unreadCount > 0 && <span className="badge-count">{unreadCount}</span>}
               </button>
 
@@ -438,6 +488,32 @@ export function HRLayout({ route, children }) {
                   <div className="notif-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 14px', borderBottom: '1px solid var(--border)' }}>
                     <strong style={{ fontSize: '13px' }}>Notifications ({unreadCount} new)</strong>
                     <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                      <button
+                        type="button"
+                        style={{
+                          border: '1px solid var(--border, #e2e8f0)',
+                          background: soundMuted ? '#f1f5f9' : '#ecfdf5',
+                          color: soundMuted ? '#64748b' : '#047857',
+                          fontSize: '10.5px',
+                          cursor: 'pointer',
+                          fontWeight: 600,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          padding: '3px 7px',
+                          borderRadius: '6px',
+                        }}
+                        title={soundMuted ? 'Notification chime muted (Click to unmute)' : 'Notification chime enabled (Click to mute)'}
+                        onClick={() => {
+                          const nextState = toggleSoundMuted()
+                          setSoundMutedState(nextState)
+                          if (!nextState) playNotificationSound('notification')
+                        }}
+                      >
+                        {soundMuted ? <VolumeX size={12} /> : <Volume2 size={12} />}
+                        <span>{soundMuted ? 'Muted' : 'Sound'}</span>
+                      </button>
+
                       {unreadCount > 0 && (
                         <button
                           type="button"
@@ -471,16 +547,17 @@ export function HRLayout({ route, children }) {
                           style={{ cursor: 'pointer', position: 'relative' }}
                           onClick={() => {
                             hrStore.markNotificationRead(n.id)
-                            const portal = isAdmin ? 'admin' : (isHR ? 'hr' : 'employee')
-                            if (n.type === 'salary') window.location.hash = `#/${portal === 'employee' ? 'employee/salary' : portal + '/payroll'}`
-                            else if (n.type === 'announcement') window.location.hash = `#/${portal}/announcements`
-                            else if (n.type === 'onboarding' || n.type === 'onboarding_submitted') window.location.hash = `#/${portal}/people`
-                            else if (n.type === 'leave') window.location.hash = `#/${portal}/leave`
+                            handleNotificationNavigation(n)
                             setNotifOpen(false)
                           }}
                         >
                           <div className={`notif-item-icon ${n.type || 'leave'}`}>
-                            {n.type === 'salary' ? <WalletCards size={14} /> : n.type === 'announcement' ? <Megaphone size={14} /> : n.type?.startsWith('onboarding') ? <ShieldCheck size={14} /> : <CalendarDays size={14} />}
+                            {n.type === 'salary' ? <WalletCards size={14} /> :
+                             n.type === 'announcement' ? <Megaphone size={14} /> :
+                             n.type?.startsWith('onboarding') ? <ShieldCheck size={14} /> :
+                             (n.type === 'expense' || n.type === 'expenses') ? <Receipt size={14} /> :
+                             (n.type === 'ticket' || n.type === 'tickets' || n.type === 'helpdesk') ? <CircleHelp size={14} /> :
+                             <CalendarDays size={14} />}
                           </div>
                           <div className="notif-item-copy" style={{ flex: 1 }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -669,6 +746,51 @@ export function HRLayout({ route, children }) {
             )}
           </div>
         </header>
+
+        {/* Real-time Floating Notification Alert Toast */}
+        <AnimatePresence>
+          {incomingAlert && (
+            <motion.div
+              className="incoming-notif-toast"
+              initial={{ opacity: 0, y: -20, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -15, scale: 0.95 }}
+              transition={{ duration: 0.25 }}
+              onClick={() => {
+                hrStore.markNotificationRead(incomingAlert.id)
+                handleNotificationNavigation(incomingAlert)
+                setIncomingAlert(null)
+              }}
+              role="alert"
+            >
+              <div className="incoming-notif-bell-icon">
+                <BellRing size={18} />
+              </div>
+              <div className="incoming-notif-body">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span className={`role-badge notif-badge-${incomingAlert.type || 'info'}`} style={{ fontSize: '9px', textTransform: 'uppercase', padding: '1px 5px' }}>
+                    {incomingAlert.type || 'Alert'}
+                  </span>
+                  <strong style={{ fontSize: '12px', color: '#0f172a' }}>{incomingAlert.title}</strong>
+                </div>
+                <p style={{ margin: '3px 0 0', fontSize: '11px', color: '#475569', lineHeight: 1.35 }}>{incomingAlert.message}</p>
+                <span style={{ fontSize: '10px', color: 'var(--teal)', fontWeight: 600, display: 'inline-block', marginTop: '3px' }}>Click to view details →</span>
+              </div>
+              <button
+                type="button"
+                className="incoming-notif-close"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setIncomingAlert(null)
+                }}
+                aria-label="Close alert"
+                title="Dismiss"
+              >
+                <X size={14} />
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         <div className="page-content">
           <RouteErrorBoundary resetKey={route?.path || 'default-route'}>

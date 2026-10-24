@@ -20,9 +20,27 @@ function access(user, resource) {
 function filter(user, resource) {
   if (resource === 'notifications') {
     const actorId = id(user)
-    return user?.employeeId
-      ? { $or: [{ ownerId: actorId }, { ownerId: String(actorId) }, { ownerId: user.employeeId }] }
-      : { $or: [{ ownerId: actorId }, { ownerId: String(actorId) }] }
+    const orConditions = [
+      { ownerId: actorId },
+      { ownerId: String(actorId) },
+    ]
+    if (user?.employeeId) {
+      orConditions.push({ ownerId: user.employeeId })
+    }
+    if (management(user)) {
+      orConditions.push(
+        { ownerId: 'management' },
+        { ownerId: 'admin' },
+        { ownerId: 'hr' },
+        { recipientRole: 'management' },
+        { recipientRole: 'all' },
+        { recipientRole: user.role }
+      )
+      if (['admin', 'hr', 'hr_executive', 'director', 'managing_director', 'co_founder'].includes(user.role)) {
+        orConditions.push({ recipientRole: 'admin' }, { recipientRole: 'hr' })
+      }
+    }
+    return { $or: orConditions }
   }
   if (management(user) || shared.has(resource) || resource === 'requisitions') return {}
   if (resource === 'tasks') return { assigneeRef: id(user) }
@@ -283,8 +301,63 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
           break
       }
       const record = await models[resource].create(values)
-      const recipient = resource === 'tasks' ? values.assigneeRef : resource === 'kudos' ? values.recipientId : !managementOnly.has(resource) ? id(actor) : null
-      if (recipient) await models.notifications.create({ ownerId: recipient, title: resource === 'tasks' ? 'Task assigned' : resource === 'kudos' ? 'Kudos received' : resource === 'enrollments' ? 'Training enrollment saved' : `${resource} submitted`, message: values.title ?? values.subject ?? values.message ?? `Your ${resource} record was saved.`, type: resource, read: false })
+
+      if (resource === 'expenses') {
+        const formattedAmt = amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })
+        // Confirmation for employee
+        await models.notifications.create({
+          ownerId: id(actor),
+          title: 'Expense Claim Submitted',
+          message: `Your claim for ₹${formattedAmt} (${values.category}) has been submitted for approval.`,
+          type: 'expense',
+          read: false,
+        })
+        // Notification for all Admin & HR members
+        const adminAndHr = await Employee.find({
+          status: 'active',
+          role: { $in: ['admin', 'hr', 'hr_executive', 'director', 'managing_director', 'co_founder'] },
+        }).select('_id role').lean()
+        if (adminAndHr.length > 0) {
+          const notifDocs = adminAndHr.map((staff) => ({
+            ownerId: String(staff._id),
+            recipientRole: staff.role,
+            title: 'New Expense Claim Submitted',
+            message: `${actorName} submitted an expense claim of ₹${formattedAmt} (${values.category}${values.merchant ? ' · ' + values.merchant : ''}) for approval.`,
+            type: 'expense',
+            read: false,
+          }))
+          await models.notifications.insertMany(notifDocs)
+        }
+      } else if (resource === 'tickets') {
+        // Confirmation for employee
+        await models.notifications.create({
+          ownerId: id(actor),
+          title: 'Support Ticket Submitted',
+          message: `Your ticket "${values.subject}" has been received. Our support team will assist you shortly.`,
+          type: 'ticket',
+          read: false,
+        })
+        // Notification for all Admin & HR members
+        const adminAndHr = await Employee.find({
+          status: 'active',
+          role: { $in: ['admin', 'hr', 'hr_executive', 'director', 'managing_director', 'co_founder'] },
+        }).select('_id role').lean()
+        if (adminAndHr.length > 0) {
+          const notifDocs = adminAndHr.map((staff) => ({
+            ownerId: String(staff._id),
+            recipientRole: staff.role,
+            title: `New Support Ticket [${values.priority || 'Medium'}]`,
+            message: `${actorName} opened support ticket #${String(record._id).slice(-6).toUpperCase()}: "${values.subject}" (${values.category || 'General Support'}).`,
+            type: 'ticket',
+            read: false,
+          }))
+          await models.notifications.insertMany(notifDocs)
+        }
+      } else {
+        const recipient = resource === 'tasks' ? values.assigneeRef : resource === 'kudos' ? values.recipientId : !managementOnly.has(resource) ? id(actor) : null
+        if (recipient) await models.notifications.create({ ownerId: recipient, title: resource === 'tasks' ? 'Task assigned' : resource === 'kudos' ? 'Kudos received' : resource === 'enrollments' ? 'Training enrollment saved' : `${resource} submitted`, message: values.title ?? values.subject ?? values.message ?? `Your ${resource} record was saved.`, type: resource, read: false })
+      }
+
       if (resource === 'announcements' || resource === 'documents' || resource === 'courses') {
         const audience = { status: 'active' }
         if (resource === 'announcements' && values.targetAudience !== 'All Employees') audience.department = values.targetAudience
@@ -300,10 +373,7 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
   router.patch('/notifications/read-all', async (req, res, next) => {
     try {
       const actorId = id(req.auth.user)
-      const empId = req.auth.user.employeeId
-      const targetQuery = empId
-        ? { $or: [{ ownerId: actorId }, { ownerId: String(actorId) }, { ownerId: empId }] }
-        : { $or: [{ ownerId: actorId }, { ownerId: String(actorId) }] }
+      const targetQuery = filter(req.auth.user, 'notifications')
       await models.notifications.updateMany(targetQuery, { $set: { read: true } })
       if (mongoose.isValidObjectId(actorId)) await Notification.updateMany({ recipientId: actorId, readAt: null }, { $set: { readAt: new Date() } })
       res.json({ success: true, data: { read: true } })
@@ -312,10 +382,7 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
   router.delete('/notifications/clear-all', async (req, res, next) => {
     try {
       const actorId = id(req.auth.user)
-      const empId = req.auth.user.employeeId
-      const targetQuery = empId
-        ? { $or: [{ ownerId: actorId }, { ownerId: String(actorId) }, { ownerId: empId }] }
-        : { $or: [{ ownerId: actorId }, { ownerId: String(actorId) }] }
+      const targetQuery = filter(req.auth.user, 'notifications')
       await models.notifications.deleteMany(targetQuery)
       if (mongoose.isValidObjectId(actorId)) await Notification.deleteMany({ recipientId: actorId })
       res.json({ success: true, data: { cleared: true } })
@@ -324,10 +391,7 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
   router.post('/notifications/clear-all', async (req, res, next) => {
     try {
       const actorId = id(req.auth.user)
-      const empId = req.auth.user.employeeId
-      const targetQuery = empId
-        ? { $or: [{ ownerId: actorId }, { ownerId: String(actorId) }, { ownerId: empId }] }
-        : { $or: [{ ownerId: actorId }, { ownerId: String(actorId) }] }
+      const targetQuery = filter(req.auth.user, 'notifications')
       await models.notifications.deleteMany(targetQuery)
       if (mongoose.isValidObjectId(actorId)) await Notification.deleteMany({ recipientId: actorId })
       res.json({ success: true, data: { cleared: true } })
@@ -441,7 +505,58 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
         if (leave) record = { ...leave, read: true }
       }
       if (!record) throw fail('Record not found or action not allowed.', 404)
-      if (resource === 'expenses' || resource === 'tickets') await models.notifications.create({ ownerId: record.ownerId, title: resource === 'expenses' ? 'Expense review' : 'Support ticket update', message: resource === 'expenses' ? `Your claim was ${record.status}.` : `Your ticket "${record.subject}" has an update.`, type: resource, read: false })
+      if (resource === 'expenses') {
+        const formattedAmt = Number(record.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })
+        const isApproved = record.status === 'approved'
+        await models.notifications.create({
+          ownerId: record.ownerId,
+          title: isApproved ? 'Expense Claim Approved' : 'Expense Claim Rejected',
+          message: isApproved
+            ? `Your expense claim of ₹${formattedAmt} was approved by ${actor.name || actor.displayName || 'HR/Admin'}.`
+            : `Your expense claim of ₹${formattedAmt} was rejected.${record.rejectionReason ? ' Reason: ' + record.rejectionReason : ''}`,
+          type: 'expense',
+          read: false,
+        })
+      } else if (resource === 'tickets') {
+        if (req.body.response !== undefined) {
+          if (!management(actor)) {
+            // Employee replied -> notify all active Admin & HR users
+            const adminAndHr = await Employee.find({
+              status: 'active',
+              role: { $in: ['admin', 'hr', 'hr_executive', 'director', 'managing_director', 'co_founder'] },
+            }).select('_id role').lean()
+            if (adminAndHr.length > 0) {
+              const notifDocs = adminAndHr.map((staff) => ({
+                ownerId: String(staff._id),
+                recipientRole: staff.role,
+                title: `New Reply on Ticket: ${record.subject}`,
+                message: `${actor.name || actor.displayName || 'Employee'} replied to support ticket "${record.subject}".`,
+                type: 'ticket',
+                read: false,
+              }))
+              await models.notifications.insertMany(notifDocs)
+            }
+          } else {
+            // Management replied -> notify employee
+            await models.notifications.create({
+              ownerId: record.ownerId,
+              title: `Support Reply: ${record.subject}`,
+              message: `${actor.name || actor.displayName || 'Support Team'} replied to your ticket "${record.subject}".`,
+              type: 'ticket',
+              read: false,
+            })
+          }
+        } else if (req.body.status !== undefined) {
+          // Status updated -> notify employee
+          await models.notifications.create({
+            ownerId: record.ownerId,
+            title: `Ticket Status Updated: ${record.status}`,
+            message: `Your support ticket "${record.subject}" is now marked as ${record.status}.`,
+            type: 'ticket',
+            read: false,
+          })
+        }
+      }
       if (resource === 'enrollments') await models.notifications.create({ ownerId: record.ownerId, title: 'Training progress saved', message: `Your self-reported course progress is ${record.progress}%.`, type: 'training', read: false })
       res.json({ success: true, data: serialize(resource, record, actor) })
     } catch (error) { next(error) }
@@ -452,10 +567,7 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
       if (resource === 'notifications') {
         const actorId = id(req.auth.user)
         if (recordId === 'clear-all') {
-          const empId = req.auth.user.employeeId
-          const targetQuery = empId
-            ? { $or: [{ ownerId: actorId }, { ownerId: String(actorId) }, { ownerId: empId }] }
-            : { $or: [{ ownerId: actorId }, { ownerId: String(actorId) }] }
+          const targetQuery = filter(req.auth.user, 'notifications')
           await models.notifications.deleteMany(targetQuery)
           if (mongoose.isValidObjectId(actorId)) await Notification.deleteMany({ recipientId: actorId })
           return res.json({ success: true, data: { cleared: true } })

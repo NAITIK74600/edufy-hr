@@ -19,6 +19,7 @@ import {
   Check,
   Paperclip,
   X,
+  LifeBuoy,
 } from 'lucide-react'
 import { hrStore } from '../services/hrStore'
 import { workspaceAction } from '../services/workspaceStore'
@@ -652,6 +653,8 @@ export function WorkspaceNotifications() {
   const salaryCount = notifications.filter((n) => n.type === 'salary').length
   const approvalCount = notifications.filter((n) => n.type === 'onboarding' || n.type === 'onboarding_submitted' || n.type === 'onboarding_verified').length
   const leaveCount = notifications.filter((n) => n.type === 'leave' || n.type === 'leave_hr').length
+  const expenseCount = notifications.filter((n) => n.type === 'expense' || n.type === 'expenses').length
+  const ticketCount = notifications.filter((n) => n.type === 'ticket' || n.type === 'tickets' || n.type === 'helpdesk').length
 
   const filtered = notifications.filter((n) => {
     if (filterType === 'unread' && n.read) return false
@@ -659,6 +662,8 @@ export function WorkspaceNotifications() {
     if (filterType === 'salary' && n.type !== 'salary') return false
     if (filterType === 'approval' && !['onboarding', 'onboarding_submitted', 'onboarding_verified'].includes(n.type)) return false
     if (filterType === 'leave' && n.type !== 'leave' && n.type !== 'leave_hr') return false
+    if (filterType === 'expense' && n.type !== 'expense' && n.type !== 'expenses') return false
+    if (filterType === 'ticket' && n.type !== 'ticket' && n.type !== 'tickets' && n.type !== 'helpdesk') return false
 
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase()
@@ -675,6 +680,8 @@ export function WorkspaceNotifications() {
     if (n.type === 'announcement') return `#/${portal}/announcements`
     if (n.type === 'onboarding' || n.type === 'onboarding_submitted') return `#/${portal}/people`
     if (n.type === 'leave') return `#/${portal}/leave`
+    if (n.type === 'expense' || n.type === 'expenses') return portal === 'employee' ? '#/employee/expenses' : (portal === 'admin' ? '#/admin/reports' : '#/hr/reports')
+    if (n.type === 'ticket' || n.type === 'tickets' || n.type === 'helpdesk') return `#/${portal}/helpdesk`
     return null
   }
 
@@ -689,7 +696,15 @@ export function WorkspaceNotifications() {
       case 'onboarding_verified':
         return <ShieldCheck size={18} style={{ color: '#16a34a' }} />
       case 'leave':
+      case 'leave_hr':
         return <CalendarDays size={18} style={{ color: '#9333ea' }} />
+      case 'expense':
+      case 'expenses':
+        return <Receipt size={18} style={{ color: '#d97706' }} />
+      case 'ticket':
+      case 'tickets':
+      case 'helpdesk':
+        return <LifeBuoy size={18} style={{ color: '#4f46e5' }} />
       default:
         return <Bell size={18} style={{ color: 'var(--teal)' }} />
     }
@@ -700,7 +715,7 @@ export function WorkspaceNotifications() {
       <PageHeader
         eyebrow="Communication Center"
         title="Notifications & System Alerts"
-        description="Stay updated with official broadcasts, salary disbursements, leave requests, and document approvals."
+        description="Stay updated with official broadcasts, salary disbursements, leave requests, document approvals, expense claims, and support tickets."
       >
         <div style={{ display: 'flex', gap: '8px' }}>
           <Button
@@ -741,6 +756,8 @@ export function WorkspaceNotifications() {
           {[
             { key: 'all', label: `All (${notifications.length})` },
             { key: 'unread', label: `Unread (${unreadCount})` },
+            { key: 'expense', label: `Expense Claims (${expenseCount})` },
+            { key: 'ticket', label: `Help Desk (${ticketCount})` },
             { key: 'announcement', label: `Announcements (${announcementCount})` },
             { key: 'salary', label: `Salary & Payroll (${salaryCount})` },
             { key: 'approval', label: `Approvals (${approvalCount})` },

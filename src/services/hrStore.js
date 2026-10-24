@@ -5341,6 +5341,19 @@ const localStore = {
       title: 'Support Ticket Created',
       message: `Ticket #${newTicket.id} (${newTicket.category}) is open and assigned.`,
       type: 'ticket',
+      recipientId: ticketData.employeeId,
+    })
+    this.addNotification({
+      title: `New Support Ticket [${newTicket.priority}]`,
+      message: `${newTicket.employeeName || 'Employee'} opened ticket #${newTicket.id}: "${newTicket.subject}" (${newTicket.category}).`,
+      type: 'ticket',
+      recipientRole: 'admin',
+    })
+    this.addNotification({
+      title: `New Support Ticket [${newTicket.priority}]`,
+      message: `${newTicket.employeeName || 'Employee'} opened ticket #${newTicket.id}: "${newTicket.subject}" (${newTicket.category}).`,
+      type: 'ticket',
+      recipientRole: 'hr',
     })
     this.addAuditLog(ticketData.employeeName, 'TICKET_CREATE', `Created ticket #${newTicket.id}: ${newTicket.subject}`)
     notifyListeners()
@@ -5473,6 +5486,19 @@ const localStore = {
       title: 'Expense Claim Submitted',
       message: `Claim for ₹${newExp.amount.toFixed(2)} (${newExp.category}) submitted for approval with proof attachment.`,
       type: 'expense',
+      recipientId: expenseData.employeeId,
+    })
+    this.addNotification({
+      title: 'New Expense Claim Submitted',
+      message: `${newExp.employeeName || 'Employee'} submitted an expense claim of ₹${newExp.amount.toFixed(2)} (${newExp.category}) for approval.`,
+      type: 'expense',
+      recipientRole: 'admin',
+    })
+    this.addNotification({
+      title: 'New Expense Claim Submitted',
+      message: `${newExp.employeeName || 'Employee'} submitted an expense claim of ₹${newExp.amount.toFixed(2)} (${newExp.category}) for approval.`,
+      type: 'expense',
+      recipientRole: 'hr',
     })
     notifyListeners()
     return newExp
@@ -5562,6 +5588,9 @@ const localStore = {
         console.warn(err)
       }
     }
+    try {
+      playNotificationSound(notif.type === 'announcement' ? 'announcement' : 'notification')
+    } catch {}
     notifyListeners()
   },
   markNotificationRead(id) {
