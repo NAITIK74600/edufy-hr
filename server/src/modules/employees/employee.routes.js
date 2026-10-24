@@ -114,8 +114,16 @@ export function createEmployeeRouter({ auth, service }) {
   router.get('/:id', auth.authenticate, auth.requirePermission(PERMISSIONS.EMPLOYEES_READ), async (request, response, next) => {
     try { return response.json({ success: true, data: await service.get(request.params.id) }) } catch (error) { return next(error) }
   })
-  router.patch('/:id', auth.authenticate, auth.requirePermission(PERMISSIONS.EMPLOYEES_WRITE), async (request, response, next) => {
-    try { return response.json({ success: true, data: await service.update(request.params.id, request.body ?? {}, request.auth.user) }) } catch (error) { return next(error) }
+  router.patch('/:id', auth.authenticate, async (request, response, next) => {
+    try {
+      const isSelf = String(request.params.id) === String(request.auth.user.id) ||
+                     String(request.params.id) === String(request.auth.user._id) ||
+                     String(request.params.id) === String(request.auth.user.employeeId)
+      if (!isSelf && !hasPermission(request.auth.user, PERMISSIONS.EMPLOYEES_WRITE)) {
+        return response.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'You do not have permission to update this employee.' } })
+      }
+      return response.json({ success: true, data: await service.update(request.params.id, request.body ?? {}, request.auth.user) })
+    } catch (error) { return next(error) }
   })
   router.post('/:id/invite', auth.authenticate, auth.requirePermission(PERMISSIONS.EMPLOYEES_WRITE), async (request, response, next) => {
     try { return response.json({ success: true, data: await service.setStatus(request.params.id, 'invited', request.auth.user) }) } catch (error) { return next(error) }

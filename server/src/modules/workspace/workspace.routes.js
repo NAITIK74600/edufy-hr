@@ -8,7 +8,7 @@ import { ensureConnected } from '../leave/leave.repository.js'
 
 const permissions = { announcements: 'announcements.read', tasks: 'tasks.read', courses: 'training.read', enrollments: 'training.read', tickets: 'helpdesk.read', expenses: 'reports.read', dailyReports: 'reports.read', kudos: 'performance.read', performanceGoals: 'performance.read', performanceReviews: 'performance.read', holidays: 'holidays.read', documents: 'documents.read', requisitions: 'recruitment.read', notifications: 'dashboard.read', roles: 'dashboard.read', departments: 'dashboard.read' }
 const shared = new Set(['announcements', 'courses', 'holidays', 'documents', 'roles', 'departments'])
-const managementOnly = new Set([...shared, 'tasks', 'requisitions', 'notifications', 'performanceGoals', 'performanceReviews', 'roles', 'departments'])
+const managementOnly = new Set([...shared, 'tasks', 'requisitions', 'performanceGoals', 'performanceReviews', 'roles', 'departments'])
 function fail(message, statusCode = 400) {
   return Object.assign(new Error(message), { statusCode, code: statusCode === 403 ? 'FORBIDDEN' : 'WORKSPACE_VALIDATION_ERROR' })
 }
