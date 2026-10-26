@@ -31,8 +31,8 @@ const HR_PERMISSIONS = [
 
 
 const SEED_DEFINITIONS = [
-  { id: 'dev-admin-1', employeeId: 'EDU-ADM-001', username: 'admin', name: 'Admin', displayName: 'Admin', email: 'admin@edufyi.in', role: 'admin', department: 'Executive Leadership', designation: 'System Administrator', permissions: ['*'], envEmailKey: 'ADMIN_EMAIL', envPasswordKeys: ['ADMIN_PASSWORD', 'SEED_ADMIN_PASSWORD'] },
-  { id: 'dev-hr-1', employeeId: 'EDU-HR-001', username: 'hr', name: 'HR', displayName: 'HR', email: 'hr@edufyi.in', role: 'hr', department: 'Human Resources', designation: 'HR Operations', permissions: HR_PERMISSIONS, envEmailKey: 'HR_EMAIL', envPasswordKeys: ['HR_PASSWORD', 'SEED_HR_PASSWORD'] },
+  { id: 'dev-admin-1', employeeId: 'EDU-ADM-001', username: 'admin', name: 'Admin', displayName: 'Admin', email: 'admin@edufyitech.in', role: 'admin', department: 'Executive Leadership', designation: 'System Administrator', permissions: ['*'], envEmailKey: 'ADMIN_EMAIL', envPasswordKeys: ['ADMIN_PASSWORD', 'SEED_ADMIN_PASSWORD'] },
+  { id: 'dev-hr-1', employeeId: 'EDU-HR-001', username: 'hr', name: 'HR', displayName: 'HR', email: 'hr@edufyitech.in', role: 'hr', department: 'Human Resources', designation: 'HR Operations', permissions: HR_PERMISSIONS, envEmailKey: 'HR_EMAIL', envPasswordKeys: ['HR_PASSWORD', 'SEED_HR_PASSWORD'] },
 ]
 
 export function createSeedUsers(env = process.env) {

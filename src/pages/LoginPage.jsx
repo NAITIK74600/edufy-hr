@@ -43,7 +43,7 @@ export function LoginPage({ route }) {
   const [empError, setEmpError] = useState('')
 
   // Management Login form state
-  const [mgmtEmail, setMgmtEmail] = useState(initialRole === 'hr' ? 'hr@edufyi.in' : 'admin@edufyi.in')
+  const [mgmtEmail, setMgmtEmail] = useState(initialRole === 'hr' ? 'hr@edufyitech.in' : 'admin@edufyitech.in')
   const [mgmtPassword, setMgmtPassword] = useState('')
   const [showMgmtPassword, setShowMgmtPassword] = useState(false)
   const [mgmtRemember, setMgmtRemember] = useState(true)
@@ -59,10 +59,10 @@ export function LoginPage({ route }) {
         setIsManagement(true)
         if (hash.includes('hr')) {
           setMgmtRoleType('hr')
-          setMgmtEmail((prev) => (!prev || prev === 'admin@edufyi.in' ? 'hr@edufyi.in' : prev))
+          setMgmtEmail((prev) => (!prev || prev === 'admin@edufyitech.in' ? 'hr@edufyitech.in' : prev))
         } else {
           setMgmtRoleType('admin')
-          setMgmtEmail((prev) => (!prev || prev === 'hr@edufyi.in' ? 'admin@edufyi.in' : prev))
+          setMgmtEmail((prev) => (!prev || prev === 'hr@edufyitech.in' ? 'admin@edufyitech.in' : prev))
         }
       } else if (hash.includes('employee')) {
         setIsManagement(false)
@@ -80,7 +80,7 @@ export function LoginPage({ route }) {
     setMgmtError('')
     const targetRole = mgmtRoleType || 'admin'
     if (!mgmtEmail) {
-      setMgmtEmail(targetRole === 'hr' ? 'hr@edufyi.in' : 'admin@edufyi.in')
+      setMgmtEmail(targetRole === 'hr' ? 'hr@edufyitech.in' : 'admin@edufyitech.in')
     }
     window.location.hash = targetRole === 'hr' ? '#/hr/login' : '#/admin/login'
   }
@@ -95,8 +95,8 @@ export function LoginPage({ route }) {
   function handleSelectAdmin() {
     setMgmtRoleType('admin')
     setMgmtError('')
-    if (!mgmtEmail || mgmtEmail === 'hr@edufyi.in' || mgmtEmail === 'hr') {
-      setMgmtEmail('admin@edufyi.in')
+    if (!mgmtEmail || mgmtEmail === 'hr@edufyitech.in' || mgmtEmail === 'hr') {
+      setMgmtEmail('admin@edufyitech.in')
     }
     window.location.hash = '#/admin/login'
   }
@@ -104,8 +104,8 @@ export function LoginPage({ route }) {
   function handleSelectHr() {
     setMgmtRoleType('hr')
     setMgmtError('')
-    if (!mgmtEmail || mgmtEmail === 'admin@edufyi.in' || mgmtEmail === 'admin') {
-      setMgmtEmail('hr@edufyi.in')
+    if (!mgmtEmail || mgmtEmail === 'admin@edufyitech.in' || mgmtEmail === 'admin') {
+      setMgmtEmail('hr@edufyitech.in')
     }
     window.location.hash = '#/hr/login'
   }
@@ -1030,8 +1030,8 @@ export function LoginPage({ route }) {
                   spellCheck={false}
                   placeholder={
                     mgmtRoleType === 'admin'
-                      ? 'Admin Email or Username (admin@edufyi.in)'
-                      : 'HR Email or Username (hr@edufyi.in)'
+                      ? 'Admin Email or Username (admin@edufyitech.in)'
+                      : 'HR Email or Username (hr@edufyitech.in)'
                   }
                   value={mgmtEmail}
                   onChange={(e) => {

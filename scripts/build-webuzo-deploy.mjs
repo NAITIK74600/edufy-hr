@@ -145,9 +145,9 @@ const envContent = `NODE_ENV=production
 PORT=30006
 JWT_SECRET=edufyi-production-jwt-key-change-this-in-production
 MONGODB_URI=mongodb+srv://naitikraj74600_db_user:uRVGHVhBdwtmctuY@cluster0.r5jflcg.mongodb.net/hr_dashboard?retryWrites=true&w=majority
-ADMIN_EMAIL=admin@edufyi.in
+ADMIN_EMAIL=admin@edufyitech.in
 ADMIN_PASSWORD=Password@123
-HR_EMAIL=hr@edufyi.in
+HR_EMAIL=hr@edufyitech.in
 HR_PASSWORD=Password@123
 TRUST_PROXY=true
 `
