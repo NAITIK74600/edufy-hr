@@ -72,10 +72,10 @@ function getMailConfig() {
   const secure = process.env.SMTP_SECURE === 'true' || port === 465
 
   const adminEmail = (process.env.ADMIN_EMAIL || 'admin@edufyitech.in').trim()
-  const adminPass = cleanPassword(process.env.ADMIN_EMAIL_PASS || process.env.ADMIN_PASSWORD)
+  const adminPass = cleanPassword(process.env.ADMIN_EMAIL_PASS)
 
   const hrEmail = (process.env.HR_EMAIL || 'hr@edufyitech.in').trim()
-  const hrPass = cleanPassword(process.env.HR_EMAIL_PASS || process.env.HR_PASSWORD)
+  const hrPass = cleanPassword(process.env.HR_EMAIL_PASS)
 
   const publicUrl = process.env.APP_PUBLIC_URL || 'https://empoyee.edufyitechsolutions.com'
 
