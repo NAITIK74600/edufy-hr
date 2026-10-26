@@ -399,9 +399,8 @@ export function createEmployeeService({ repository }) {
         String(actor._id) === String(employee.id ?? employee._id) ||
         (actor.employeeId && employee.employeeId && String(actor.employeeId).toUpperCase() === String(employee.employeeId).toUpperCase()) ||
         (actor.email && employee.email && String(actor.email).toLowerCase() === String(employee.email).toLowerCase())
-      const canManage = ['admin', 'hr'].includes(actor.role) || hasPermission(actor, 'employees.write')
-      if (!isSelf && !canManage) {
-        const error = new Error('Not authorized to upload documents for this employee.')
+      if (!isSelf) {
+        const error = new Error('Not authorized to upload documents for this employee. Only the employee or account owner can upload their verification documents.')
         error.statusCode = 403
         error.code = 'FORBIDDEN'
         throw error

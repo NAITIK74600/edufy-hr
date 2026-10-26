@@ -2728,7 +2728,7 @@ function EmployeeDetail({ id }) {
         <h3 style={{ margin: '0 0 16px', fontSize: '15px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px' }}>
           <ShieldCheck size={18} style={{ color: 'var(--teal)' }} /> Onboarding Verification & Submitted Documents
         </h3>
-        <OnboardingDossierView employee={employee} canEdit={hasPermission(user, 'employees.write')} canVerify={true} />
+        <OnboardingDossierView employee={employee} canEdit={false} canVerify={true} />
       </section>
 
       {/* CONFIRM DELETE MODAL */}

@@ -54,6 +54,10 @@ export function OnboardingDossierView({ employee, canEdit = false, canVerify = f
   const isHRorAdmin = Boolean(canVerify) && isStaffRole && !isOwnRecord
   const isSelfServiceUser = !isHRorAdmin
 
+  // Strictly enforce: Only the employee / user of the account can upload verification and onboarding files.
+  // HR and Admin reviewing an employee can only Verify or Reject, never upload on their behalf.
+  const canUpload = Boolean(canEdit) && !isHRorAdmin && (isOwnRecord || !isStaffRole)
+
   const [activeTab, setActiveTab] = useState(initialTab || 'verification')
 
   useEffect(() => {
@@ -330,6 +334,10 @@ export function OnboardingDossierView({ employee, canEdit = false, canVerify = f
 
   // Direct Quick File / Media Upload from Document Card (Fast & Optimistic)
   async function handleQuickUpload(docKey, docTitle, fileOrFiles) {
+    if (!canUpload) {
+      setFeedback('Only the employee or account owner can upload verification files.')
+      return
+    }
     if (!fileOrFiles) return
     const fileList = fileOrFiles instanceof FileList || Array.isArray(fileOrFiles) ? Array.from(fileOrFiles) : [fileOrFiles]
     if (fileList.length === 0) return
@@ -1117,7 +1125,10 @@ export function OnboardingDossierView({ employee, canEdit = false, canVerify = f
                 Mandatory Employee Verification Forms & Background Screening Locker
               </h4>
               <p style={{ margin: 0, fontSize: '12px', color: '#475569', maxWidth: '780px', lineHeight: '1.5' }}>
-                Download each official blank template below, fill in your details and physically or digitally sign, then upload the completed signed copy. Once all forms are attached, click <strong>Submit Verification to HR</strong>. When verified by HR, your documents are permanently secured and locked in your official employee compliance locker.
+                {isHRorAdmin
+                  ? "Official employee compliance and background screening locker. Review, verify, or request revisions for the employee's submitted signed documents."
+                  : "Download each official blank template below, fill in your details and physically or digitally sign, then upload the completed signed copy. Once all forms are attached, click Submit Verification to HR. When verified by HR, your documents are permanently secured and locked in your official employee compliance locker."
+                }
               </p>
             </div>
 
@@ -1200,10 +1211,10 @@ export function OnboardingDossierView({ employee, canEdit = false, canVerify = f
                 template={tmpl}
                 docData={docs[tmpl.key]}
                 isVerified={isVerified}
-                canEdit={canEdit}
+                canEdit={canUpload}
                 isHRorAdmin={isHRorAdmin}
                 onView={(data) => setViewingDoc({ ...data, label: tmpl.title, title: tmpl.title })}
-                onQuickUpload={handleQuickUpload}
+                onQuickUpload={canUpload ? handleQuickUpload : null}
                 onVerifySingle={handleVerifySingleDoc}
                 onRejectSingle={openRejectDocModal}
               />
@@ -1225,8 +1236,8 @@ export function OnboardingDossierView({ employee, canEdit = false, canVerify = f
             onView={(data) => setViewingDoc({ label: 'Aadhar Card', title: 'Aadhar Card', ...data })}
             onVerifySingle={handleVerifySingleDoc}
             onRejectSingle={openRejectDocModal}
-            onQuickUpload={handleQuickUpload}
-            canEdit={canEdit}
+            onQuickUpload={canUpload ? handleQuickUpload : null}
+            canEdit={canUpload}
             isHRorAdmin={isHRorAdmin}
           />
           <DocumentCard
@@ -1239,8 +1250,8 @@ export function OnboardingDossierView({ employee, canEdit = false, canVerify = f
             onView={(data) => setViewingDoc({ label: 'PAN Card', title: 'PAN Card', ...data })}
             onVerifySingle={handleVerifySingleDoc}
             onRejectSingle={openRejectDocModal}
-            onQuickUpload={handleQuickUpload}
-            canEdit={canEdit}
+            onQuickUpload={canUpload ? handleQuickUpload : null}
+            canEdit={canUpload}
             isHRorAdmin={isHRorAdmin}
           />
           <DocumentCard
@@ -1253,8 +1264,8 @@ export function OnboardingDossierView({ employee, canEdit = false, canVerify = f
             onView={(data) => setViewingDoc({ label: 'Passport', title: 'Passport', ...data })}
             onVerifySingle={handleVerifySingleDoc}
             onRejectSingle={openRejectDocModal}
-            onQuickUpload={handleQuickUpload}
-            canEdit={canEdit}
+            onQuickUpload={canUpload ? handleQuickUpload : null}
+            canEdit={canUpload}
             isHRorAdmin={isHRorAdmin}
           />
           <DocumentCard
@@ -1267,8 +1278,8 @@ export function OnboardingDossierView({ employee, canEdit = false, canVerify = f
             onView={(data) => setViewingDoc({ label: 'UAN Document', title: 'UAN Document', ...data })}
             onVerifySingle={handleVerifySingleDoc}
             onRejectSingle={openRejectDocModal}
-            onQuickUpload={handleQuickUpload}
-            canEdit={canEdit}
+            onQuickUpload={canUpload ? handleQuickUpload : null}
+            canEdit={canUpload}
             isHRorAdmin={isHRorAdmin}
           />
           <DocumentCard
@@ -1279,8 +1290,8 @@ export function OnboardingDossierView({ employee, canEdit = false, canVerify = f
             onView={(data) => setViewingDoc({ label: 'Signed Offer Letter', title: 'Signed Offer Letter', ...data })}
             onVerifySingle={handleVerifySingleDoc}
             onRejectSingle={openRejectDocModal}
-            onQuickUpload={handleQuickUpload}
-            canEdit={canEdit}
+            onQuickUpload={canUpload ? handleQuickUpload : null}
+            canEdit={canUpload}
             isHRorAdmin={isHRorAdmin}
           />
         </div>
@@ -1331,8 +1342,8 @@ export function OnboardingDossierView({ employee, canEdit = false, canVerify = f
               onView={(data) => setViewingDoc({ label: 'Cancelled Cheque', title: 'Cancelled Cheque / Bank Passbook', ...data })}
               onVerifySingle={handleVerifySingleDoc}
               onRejectSingle={openRejectDocModal}
-              onQuickUpload={handleQuickUpload}
-              canEdit={canEdit}
+              onQuickUpload={canUpload ? handleQuickUpload : null}
+              canEdit={canUpload}
               isHRorAdmin={isHRorAdmin}
             />
           </div>
@@ -1545,8 +1556,8 @@ export function OnboardingDossierView({ employee, canEdit = false, canVerify = f
             onView={(data) => setViewingDoc({ label: 'UG Marksheets', title: 'Undergraduate Marksheets', ...data })}
             onVerifySingle={handleVerifySingleDoc}
             onRejectSingle={openRejectDocModal}
-            onQuickUpload={handleQuickUpload}
-            canEdit={canEdit}
+            onQuickUpload={canUpload ? handleQuickUpload : null}
+            canEdit={canUpload}
             isHRorAdmin={isHRorAdmin}
           />
           <DocumentCard
@@ -1557,8 +1568,8 @@ export function OnboardingDossierView({ employee, canEdit = false, canVerify = f
             onView={(data) => setViewingDoc({ label: 'PG Marksheets', title: 'Postgraduate Marksheets', ...data })}
             onVerifySingle={handleVerifySingleDoc}
             onRejectSingle={openRejectDocModal}
-            onQuickUpload={handleQuickUpload}
-            canEdit={canEdit}
+            onQuickUpload={canUpload ? handleQuickUpload : null}
+            canEdit={canUpload}
             isHRorAdmin={isHRorAdmin}
           />
           <DocumentCard
@@ -1569,8 +1580,8 @@ export function OnboardingDossierView({ employee, canEdit = false, canVerify = f
             onView={(data) => setViewingDoc({ label: 'Degree Certificate', title: 'Degree Certificate', ...data })}
             onVerifySingle={handleVerifySingleDoc}
             onRejectSingle={openRejectDocModal}
-            onQuickUpload={handleQuickUpload}
-            canEdit={canEdit}
+            onQuickUpload={canUpload ? handleQuickUpload : null}
+            canEdit={canUpload}
             isHRorAdmin={isHRorAdmin}
           />
           <DocumentCard
@@ -1581,8 +1592,8 @@ export function OnboardingDossierView({ employee, canEdit = false, canVerify = f
             onView={(data) => setViewingDoc({ label: 'Other Academic Documents', title: 'Other Academic Documents', ...data })}
             onVerifySingle={handleVerifySingleDoc}
             onRejectSingle={openRejectDocModal}
-            onQuickUpload={handleQuickUpload}
-            canEdit={canEdit}
+            onQuickUpload={canUpload ? handleQuickUpload : null}
+            canEdit={canUpload}
             isHRorAdmin={isHRorAdmin}
             allowMultiple={true}
           />
@@ -1600,8 +1611,8 @@ export function OnboardingDossierView({ employee, canEdit = false, canVerify = f
             onView={(data) => setViewingDoc({ label: 'Experience Letter', title: 'Experience Letter', ...data })}
             onVerifySingle={handleVerifySingleDoc}
             onRejectSingle={openRejectDocModal}
-            onQuickUpload={handleQuickUpload}
-            canEdit={canEdit}
+            onQuickUpload={canUpload ? handleQuickUpload : null}
+            canEdit={canUpload}
             isHRorAdmin={isHRorAdmin}
           />
           <DocumentCard
@@ -1612,8 +1623,8 @@ export function OnboardingDossierView({ employee, canEdit = false, canVerify = f
             onView={(data) => setViewingDoc({ label: 'Previous Payslip / Bank Statement', title: 'Previous Payslip / Bank Statement', ...data })}
             onVerifySingle={handleVerifySingleDoc}
             onRejectSingle={openRejectDocModal}
-            onQuickUpload={handleQuickUpload}
-            canEdit={canEdit}
+            onQuickUpload={canUpload ? handleQuickUpload : null}
+            canEdit={canUpload}
             isHRorAdmin={isHRorAdmin}
           />
           <DocumentCard
@@ -1624,8 +1635,8 @@ export function OnboardingDossierView({ employee, canEdit = false, canVerify = f
             onView={(data) => setViewingDoc({ label: 'Relieving Letter', title: 'Relieving Letter', ...data })}
             onVerifySingle={handleVerifySingleDoc}
             onRejectSingle={openRejectDocModal}
-            onQuickUpload={handleQuickUpload}
-            canEdit={canEdit}
+            onQuickUpload={canUpload ? handleQuickUpload : null}
+            canEdit={canUpload}
             isHRorAdmin={isHRorAdmin}
           />
           <DocumentCard
@@ -1636,8 +1647,8 @@ export function OnboardingDossierView({ employee, canEdit = false, canVerify = f
             onView={(data) => setViewingDoc({ label: 'Previous Offer Letter', title: 'Previous Offer Letter', ...data })}
             onVerifySingle={handleVerifySingleDoc}
             onRejectSingle={openRejectDocModal}
-            onQuickUpload={handleQuickUpload}
-            canEdit={canEdit}
+            onQuickUpload={canUpload ? handleQuickUpload : null}
+            canEdit={canUpload}
             isHRorAdmin={isHRorAdmin}
           />
         </div>
@@ -2825,7 +2836,7 @@ function VerificationFormCard({
             </button>
           )}
 
-          {canEdit && (
+          {canEdit && onQuickUpload && (
             <label
               style={{
                 flex: 1,
@@ -2861,7 +2872,7 @@ function VerificationFormCard({
             </label>
           )}
 
-          {isDocVerified && !canEdit && (
+          {isDocVerified && (!canEdit || !onQuickUpload) && (
             <div
               style={{
                 flex: 1,

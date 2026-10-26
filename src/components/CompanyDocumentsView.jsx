@@ -43,12 +43,25 @@ export function CompanyDocumentsView({ employee: propEmployee, user: propUser })
     return hrStore.subscribe((state) => setStoreState(state))
   }, [])
 
+  const userRoleNormalized = String(user?.role || '').toLowerCase().trim().replace(/[\s-]+/g, '_')
+  const isStaffRole = ['hr', 'admin', 'superadmin'].includes(userRoleNormalized)
+
   // Resolve current active employee
   const currentEmployee = propEmployee || storeState.employees.find((emp) =>
     (user?.id && (emp.id === user.id || emp._id === user.id || emp.userId === user.id)) ||
     (user?.employeeId && (emp.employeeId === user.employeeId || emp.id === user.employeeId)) ||
     (user?.email && emp.email && String(user.email).trim().toLowerCase() === String(emp.email).trim().toLowerCase())
-  ) || storeState.employees[0]
+  ) || (!isStaffRole ? storeState.employees[0] : null)
+
+  const isOwnEmployee = Boolean(
+    currentEmployee && user && (
+      (user.id && (currentEmployee.id === user.id || currentEmployee._id === user.id || currentEmployee.userId === user.id)) ||
+      (user.employeeId && (currentEmployee.employeeId === user.employeeId || currentEmployee.id === user.employeeId)) ||
+      (user.email && currentEmployee.email && String(user.email).trim().toLowerCase() === String(currentEmployee.email).trim().toLowerCase())
+    )
+  )
+
+  const canUploadSigned = isOwnEmployee || !isStaffRole
 
   // Extract compliance documents uploaded by this employee
   const complianceDocs = currentEmployee?.complianceDocs || currentEmployee?.onboardingDocs?.complianceDocs || {}
@@ -63,6 +76,10 @@ export function CompanyDocumentsView({ employee: propEmployee, user: propUser })
 
   // Handle uploading of signed compliance / NDA document
   const handleUploadSignedDoc = async (template, file) => {
+    if (!canUploadSigned || !currentEmployee) {
+      setFeedback('Only the employee or account owner can upload signed compliance copies.')
+      return
+    }
     if (!file) return
     setUploadingKey(template.key)
     setFeedback('')
@@ -405,6 +422,7 @@ export function CompanyDocumentsView({ employee: propEmployee, user: propUser })
                   uploadedDoc={uploadedDoc}
                   isUploaded={isUploaded}
                   isUploading={isUploading}
+                  canUpload={canUploadSigned}
                   onViewTemplate={() => setViewingPdf(template)}
                   onViewUploaded={() => setViewingPdf({ ...uploadedDoc, title: `Signed: ${template.title}` })}
                   onUploadFile={(file) => handleUploadSignedDoc(template, file)}
@@ -566,6 +584,7 @@ function ComplianceNdaCard({
   onViewTemplate,
   onViewUploaded,
   onUploadFile,
+  canUpload = true,
 }) {
   const fileInputRef = useRef(null)
 
@@ -742,17 +761,19 @@ function ComplianceNdaCard({
             >
               <Eye size={13} /> View Signed Copy
             </button>
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={isUploading}
-              className="ui-button secondary"
-              style={{ fontSize: '11.5px', padding: '7px 12px', justifyContent: 'center', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
-            >
-              <Upload size={13} /> {isUploading ? 'Uploading...' : 'Re-upload'}
-            </button>
+            {canUpload && (
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isUploading}
+                className="ui-button secondary"
+                style={{ fontSize: '11.5px', padding: '7px 12px', justifyContent: 'center', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
+              >
+                <Upload size={13} /> {isUploading ? 'Uploading...' : 'Re-upload'}
+              </button>
+            )}
           </div>
-        ) : (
+        ) : canUpload ? (
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
@@ -775,7 +796,7 @@ function ComplianceNdaCard({
             <Upload size={14} />
             {isUploading ? 'Attaching Document...' : 'Upload Signed Copy'}
           </button>
-        )}
+        ) : null}
       </div>
     </div>
   )
