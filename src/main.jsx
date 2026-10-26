@@ -302,6 +302,8 @@ function App() {
       ? <PayrollPage />
       : route.path === '/employee/profile'
       ? <EmployeeProfilePage />
+      : route.path === '/hr/users' || route.path === '/admin/users'
+      ? <AdminUsersModule />
       : route.path.startsWith('/admin/people')
       ? <EmployeesPage route={{ ...route, path: route.path.replace('/admin/people', '/hr/people') }} />
       : route.path === '/admin/leave'

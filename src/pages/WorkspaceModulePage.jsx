@@ -55,6 +55,7 @@ import { workspaceAction } from '../services/workspaceStore'
 import { PerformanceWorkspace, WorkspaceReports, WorkspaceNotifications } from '../components/WorkspaceRecords'
 import { CompanyPoliciesView } from '../components/CompanyPoliciesView'
 import { CompanyDocumentsView } from '../components/CompanyDocumentsView'
+import { AdminUsersModule } from './AdminDashboardPage'
 import { todayKey } from '../services/connectedStore'
 import { useAuth } from '../auth/AuthContext'
 import { formatINR, formatINRRaw, amountInWordsINR } from '../utils/currency'
@@ -4476,6 +4477,7 @@ function SettingsModule() {
 export function WorkspaceModulePage({ route }) {
   const p = route.path
 
+  if (p === '/hr/users' || p === '/admin/users' || p.includes('users')) return <AdminUsersModule />
   if (p === '/hr/attendance' || p.includes('attendance')) return <AttendanceModule />
   if (p === '/hr/payroll' || p.includes('payroll') || p.includes('salary')) return <PayrollModule />
   if (p === '/hr/recruitment' || p.includes('recruitment')) return <RecruitmentModule />

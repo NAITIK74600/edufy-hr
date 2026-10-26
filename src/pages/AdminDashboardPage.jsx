@@ -292,7 +292,27 @@ export function AdminUsersModule() {
     return hrStore.subscribe((state) => setStoreState({ ...state, companySettings: { ...(state.companySettings || {}), locations: [...(state.companySettings?.locations || [])] }, holidays: [...(state.holidays || [])] }))
   }, [])
 
-  const users = storeState.users || []
+  const rawUsers = storeState.users || []
+  const userEmails = new Set(rawUsers.map((u) => u.email?.toLowerCase()).filter(Boolean))
+  const userEmpIds = new Set(rawUsers.map((u) => u.employeeId).filter(Boolean))
+  const mergedUsers = [
+    ...rawUsers,
+    ...(storeState.employees || [])
+      .filter((emp) => !userEmails.has(emp.email?.toLowerCase()) && !userEmpIds.has(emp.employeeId))
+      .map((emp) => ({
+        id: emp.id || emp._id,
+        employeeId: emp.employeeId,
+        name: emp.name,
+        displayName: emp.name,
+        email: emp.email,
+        role: emp.role || 'employee',
+        department: emp.department || 'General',
+        designation: emp.designation || 'Staff',
+        status: emp.status || 'active',
+        avatarTone: 'teal',
+      })),
+  ]
+  const users = mergedUsers
   const availableRoles = hrStore.getRoles()
   const availableDepartments = hrStore.getDepartments()
   const availableProfiles = (storeState.employees || []).filter((employee) => !employee.hasLogin && !users.some((account) => account.id === employee.id))
