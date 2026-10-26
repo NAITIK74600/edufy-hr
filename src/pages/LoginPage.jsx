@@ -14,12 +14,11 @@ import {
 import { useAuth } from '../auth/AuthContext'
 
 /**
- * Pixel-perfect styles matching the exact Edufyi design in the user reference screenshots:
- * - Deep midnight background with top-right cyan glow
- * - Dark navy rounded input fields (#0c1829) with perfect icon clearance
- * - Solid cyan primary buttons with glowing under-drop shadows (#00a8e8 / #00b4d8)
- * - Stylized brand badge + ELYTHRA EdufyiTech typography
- * - High-specificity scoped rules to prevent global styles.css override
+ * Premium Card Layout & Pixel-Perfect Theme:
+ * - Glassmorphic high-contrast dark card container with subtle cyan neon border & glow
+ * - Official Elythra EdufyiTech banner logo from /elythra-edufyitech-logo.png
+ * - Deep midnight inputs (#07101b) with crisp icon alignment and zero text overlap
+ * - High-specificity scoped overrides to guarantee 100% immunity against global styles.css
  */
 function LoginStyles() {
   return (
@@ -31,78 +30,57 @@ function LoginStyles() {
 
       .edufyi-login-root {
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif !important;
-        background-color: #050a14 !important;
+        background-color: #040812 !important;
         background-image: 
-          radial-gradient(circle at 85% 15%, rgba(0, 180, 216, 0.18) 0%, transparent 45%),
-          radial-gradient(circle at 15% 85%, rgba(2, 132, 199, 0.12) 0%, transparent 40%) !important;
+          radial-gradient(circle at 80% 12%, rgba(0, 180, 216, 0.20) 0%, transparent 45%),
+          radial-gradient(circle at 18% 85%, rgba(2, 132, 199, 0.15) 0%, transparent 42%) !important;
         min-height: 100vh !important;
         min-height: 100dvh !important;
         width: 100% !important;
         display: flex !important;
         justify-content: center !important;
         align-items: center !important;
-        padding: 30px 16px !important;
+        padding: 40px 16px !important;
         position: relative !important;
         overflow-x: hidden !important;
       }
 
+      /* Premium Card Layout */
       .edufyi-login-card {
         width: 100% !important;
-        max-width: 410px !important;
+        max-width: 430px !important;
+        background: rgba(11, 22, 38, 0.88) !important;
+        backdrop-filter: blur(20px) !important;
+        -webkit-backdrop-filter: blur(20px) !important;
+        border: 1px solid rgba(0, 180, 216, 0.25) !important;
+        box-shadow: 
+          0 24px 60px rgba(0, 0, 0, 0.65),
+          0 0 35px rgba(0, 180, 216, 0.12) !important;
+        border-radius: 22px !important;
+        padding: 36px 30px 32px !important;
         display: flex !important;
         flex-direction: column !important;
         align-items: center !important;
         text-align: center !important;
         z-index: 2 !important;
+        position: relative !important;
       }
 
-      /* Logo Header */
-      .edufyi-brand-header {
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
-        gap: 12px !important;
-        margin-bottom: 22px !important;
-        filter: drop-shadow(0 0 18px rgba(0, 180, 216, 0.35)) !important;
+      @media (max-width: 480px) {
+        .edufyi-login-card {
+          padding: 28px 18px 24px !important;
+          border-radius: 18px !important;
+        }
       }
 
-      .edufyi-brand-emblem-box {
-        width: 46px !important;
-        height: 46px !important;
-        background: #ffffff !important;
-        border-radius: 12px !important;
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
-        box-shadow: 0 0 20px rgba(0, 180, 216, 0.5) !important;
-        flex-shrink: 0 !important;
-      }
-
-      .edufyi-brand-text {
-        text-align: left !important;
-        display: flex !important;
-        flex-direction: column !important;
-      }
-
-      .edufyi-brand-kicker {
-        font-size: 11px !important;
-        letter-spacing: 0.22em !important;
-        font-weight: 700 !important;
-        color: #94a3b8 !important;
-        text-transform: uppercase !important;
-        line-height: 1.1 !important;
-      }
-
-      .edufyi-brand-name {
-        font-size: 25px !important;
-        font-weight: 800 !important;
-        color: #ffffff !important;
-        letter-spacing: -0.02em !important;
-        line-height: 1.15 !important;
-      }
-
-      .edufyi-brand-name span {
-        color: #00b4d8 !important;
+      /* Official Logo Image */
+      .edufyi-brand-logo {
+        height: 48px !important;
+        max-width: 240px !important;
+        object-fit: contain !important;
+        margin-bottom: 20px !important;
+        filter: drop-shadow(0 0 16px rgba(0, 180, 216, 0.40)) !important;
+        display: block !important;
       }
 
       /* Pill Badge */
@@ -119,15 +97,15 @@ function LoginStyles() {
         background: rgba(0, 180, 216, 0.08) !important;
         border: 1px solid rgba(0, 180, 216, 0.45) !important;
         color: #00d2ff !important;
-        margin-bottom: 16px !important;
+        margin-bottom: 14px !important;
       }
 
       /* Heading & Subtitle */
       .edufyi-login-title {
-        font-size: 32px !important;
+        font-size: 28px !important;
         font-weight: 800 !important;
         color: #ffffff !important;
-        margin: 0 0 10px 0 !important;
+        margin: 0 0 8px 0 !important;
         letter-spacing: -0.025em !important;
         line-height: 1.2 !important;
       }
@@ -135,7 +113,7 @@ function LoginStyles() {
       .edufyi-login-subtitle {
         font-size: 13.5px !important;
         color: #7d8fa9 !important;
-        margin: 0 0 24px 0 !important;
+        margin: 0 0 22px 0 !important;
         line-height: 1.45 !important;
         max-width: 340px !important;
       }
@@ -146,12 +124,12 @@ function LoginStyles() {
         display: grid !important;
         grid-template-columns: 1fr 1fr !important;
         gap: 10px !important;
-        margin-bottom: 20px !important;
+        margin-bottom: 18px !important;
       }
 
       .edufyi-mgmt-tab {
         height: 44px !important;
-        background: #0c1829 !important;
+        background: #081322 !important;
         border: 1px solid rgba(30, 58, 95, 0.8) !important;
         border-radius: 10px !important;
         color: #64748b !important;
@@ -167,7 +145,7 @@ function LoginStyles() {
       }
 
       .edufyi-mgmt-tab.active {
-        background: #091a2e !important;
+        background: #06172a !important;
         border: 2px solid #00b4d8 !important;
         color: #ffffff !important;
         font-weight: 700 !important;
@@ -188,9 +166,9 @@ function LoginStyles() {
         display: flex !important;
         align-items: center !important;
         width: 100% !important;
-        height: 52px !important;
-        background: #0c1829 !important;
-        background-color: #0c1829 !important;
+        height: 50px !important;
+        background: #07101b !important;
+        background-color: #07101b !important;
         border: 1px solid rgba(30, 58, 95, 0.85) !important;
         border-radius: 12px !important;
         box-shadow: none !important;
@@ -201,14 +179,14 @@ function LoginStyles() {
       .edufyi-login-root .edufyi-field-box:focus-within {
         border-color: #00b4d8 !important;
         box-shadow: 0 0 0 3px rgba(0, 180, 216, 0.2) !important;
-        background: #0e1c31 !important;
-        background-color: #0e1c31 !important;
+        background: #091626 !important;
+        background-color: #091626 !important;
       }
 
       /* Input Icon */
       .edufyi-login-root .edufyi-field-icon {
         position: absolute !important;
-        left: 18px !important;
+        left: 17px !important;
         top: 50% !important;
         transform: translateY(-50%) !important;
         color: #5a7194 !important;
@@ -231,9 +209,9 @@ function LoginStyles() {
       .edufyi-login-root .edufyi-field-box input[type="password"] {
         display: block !important;
         width: 100% !important;
-        height: 52px !important;
-        min-height: 52px !important;
-        max-height: 52px !important;
+        height: 50px !important;
+        min-height: 50px !important;
+        max-height: 50px !important;
         background: transparent !important;
         background-color: transparent !important;
         border: none !important;
@@ -243,9 +221,9 @@ function LoginStyles() {
         color: #ffffff !important;
         font-size: 14.5px !important;
         font-weight: 500 !important;
-        padding: 0 46px 0 52px !important;
+        padding: 0 44px 0 50px !important;
         margin: 0 !important;
-        line-height: 52px !important;
+        line-height: 50px !important;
         font-family: inherit !important;
       }
 
@@ -274,7 +252,7 @@ function LoginStyles() {
       .edufyi-login-root input:-webkit-autofill:hover,
       .edufyi-login-root input:-webkit-autofill:focus,
       .edufyi-login-root input:-webkit-autofill:active {
-        -webkit-box-shadow: 0 0 0 1000px #0c1829 inset !important;
+        -webkit-box-shadow: 0 0 0 1000px #07101b inset !important;
         -webkit-text-fill-color: #ffffff !important;
         caret-color: #ffffff !important;
         transition: background-color 5000s ease-in-out 0s !important;
@@ -329,7 +307,7 @@ function LoginStyles() {
         height: 18px !important;
         border: 1.5px solid #00b4d8 !important;
         border-radius: 4px !important;
-        background: #091a2e !important;
+        background: #07101b !important;
         cursor: pointer !important;
         display: inline-grid !important;
         place-content: center !important;
@@ -408,7 +386,7 @@ function LoginStyles() {
       .edufyi-login-root .edufyi-secondary-btn {
         width: 100% !important;
         height: 48px !important;
-        background: #0c1829 !important;
+        background: #07101b !important;
         border: 1px solid rgba(30, 58, 95, 0.85) !important;
         border-radius: 12px !important;
         color: #ffffff !important;
@@ -423,7 +401,7 @@ function LoginStyles() {
       }
 
       .edufyi-login-root .edufyi-secondary-btn:hover {
-        background: #112239 !important;
+        background: #0c1c2e !important;
         border-color: rgba(0, 180, 216, 0.4) !important;
         color: #ffffff !important;
       }
@@ -466,37 +444,11 @@ function LoginStyles() {
 }
 
 /**
- * Pixel-perfect EdufyiTech Brand Header matching Screenshot 1 & 2
- */
-function BrandLogo() {
-  return (
-    <div className="edufyi-brand-header">
-      <div className="edufyi-brand-emblem-box">
-        <svg width="28" height="28" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <circle cx="18" cy="18" r="13" stroke="#00b4d8" strokeWidth="2.5" />
-          <path
-            d="M12 13.5H23C23.8 13.5 24.5 14.2 24.5 15C24.5 15.8 23.8 16.5 23 16.5H15.5M12 18H21C21.8 18 22.5 18.7 22.5 19.5C22.5 20.3 21.8 21 21 21H12M12 22.5H24"
-            stroke="#0096c7"
-            strokeWidth="2.4"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
-      </div>
-      <div className="edufyi-brand-text">
-        <span className="edufyi-brand-kicker">ELYTHRA</span>
-        <span className="edufyi-brand-name">
-          Edufyi<span>Tech</span>
-        </span>
-      </div>
-    </div>
-  )
-}
-
-/**
  * EMPLOYEE LOGIN PAGE
  * Rendered at #/employee/login
  * Exactly matching Image 2:
+ * - Card container
+ * - elythra-edufyitech-logo.png
  * - NO tabs! NO Admin Terminal / HR Operations buttons!
  * - NO switch console option!
  */
@@ -538,8 +490,12 @@ export function EmployeeLoginPage() {
     <div className="edufyi-login-root">
       <LoginStyles />
       <div className="edufyi-login-card">
-        {/* BRAND LOGO */}
-        <BrandLogo />
+        {/* OFFICIAL BRAND LOGO BANNER */}
+        <img
+          src="/elythra-edufyitech-logo.png"
+          alt="Elythra EdufyiTech"
+          className="edufyi-brand-logo"
+        />
 
         {/* BADGE: EMPLOYEE SELF-SERVICE */}
         <div className="edufyi-pill-badge">
@@ -655,6 +611,8 @@ export function EmployeeLoginPage() {
  * HR & ADMIN MANAGEMENT LOGIN PAGE
  * Rendered at #/admin/login, #/hr/login, and default #/login
  * Exactly matching Image 1:
+ * - Card container
+ * - elythra-edufyitech-logo.png
  * - Tabs: Admin Terminal | HR Operations
  * - NO option for Employee!
  * - NO switch console option!
@@ -745,8 +703,12 @@ export function ManagementLoginPage({ defaultRole = 'hr' }) {
     <div className="edufyi-login-root">
       <LoginStyles />
       <div className="edufyi-login-card">
-        {/* BRAND LOGO */}
-        <BrandLogo />
+        {/* OFFICIAL BRAND LOGO BANNER */}
+        <img
+          src="/elythra-edufyitech-logo.png"
+          alt="Elythra EdufyiTech"
+          className="edufyi-brand-logo"
+        />
 
         {/* PILL BADGE */}
         <div className="edufyi-pill-badge">
@@ -871,7 +833,7 @@ export function ManagementLoginPage({ defaultRole = 'hr' }) {
             className="edufyi-secondary-btn"
             onClick={() => setNotice('Hardware Passkey authentication is currently in private preview. Please use your standard credentials.')}
           >
-            <Key size={16} style={{ color: '#00d2ff' }} />
+            <Key size={16} style={{ color: '#00b4d8' }} />
             Passkey login is not configured
           </button>
         </form>
