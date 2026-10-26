@@ -1193,7 +1193,7 @@ export function OnboardingDossierView({ employee, canEdit = false, canVerify = f
           </div>
 
           {/* Cards for each of the 5 verification forms */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '14px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 420px), 1fr))', gap: '18px' }}>
             {VERIFICATION_TEMPLATES.map((tmpl) => (
               <VerificationFormCard
                 key={tmpl.key}
@@ -2671,11 +2671,11 @@ function VerificationFormCard({
     <div
       className="panel"
       style={{
-        padding: '16px',
+        padding: '20px',
         display: 'flex',
         flexDirection: 'column',
         justifyContent: 'space-between',
-        gap: '12px',
+        gap: '16px',
         borderRadius: '10px',
         border: isDocRejected ? '1px solid #fca5a5' : isDocVerified ? '1px solid #86efac' : '1px solid var(--border-color)',
         background: isDocRejected ? '#fffbfb' : isDocVerified ? '#fbfdfb' : '#ffffff',
@@ -2762,7 +2762,7 @@ function VerificationFormCard({
           <FileCheck2 size={16} style={{ color: isDocVerified ? '#16a34a' : 'var(--teal)' }} />
           {template.title}
         </h4>
-        <p style={{ margin: '0 0 12px', fontSize: '11px', color: '#64748b', lineHeight: '1.45' }}>
+        <p style={{ margin: '0 0 14px', fontSize: '12px', color: '#64748b', lineHeight: '1.5' }}>
           {template.description}
         </p>
 
@@ -2786,7 +2786,7 @@ function VerificationFormCard({
       </div>
 
       {/* Action Controls */}
-      <div style={{ display: 'grid', gap: '8px' }}>
+      <div style={{ display: 'grid', gap: '10px' }}>
         {/* Step 1: Download Blank Form */}
         <a
           href={template.downloadUrl}
