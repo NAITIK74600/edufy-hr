@@ -453,7 +453,7 @@ function LoginStyles() {
  * - NO switch console option!
  */
 export function EmployeeLoginPage() {
-  const { login } = useAuth()
+  const { login, changePassword } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -461,6 +461,10 @@ export function EmployeeLoginPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
+  const [mustSetNewPassword, setMustSetNewPassword] = useState(false)
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [showNewPassword, setShowNewPassword] = useState(false)
 
   async function handleSubmit(e) {
     if (e) e.preventDefault()
@@ -478,9 +482,40 @@ export function EmployeeLoginPage() {
       if (loggedUser?.role === 'admin' || loggedUser?.role === 'hr') {
         throw new Error('Access denied: Management accounts must log in via the HR / Admin Console.')
       }
+      if (loggedUser?.mustChangePassword) {
+        setMustSetNewPassword(true)
+        setNotice('First-time login detected: An auto-generated temporary password was used. Please set a new password below.')
+        return
+      }
       window.location.hash = '#/employee'
     } catch (err) {
       setError(err.message || 'Invalid email or password.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleSetNewPassword(e) {
+    if (e) e.preventDefault()
+    setError('')
+    if (!newPassword || newPassword.trim().length < 8) {
+      setError('New password must be at least 8 characters long.')
+      return
+    }
+    if (newPassword !== confirmPassword) {
+      setError('New password and confirmation do not match.')
+      return
+    }
+    if (newPassword === password) {
+      setError('New password must be different from your temporary password.')
+      return
+    }
+    setLoading(true)
+    try {
+      await changePassword({ currentPassword: password, newPassword: newPassword.trim() })
+      window.location.hash = '#/employee'
+    } catch (err) {
+      setError(err?.message || 'Failed to set new password. Please try again.')
     } finally {
       setLoading(false)
     }
@@ -500,13 +535,17 @@ export function EmployeeLoginPage() {
         {/* BADGE: EMPLOYEE SELF-SERVICE */}
         <div className="edufyi-pill-badge">
           <Sparkles size={13} style={{ color: '#00d2ff' }} />
-          <span>EMPLOYEE SELF-SERVICE</span>
+          <span>{mustSetNewPassword ? 'SECURITY SETUP' : 'EMPLOYEE SELF-SERVICE'}</span>
         </div>
 
         {/* TITLE & SUBTITLE */}
-        <h1 className="edufyi-login-title">Employee Login</h1>
+        <h1 className="edufyi-login-title">
+          {mustSetNewPassword ? 'Set New Password' : 'Employee Login'}
+        </h1>
         <p className="edufyi-login-subtitle">
-          Sign in with your Admin or HR-created account
+          {mustSetNewPassword
+            ? 'Choose a permanent personal password to secure your account'
+            : 'Sign in with your Admin or HR-created account'}
         </p>
 
         {/* ERROR BOX */}
@@ -525,83 +564,133 @@ export function EmployeeLoginPage() {
           </div>
         )}
 
-        {/* FORM */}
-        <form onSubmit={handleSubmit} className="edufyi-login-form">
-          <div className="edufyi-field-box">
-            <span className="edufyi-field-icon">
-              <Mail size={17} />
-            </span>
-            <input
-              type="text"
-              className="edufyi-field-input"
-              placeholder="Work Email, Username or Employee ID"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              autoComplete="username"
-              disabled={loading}
-            />
-          </div>
-
-          <div className="edufyi-field-box">
-            <span className="edufyi-field-icon">
-              <Lock size={17} />
-            </span>
-            <input
-              type={showPassword ? 'text' : 'password'}
-              className="edufyi-field-input"
-              placeholder="Password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              autoComplete="current-password"
-              disabled={loading}
-            />
-            <button
-              type="button"
-              className="edufyi-eye-toggle"
-              onClick={() => setShowPassword(!showPassword)}
-              tabIndex={-1}
-              aria-label={showPassword ? 'Hide password' : 'Show password'}
-            >
-              {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-            </button>
-          </div>
-
-          <div className="edufyi-action-row">
-            <label className="edufyi-remember-label">
+        {mustSetNewPassword ? (
+          <form onSubmit={handleSetNewPassword} className="edufyi-login-form">
+            <div className="edufyi-field-box">
+              <span className="edufyi-field-icon">
+                <Key size={17} />
+              </span>
               <input
-                type="checkbox"
-                className="edufyi-checkbox"
-                checked={remember}
-                onChange={(e) => setRemember(e.target.checked)}
+                type={showNewPassword ? 'text' : 'password'}
+                className="edufyi-field-input"
+                placeholder="New Password (min 8 characters)"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                autoComplete="new-password"
+                disabled={loading}
+                autoFocus
               />
-              Remember me
-            </label>
+              <button
+                type="button"
+                className="edufyi-eye-toggle"
+                onClick={() => setShowNewPassword(!showNewPassword)}
+                tabIndex={-1}
+              >
+                {showNewPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
+
+            <div className="edufyi-field-box">
+              <span className="edufyi-field-icon">
+                <Lock size={17} />
+              </span>
+              <input
+                type={showNewPassword ? 'text' : 'password'}
+                className="edufyi-field-input"
+                placeholder="Confirm New Password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                autoComplete="new-password"
+                disabled={loading}
+              />
+            </div>
+
+            <button type="submit" className="edufyi-primary-btn" disabled={loading}>
+              {loading ? 'SAVING NEW PASSWORD...' : (
+                <>
+                  SAVE PASSWORD & ENTER <ArrowRight size={16} />
+                </>
+              )}
+            </button>
+          </form>
+        ) : (
+          <form onSubmit={handleSubmit} className="edufyi-login-form">
+            <div className="edufyi-field-box">
+              <span className="edufyi-field-icon">
+                <Mail size={17} />
+              </span>
+              <input
+                type="text"
+                className="edufyi-field-input"
+                placeholder="Work Email, Username or Employee ID"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                autoComplete="username"
+                disabled={loading}
+              />
+            </div>
+
+            <div className="edufyi-field-box">
+              <span className="edufyi-field-icon">
+                <Lock size={17} />
+              </span>
+              <input
+                type={showPassword ? 'text' : 'password'}
+                className="edufyi-field-input"
+                placeholder="Password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoComplete="current-password"
+                disabled={loading}
+              />
+              <button
+                type="button"
+                className="edufyi-eye-toggle"
+                onClick={() => setShowPassword(!showPassword)}
+                tabIndex={-1}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+              >
+                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
+
+            <div className="edufyi-action-row">
+              <label className="edufyi-remember-label">
+                <input
+                  type="checkbox"
+                  className="edufyi-checkbox"
+                  checked={remember}
+                  onChange={(e) => setRemember(e.target.checked)}
+                />
+                Remember me
+              </label>
+              <button
+                type="button"
+                className="edufyi-link"
+                onClick={() => setNotice('For account recovery, password resets, or credentials lookup, please reach out to your HR Operations team.')}
+              >
+                Forgot password?
+              </button>
+            </div>
+
+            <button type="submit" className="edufyi-primary-btn" disabled={loading}>
+              {loading ? 'SIGNING IN...' : (
+                <>
+                  SIGN IN <ArrowRight size={16} />
+                </>
+              )}
+            </button>
+
             <button
               type="button"
-              className="edufyi-link"
-              onClick={() => setNotice('For account recovery, password resets, or credentials lookup, please reach out to your HR Operations team.')}
+              className="edufyi-secondary-btn"
+              onClick={() => setNotice('Hardware Passkey authentication is currently in private preview. Please use your standard credentials.')}
             >
-              Forgot password?
+              <Fingerprint size={17} style={{ color: '#00d2ff' }} />
+              Passkey login is not configured
             </button>
-          </div>
-
-          <button type="submit" className="edufyi-primary-btn" disabled={loading}>
-            {loading ? 'SIGNING IN...' : (
-              <>
-                SIGN IN <ArrowRight size={16} />
-              </>
-            )}
-          </button>
-
-          <button
-            type="button"
-            className="edufyi-secondary-btn"
-            onClick={() => setNotice('Hardware Passkey authentication is currently in private preview. Please use your standard credentials.')}
-          >
-            <Fingerprint size={17} style={{ color: '#00d2ff' }} />
-            Passkey login is not configured
-          </button>
-        </form>
+          </form>
+        )}
       </div>
     </div>
   )
@@ -618,7 +707,7 @@ export function EmployeeLoginPage() {
  * - NO switch console option!
  */
 export function ManagementLoginPage({ defaultRole = 'hr' }) {
-  const { login } = useAuth()
+  const { login, changePassword } = useAuth()
 
   // Track active role: 'admin' or 'hr'
   const [role, setRole] = useState(() => {
@@ -633,6 +722,10 @@ export function ManagementLoginPage({ defaultRole = 'hr' }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
+  const [mustSetNewPassword, setMustSetNewPassword] = useState(false)
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [showNewPassword, setShowNewPassword] = useState(false)
 
   // Sync hash changes dynamically
   useEffect(() => {
@@ -683,6 +776,12 @@ export function ManagementLoginPage({ defaultRole = 'hr' }) {
       const targetPortal = role === 'admin' ? 'admin' : 'hr'
       const loggedUser = await login(email.trim(), password, targetPortal)
 
+      if (loggedUser?.mustChangePassword) {
+        setMustSetNewPassword(true)
+        setNotice('First-time login detected: An auto-generated temporary password was used. Please set a new password below.')
+        return
+      }
+
       if (loggedUser?.role === 'admin') {
         window.location.hash = '#/admin'
       } else if (loggedUser?.role === 'hr') {
@@ -692,6 +791,32 @@ export function ManagementLoginPage({ defaultRole = 'hr' }) {
       }
     } catch (err) {
       setError(err.message || 'Invalid email or password.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleSetNewPassword(e) {
+    if (e) e.preventDefault()
+    setError('')
+    if (!newPassword || newPassword.trim().length < 8) {
+      setError('New password must be at least 8 characters long.')
+      return
+    }
+    if (newPassword !== confirmPassword) {
+      setError('New password and confirmation do not match.')
+      return
+    }
+    if (newPassword === password) {
+      setError('New password must be different from your temporary password.')
+      return
+    }
+    setLoading(true)
+    try {
+      await changePassword({ currentPassword: password, newPassword: newPassword.trim() })
+      window.location.hash = role === 'admin' ? '#/admin' : '#/hr'
+    } catch (err) {
+      setError(err?.message || 'Failed to set new password. Please try again.')
     } finally {
       setLoading(false)
     }
@@ -760,8 +885,58 @@ export function ManagementLoginPage({ defaultRole = 'hr' }) {
           </div>
         )}
 
-        {/* FORM */}
-        <form onSubmit={handleSubmit} className="edufyi-login-form">
+        {mustSetNewPassword ? (
+          <form onSubmit={handleSetNewPassword} className="edufyi-login-form">
+            <div className="edufyi-field-box">
+              <span className="edufyi-field-icon">
+                <Key size={17} />
+              </span>
+              <input
+                type={showNewPassword ? 'text' : 'password'}
+                className="edufyi-field-input"
+                placeholder="New Password (min 8 characters)"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                autoComplete="new-password"
+                disabled={loading}
+                autoFocus
+              />
+              <button
+                type="button"
+                className="edufyi-eye-toggle"
+                onClick={() => setShowNewPassword(!showNewPassword)}
+                tabIndex={-1}
+              >
+                {showNewPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
+
+            <div className="edufyi-field-box">
+              <span className="edufyi-field-icon">
+                <Lock size={17} />
+              </span>
+              <input
+                type={showNewPassword ? 'text' : 'password'}
+                className="edufyi-field-input"
+                placeholder="Confirm New Password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                autoComplete="new-password"
+                disabled={loading}
+              />
+            </div>
+
+            <button type="submit" className="edufyi-primary-btn" disabled={loading}>
+              {loading ? 'SAVING NEW PASSWORD...' : (
+                <>
+                  SET PASSWORD & ENTER <ArrowRight size={16} />
+                </>
+              )}
+            </button>
+          </form>
+        ) : (
+          /* FORM */
+          <form onSubmit={handleSubmit} className="edufyi-login-form">
           <div className="edufyi-field-box">
             <span className="edufyi-field-icon">
               <Mail size={17} />
@@ -837,6 +1012,7 @@ export function ManagementLoginPage({ defaultRole = 'hr' }) {
             Passkey login is not configured
           </button>
         </form>
+        )}
       </div>
     </div>
   )

@@ -41,6 +41,7 @@ import {
   Receipt,
   LifeBuoy,
   BellRing,
+  KeyRound,
 } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
 import { adminRoutes, hrRoutes, employeeRoutes } from '../app/routes'
@@ -52,6 +53,7 @@ import { getTimeOfDayGreeting, getRoleBadgeLabel, resolveUserDisplayName } from 
 import { apiClient } from '../services/apiClient'
 import { AIHRAssistant } from './AIHRAssistant'
 import { isSoundMuted, toggleSoundMuted, playNotificationSound } from '../utils/soundHelper'
+import { ChangePasswordModal } from './ChangePasswordModal'
 
 
 class RouteErrorBoundary extends React.Component {
@@ -168,6 +170,7 @@ export function HRLayout({ route, children }) {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [notifOpen, setNotifOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
+  const [changePasswordOpen, setChangePasswordOpen] = useState(false)
   const [photoNotice, setPhotoNotice] = useState(false)
   const [aiAssistantOpen, setAiAssistantOpen] = useState(false)
   const [soundMuted, setSoundMutedState] = useState(() => isSoundMuted())
@@ -843,6 +846,19 @@ export function HRLayout({ route, children }) {
                         <ShieldCheck size={14} />
                         <span>Authorized Employee session • Self-Service Portal</span>
                       </div>
+
+                      <button
+                        type="button"
+                        className="profile-photo-change-btn"
+                        style={{ width: '100%', justifyContent: 'center', marginTop: '8px', padding: '7px 10px', background: '#ffffff', border: '1px solid var(--border)' }}
+                        onClick={() => {
+                          setProfileOpen(false)
+                          setChangePasswordOpen(true)
+                        }}
+                      >
+                        <KeyRound size={13} style={{ color: 'var(--teal)' }} />
+                        <span>Change Password</span>
+                      </button>
                     </div>
 
                     <div className="profile-popover-footer">
@@ -856,6 +872,20 @@ export function HRLayout({ route, children }) {
             )}
           </div>
         </header>
+
+        {/* Force Password Change on Auto-Generated / Temporary Password */}
+        {user?.mustChangePassword && (
+          <ChangePasswordModal isOpen={true} isForced={true} />
+        )}
+
+        {/* User-Triggered Change Password Modal */}
+        {changePasswordOpen && (
+          <ChangePasswordModal
+            isOpen={true}
+            isForced={false}
+            onClose={() => setChangePasswordOpen(false)}
+          />
+        )}
 
         {/* Real-time Floating Notification Alert Toast */}
         <AnimatePresence>

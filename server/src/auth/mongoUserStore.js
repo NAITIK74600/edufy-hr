@@ -14,7 +14,7 @@ function toPublicUser(user) {
   delete source.passwordHash
   delete source.authVersion
   const displayName = source.displayName || source.name || source.username || (source.email ? source.email.split('@')[0] : 'Employee')
-  return { ...source, displayName, name: source.name || displayName }
+  return { ...source, displayName, name: source.name || displayName, mustChangePassword: Boolean(source.mustChangePassword) }
 }
 
 export function createMongoUserStore({ managementUsers = [] } = {}) {
@@ -185,7 +185,18 @@ export function createMongoUserStore({ managementUsers = [] } = {}) {
         : { $or: [{ employeeId: String(id).toUpperCase() }, { id: String(id) }, { email: String(id).toLowerCase() }] }
       return toAuthUser(await Employee.findOneAndUpdate(
         query,
-        { $set: { passwordHash }, $inc: { authVersion: 1 } },
+        { $set: { passwordHash, mustChangePassword: true }, $inc: { authVersion: 1 } },
+        { returnDocument: 'after', runValidators: true },
+      ).lean())
+    },
+    async changePassword(id, passwordHash) {
+      await initialize()
+      const query = mongoose.isValidObjectId(id)
+        ? { _id: id }
+        : { $or: [{ employeeId: String(id).toUpperCase() }, { id: String(id) }, { email: String(id).toLowerCase() }] }
+      return toAuthUser(await Employee.findOneAndUpdate(
+        query,
+        { $set: { passwordHash, mustChangePassword: false }, $inc: { authVersion: 1 } },
         { returnDocument: 'after', runValidators: true },
       ).lean())
     },

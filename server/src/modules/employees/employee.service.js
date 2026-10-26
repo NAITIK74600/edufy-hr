@@ -160,6 +160,7 @@ export function createEmployeeService({ repository }) {
         ? String(values.password).trim()
         : 'Password@123')
       values.passwordHash = hashPassword(rawPassword)
+      values.mustChangePassword = true
       delete values.password
       const employee = await repository.create(values)
       await repository.addAudit(auditEvent(actor, 'employee.created', employee.id ?? employee._id, Object.keys(values)))
@@ -247,6 +248,7 @@ export function createEmployeeService({ repository }) {
       preventSelfDeactivation(id, status, actor)
       if (employee.status !== status) employee.authVersion = (employee.authVersion ?? 0) + 1
       employee.status = status
+      if (status === 'invited') employee.mustChangePassword = true
       await repository.save(employee)
       await repository.addAudit(auditEvent(actor, `employee.${status}`, employee.id ?? employee._id, ['status']))
 

@@ -34,5 +34,5 @@ export function createAuthService({ userStore, jwtSecret, issuer = 'edufyi-hr-ap
 export function toPublicUser(user) {
   const { passwordHash, authVersion, ...safeUser } = user
   const displayName = safeUser.displayName || safeUser.name || safeUser.username || (safeUser.email ? safeUser.email.split('@')[0] : 'Employee')
-  return { ...safeUser, displayName, name: safeUser.name || displayName, permissions: getUserPermissions(user) }
+  return { ...safeUser, displayName, name: safeUser.name || displayName, mustChangePassword: Boolean(user.mustChangePassword), permissions: getUserPermissions(user) }
 }

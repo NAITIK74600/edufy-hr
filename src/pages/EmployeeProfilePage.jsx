@@ -5,14 +5,16 @@ import { PageHeader } from '../components/ui'
 import { formatINR } from '../utils/currency'
 import { OnboardingDossierView } from '../components/OnboardingDossierView'
 import { EmployeeComplianceStatusCard } from '../components/EmployeeComplianceStatusCard'
-import { User, Mail, Phone, Building2, Calendar, ShieldCheck, Briefcase, Camera, Check } from 'lucide-react'
+import { User, Mail, Phone, Building2, Calendar, ShieldCheck, Briefcase, Camera, Check, KeyRound } from 'lucide-react'
 import { apiClient } from '../services/apiClient'
+import { ChangePasswordModal } from '../components/ChangePasswordModal'
 
 export function EmployeeProfilePage() {
   const { user, updateUser } = useAuth()
   const [state, setState] = useState(() => hrStore.getState())
   const [photoNotice, setPhotoNotice] = useState(false)
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
+  const [passwordModalOpen, setPasswordModalOpen] = useState(false)
   const fileInputRef = useRef(null)
   useEffect(() => hrStore.subscribe(setState), [])
 
@@ -165,6 +167,29 @@ export function EmployeeProfilePage() {
         <EmployeeComplianceStatusCard employee={employee} />
       )}
 
+      {/* Security & Password Credentials Section */}
+      <section className="panel" style={{ padding: '22px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+          <div>
+            <h3 style={{ margin: '0 0 4px', fontSize: '16px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <KeyRound size={18} style={{ color: 'var(--teal)' }} /> Account Security & Password
+            </h3>
+            <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-secondary)' }}>
+              Manage your personal corporate portal access password and security credentials.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            className="ui-button primary"
+            onClick={() => setPasswordModalOpen(true)}
+            style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px' }}
+          >
+            <KeyRound size={14} /> Change Password
+          </button>
+        </div>
+      </section>
+
       {/* Onboarding Documents & Statutory Dossier Section */}
       <section className="panel" style={{ padding: '22px' }}>
         <h3 style={{ margin: '0 0 16px', fontSize: '16px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -172,6 +197,15 @@ export function EmployeeProfilePage() {
         </h3>
         <OnboardingDossierView employee={employee} canEdit={true} canVerify={false} />
       </section>
+
+      {/* Change Password Modal */}
+      {passwordModalOpen && (
+        <ChangePasswordModal
+          isOpen={true}
+          isForced={false}
+          onClose={() => setPasswordModalOpen(false)}
+        />
+      )}
     </div>
   )
 }

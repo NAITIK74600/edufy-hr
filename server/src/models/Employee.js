@@ -32,6 +32,7 @@ const employeeSchema = new mongoose.Schema({
   email: { type: String, required: true, unique: true, lowercase: true, trim: true },
   passwordHash: { type: String, select: false },
   authVersion: { type: Number, default: 0, select: false },
+  mustChangePassword: { type: Boolean, default: false },
   role: { type: String, trim: true, default: 'employee' },
   avatarUrl: { type: String, trim: true, default: null },
   permissions: { type: [String], default: [] },

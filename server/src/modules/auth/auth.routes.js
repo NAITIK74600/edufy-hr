@@ -132,6 +132,7 @@ export function createAuthRouter({ authService, auth, userStore }) {
         designation: designation || 'Staff Member',
         status: 'active',
         passwordHash: hashPassword(password),
+        mustChangePassword: true,
       }
       const savedUser = await userStore.addUser(newUser)
       if (!savedUser) throw new Error('Account could not be saved.')
@@ -170,6 +171,80 @@ export function createAuthRouter({ authService, auth, userStore }) {
       if (mongoose.connection.readyState === 1) await attachOnboardingDocs(user)
       return response.json({ success: true, data: { user: authService.toPublicUser ? authService.toPublicUser(user) : user } })
     } catch (error) { return next(error) }
+  })
+
+  router.post('/change-password', auth.authenticate, async (request, response, next) => {
+    try {
+      const { currentPassword, newPassword } = request.body ?? {}
+      if (typeof newPassword !== 'string' || newPassword.trim().length < 8) {
+        return response.status(400).json({
+          success: false,
+          error: { code: 'VALIDATION_ERROR', message: 'New password must be at least 8 characters long.' },
+        })
+      }
+
+      const userId = request.auth.user.id || request.auth.user._id
+      const user = await userStore.findById(userId)
+      if (!user) {
+        return response.status(404).json({
+          success: false,
+          error: { code: 'USER_NOT_FOUND', message: 'User account not found.' },
+        })
+      }
+
+      // If user does NOT have mustChangePassword or if currentPassword was provided:
+      const needsCurrentCheck = !user.mustChangePassword || Boolean(currentPassword)
+      if (needsCurrentCheck) {
+        if (!currentPassword || typeof currentPassword !== 'string') {
+          return response.status(400).json({
+            success: false,
+            error: { code: 'VALIDATION_ERROR', message: 'Current password is required.' },
+          })
+        }
+        const { verifyPassword } = await import('../../auth/passwords.js')
+        const isValid = user.passwordHash && (
+          verifyPassword(currentPassword, user.passwordHash) ||
+          verifyPassword(currentPassword.trim(), user.passwordHash)
+        )
+        if (!isValid) {
+          return response.status(400).json({
+            success: false,
+            error: { code: 'INVALID_CREDENTIALS', message: 'Current password is incorrect.' },
+          })
+        }
+      }
+
+      const newHash = hashPassword(newPassword.trim())
+      let updatedUser = null
+      if (userStore.changePassword) {
+        updatedUser = await userStore.changePassword(userId, newHash)
+      } else if (userStore.resetPassword) {
+        updatedUser = await userStore.resetPassword(userId, newHash)
+      }
+
+      if (mongoose.connection.readyState === 1) {
+        const { Employee } = await import('../../models/Employee.js')
+        await Employee.updateOne(
+          {
+            $or: [
+              ...(mongoose.isValidObjectId(userId) ? [{ _id: userId }] : []),
+              ...(user.employeeId ? [{ employeeId: user.employeeId }] : []),
+              ...(user.email ? [{ email: user.email.toLowerCase() }] : []),
+            ],
+          },
+          { $set: { passwordHash: newHash, mustChangePassword: false }, $inc: { authVersion: 1 } },
+        )
+      }
+
+      const publicUser = authService.toPublicUser(updatedUser || { ...user, mustChangePassword: false })
+      return response.json({
+        success: true,
+        message: 'Password has been updated successfully.',
+        data: { user: publicUser },
+      })
+    } catch (error) {
+      return next(error)
+    }
   })
 
   router.post('/users/:id/password', auth.authenticate, async (request, response, next) => {

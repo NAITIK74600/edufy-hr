@@ -68,6 +68,16 @@ export function createUserStore(users = []) {
       const user = records.get(String(id))
       if (user) {
         user.passwordHash = passwordHash
+        user.mustChangePassword = true
+        return publicUser(user)
+      }
+      return null
+    },
+    async changePassword(id, passwordHash) {
+      const user = records.get(String(id))
+      if (user) {
+        user.passwordHash = passwordHash
+        user.mustChangePassword = false
         return publicUser(user)
       }
       return null

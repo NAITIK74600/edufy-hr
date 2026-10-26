@@ -249,6 +249,22 @@ export function AuthProvider({ children }) {
     }
   }
 
+  async function changePassword({ currentPassword, newPassword }) {
+    if (!newPassword || newPassword.trim().length < 8) {
+      throw new Error('New password must be at least 8 characters long.')
+    }
+    const res = await apiClient.post('/auth/change-password', {
+      currentPassword: currentPassword || undefined,
+      newPassword: newPassword.trim(),
+    })
+    if (res?.data?.user) {
+      updateUser(res.data.user)
+    } else {
+      updateUser({ mustChangePassword: false })
+    }
+    return res?.data || { success: true }
+  }
+
   const value = useMemo(
     () => ({
       token,
@@ -256,6 +272,7 @@ export function AuthProvider({ children }) {
       status,
       login,
       logout,
+      changePassword,
       updateUser,
     }),
     [token, user, status]
@@ -273,6 +290,7 @@ export function useAuth() {
       token: null,
       login: async () => {},
       logout: async () => {},
+      changePassword: async () => {},
       updateUser: () => {},
     }
   }
