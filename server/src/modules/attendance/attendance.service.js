@@ -112,9 +112,9 @@ export function calculateDistanceMeters(lat1, lon1, lat2, lon2) {
   const a =
     Math.sin(dLat / 2) * Math.sin(dLat / 2) +
     Math.cos((numLat1 * Math.PI) / 180) *
-      Math.cos((numLat2 * Math.PI) / 180) *
-      Math.sin(dLon / 2) *
-      Math.sin(dLon / 2)
+    Math.cos((numLat2 * Math.PI) / 180) *
+    Math.sin(dLon / 2) *
+    Math.sin(dLon / 2)
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
   return Math.round(R * c)
 }
@@ -183,7 +183,7 @@ function isIpMatching(clientIp, allowedIPs = []) {
           const type = family === 4 ? 'ipv4' : 'ipv6'
           list.addSubnet(address, bits, type)
           if (list.check(cleanIp, type)) return true
-        } catch {}
+        } catch { }
       }
       return false
     }
@@ -208,7 +208,7 @@ function isIpMatching(clientIp, allowedIPs = []) {
         const list = new BlockList()
         list.addSubnet(cleanAllowed, 64, 'ipv6')
         if (list.check(cleanIp, 'ipv6')) return true
-      } catch {}
+      } catch { }
     }
 
     return false
@@ -274,7 +274,7 @@ export function createAttendanceService({ repository, companySettings = {} }) {
       })
     }
 
-    const maxAllowedRadius = nearestLocation?.radiusMeters || attendanceRules.maxGeofenceRadiusMeters || 30
+    const maxAllowedRadius = Number(attendanceRules.maxGeofenceRadiusMeters) || Number(nearestLocation?.radiusMeters) || 50
     const hasGps = hasValidCoords && minDistance !== Infinity
     const numAccuracy = typeof accuracy === 'number' && Number.isFinite(accuracy) ? accuracy : null
     const accurateGps = numAccuracy !== null ? (numAccuracy >= 0 && numAccuracy <= Math.max(maxAllowedRadius, 250)) : true
@@ -414,25 +414,25 @@ export function createAttendanceService({ repository, companySettings = {} }) {
 
     async getTodayRecord(employeeId, date = getTodayString()) {
       if (date === getTodayString()) {
-        await this.autoPunchOutDisconnectedRecords().catch(() => {})
+        await this.autoPunchOutDisconnectedRecords().catch(() => { })
       }
       return repository.findByEmployeeAndDate(employeeId, date)
     },
 
     async listSelf(user, filters = {}) {
-      await this.autoPunchOutDisconnectedRecords().catch(() => {})
+      await this.autoPunchOutDisconnectedRecords().catch(() => { })
       const employeeId = user.employeeId || user.id
       return repository.list({ ...filters, employeeId })
     },
 
     async listAll(filters = {}) {
-      await this.autoPunchOutDisconnectedRecords().catch(() => {})
+      await this.autoPunchOutDisconnectedRecords().catch(() => { })
       return repository.list(filters)
     },
 
     async getSummary(date = getTodayString()) {
       if (date === getTodayString()) {
-        await this.autoPunchOutDisconnectedRecords().catch(() => {})
+        await this.autoPunchOutDisconnectedRecords().catch(() => { })
       }
       return repository.getSummary(date)
     },
@@ -724,8 +724,8 @@ export function createAttendanceService({ repository, companySettings = {} }) {
       const earlyLogoutReason = isLop
         ? 'Early Logout (06:30 PM – 07:30 PM) marked as LOP per month-end policy (from 25th)'
         : (isHalfDayFromEarly
-            ? `Early Logout #${earlyLogoutCount} (Exceeded 2 accepted early logouts — marked as Half Day)`
-            : (isEarlyLogout ? `Early Logout #${earlyLogoutCount} of 2 accepted early departures (06:30 PM – 07:30 PM)` : ''))
+          ? `Early Logout #${earlyLogoutCount} (Exceeded 2 accepted early logouts — marked as Half Day)`
+          : (isEarlyLogout ? `Early Logout #${earlyLogoutCount} of 2 accepted early departures (06:30 PM – 07:30 PM)` : ''))
 
       const defaultReason = autoPunchOut ? 'Auto Punch Out (GPS & WiFi disconnected for 2 hrs)' : earlyLogoutReason
       const reasonToSet = punchOutReason || defaultReason

@@ -4384,7 +4384,7 @@ function AdminSettingsModule() {
   const [endTime, setEndTime] = useState(initialAtt.workEndTime || '18:30')
   const [graceMins, setGraceMins] = useState(initialAtt.gracePeriodMinutes ?? 15)
   const [wifiReq, setWifiReq] = useState(initialAtt.requireOfficeNetworkAndGps ?? true)
-  const [geofenceRadius, setGeofenceRadius] = useState(initialAtt.maxGeofenceRadiusMeters || 30)
+  const [geofenceRadius, setGeofenceRadius] = useState(initialAtt.maxGeofenceRadiusMeters || 50)
   const [casualQuota, setCasualQuota] = useState(initialLeave.casualQuota ?? 12)
   const [sickQuota, setSickQuota] = useState(initialLeave.sickQuota ?? 10)
   const [earnedQuota, setEarnedQuota] = useState(initialLeave.earnedQuota ?? 15)
@@ -4578,7 +4578,7 @@ function AdminSettingsModule() {
         workEndTime: endTime,
         gracePeriodMinutes: Number(graceMins),
         requireOfficeNetworkAndGps: Boolean(wifiReq),
-        maxGeofenceRadiusMeters: Number(geofenceRadius) || 30,
+        maxGeofenceRadiusMeters: Number(geofenceRadius) || 50,
       },
       leavePolicies: {
         casualQuota: Number(casualQuota),
@@ -4674,18 +4674,21 @@ function AdminSettingsModule() {
                   />
                 </div>
                 <div>
-                  <label style={{ fontSize: '11px', display: 'block', color: 'var(--muted)', marginBottom: '3px' }}>Max Geofence Radius (10 - 30 Meters)</label>
+                  <label style={{ fontSize: '11px', display: 'block', color: 'var(--muted)', marginBottom: '3px' }}>Max GPS Geofence Radius (Meters, e.g. 50m)</label>
                   <input
                     type="number"
-                    min="10"
-                    max="30"
-                    step="1"
+                    min="5"
+                    max="1000"
+                    step="5"
                     className="text-input"
                     value={geofenceRadius}
                     onChange={(e) => setGeofenceRadius(e.target.value)}
                     style={{ width: '100%', padding: '5px 8px', fontSize: '12px' }}
                     required
                   />
+                  <small style={{ fontSize: '10px', color: 'var(--muted)', display: 'block', marginTop: '2px' }}>
+                    Permitted distance radius for attendance verification (Default: 50m).
+                  </small>
                 </div>
                 <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11px', cursor: 'pointer', marginTop: '4px' }}>
                   <input
@@ -4929,7 +4932,7 @@ function AdminSettingsModule() {
                     </div>
                     <div style={{ fontSize: '10px', color: 'var(--muted)', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '4px' }}>
                       <MapPin size={11} color="var(--teal)" />
-                      <span>{branchLabel} (≤200m) • BSSID: <strong style={{ fontFamily: 'monospace' }}>{matchedNetwork?.bssid || '⚠ not set'}</strong></span>
+                      <span>{branchLabel} (≤{storeState.companySettings?.attendanceRules?.maxGeofenceRadiusMeters || 50}m) • BSSID: <strong style={{ fontFamily: 'monospace' }}>{matchedNetwork?.bssid || '⚠ not set'}</strong></span>
                     </div>
                   </div>
                   <button

@@ -301,8 +301,9 @@ function GPSAttendanceStation({ user, todayRecord, onPunch, onStartBreak, onEndB
   const isWifiVerified = isOnOfficeNetwork
   const primaryLocation = settings?.locations?.[0] || null
   const nearestOfficeName = verification.nearestLocation || primaryLocation?.name || 'Office'
+  const maxGeofenceRadius = Number(settings?.attendanceRules?.maxGeofenceRadiusMeters) || Number(verification?.maxAllowedRadius) || 50
 
-  // Inside campus requires office Wi-Fi / IP verification OR verified GPS geofence (<=200m)
+  // Inside campus requires office Wi-Fi / IP verification OR verified GPS geofence (<=maxGeofenceRadius)
   const isInsideCampus = Boolean(
     serverVerification &&
     (serverVerification.isGpsVerified || serverVerification.isWifiVerified || serverVerification.isIpVerified)
@@ -596,7 +597,7 @@ function GPSAttendanceStation({ user, todayRecord, onPunch, onStartBreak, onEndB
               <Wifi size={11} /> {networkLabel}
             </span>
             <span className={`gps-verified-badge ${isGpsInside ? 'in-range' : 'out-range'}`}>
-              <MapPin size={11} /> GPS: {hasGps ? `${distanceLabel} (${isGpsInside ? '≤200m Verified' : 'Outside Geofence'})` : 'Not detected'}
+              <MapPin size={11} /> GPS: {hasGps ? `${distanceLabel} (${isGpsInside ? `≤${maxGeofenceRadius}m Verified` : 'Outside Geofence'})` : 'Not detected'}
             </span>
             <span
               style={{
@@ -878,7 +879,7 @@ function GPSAttendanceStation({ user, todayRecord, onPunch, onStartBreak, onEndB
         <div style={{ marginTop: '12px', background: '#fff7ed', border: '1px solid #fed7aa', color: '#9a3412', padding: '9px 13px', borderRadius: '8px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
           <Pause size={16} style={{ flexShrink: 0, color: '#ea580c' }} />
           <div>
-            <strong>Work Timer Paused (Outside Campus / Off-Network):</strong> You are outside the office geofence and not connected to verified office Wi-Fi. The active work counter timer has stopped and will automatically resume once you return within campus (≤200m) or reconnect to office Wi-Fi.
+            <strong>Work Timer Paused (Outside Campus / Off-Network):</strong> You are outside the office geofence and not connected to verified office Wi-Fi. The active work counter timer has stopped and will automatically resume once you return within campus (≤{maxGeofenceRadius}m) or reconnect to office Wi-Fi.
           </div>
         </div>
       )}
@@ -946,16 +947,16 @@ function GPSAttendanceStation({ user, todayRecord, onPunch, onStartBreak, onEndB
         <div style={{ background: '#faf9f5', border: '1px solid var(--line)', borderRadius: '8px', padding: '10px 12px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
             <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: '5px' }}>
-              <Radio size={13} color={isGpsInside ? 'var(--teal)' : '#c25e00'} /> GPS Geofence (Max {verification.maxAllowedRadius || 200}m)
+              <Radio size={13} color={isGpsInside ? 'var(--teal)' : '#c25e00'} /> GPS Geofence (Max {maxGeofenceRadius}m)
             </span>
             <span style={{ fontSize: '10px', color: isGpsInside ? 'var(--teal)' : '#c25e00', fontWeight: 600 }}>
               {!hasGps
                 ? 'Not detected'
                 : isGpsInside
                   ? `✓ Verified (${distanceLabel})`
-                  : distance != null && distance <= (verification.maxAllowedRadius || 200)
+                  : distance != null && distance <= maxGeofenceRadius
                     ? `✓ Within Zone (${distanceLabel})`
-                    : `✕ ${distanceLabel} (Outside ${verification.maxAllowedRadius || 200}m)`}
+                    : `✕ ${distanceLabel} (Outside ${maxGeofenceRadius}m)`}
             </span>
           </div>
 
@@ -1010,12 +1011,12 @@ function GPSAttendanceStation({ user, todayRecord, onPunch, onStartBreak, onEndB
           <span>
             <strong>Punch-In Verification:</strong>{' '}
             {isGpsInside && isWifiVerified
-              ? `✓ Ready to Punch In — Dual Verified (Office Network: ${publicIp || 'Verified'} & GPS: ${distanceLabel} within ${verification.maxAllowedRadius || 200}m)`
+              ? `✓ Ready to Punch In — Dual Verified (Office Network: ${publicIp || 'Verified'} & GPS: ${distanceLabel} within ${maxGeofenceRadius}m)`
               : !isWifiVerified && !isGpsInside
                 ? `✕ Blocked: Both Office Network and GPS Geofence checks failed`
                 : !isWifiVerified
                   ? `✕ Blocked: Office Network verification failed (Must connect to registered office Wi-Fi)`
-                  : `✕ Blocked: GPS Geofence verification failed (${distanceLabel} away, max permitted: ${verification.maxAllowedRadius || 200}m)`}
+                  : `✕ Blocked: GPS Geofence verification failed (${distanceLabel} away, max permitted: ${maxGeofenceRadius}m)`}
           </span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '10px' }}>
@@ -1643,7 +1644,7 @@ function ESSAttendanceView({ user }) {
       <PageHeader
         eyebrow="Attendance & Shift Logs"
         title="My Attendance Tracker"
-        description="Punch in/out with automatic corporate Wi-Fi authentication and GPS Geofencing (≤ 200m max distance), review monthly timesheets, and view shift metrics."
+        description="Punch in/out with automatic corporate Wi-Fi authentication and GPS Geofencing, review monthly timesheets, and view shift metrics."
       />
 
       {/* PUNCH STATION WITH GPS & WI-FI DUAL VERIFICATION */}

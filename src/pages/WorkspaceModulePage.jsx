@@ -114,6 +114,7 @@ function AttendanceModule() {
   const allAttendance = storeState.attendance || []
   const allEmployees = storeState.employees || []
   const wifiNetworks = storeState.companySettings?.wifiNetworks || []
+  const maxGeofenceRadius = Number(storeState.companySettings?.attendanceRules?.maxGeofenceRadiusMeters) || 50
   const monthlyAttendance = allAttendance.filter((record) => record.date.startsWith(selectedDate.slice(0, 7)))
   const calendarDays = new Date(Number(selectedDate.slice(0, 4)), Number(selectedDate.slice(5, 7)), 0).getDate()
 
@@ -375,7 +376,7 @@ function AttendanceModule() {
               <h2>Presence Log ({selectedDate})</h2>
             </div>
 
-            <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#f7f6f2', border: '1px solid var(--line)', borderRadius: '8px', padding: '0 10px', height: '36px' }}>
                 <span style={{ fontSize: '10px', color: 'var(--muted)', fontWeight: 600 }}>Date:</span>
                 <input
@@ -386,7 +387,7 @@ function AttendanceModule() {
                 />
               </div>
 
-              <div className="module-search" style={{ minWidth: '200px' }}>
+              <div className="module-search" style={{ minWidth: '180px' }}>
                 <Search size={15} />
                 <input
                   placeholder="Search employee..."
@@ -399,6 +400,7 @@ function AttendanceModule() {
                 className="leave-filter"
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
+                style={{ height: '36px' }}
               >
                 <option value="all">All statuses</option>
                 <option value="present">Present (On-Time)</option>
@@ -410,9 +412,15 @@ function AttendanceModule() {
                 <option value="absent">Absent</option>
               </select>
 
-              <Button variant="secondary" onClick={handlePopulateStandardRoster} disabled>
-                <Sparkles size={14} /> Auto-Fill Shift
-              </Button>
+              <button
+                type="button"
+                className="ui-button secondary"
+                onClick={handleExportCSV}
+                title="Export current attendance log to CSV"
+                style={{ height: '36px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '5px' }}
+              >
+                <Download size={13} /> Export CSV
+              </button>
             </div>
           </div>
 
@@ -430,8 +438,8 @@ function AttendanceModule() {
               <EmptyState title="No attendance entries" message={`No records for ${selectedDate}. Record actual attendance or wait for employee punches.`} />
             ) : (
               dailyAttendance.map((r) => {
-                const isInside = r.distanceMeters !== undefined && r.distanceMeters !== null ? r.distanceMeters <= 200 : r.gpsVerified
-                const distText = r.distanceMeters !== undefined && r.distanceMeters !== null ? `${r.distanceMeters}m` : (r.wifiVerified ? '<30m' : '—')
+                const isInside = r.distanceMeters !== undefined && r.distanceMeters !== null ? r.distanceMeters <= maxGeofenceRadius : r.gpsVerified
+                const distText = r.distanceMeters !== undefined && r.distanceMeters !== null ? `${r.distanceMeters}m` : (r.wifiVerified ? `<${maxGeofenceRadius}m` : '—')
                 return (
                   <div
                     key={r.id}
@@ -534,7 +542,7 @@ function AttendanceModule() {
                         <Wifi size={10} /> {r.wifiVerified ? 'Office Wi-Fi' : 'Remote'} {r.wifiSSID && `(${r.wifiSSID})`}
                       </span>
                       <span className={`gps-verified-badge ${isInside ? 'in-range' : 'out-range'}`}>
-                        <MapPin size={10} /> {isInside ? `GPS ≤200m (${distText})` : `GPS Out (${distText})`}
+                        <MapPin size={10} /> {isInside ? `GPS ≤${maxGeofenceRadius}m (${distText})` : `GPS Out (${distText})`}
                       </span>
                     </div>
 
@@ -661,15 +669,19 @@ function AttendanceModule() {
                 },
                 {
                   key: 'geofence',
-                  label: 'GPS Geofence (≤ 200m)',
+                  label: `GPS Geofence (≤ ${maxGeofenceRadius}m)`,
                   render: (r) => {
-                    const isInside = r.distanceMeters !== undefined && r.distanceMeters !== null ? r.distanceMeters <= 200 : r.gpsVerified
-                    const distText = r.distanceMeters !== undefined && r.distanceMeters !== null ? `${r.distanceMeters}m` : (r.wifiVerified ? '<30m' : '—')
+                    const isInside = r.distanceMeters !== undefined && r.distanceMeters !== null
+                      ? r.distanceMeters <= maxGeofenceRadius
+                      : r.gpsVerified
+                    const distText = r.distanceMeters !== undefined && r.distanceMeters !== null
+                      ? `${r.distanceMeters}m`
+                      : (r.wifiVerified ? `<${maxGeofenceRadius}m` : '—')
                     return (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <MapPin size={13} style={{ color: isInside ? 'var(--teal)' : '#c25e00' }} />
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap' }}>
+                        <MapPin size={13} style={{ color: isInside ? 'var(--teal)' : '#c25e00', flexShrink: 0 }} />
                         <span className={`gps-verified-badge ${isInside ? 'in-range' : 'out-range'}`}>
-                          {isInside ? `≤200m (${distText})` : `Outside (${distText})`}
+                          {isInside ? `≤${maxGeofenceRadius}m (${distText})` : `Outside (${distText})`}
                         </span>
                         {r.locationName && (
                           <small style={{ color: 'var(--muted)', fontSize: '9px' }}>{r.locationName}</small>
@@ -682,7 +694,7 @@ function AttendanceModule() {
                   key: 'status',
                   label: 'Status',
                   render: (r) => (
-                    <div>
+                    <div style={{ minWidth: '150px', maxWidth: '280px' }}>
                       <StatusBadge
                         tone={
                           r.status === 'present'
@@ -715,7 +727,15 @@ function AttendanceModule() {
                           : 'Absent'}
                       </StatusBadge>
                       {r.notes && (
-                        <div style={{ fontSize: '10px', color: '#b45309', marginTop: '2px', maxWidth: '180px', lineHeight: 1.2 }}>
+                        <div style={{
+                          fontSize: '10px',
+                          color: '#b45309',
+                          marginTop: '4px',
+                          maxWidth: '280px',
+                          whiteSpace: 'normal',
+                          wordBreak: 'break-word',
+                          lineHeight: 1.35
+                        }}>
                           {r.notes}
                         </div>
                       )}
@@ -971,7 +991,7 @@ function AttendanceModule() {
                         </div>
                         <div style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '4px' }}>
                           <MapPin size={11} color="var(--teal)" />
-                          <span>Branch: <strong>{branchLabel}</strong> • Geofence: ≤200m</span>
+                          <span>Branch: <strong>{branchLabel}</strong> • Geofence: ≤{maxGeofenceRadius}m</span>
                         </div>
                       </div>
                     </div>
@@ -990,19 +1010,19 @@ function AttendanceModule() {
             </div>
           </section>
 
-          {/* GPS GEOFENCING CONFIGURATION PANEL (10M - 30M RADIUS) */}
+          {/* GPS GEOFENCING CONFIGURATION PANEL */}
           <section className="panel">
             <div className="panel-heading">
               <div>
                 <p className="section-kicker">Geographic Coordinates</p>
-                <h2>Office GPS Geofence Perimeters (10m - 30m Distance)</h2>
+                <h2>Office GPS Geofence Perimeters (≤{maxGeofenceRadius}m Distance)</h2>
               </div>
               <span className="gps-verified-badge in-range">
-                <Radio size={12} /> Geofence Strict: 10m - 30m
+                <Radio size={12} /> Geofence Rule: ≤{maxGeofenceRadius}m
               </span>
             </div>
             <p className="foundation-copy" style={{ margin: '10px 0 16px' }}>
-              Employees punching attendance from mobile devices or laptops must be physically located within <strong>10 to 30 meters</strong> of any registered office coordinates to obtain automatic in-office GPS verification.
+              Employees punching attendance from mobile devices or laptops must be physically located within <strong>{maxGeofenceRadius} meters</strong> of any registered office coordinates to obtain automatic in-office GPS verification.
             </p>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '12px' }}>
@@ -1025,7 +1045,7 @@ function AttendanceModule() {
                       <strong style={{ fontSize: '13px' }}>{loc.name}</strong>
                     </div>
                     <span className="role-badge" style={{ fontSize: '9px', background: 'var(--soft-teal)', color: 'var(--teal)' }}>
-                      Radius: {loc.radiusMeters || 30}m
+                      Radius: {loc.radiusMeters || maxGeofenceRadius}m
                     </span>
                   </div>
 
@@ -1036,7 +1056,7 @@ function AttendanceModule() {
                   </div>
 
                   <div style={{ borderTop: '1px solid var(--line)', paddingTop: '6px', fontSize: '10px', color: 'var(--teal)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <CheckCircle2 size={11} /> {loc.radiusMeters || 30}m Geofence Active
+                    <CheckCircle2 size={11} /> {loc.radiusMeters || maxGeofenceRadius}m Geofence Active
                   </div>
                 </div>
               ))}

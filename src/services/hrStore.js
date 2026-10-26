@@ -1974,7 +1974,7 @@ const INITIAL_COMPANY_SETTINGS = {
     halfDayHours: 4.5,
     fullDayHours: 8.0,
     geofenceStrict: false,
-    maxGeofenceRadiusMeters: 30,
+    maxGeofenceRadiusMeters: 50,
     gpsVerificationRequired: true,
     wifiVerificationRequired: true,
     requireOfficeNetworkAndGps: false,
@@ -4300,7 +4300,7 @@ const localStore = {
       })
     }
 
-    const maxAllowedRadius = settings?.attendanceRules?.maxGeofenceRadiusMeters || nearestLocation?.radiusMeters || 30
+    const maxAllowedRadius = Number(settings?.attendanceRules?.maxGeofenceRadiusMeters) || Number(nearestLocation?.radiusMeters) || 50
     const hasGps = minDistance !== Infinity
     const isGpsVerified = hasGps && minDistance <= maxAllowedRadius
 
