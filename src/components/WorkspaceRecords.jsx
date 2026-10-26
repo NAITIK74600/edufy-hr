@@ -684,13 +684,66 @@ export function WorkspaceNotifications() {
   })
 
   const getTargetUrl = (n) => {
-    if (n.type === 'salary') return portal === 'employee' ? '#/employee/salary' : `#/${portal}/payroll`
-    if (n.type === 'announcement') return `#/${portal}/announcements`
-    if (n.type === 'onboarding' || n.type === 'onboarding_submitted') return `#/${portal}/people`
-    if (n.type === 'leave') return `#/${portal}/leave`
-    if (n.type === 'expense' || n.type === 'expenses') return portal === 'employee' ? '#/employee/expenses' : (portal === 'admin' ? '#/admin/reports' : '#/hr/reports')
-    if (n.type === 'ticket' || n.type === 'tickets' || n.type === 'helpdesk') return `#/${portal}/helpdesk`
-    return null
+    if (!n) return null
+    // 1. Explicit link/path provided
+    const direct = n.link || n.url || n.path || n.route || n.targetUrl || n.target
+    if (direct && typeof direct === 'string') {
+      if (direct.startsWith('#')) return direct
+      if (direct.startsWith('/')) return `#${direct}`
+      return `#/${direct}`
+    }
+
+    const type = (n.type || '').toLowerCase()
+    const title = (n.title || '').toLowerCase()
+    const msg = (n.message || '').toLowerCase()
+    const text = `${type} ${title} ${msg}`
+
+    if (type === 'salary' || text.includes('salary') || text.includes('payslip') || text.includes('payroll') || text.includes('disbursement')) {
+      return portal === 'employee' ? '#/employee/salary' : `#/${portal}/payroll`
+    }
+    if (portal === 'employee' && (type === 'team_leave' || text.includes('team lead leave') || text.includes('manager approval') || text.includes('approval request') || n.metadata?.type === 'approval_request')) {
+      return '#/employee/team-leave'
+    }
+    if (type === 'leave' || type === 'leave_hr' || text.includes('leave') || text.includes('vacation')) {
+      return `#/${portal}/leave`
+    }
+    if (type === 'attendance' || text.includes('attendance') || text.includes('punch') || text.includes('clock-in') || text.includes('geofence')) {
+      return `#/${portal}/attendance`
+    }
+    if (text.includes('daily report') || text.includes('standup')) {
+      return portal === 'employee' ? '#/employee/daily-report' : (portal === 'admin' ? '#/admin/reports' : '#/hr/reports')
+    }
+    if (type === 'task' || type === 'tasks' || text.includes('task')) {
+      return `#/${portal}/tasks`
+    }
+    if (type === 'announcement' || text.includes('announcement')) {
+      return `#/${portal}/announcements`
+    }
+    if (type === 'ticket' || type === 'tickets' || type === 'helpdesk' || text.includes('ticket') || text.includes('support ticket')) {
+      return `#/${portal}/helpdesk`
+    }
+    if (type === 'expense' || type === 'expenses' || text.includes('expense')) {
+      return portal === 'employee' ? '#/employee/expenses' : (portal === 'admin' ? '#/admin/reports' : '#/hr/reports')
+    }
+    if (type === 'training' || type === 'learning' || type === 'course' || text.includes('training') || text.includes('certificate')) {
+      return portal === 'employee' ? '#/employee/training' : `#/${portal}/learning`
+    }
+    if (type === 'performance' || text.includes('performance') || text.includes('appraisal')) {
+      return `#/${portal}/performance`
+    }
+    if (type.startsWith('onboarding') || text.includes('onboarding')) {
+      return portal === 'employee' ? '#/employee/profile' : `#/${portal}/people`
+    }
+    if (type === 'document' || type === 'policy' || text.includes('policy') || text.includes('nda')) {
+      return `#/${portal}/policies`
+    }
+    if (type === 'holiday' || text.includes('holiday')) {
+      return `#/${portal}/holidays`
+    }
+    if (type === 'user' || type === 'users' || text.includes('credential')) {
+      return portal === 'employee' ? '#/employee/profile' : `#/${portal}/users`
+    }
+    return `#/${portal}/notifications`
   }
 
   const getNotificationIcon = (type) => {
