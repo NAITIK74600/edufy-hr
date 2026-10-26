@@ -4558,6 +4558,28 @@ const localStore = {
           }
         }
 
+        // Early Logout & Month-End LOP Policy:
+        // Checkout between 06:30 PM (18:30 / 1110 mins) and 07:30 PM (19:30 / 1170 mins) is early logout.
+        // From the 25th of the month onwards, early logouts are marked as Loss of Pay (LOP).
+        const checkoutTotalMins = now.getHours() * 60 + now.getMinutes()
+        const isEarlyLogoutWindow = checkoutTotalMins >= 1110 && checkoutTotalMins <= 1170
+        const dateParts = (date || '').split('-')
+        const dayOfMonth = dateParts.length === 3 ? parseInt(dateParts[2], 10) : now.getDate()
+        const isMonthEnd = Number.isFinite(dayOfMonth) && dayOfMonth >= 25
+
+        let isEarlyLogout = false
+        let isLop = false
+
+        if (isEarlyLogoutWindow && att.status !== 'on-leave') {
+          isEarlyLogout = true
+          if (isMonthEnd) {
+            isLop = true
+            newStatus = 'lop'
+          } else {
+            newStatus = 'early-logout'
+          }
+        }
+
         return {
           ...att,
           checkOut: timeStr,
@@ -4568,6 +4590,8 @@ const localStore = {
           totalBreakMinutes: totalBreak,
           offCampusMinutes: offCampusDurationMinutes,
           status: newStatus,
+          isEarlyLogout,
+          isLop,
           totalHours: `${hours}h ${mins}m (Completed)${breakStr}${offCampusStr}`,
         }
       }
@@ -4587,11 +4611,40 @@ const localStore = {
     const isVerified = record.wifiVerified !== undefined ? record.wifiVerified : verification.isWifiVerified
     const existingIndex = storeState.attendance.findIndex((a) => a.id === record.id || (a.employeeId === record.employeeId && a.date === date))
 
+    let finalStatus = record.status
+    let isEarlyLogout = record.isEarlyLogout || (record.status === 'early-logout')
+    let isLop = record.isLop || (record.status === 'lop')
+
+    if (!finalStatus && record.checkOut) {
+      const match = /(\d+):(\d+)(?::(\d+))?\s*(AM|PM)?/i.exec(record.checkOut)
+      if (match) {
+        let h = parseInt(match[1], 10)
+        const m = parseInt(match[2], 10)
+        const meridiem = match[4]?.toUpperCase()
+        if (meridiem === 'PM' && h < 12) h += 12
+        if (meridiem === 'AM' && h === 12) h = 0
+        const outTotalMins = h * 60 + m
+        if (outTotalMins >= 1110 && outTotalMins <= 1170) {
+          isEarlyLogout = true
+          const day = date ? parseInt(date.split('-')[2], 10) : new Date().getDate()
+          if (day >= 25) {
+            isLop = true
+            finalStatus = 'lop'
+          } else {
+            finalStatus = 'early-logout'
+          }
+        }
+      }
+    }
+
     let updated
     if (existingIndex >= 0) {
       updated = {
         ...storeState.attendance[existingIndex],
         ...record,
+        status: finalStatus || storeState.attendance[existingIndex].status || 'present',
+        isEarlyLogout,
+        isLop,
         date,
         wifiVerified: isVerified,
         gpsVerified: record.gpsVerified !== undefined ? record.gpsVerified : verification.isGpsVerified,
@@ -4607,7 +4660,9 @@ const localStore = {
         date,
         checkIn: record.checkIn || '09:15 AM',
         checkOut: record.checkOut || '06:15 PM',
-        status: record.status || 'present',
+        status: finalStatus || 'present',
+        isEarlyLogout,
+        isLop,
         wifiSSID: record.wifiSSID || storeState.companySettings?.allowedWifiSSIDs?.[0] || 'Edufyi',
         wifiVerified: isVerified,
         latitude: record.latitude ?? (isVerified ? 37.789172 : null),
@@ -5946,15 +6001,37 @@ const localStore = {
       const pf = Math.min(1800, Math.round(basic * 0.12))
       const professionalTax = 200
 
+      // Calculate actual LOP days from attendance records (status 'lop' or isLop true)
+      const empIdStr = String(emp.employeeId || emp.id || '').toUpperCase()
+      const attendanceList = storeState.attendance || []
+      const calculatedLopDays = attendanceList.filter((a) => {
+        const matchesEmp = String(a.employeeId || '').toUpperCase() === empIdStr
+        return matchesEmp && (a.status === 'lop' || a.isLop)
+      }).length
+
+      const standardDays = 30
+      const lopDays = calculatedLopDays
+      const payableDays = Math.max(0, standardDays - lopDays)
+      const paidDays = payableDays
+      const lopDeduction = lopDays > 0 ? Math.round((monthlyGross / standardDays) * lopDays) : 0
+
       const grossEarnings = basic + hra + conveyance + specialAllowance + otherAllowance
-      const totalDeductions = pf + professionalTax
-      const netPay = grossEarnings - totalDeductions
+      const totalDeductions = pf + professionalTax + lopDeduction
+      const netPay = Math.max(0, grossEarnings - totalDeductions)
 
       const bankName = emp.bankDetails?.bankName || emp.bankName || 'HDFC Bank'
       const accountNumber = emp.bankDetails?.accountNumber || emp.accountNumber || ''
       const ifscCode = emp.bankDetails?.ifscCode || emp.ifscCode || ''
       const panTaxId = emp.bankDetails?.panTaxId || emp.panTaxId || ''
       const uanNumber = emp.bankDetails?.uanNumber || emp.uanNumber || ''
+
+      const deductionsList = [
+        { name: 'Provident Fund (P.F.)', amount: pf },
+        { name: 'Professional Tax', amount: professionalTax },
+      ]
+      if (lopDeduction > 0) {
+        deductionsList.push({ name: 'Loss of Pay (LOP)', amount: lopDeduction })
+      }
 
       const recordData = {
         employeeId: emp.employeeId || emp.id,
@@ -5964,10 +6041,10 @@ const localStore = {
         department: emp.department || 'General',
         location: emp.location || 'Headquarters',
         month: month || 'October 2026',
-        standardDays: 30,
-        payableDays: 30,
-        paidDays: 30,
-        lopDays: 0,
+        standardDays,
+        payableDays,
+        paidDays,
+        lopDays,
         lopReversalDays: 0,
         arrearDays: 0,
         bankName,
@@ -5982,10 +6059,7 @@ const localStore = {
           { name: 'Special Allowance', monthlyRate: specialAllowance, currentMonth: specialAllowance, arrear: 0, total: specialAllowance },
           { name: 'Other Allowance', monthlyRate: otherAllowance, currentMonth: otherAllowance, arrear: 0, total: otherAllowance },
         ],
-        deductionsList: [
-          { name: 'Provident Fund (P.F.)', amount: pf },
-          { name: 'Professional Tax', amount: professionalTax },
-        ],
+        deductionsList,
         earnings: {
           basic,
           hra,
@@ -5996,12 +6070,13 @@ const localStore = {
         deductions: {
           pf,
           professionalTax,
+          lossOfPay: lopDeduction,
         },
         grossEarnings,
         totalDeductions,
         netPay,
         status: 'Processed',
-        notes: 'Bulk generated payroll draft',
+        notes: lopDays > 0 ? `Bulk generated payroll draft (${lopDays} LOP day(s) deducted)` : 'Bulk generated payroll draft',
       }
 
       const existingIndex = updatedPayroll.findIndex(

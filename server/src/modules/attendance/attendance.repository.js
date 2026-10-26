@@ -62,6 +62,8 @@ export function createMongoAttendanceRepository() {
             checkOutAt: record.checkOutAt,
             totalHours: record.totalHours,
             status: record.status,
+            isEarlyLogout: record.isEarlyLogout ?? false,
+            isLop: record.isLop ?? false,
             isOnBreak: record.isOnBreak ?? false,
             currentBreak: record.currentBreak ?? null,
             breaks: record.breaks ?? [],
@@ -189,9 +191,11 @@ export function createMongoAttendanceRepository() {
       const present = docs.filter((r) => r.status === 'present').length
       const late = docs.filter((r) => r.status === 'late').length
       const halfDay = docs.filter((r) => r.status === 'half-day').length
+      const earlyLogout = docs.filter((r) => r.status === 'early-logout' || r.isEarlyLogout).length
+      const lop = docs.filter((r) => r.status === 'lop' || r.isLop).length
       const onLeave = docs.filter((r) => r.status === 'on-leave').length
       const absent = docs.filter((r) => r.status === 'absent').length
-      return { total: docs.length, present, late, halfDay, onLeave, absent }
+      return { total: docs.length, present, late, halfDay, earlyLogout, lop, onLeave, absent }
     },
   }
 }

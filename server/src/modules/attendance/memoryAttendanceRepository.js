@@ -166,9 +166,11 @@ export function createMemoryAttendanceRepository(seedRecords = []) {
       const present = dayRecords.filter((r) => r.status === 'present').length
       const late = dayRecords.filter((r) => r.status === 'late').length
       const halfDay = dayRecords.filter((r) => r.status === 'half-day').length
+      const earlyLogout = dayRecords.filter((r) => r.status === 'early-logout' || r.isEarlyLogout).length
+      const lop = dayRecords.filter((r) => r.status === 'lop' || r.isLop).length
       const onLeave = dayRecords.filter((r) => r.status === 'on-leave').length
       const absent = dayRecords.filter((r) => r.status === 'absent').length
-      return { total: dayRecords.length, present, late, halfDay, onLeave, absent }
+      return { total: dayRecords.length, present, late, halfDay, earlyLogout, lop, onLeave, absent }
     },
   }
 }

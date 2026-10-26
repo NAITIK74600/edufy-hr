@@ -1613,6 +1613,8 @@ function ESSAttendanceView({ user }) {
               <option value="all">All Statuses</option>
               <option value="present">Present (Full Day 8h+)</option>
               <option value="late">Late In (Full Day 8h+)</option>
+              <option value="early-logout">Early Logout (6:30–7:30 PM)</option>
+              <option value="lop">Loss of Pay (LOP)</option>
               <option value="half-day">Half Day (Min 4h)</option>
               <option value="short-hours">Short Hours (&lt;4h)</option>
               <option value="on-leave">On Leave</option>
@@ -1646,6 +1648,10 @@ function ESSAttendanceView({ user }) {
                       ? 'success'
                       : row.status === 'late'
                       ? 'warning'
+                      : row.status === 'early-logout'
+                      ? 'warning'
+                      : row.status === 'lop'
+                      ? 'danger'
                       : (row.status === 'half-day' || row.status === 'half_day')
                       ? 'info'
                       : row.status === 'short-hours'
@@ -1657,6 +1663,10 @@ function ESSAttendanceView({ user }) {
                     ? 'Present (Full Day)'
                     : row.status === 'late'
                     ? 'Late In (Full Day)'
+                    : row.status === 'early-logout'
+                    ? 'Early Logout'
+                    : row.status === 'lop'
+                    ? 'Loss of Pay (LOP)'
                     : (row.status === 'half-day' || row.status === 'half_day')
                     ? 'Half Day (4h+)'
                     : row.status === 'short-hours'
@@ -1745,6 +1755,10 @@ function ESSAttendanceView({ user }) {
                             ? 'success'
                             : row.status === 'late'
                             ? 'warning'
+                            : row.status === 'early-logout'
+                            ? 'warning'
+                            : row.status === 'lop'
+                            ? 'danger'
                             : (row.status === 'half-day' || row.status === 'half_day')
                             ? 'info'
                             : row.status === 'short-hours'
@@ -1756,6 +1770,10 @@ function ESSAttendanceView({ user }) {
                           ? 'Present (Full Day)'
                           : row.status === 'late'
                           ? 'Late In (Full Day)'
+                          : row.status === 'early-logout'
+                          ? 'Early Logout'
+                          : row.status === 'lop'
+                          ? 'Loss of Pay (LOP)'
                           : (row.status === 'half-day' || row.status === 'half_day')
                           ? 'Half Day (4h+)'
                           : row.status === 'short-hours'

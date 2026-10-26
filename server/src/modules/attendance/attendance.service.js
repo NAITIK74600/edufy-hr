@@ -656,8 +656,36 @@ export function createAttendanceService({ repository, companySettings = {} }) {
         }
       }
 
-      const defaultReason = autoPunchOut ? 'Auto Punch Out (GPS & WiFi disconnected for 2 hrs)' : ''
+      // Early Logout & Month-End LOP Policy:
+      // Checkout between 06:30 PM (18:30 / 1110 mins) and 07:30 PM (19:30 / 1170 mins) is early logout.
+      // From the 25th of the month onwards, early logouts are marked as Loss of Pay (LOP).
+      const isEarlyLogoutWindow = outMins !== null && outMins >= 1110 && outMins <= 1170
+      const dateParts = (workDate || '').split('-')
+      const dayOfMonth = dateParts.length === 3 ? parseInt(dateParts[2], 10) : now.getDate()
+      const isMonthEndLop = Number.isFinite(dayOfMonth) && dayOfMonth >= 25
+
+      let isEarlyLogout = false
+      let isLop = false
+
+      if (isEarlyLogoutWindow && existing.status !== 'on-leave') {
+        isEarlyLogout = true
+        if (isMonthEndLop) {
+          isLop = true
+          newStatus = 'lop'
+        } else {
+          newStatus = 'early-logout'
+        }
+      }
+
+      const earlyLogoutReason = isLop
+        ? 'Early Logout (06:30 PM – 07:30 PM) marked as LOP per month-end policy (from 25th)'
+        : (isEarlyLogout ? 'Early Logout (06:30 PM – 07:30 PM)' : '')
+
+      const defaultReason = autoPunchOut ? 'Auto Punch Out (GPS & WiFi disconnected for 2 hrs)' : earlyLogoutReason
       const reasonToSet = punchOutReason || defaultReason
+
+      const notesArr = [existing.notes, reasonToSet].filter(Boolean)
+      const combinedNotes = [...new Set(notesArr)].join(' | ')
 
       const updated = {
         ...existing,
@@ -665,6 +693,8 @@ export function createAttendanceService({ repository, companySettings = {} }) {
         checkOutAt: now,
         totalHours: totalHoursStr,
         status: newStatus,
+        isEarlyLogout,
+        isLop,
         isOnBreak: false,
         currentBreak: null,
         breaks: breaksList,
@@ -673,9 +703,7 @@ export function createAttendanceService({ repository, companySettings = {} }) {
         autoPunchOut: Boolean(autoPunchOut),
         punchOutReason: reasonToSet,
         punchOutType: autoPunchOut ? 'auto' : 'manual',
-        notes: autoPunchOut
-          ? (existing.notes ? `${existing.notes} | ${reasonToSet}` : reasonToSet)
-          : (existing.notes || ''),
+        notes: combinedNotes,
       }
 
       return repository.punchOut(updated)
@@ -775,6 +803,8 @@ export function createAttendanceService({ repository, companySettings = {} }) {
         ...recordData,
         employeeId: recordData.employeeId.toUpperCase(),
         date: workDate,
+        isEarlyLogout: recordData.isEarlyLogout !== undefined ? recordData.isEarlyLogout : (recordData.status === 'early-logout'),
+        isLop: recordData.isLop !== undefined ? recordData.isLop : (recordData.status === 'lop'),
         wifiVerified: recordData.wifiVerified !== undefined ? recordData.wifiVerified : verification.isWifiVerified,
         gpsVerified: recordData.gpsVerified !== undefined ? recordData.gpsVerified : verification.isGpsVerified,
         distanceMeters: recordData.distanceMeters !== undefined ? recordData.distanceMeters : verification.distanceMeters,

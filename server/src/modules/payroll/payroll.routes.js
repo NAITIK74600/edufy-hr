@@ -205,6 +205,8 @@ async function context(employee, month) {
       attendanceDays: attendance.length,
       absentDays: attendance.filter((record) => record.status === 'absent').length,
       halfDays: attendance.filter((record) => record.status === 'half-day').length,
+      lopDays: attendance.filter((record) => record.status === 'lop' || record.isLop).length,
+      earlyLogoutDays: attendance.filter((record) => record.status === 'early-logout' || record.isEarlyLogout).length,
       approvedLeave: leave.map(({ leaveType, startDate, endDate, units }) => ({ leaveType, startDate, endDate, units })),
     }
   } catch {
@@ -212,6 +214,8 @@ async function context(employee, month) {
       attendanceDays: 0,
       absentDays: 0,
       halfDays: 0,
+      lopDays: 0,
+      earlyLogoutDays: 0,
       approvedLeave: [],
     }
   }

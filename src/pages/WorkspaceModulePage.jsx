@@ -402,6 +402,8 @@ function AttendanceModule() {
                 <option value="all">All statuses</option>
                 <option value="present">Present (On-Time)</option>
                 <option value="late">Late Arrival</option>
+                <option value="early-logout">Early Logout (6:30–7:30 PM)</option>
+                <option value="lop">Loss of Pay (LOP)</option>
                 <option value="half-day">Half Day</option>
                 <option value="on-leave">On Leave</option>
                 <option value="absent">Absent</option>
@@ -445,12 +447,28 @@ function AttendanceModule() {
                             ? 'info'
                             : r.status === 'late'
                             ? 'warning'
+                            : r.status === 'early-logout'
+                            ? 'warning'
+                            : r.status === 'lop'
+                            ? 'danger'
                             : r.status === 'on-leave'
                             ? 'neutral'
                             : 'warning'
                         }
                       >
-                        {r.status === 'present' ? 'Present' : r.status === 'late' ? 'Late Arrival' : r.status === 'half-day' ? 'Half Day' : r.status === 'on-leave' ? 'On Leave' : 'Absent'}
+                        {r.status === 'present'
+                          ? 'Present'
+                          : r.status === 'late'
+                          ? 'Late Arrival'
+                          : r.status === 'early-logout'
+                          ? 'Early Logout'
+                          : r.status === 'lop'
+                          ? 'Loss of Pay (LOP)'
+                          : r.status === 'half-day'
+                          ? 'Half Day'
+                          : r.status === 'on-leave'
+                          ? 'On Leave'
+                          : 'Absent'}
                       </StatusBadge>
                     </div>
 
@@ -656,6 +674,10 @@ function AttendanceModule() {
                           ? 'info'
                           : r.status === 'late'
                           ? 'warning'
+                          : r.status === 'early-logout'
+                          ? 'warning'
+                          : r.status === 'lop'
+                          ? 'danger'
                           : r.status === 'on-leave'
                           ? 'neutral'
                           : 'warning'
@@ -665,6 +687,10 @@ function AttendanceModule() {
                         ? 'Present'
                         : r.status === 'late'
                         ? 'Late Arrival'
+                        : r.status === 'early-logout'
+                        ? 'Early Logout'
+                        : r.status === 'lop'
+                        ? 'Loss of Pay (LOP)'
                         : r.status === 'half-day'
                         ? 'Half Day'
                         : r.status === 'on-leave'
@@ -1040,6 +1066,8 @@ function AttendanceModule() {
                     >
                       <option value="present">Present (On-Time)</option>
                       <option value="late">Late Arrival</option>
+                      <option value="early-logout">Early Logout (6:30–7:30 PM)</option>
+                      <option value="lop">Loss of Pay (LOP)</option>
                       <option value="half-day">Half Day</option>
                       <option value="on-leave">On Leave</option>
                       <option value="absent">Absent / Unpaid</option>
@@ -1132,6 +1160,8 @@ function AttendanceModule() {
                     >
                       <option value="present">Present (On-Time)</option>
                       <option value="late">Late Arrival</option>
+                      <option value="early-logout">Early Logout (6:30–7:30 PM)</option>
+                      <option value="lop">Loss of Pay (LOP)</option>
                       <option value="half-day">Half Day</option>
                       <option value="on-leave">On Leave</option>
                       <option value="absent">Absent</option>
