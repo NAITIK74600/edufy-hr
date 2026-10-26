@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import {
   Calendar,
   Activity,
@@ -1159,7 +1160,7 @@ export function AllInOneQuotaModal({ open, onClose, targetEmployee, employees = 
     )
   }
 
-  return (
+  const modalContent = (
     <div className="quota-modal-backdrop" onClick={onClose}>
       <div className="quota-modal-dialog" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '580px' }}>
         <div className="quota-modal-header">
@@ -1176,7 +1177,7 @@ export function AllInOneQuotaModal({ open, onClose, targetEmployee, employees = 
           </button>
         </div>
 
-        <form onSubmit={handleSubmit}>
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' }}>
           <div className="quota-modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
             {errorMsg && (
               <div style={{ padding: '10px 14px', borderRadius: '8px', background: '#fef2f2', border: '1px solid #fecaca', color: '#dc2626', fontSize: '12px', fontWeight: 600 }}>
@@ -1331,6 +1332,8 @@ export function AllInOneQuotaModal({ open, onClose, targetEmployee, employees = 
       </div>
     </div>
   )
+
+  return typeof document !== 'undefined' ? createPortal(modalContent, document.body) : modalContent
 }
 
 export function CompanyDefaultsModal({ open, onClose, currentDefaults, employees = [], onSaveDefaults, onBulkApply }) {
@@ -1367,7 +1370,7 @@ export function CompanyDefaultsModal({ open, onClose, currentDefaults, employees
 
   const leaveKeys = ['casual', 'sick', 'earned', 'comp_off', 'maternity', 'lop']
 
-  return (
+  const modalContent = (
     <div className="quota-modal-backdrop" onClick={onClose}>
       <div className="quota-modal-dialog" onClick={(e) => e.stopPropagation()}>
         <div className="quota-modal-header">
@@ -1384,7 +1387,7 @@ export function CompanyDefaultsModal({ open, onClose, currentDefaults, employees
           </button>
         </div>
 
-        <form onSubmit={handleSave}>
+        <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' }}>
           <div className="quota-modal-body">
             <div className="quota-inputs-grid">
               {leaveKeys.map((key) => {
@@ -1499,6 +1502,8 @@ export function CompanyDefaultsModal({ open, onClose, currentDefaults, employees
       </div>
     </div>
   )
+
+  return typeof document !== 'undefined' ? createPortal(modalContent, document.body) : modalContent
 }
 
 export function LeaveBalanceTable({ balances = [], employees = [], onSwitchTab }) {
