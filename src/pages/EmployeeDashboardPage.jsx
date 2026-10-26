@@ -138,7 +138,7 @@ function GPSAttendanceStation({ user, todayRecord, onPunch, onStartBreak, onEndB
           setPermissionStatus(status.state)
           status.onchange = () => setPermissionStatus(status.state)
         })
-        .catch(() => {})
+        .catch(() => { })
     } else if (typeof navigator !== 'undefined' && !navigator.geolocation) {
       setPermissionStatus('unsupported')
     }
@@ -156,7 +156,7 @@ function GPSAttendanceStation({ user, todayRecord, onPunch, onStartBreak, onEndB
           setGpsLive(true)
           setPermissionStatus('granted')
         },
-        () => {},
+        () => { },
         { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
       )
     }
@@ -212,7 +212,7 @@ function GPSAttendanceStation({ user, todayRecord, onPunch, onStartBreak, onEndB
           coords = await getFreshCoordinates()
           setCustomCoords(coords)
           setGpsLive(true)
-        } catch {}
+        } catch { }
       }
 
       try {
@@ -271,7 +271,7 @@ function GPSAttendanceStation({ user, todayRecord, onPunch, onStartBreak, onEndB
               punchOutReason: 'Auto Punch Out (GPS & WiFi disconnected for 2 hrs)',
             })
             setIsAutoPunchedOut(true)
-          } catch {}
+          } catch { }
         }
       }
     }
@@ -389,7 +389,7 @@ function GPSAttendanceStation({ user, todayRecord, onPunch, onStartBreak, onEndB
         d.setHours(h, m, s, 0)
         return d.getTime()
       }
-    } catch {}
+    } catch { }
     return null
   }, [todayRecord?.checkIn, todayRecord?.checkInAt])
 
@@ -661,8 +661,8 @@ function GPSAttendanceStation({ user, todayRecord, onPunch, onStartBreak, onEndB
                     {isOnBreak
                       ? 'Active Work (Paused — Break)'
                       : isOutsideCampus
-                      ? 'Active Work (Paused — Outside Campus / Off Wi-Fi)'
-                      : 'Active Net Work Time'}
+                        ? 'Active Work (Paused — Outside Campus / Off Wi-Fi)'
+                        : 'Active Net Work Time'}
                   </span>
                 </div>
                 <div
@@ -709,8 +709,8 @@ function GPSAttendanceStation({ user, todayRecord, onPunch, onStartBreak, onEndB
                     {isFullDayQualified
                       ? 'Full Day Qualified (8+ hrs)'
                       : isHalfDayQualified
-                      ? 'Half Day Qualified (4+ hrs)'
-                      : 'Below Min Half Day (<4 hrs)'}
+                        ? 'Half Day Qualified (4+ hrs)'
+                        : 'Below Min Half Day (<4 hrs)'}
                   </span>
                 </div>
                 <div style={{ width: '100%', height: '5px', background: '#e2e8f0', borderRadius: '3px', overflow: 'hidden', marginTop: '2px' }}>
@@ -952,10 +952,10 @@ function GPSAttendanceStation({ user, todayRecord, onPunch, onStartBreak, onEndB
               {!hasGps
                 ? 'Not detected'
                 : isGpsInside
-                ? `✓ Verified (${distanceLabel})`
-                : distance != null && distance <= (verification.maxAllowedRadius || 200)
-                ? `✓ Within Zone (${distanceLabel})`
-                : `✕ ${distanceLabel} (Outside ${verification.maxAllowedRadius || 200}m)`}
+                  ? `✓ Verified (${distanceLabel})`
+                  : distance != null && distance <= (verification.maxAllowedRadius || 200)
+                    ? `✓ Within Zone (${distanceLabel})`
+                    : `✕ ${distanceLabel} (Outside ${verification.maxAllowedRadius || 200}m)`}
             </span>
           </div>
 
@@ -1012,10 +1012,10 @@ function GPSAttendanceStation({ user, todayRecord, onPunch, onStartBreak, onEndB
             {isGpsInside && isWifiVerified
               ? `✓ Ready to Punch In — Dual Verified (Office Network: ${publicIp || 'Verified'} & GPS: ${distanceLabel} within ${verification.maxAllowedRadius || 200}m)`
               : !isWifiVerified && !isGpsInside
-              ? `✕ Blocked: Both Office Network and GPS Geofence checks failed`
-              : !isWifiVerified
-              ? `✕ Blocked: Office Network verification failed (Must connect to registered office Wi-Fi)`
-              : `✕ Blocked: GPS Geofence verification failed (${distanceLabel} away, max permitted: ${verification.maxAllowedRadius || 200}m)`}
+                ? `✕ Blocked: Both Office Network and GPS Geofence checks failed`
+                : !isWifiVerified
+                  ? `✕ Blocked: Office Network verification failed (Must connect to registered office Wi-Fi)`
+                  : `✕ Blocked: GPS Geofence verification failed (${distanceLabel} away, max permitted: ${verification.maxAllowedRadius || 200}m)`}
           </span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '10px' }}>
@@ -1192,7 +1192,17 @@ function ESSOverview({ user }) {
   const holidays = (storeState.holidays || []).slice(0, 3)
   const myAttendance = storeState.attendance.filter((record) => record.employeeId === empId && record.date.startsWith(todayKey().slice(0, 7)))
   const presentDays = myAttendance.filter((record) => ['present', 'late', 'half-day'].includes(record.status)).length
-  const availableLeave = (storeState.leaveBalances ?? []).reduce((sum, balance) => sum + balance.allowance - balance.used - balance.reserved, 0)
+  const myLeaveBalances = (storeState.leaveBalances ?? []).filter((b) => {
+    if (!b) return false
+    if (!b.employeeId) return true
+    const bEmp = String(b.employeeId).toUpperCase()
+    const matchEmp = currentEmpId && bEmp === String(currentEmpId).toUpperCase()
+    const matchUser = currentUserId && (bEmp === currentUserId || bEmp === currentEmpRef)
+    return Boolean(matchEmp || matchUser)
+  })
+  const availableLeave = myLeaveBalances.length
+    ? myLeaveBalances.reduce((sum, b) => sum + Math.max(0, (Number(b.allowance) || 0) - (Number(b.used) || 0) - (Number(b.reserved) || 0)), 0)
+    : 0
 
   // Net salary calculation (dynamic, never hardcoded fallback)
   const userMatchedPayslips = useMemo(() => {
@@ -1758,33 +1768,33 @@ function ESSAttendanceView({ user }) {
                     row.status === 'present'
                       ? 'success'
                       : row.status === 'late'
-                      ? 'warning'
-                      : row.status === 'early-logout'
-                      ? 'warning'
-                      : row.status === 'lop'
-                      ? 'danger'
-                      : (row.status === 'half-day' || row.status === 'half_day')
-                      ? 'info'
-                      : row.status === 'short-hours'
-                      ? 'danger'
-                      : 'neutral'
+                        ? 'warning'
+                        : row.status === 'early-logout'
+                          ? 'warning'
+                          : row.status === 'lop'
+                            ? 'danger'
+                            : (row.status === 'half-day' || row.status === 'half_day')
+                              ? 'info'
+                              : row.status === 'short-hours'
+                                ? 'danger'
+                                : 'neutral'
                   }
                 >
                   {row.status === 'present'
                     ? 'Present (Full Day)'
                     : row.status === 'late'
-                    ? 'Late In (Full Day)'
-                    : row.status === 'early-logout'
-                    ? 'Early Logout'
-                    : row.status === 'lop'
-                    ? 'Loss of Pay (LOP)'
-                    : (row.status === 'half-day' || row.status === 'half_day')
-                    ? 'Half Day (4h+)'
-                    : row.status === 'short-hours'
-                    ? 'Short Hours (<4h)'
-                    : row.status === 'on-leave'
-                    ? 'On Leave'
-                    : 'Absent'}
+                      ? 'Late In (Full Day)'
+                      : row.status === 'early-logout'
+                        ? 'Early Logout'
+                        : row.status === 'lop'
+                          ? 'Loss of Pay (LOP)'
+                          : (row.status === 'half-day' || row.status === 'half_day')
+                            ? 'Half Day (4h+)'
+                            : row.status === 'short-hours'
+                              ? 'Short Hours (<4h)'
+                              : row.status === 'on-leave'
+                                ? 'On Leave'
+                                : 'Absent'}
                 </StatusBadge>
                 {row.notes && (
                   <div style={{ fontSize: '10px', color: '#b45309', marginTop: '3px', lineHeight: 1.2 }}>
@@ -1870,33 +1880,33 @@ function ESSAttendanceView({ user }) {
                           row.status === 'present'
                             ? 'success'
                             : row.status === 'late'
-                            ? 'warning'
-                            : row.status === 'early-logout'
-                            ? 'warning'
-                            : row.status === 'lop'
-                            ? 'danger'
-                            : (row.status === 'half-day' || row.status === 'half_day')
-                            ? 'info'
-                            : row.status === 'short-hours'
-                            ? 'danger'
-                            : 'neutral'
+                              ? 'warning'
+                              : row.status === 'early-logout'
+                                ? 'warning'
+                                : row.status === 'lop'
+                                  ? 'danger'
+                                  : (row.status === 'half-day' || row.status === 'half_day')
+                                    ? 'info'
+                                    : row.status === 'short-hours'
+                                      ? 'danger'
+                                      : 'neutral'
                         }
                       >
                         {row.status === 'present'
                           ? 'Present (Full Day)'
                           : row.status === 'late'
-                          ? 'Late In (Full Day)'
-                          : row.status === 'early-logout'
-                          ? 'Early Logout'
-                          : row.status === 'lop'
-                          ? 'Loss of Pay (LOP)'
-                          : (row.status === 'half-day' || row.status === 'half_day')
-                          ? 'Half Day (4h+)'
-                          : row.status === 'short-hours'
-                          ? 'Short Hours (<4h)'
-                          : row.status === 'on-leave'
-                          ? 'On Leave'
-                          : 'Absent'}
+                            ? 'Late In (Full Day)'
+                            : row.status === 'early-logout'
+                              ? 'Early Logout'
+                              : row.status === 'lop'
+                                ? 'Loss of Pay (LOP)'
+                                : (row.status === 'half-day' || row.status === 'half_day')
+                                  ? 'Half Day (4h+)'
+                                  : row.status === 'short-hours'
+                                    ? 'Short Hours (<4h)'
+                                    : row.status === 'on-leave'
+                                      ? 'On Leave'
+                                      : 'Absent'}
                       </StatusBadge>
                       {row.notes && (
                         <div style={{ fontSize: '10px', color: '#b45309', marginTop: '3px', maxWidth: '180px', lineHeight: 1.2 }}>
