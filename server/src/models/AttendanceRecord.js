@@ -43,7 +43,16 @@ const attendanceRecordSchema = new mongoose.Schema({
   locationName: { type: String, trim: true, default: '' },
   verificationMethod: {
     type: String,
-    enum: ['wifi_and_gps', 'gps_geofence', 'wifi_trusted', 'wifi_only', 'ip_verified', 'remote'],
+    enum: [
+      'wifi_and_gps',
+      'gps_geofence',
+      'office_network',
+      'wifi_trusted',
+      'wifi_only',
+      'wifi_metadata_only',
+      'ip_verified',
+      'remote',
+    ],
     default: 'remote',
   },
   totalHours: { type: String, default: 'Active (Live)' },
