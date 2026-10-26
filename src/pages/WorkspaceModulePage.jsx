@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
+  AlertCircle,
   ArrowLeft,
   ArrowRight,
   ArrowUpRight,
@@ -415,6 +416,14 @@ function AttendanceModule() {
             </div>
           </div>
 
+          {/* Monthly Attendance Policy Notice */}
+          <div style={{ background: '#fdfbf7', border: '1px solid #fae8cc', borderRadius: '8px', padding: '10px 14px', marginTop: '12px', fontSize: '11px', color: '#92400e', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <AlertCircle size={15} style={{ color: '#d97706', flexShrink: 0 }} />
+            <span>
+              <strong>Monthly Attendance Policy:</strong> Up to 2 late logins and 2 early logouts are accepted per month without penalty. The <strong>3rd occurrence</strong> (and onwards) is marked as a <strong>Half Day</strong>. <em>(From the 25th onwards, early logouts are marked as Loss of Pay / LOP).</em>
+            </span>
+          </div>
+
           {/* Mobile Attendance Cards for HR */}
           <div className="attendance-cards-mobile" style={{ display: 'none', gap: '10px', marginTop: '14px' }}>
             {dailyAttendance.length === 0 ? (
@@ -470,6 +479,11 @@ function AttendanceModule() {
                           ? 'On Leave'
                           : 'Absent'}
                       </StatusBadge>
+                      {r.notes && (
+                        <div style={{ fontSize: '10px', color: '#b45309', marginTop: '2px', lineHeight: 1.2 }}>
+                          {r.notes}
+                        </div>
+                      )}
                     </div>
 
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '6px', fontSize: '11px', background: 'var(--surface-sunken)', padding: '8px 10px', borderRadius: '6px' }}>
@@ -525,7 +539,7 @@ function AttendanceModule() {
                     </div>
 
                     <div style={{ display: 'flex', gap: '6px', borderTop: '1px solid var(--line)', paddingTop: '8px' }}>
-                      {!r.checkOut && (r.status === 'present' || r.status === 'late') && (
+                      {!r.checkOut && (r.status === 'present' || r.status === 'late' || r.status === 'half-day') && (
                         <button
                           type="button"
                           className="emp-action-btn edit"
@@ -668,35 +682,44 @@ function AttendanceModule() {
                   key: 'status',
                   label: 'Status',
                   render: (r) => (
-                    <StatusBadge
-                      tone={
-                        r.status === 'present'
-                          ? 'info'
+                    <div>
+                      <StatusBadge
+                        tone={
+                          r.status === 'present'
+                            ? 'info'
+                            : r.status === 'late'
+                            ? 'warning'
+                            : r.status === 'early-logout'
+                            ? 'warning'
+                            : r.status === 'lop'
+                            ? 'danger'
+                            : r.status === 'half-day'
+                            ? 'warning'
+                            : r.status === 'on-leave'
+                            ? 'neutral'
+                            : 'warning'
+                        }
+                      >
+                        {r.status === 'present'
+                          ? 'Present'
                           : r.status === 'late'
-                          ? 'warning'
+                          ? 'Late Arrival'
                           : r.status === 'early-logout'
-                          ? 'warning'
+                          ? 'Early Logout'
                           : r.status === 'lop'
-                          ? 'danger'
+                          ? 'Loss of Pay (LOP)'
+                          : r.status === 'half-day'
+                          ? 'Half Day'
                           : r.status === 'on-leave'
-                          ? 'neutral'
-                          : 'warning'
-                      }
-                    >
-                      {r.status === 'present'
-                        ? 'Present'
-                        : r.status === 'late'
-                        ? 'Late Arrival'
-                        : r.status === 'early-logout'
-                        ? 'Early Logout'
-                        : r.status === 'lop'
-                        ? 'Loss of Pay (LOP)'
-                        : r.status === 'half-day'
-                        ? 'Half Day'
-                        : r.status === 'on-leave'
-                        ? 'On Leave'
-                        : 'Absent'}
-                    </StatusBadge>
+                          ? 'On Leave'
+                          : 'Absent'}
+                      </StatusBadge>
+                      {r.notes && (
+                        <div style={{ fontSize: '10px', color: '#b45309', marginTop: '2px', maxWidth: '180px', lineHeight: 1.2 }}>
+                          {r.notes}
+                        </div>
+                      )}
+                    </div>
                   ),
                 },
                 {
@@ -705,7 +728,7 @@ function AttendanceModule() {
                   render: (r) => (
                     <div className="emp-action-group">
                       {/* Check out button if still active */}
-                      {!r.checkOut && (r.status === 'present' || r.status === 'late') && (
+                      {!r.checkOut && (r.status === 'present' || r.status === 'late' || r.status === 'half-day') && (
                         <button
                           type="button"
                           className="emp-action-btn edit"

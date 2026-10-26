@@ -1614,6 +1614,10 @@ function ESSAttendanceView({ user }) {
     isOnBreak: record.isOnBreak,
     currentBreak: record.currentBreak,
     status: record.status,
+    notes: record.notes,
+    isHalfDay: record.isHalfDay,
+    lateCount: record.lateCount,
+    earlyLogoutCount: record.earlyLogoutCount,
   }))
   const completedDurations = monthlyLogs.map((record) => /^(\d+)h (\d+)m/.exec(record.hours)).filter(Boolean).map((match) => Number(match[1]) * 60 + Number(match[2]))
   const averageMinutes = completedDurations.length ? Math.round(completedDurations.reduce((sum, value) => sum + value, 0) / completedDurations.length) : null
@@ -1721,6 +1725,14 @@ function ESSAttendanceView({ user }) {
           </div>
         </div>
 
+        {/* Monthly Attendance Policy Notice */}
+        <div style={{ background: '#fdfbf7', border: '1px solid #fae8cc', borderRadius: '8px', padding: '10px 14px', marginTop: '12px', fontSize: '11px', color: '#92400e', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <AlertCircle size={15} style={{ color: '#d97706', flexShrink: 0 }} />
+          <span>
+            <strong>Monthly Attendance Policy:</strong> Up to 2 late logins and 2 early logouts are accepted per month without penalty. The <strong>3rd occurrence</strong> (and onwards) is marked as a <strong>Half Day</strong>. <em>(From the 25th onwards, early logouts are marked as Loss of Pay / LOP).</em>
+          </span>
+        </div>
+
         {/* Mobile Attendance Cards */}
         <div className="attendance-cards-mobile" style={{ display: 'none', gap: '10px', marginTop: '14px' }}>
           {filteredLogs.map((row, idx) => (
@@ -1774,6 +1786,11 @@ function ESSAttendanceView({ user }) {
                     ? 'On Leave'
                     : 'Absent'}
                 </StatusBadge>
+                {row.notes && (
+                  <div style={{ fontSize: '10px', color: '#b45309', marginTop: '3px', lineHeight: 1.2 }}>
+                    {row.notes}
+                  </div>
+                )}
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '6px', fontSize: '11px', background: 'var(--surface-sunken)', padding: '8px 10px', borderRadius: '6px' }}>
@@ -1881,6 +1898,11 @@ function ESSAttendanceView({ user }) {
                           ? 'On Leave'
                           : 'Absent'}
                       </StatusBadge>
+                      {row.notes && (
+                        <div style={{ fontSize: '10px', color: '#b45309', marginTop: '3px', maxWidth: '180px', lineHeight: 1.2 }}>
+                          {row.notes}
+                        </div>
+                      )}
                     </td>
                   </tr>
                 ))

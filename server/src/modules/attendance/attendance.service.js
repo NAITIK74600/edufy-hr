@@ -479,6 +479,30 @@ export function createAttendanceService({ repository, companySettings = {} }) {
       const currentMins = now.getHours() * 60 + now.getMinutes()
       const isLate = currentMins > workStartMins + gracePeriod
 
+      let lateCount = 0
+      let isHalfDayFromLate = false
+      let punchInStatus = 'present'
+      let lateNote = `On-time verification (${matchedShift.name})`
+
+      if (isLate) {
+        const monthPrefix = workDate.slice(0, 7)
+        const allEmpRecords = await repository.list({ employeeId: employeeId.toUpperCase() })
+        const priorLateRecords = (allEmpRecords || []).filter((r) =>
+          r.date && r.date.startsWith(monthPrefix) && r.date !== workDate && (
+            r.isLate || r.status === 'late' || (r.status === 'half-day' && r.lateCount > 0) || (r.notes && r.notes.toLowerCase().includes('late'))
+          )
+        )
+        lateCount = priorLateRecords.length + 1
+        if (lateCount <= 2) {
+          punchInStatus = 'late'
+          lateNote = `Late Login #${lateCount} of 2 accepted grace arrivals (${matchedShift.name})`
+        } else {
+          isHalfDayFromLate = true
+          punchInStatus = 'half-day'
+          lateNote = `Late Login #${lateCount} (Exceeded 2 accepted late logins — marked as Half Day)`
+        }
+      }
+
       const record = {
         id: existing?.id,
         employeeId: employeeId.toUpperCase(),
@@ -487,7 +511,10 @@ export function createAttendanceService({ repository, companySettings = {} }) {
         checkIn: checkInTime,
         checkInAt: now,
         checkOut: null,
-        status: isLate ? 'late' : 'present',
+        status: punchInStatus,
+        isLate,
+        isHalfDay: isHalfDayFromLate,
+        lateCount,
         shift: chosenShiftDisplay,
         shiftCode: chosenShiftCode,
         isOnBreak: false,
@@ -506,8 +533,8 @@ export function createAttendanceService({ repository, companySettings = {} }) {
         gpsVerified: verification.isGpsVerified,
         locationName: verification.nearestLocation,
         verificationMethod: verification.method,
-        totalHours: 'Active (Live)',
-        notes: isLate ? `Late arrival past ${matchedShift.name} grace threshold` : `On-time verification (${matchedShift.name})`,
+        totalHours: isHalfDayFromLate ? 'Active (Half-Day · Late)' : (isLate ? 'Active (Late)' : 'Active (Live)'),
+        notes: lateNote,
       }
 
       return repository.punchIn(record)
@@ -647,7 +674,7 @@ export function createAttendanceService({ repository, companySettings = {} }) {
         totalHoursStr = `${hours}h ${mins}m (${tag})${breakPart}${offCampusPart}`
         if (existing.status !== 'on-leave') {
           if (netWorkMinutes >= 480) {
-            newStatus = existing.status === 'late' ? 'late' : 'present'
+            newStatus = existing.status === 'half-day' ? 'half-day' : (existing.status === 'late' ? 'late' : 'present')
           } else if (netWorkMinutes >= 240) {
             newStatus = 'half-day'
           } else {
@@ -659,6 +686,7 @@ export function createAttendanceService({ repository, companySettings = {} }) {
       // Early Logout & Month-End LOP Policy:
       // Checkout between 06:30 PM (18:30 / 1110 mins) and 07:30 PM (19:30 / 1170 mins) is early logout.
       // From the 25th of the month onwards, early logouts are marked as Loss of Pay (LOP).
+      // First 2 early logouts in the month are accepted; the 3rd and subsequent early logouts are marked as Half Day.
       const isEarlyLogoutWindow = outMins !== null && outMins >= 1110 && outMins <= 1170
       const dateParts = (workDate || '').split('-')
       const dayOfMonth = dateParts.length === 3 ? parseInt(dateParts[2], 10) : now.getDate()
@@ -666,6 +694,8 @@ export function createAttendanceService({ repository, companySettings = {} }) {
 
       let isEarlyLogout = false
       let isLop = false
+      let isHalfDayFromEarly = false
+      let earlyLogoutCount = 0
 
       if (isEarlyLogoutWindow && existing.status !== 'on-leave') {
         isEarlyLogout = true
@@ -673,13 +703,29 @@ export function createAttendanceService({ repository, companySettings = {} }) {
           isLop = true
           newStatus = 'lop'
         } else {
-          newStatus = 'early-logout'
+          // Count prior early logouts in the same month
+          const monthPrefix = (workDate || '').slice(0, 7)
+          const allEmpRecords = await repository.list({ employeeId: employeeId.toUpperCase() })
+          const priorEarlyRecords = (allEmpRecords || []).filter((r) =>
+            r.date && r.date.startsWith(monthPrefix) && r.date !== workDate && (
+              r.isEarlyLogout || r.status === 'early-logout' || (r.status === 'half-day' && r.earlyLogoutCount > 0) || (r.notes && r.notes.toLowerCase().includes('early logout'))
+            )
+          )
+          earlyLogoutCount = priorEarlyRecords.length + 1
+          if (earlyLogoutCount <= 2) {
+            newStatus = existing.status === 'half-day' ? 'half-day' : 'early-logout'
+          } else {
+            isHalfDayFromEarly = true
+            newStatus = 'half-day'
+          }
         }
       }
 
       const earlyLogoutReason = isLop
         ? 'Early Logout (06:30 PM – 07:30 PM) marked as LOP per month-end policy (from 25th)'
-        : (isEarlyLogout ? 'Early Logout (06:30 PM – 07:30 PM)' : '')
+        : (isHalfDayFromEarly
+            ? `Early Logout #${earlyLogoutCount} (Exceeded 2 accepted early logouts — marked as Half Day)`
+            : (isEarlyLogout ? `Early Logout #${earlyLogoutCount} of 2 accepted early departures (06:30 PM – 07:30 PM)` : ''))
 
       const defaultReason = autoPunchOut ? 'Auto Punch Out (GPS & WiFi disconnected for 2 hrs)' : earlyLogoutReason
       const reasonToSet = punchOutReason || defaultReason
@@ -695,6 +741,8 @@ export function createAttendanceService({ repository, companySettings = {} }) {
         status: newStatus,
         isEarlyLogout,
         isLop,
+        isHalfDay: newStatus === 'half-day' || Boolean(existing.isHalfDay),
+        earlyLogoutCount: earlyLogoutCount || existing.earlyLogoutCount || 0,
         isOnBreak: false,
         currentBreak: null,
         breaks: breaksList,

@@ -4408,6 +4408,34 @@ const localStore = {
       return now.getHours() > 9 || (now.getHours() === 9 && now.getMinutes() > 45)
     })()
 
+    // Policy: 2 late logins per month are accepted (status = 'late').
+    // 3rd late login onwards is marked as 'half-day'.
+    const monthPrefix = (date || '').substring(0, 7) || now.toISOString().substring(0, 7)
+    const priorLateCount = (storeState.attendance || []).filter((a) => {
+      if (a.employeeId !== employeeId) return false
+      if (a.date === date) return false
+      const m = (a.date || '').substring(0, 7)
+      if (m !== monthPrefix) return false
+      return Boolean(a.isLate || a.status === 'late' || (a.status === 'half-day' && a.lateCount > 0))
+    }).length
+
+    let initialStatus = 'present'
+    let isHalfDay = false
+    let currentLateOccurrence = 0
+    let noteText = ''
+
+    if (isLate) {
+      currentLateOccurrence = priorLateCount + 1
+      if (currentLateOccurrence <= 2) {
+        initialStatus = 'late'
+        noteText = `Late Login #${currentLateOccurrence} (Grace period: ${currentLateOccurrence}/2 accepted)`
+      } else {
+        initialStatus = 'half-day'
+        isHalfDay = true
+        noteText = `Late Login #${currentLateOccurrence} (Exceeded 2 accepted late logins — marked as Half Day)`
+      }
+    }
+
     const existingIndex = storeState.attendance.findIndex((a) => a.employeeId === employeeId && a.date === date)
     const newRecord = {
       id: `att-${Date.now()}`,
@@ -4417,7 +4445,11 @@ const localStore = {
       checkIn: timeStr,
       checkInAt: now.toISOString(),
       checkOut: null,
-      status: isLate ? 'late' : 'present',
+      status: initialStatus,
+      isLate: Boolean(isLate),
+      isHalfDay,
+      lateCount: currentLateOccurrence,
+      notes: noteText,
       wifiSSID: customWifi,
       bssid: verification.bssid || null,
       wifiVerified: isWifiVerified,
@@ -4550,7 +4582,7 @@ const localStore = {
         let newStatus = att.status || 'present'
         if (att.status !== 'on-leave') {
           if (netWorkMinutes >= 480) { // 8 hours minimum for full day
-            newStatus = att.status === 'late' ? 'late' : 'present'
+            newStatus = att.status === 'late' ? 'late' : (att.status === 'half-day' ? 'half-day' : 'present')
           } else if (netWorkMinutes >= 240) { // 4 hours minimum for half day
             newStatus = 'half-day'
           } else { // Below half day minimum
@@ -4560,7 +4592,9 @@ const localStore = {
 
         // Early Logout & Month-End LOP Policy:
         // Checkout between 06:30 PM (18:30 / 1110 mins) and 07:30 PM (19:30 / 1170 mins) is early logout.
-        // From the 25th of the month onwards, early logouts are marked as Loss of Pay (LOP).
+        // 1) From the 25th of the month onwards, early logouts are marked as Loss of Pay (LOP).
+        // 2) Up to 2 early logouts per month are accepted (status = 'early-logout').
+        //    From the 3rd early logout onwards, it is marked as 'half-day'.
         const checkoutTotalMins = now.getHours() * 60 + now.getMinutes()
         const isEarlyLogoutWindow = checkoutTotalMins >= 1110 && checkoutTotalMins <= 1170
         const dateParts = (date || '').split('-')
@@ -4569,14 +4603,38 @@ const localStore = {
 
         let isEarlyLogout = false
         let isLop = false
+        let isHalfDay = att.isHalfDay || (newStatus === 'half-day')
+        let earlyLogoutCount = att.earlyLogoutCount || 0
+        let noteText = att.notes || ''
 
         if (isEarlyLogoutWindow && att.status !== 'on-leave') {
           isEarlyLogout = true
           if (isMonthEnd) {
             isLop = true
             newStatus = 'lop'
+            noteText = noteText ? `${noteText} · Month-end early logout (LOP applied)` : 'Month-end early logout (LOP applied)'
           } else {
-            newStatus = 'early-logout'
+            const monthPrefix = (date || '').substring(0, 7) || now.toISOString().substring(0, 7)
+            const priorEarlyCount = (storeState.attendance || []).filter((a) => {
+              if (a.employeeId !== employeeId) return false
+              if (a.date === date) return false
+              const m = (a.date || '').substring(0, 7)
+              if (m !== monthPrefix) return false
+              return Boolean(a.isEarlyLogout || a.status === 'early-logout' || (a.status === 'half-day' && a.earlyLogoutCount > 0))
+            }).length
+            earlyLogoutCount = priorEarlyCount + 1
+            if (earlyLogoutCount <= 2) {
+              if (newStatus !== 'half-day') {
+                newStatus = 'early-logout'
+              }
+              const earlyNote = `Early Logout #${earlyLogoutCount} (Grace period: ${earlyLogoutCount}/2 accepted)`
+              noteText = noteText ? `${noteText} · ${earlyNote}` : earlyNote
+            } else {
+              newStatus = 'half-day'
+              isHalfDay = true
+              const earlyNote = `Early Logout #${earlyLogoutCount} (Exceeded 2 accepted early logouts — marked as Half Day)`
+              noteText = noteText ? `${noteText} · ${earlyNote}` : earlyNote
+            }
           }
         }
 
@@ -4592,6 +4650,9 @@ const localStore = {
           status: newStatus,
           isEarlyLogout,
           isLop,
+          isHalfDay,
+          earlyLogoutCount,
+          notes: noteText,
           totalHours: `${hours}h ${mins}m (Completed)${breakStr}${offCampusStr}`,
         }
       }
@@ -4645,6 +4706,10 @@ const localStore = {
         status: finalStatus || storeState.attendance[existingIndex].status || 'present',
         isEarlyLogout,
         isLop,
+        isHalfDay: record.isHalfDay !== undefined ? record.isHalfDay : (finalStatus === 'half-day'),
+        isLate: record.isLate !== undefined ? record.isLate : (finalStatus === 'late'),
+        lateCount: record.lateCount ?? storeState.attendance[existingIndex].lateCount ?? 0,
+        earlyLogoutCount: record.earlyLogoutCount ?? storeState.attendance[existingIndex].earlyLogoutCount ?? 0,
         date,
         wifiVerified: isVerified,
         gpsVerified: record.gpsVerified !== undefined ? record.gpsVerified : verification.isGpsVerified,
@@ -4663,6 +4728,10 @@ const localStore = {
         status: finalStatus || 'present',
         isEarlyLogout,
         isLop,
+        isHalfDay: record.isHalfDay !== undefined ? record.isHalfDay : (finalStatus === 'half-day'),
+        isLate: record.isLate !== undefined ? record.isLate : (finalStatus === 'late'),
+        lateCount: record.lateCount ?? 0,
+        earlyLogoutCount: record.earlyLogoutCount ?? 0,
         wifiSSID: record.wifiSSID || storeState.companySettings?.allowedWifiSSIDs?.[0] || 'Edufyi',
         wifiVerified: isVerified,
         latitude: record.latitude ?? (isVerified ? 37.789172 : null),
