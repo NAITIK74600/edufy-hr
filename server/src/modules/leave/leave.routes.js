@@ -42,7 +42,7 @@ export function createLeaveRouter({ auth, service }) {
       if (allowance < (current?.used ?? 0) + (current?.reserved ?? 0)) throw Object.assign(new Error('Allowance cannot be below used and reserved leave.'), { statusCode: 409, code: 'INVALID_ALLOWANCE' })
       const data = current ? await LeaveBalance.findOneAndUpdate(
         { _id: current._id, $expr: { $lte: [{ $add: ['$used', '$reserved'] }, allowance] } },
-        { $set: { allowance } }, { returnDocument: 'after', runValidators: true },
+        { $set: { allowance } }, { new: true, returnDocument: 'after', runValidators: true },
       ).lean() : (await LeaveBalance.create({ employeeId: empObjectId, leaveType: request.params.leaveType, allowance })).toObject()
       if (!data) throw Object.assign(new Error('Leave balance changed; refresh and retry.'), { statusCode: 409, code: 'INVALID_ALLOWANCE' })
       return response.json({ success: true, data })

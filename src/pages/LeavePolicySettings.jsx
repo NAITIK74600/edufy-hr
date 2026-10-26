@@ -215,10 +215,16 @@ export function LeavePolicySettings({ employees = [], onSwitchTab, allRequests }
   })
 
   const saveBalance = storeAction(async (event) => {
-    event.preventDefault()
+    if (event?.preventDefault) event.preventDefault()
+    if (!balance.employeeId) {
+      setNotice('Please select an employee.')
+      setNoticeType('error')
+      return
+    }
     setBusy(true)
     try {
-      await apiClient.put(`/leave/hr/balances/${balance.employeeId}/${balance.leaveType}`, { allowance: balance.allowance })
+      const targetAllowance = Number(balance.allowance ?? 0)
+      await apiClient.put(`/leave/hr/balances/${balance.employeeId}/${balance.leaveType}`, { allowance: targetAllowance })
       await hrStore.refresh()
       setNotice('Employee leave entitlement quota saved successfully.')
       setNoticeType('success')
@@ -616,12 +622,23 @@ export function LeavePolicySettings({ employees = [], onSwitchTab, allRequests }
             <select
               required
               value={balance.employeeId}
-              onChange={(event) => setBalance({ ...balance, employeeId: event.target.value })}
+              onChange={(event) => {
+                const newEmpId = event.target.value
+                const empBal = (hrStore.getState().leaveBalances || []).find((b) => {
+                  const bEmpId = typeof b.employeeId === 'object' ? (b.employeeId?._id || b.employeeId?.id || b.employeeId?.employeeId) : b.employeeId
+                  return String(bEmpId).toLowerCase() === String(newEmpId).toLowerCase() && b.leaveType === balance.leaveType
+                })
+                setBalance({
+                  ...balance,
+                  employeeId: newEmpId,
+                  allowance: empBal ? empBal.allowance : balance.allowance,
+                })
+              }}
               style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid var(--line)', background: '#fff', fontSize: '12px' }}
             >
               <option value="">Choose employee…</option>
               {employees.map((employee) => (
-                <option key={employee.id} value={employee.id}>
+                <option key={employee.id || employee._id} value={employee.id || employee._id || employee.employeeId}>
                   {employee.name} ({employee.employeeId || 'No Code'})
                 </option>
               ))}
@@ -631,7 +648,18 @@ export function LeavePolicySettings({ employees = [], onSwitchTab, allRequests }
           <Field label="Configured Leave Type" required>
             <select
               value={balance.leaveType}
-              onChange={(event) => setBalance({ ...balance, leaveType: event.target.value })}
+              onChange={(event) => {
+                const newType = event.target.value
+                const empBal = (hrStore.getState().leaveBalances || []).find((b) => {
+                  const bEmpId = typeof b.employeeId === 'object' ? (b.employeeId?._id || b.employeeId?.id || b.employeeId?.employeeId) : b.employeeId
+                  return String(bEmpId).toLowerCase() === String(balance.employeeId).toLowerCase() && b.leaveType === newType
+                })
+                setBalance({
+                  ...balance,
+                  leaveType: newType,
+                  allowance: empBal ? empBal.allowance : balance.allowance,
+                })
+              }}
               style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid var(--line)', background: '#fff', fontSize: '12px' }}
             >
               {displayPolicies.map((record) => (
@@ -648,8 +676,14 @@ export function LeavePolicySettings({ employees = [], onSwitchTab, allRequests }
               type="number"
               min="0"
               step="0.5"
-              value={balance.allowance}
-              onChange={(event) => setBalance({ ...balance, allowance: Number(event.target.value) })}
+              value={balance.allowance !== undefined && balance.allowance !== null ? balance.allowance : ''}
+              onChange={(event) => {
+                const v = event.target.value
+                setBalance({ ...balance, allowance: v === '' ? '' : Number(v) })
+              }}
+              onBlur={() => {
+                setBalance((prev) => ({ ...prev, allowance: Number(prev.allowance || 0) }))
+              }}
               style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid var(--line)', background: '#fff', fontSize: '12px', fontWeight: 600 }}
             />
           </Field>
@@ -658,6 +692,7 @@ export function LeavePolicySettings({ employees = [], onSwitchTab, allRequests }
             <Button
               type="submit"
               disabled={busy || !balance.employeeId}
+              onClick={saveBalance}
               style={{ width: '100%', height: '38px', fontSize: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
             >
               <Save size={14} /> Save Employee Allowance
@@ -965,41 +1000,46 @@ export function saveDefaultCompanyQuotas(quotas) {
 
 export function AllInOneQuotaModal({ open, onClose, targetEmployee, employees = [], defaults, onSuccess }) {
   const [empId, setEmpId] = useState('')
-  const [quotas, setQuotas] = useState({ ...defaults })
+  const [quotas, setQuotas] = useState(() => ({ ...(defaults || getDefaultCompanyQuotas()) }))
   const [busy, setBusy] = useState(false)
   const [errorMsg, setErrorMsg] = useState('')
+
+  // Stable key so parent re-renders don't wipe newly typed values
+  const targetId = targetEmployee?.id || targetEmployee?._id || targetEmployee?.employeeId || ''
 
   useEffect(() => {
     if (!open) return
     setErrorMsg('')
-    const target = targetEmployee || employees[0]
+    const target = targetEmployee || (employees.length > 0 ? employees[0] : null)
     const chosenId = target?.id || target?._id || target?.employeeId || ''
     setEmpId(chosenId)
 
+    const baseDefaults = defaults || getDefaultCompanyQuotas()
     if (target && target.balances) {
       setQuotas({
-        casual: target.balances.casual?.allowance ?? defaults.casual,
-        sick: target.balances.sick?.allowance ?? defaults.sick,
-        earned: target.balances.earned?.allowance ?? defaults.earned,
-        comp_off: target.balances.comp_off?.allowance ?? defaults.comp_off,
-        maternity: target.balances.maternity?.allowance ?? defaults.maternity,
-        lop: target.balances.lop?.allowance ?? defaults.lop,
+        casual: target.balances.casual?.allowance ?? baseDefaults.casual ?? 12,
+        sick: target.balances.sick?.allowance ?? baseDefaults.sick ?? 10,
+        earned: target.balances.earned?.allowance ?? baseDefaults.earned ?? 15,
+        comp_off: target.balances.comp_off?.allowance ?? baseDefaults.comp_off ?? 2,
+        maternity: target.balances.maternity?.allowance ?? baseDefaults.maternity ?? 90,
+        lop: target.balances.lop?.allowance ?? baseDefaults.lop ?? 0,
       })
     } else {
-      setQuotas({ ...defaults })
+      setQuotas({ ...baseDefaults })
     }
-  }, [open, targetEmployee, defaults, employees])
+  }, [open, targetId])
 
   if (!open) return null
 
   const activeEmp = employees.find((e) => (e.id || e._id || e.employeeId) === empId) || targetEmployee
 
   const handleApplyDefaults = () => {
-    setQuotas({ ...defaults })
+    const baseDefaults = defaults || getDefaultCompanyQuotas()
+    setQuotas({ ...baseDefaults })
   }
 
   const handleSubmit = async (e) => {
-    e.preventDefault()
+    if (e?.preventDefault) e.preventDefault()
     if (!empId) {
       setErrorMsg('Please select an employee.')
       return
@@ -1009,7 +1049,8 @@ export function AllInOneQuotaModal({ open, onClose, targetEmployee, employees = 
     try {
       const types = ['casual', 'sick', 'earned', 'comp_off', 'maternity', 'lop']
       for (const type of types) {
-        const val = Number(quotas[type] ?? 0)
+        const raw = quotas[type]
+        const val = Math.max(0, Number(raw === '' || raw === undefined ? 0 : raw))
         await apiClient.put(`/leave/hr/balances/${empId}/${type}`, { allowance: val })
       }
       await hrStore.refresh()
@@ -1062,15 +1103,18 @@ export function AllInOneQuotaModal({ open, onClose, targetEmployee, employees = 
                   const newId = e.target.value
                   setEmpId(newId)
                   const chosen = employees.find((x) => (x.id || x._id || x.employeeId) === newId)
+                  const baseDefaults = defaults || getDefaultCompanyQuotas()
                   if (chosen && chosen.balances) {
                     setQuotas({
-                      casual: chosen.balances.casual?.allowance ?? defaults.casual,
-                      sick: chosen.balances.sick?.allowance ?? defaults.sick,
-                      earned: chosen.balances.earned?.allowance ?? defaults.earned,
-                      comp_off: chosen.balances.comp_off?.allowance ?? defaults.comp_off,
-                      maternity: chosen.balances.maternity?.allowance ?? defaults.maternity,
-                      lop: chosen.balances.lop?.allowance ?? defaults.lop,
+                      casual: chosen.balances.casual?.allowance ?? baseDefaults.casual ?? 12,
+                      sick: chosen.balances.sick?.allowance ?? baseDefaults.sick ?? 10,
+                      earned: chosen.balances.earned?.allowance ?? baseDefaults.earned ?? 15,
+                      comp_off: chosen.balances.comp_off?.allowance ?? baseDefaults.comp_off ?? 2,
+                      maternity: chosen.balances.maternity?.allowance ?? baseDefaults.maternity ?? 90,
+                      lop: chosen.balances.lop?.allowance ?? baseDefaults.lop ?? 0,
                     })
+                  } else {
+                    setQuotas({ ...baseDefaults })
                   }
                 }}
                 disabled={Boolean(targetEmployee)}
@@ -1131,8 +1175,17 @@ export function AllInOneQuotaModal({ open, onClose, targetEmployee, employees = 
                         min={minAllowed}
                         step="0.5"
                         required
-                        value={quotas[key] ?? 0}
-                        onChange={(e) => setQuotas({ ...quotas, [key]: Number(e.target.value) })}
+                        value={quotas[key] !== undefined && quotas[key] !== null ? quotas[key] : ''}
+                        onChange={(e) => {
+                          const v = e.target.value
+                          setQuotas((prev) => ({ ...prev, [key]: v === '' ? '' : Number(v) }))
+                        }}
+                        onBlur={() => {
+                          setQuotas((prev) => ({
+                            ...prev,
+                            [key]: Math.max(minAllowed, Number(prev[key] || 0)),
+                          }))
+                        }}
                         style={{ flex: 1, padding: '7px 10px', borderRadius: '6px', border: '1px solid var(--line)', fontSize: '13px', fontWeight: 700, textAlign: 'right' }}
                       />
                       <span style={{ fontSize: '12px', color: 'var(--muted)', fontWeight: 600 }}>Days</span>
@@ -1160,6 +1213,7 @@ export function AllInOneQuotaModal({ open, onClose, targetEmployee, employees = 
                 type="submit"
                 className="ui-button primary"
                 disabled={busy}
+                onClick={handleSubmit}
                 style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
               >
                 {busy ? <RefreshCw size={14} className="spin-slow" /> : <Save size={14} />}
@@ -1183,12 +1237,12 @@ export function CompanyDefaultsModal({ open, onClose, currentDefaults, employees
       setForm({ ...currentDefaults })
       setConfirmBulk(false)
     }
-  }, [open, currentDefaults])
+  }, [open])
 
   if (!open) return null
 
   const handleSave = (e) => {
-    e.preventDefault()
+    if (e?.preventDefault) e.preventDefault()
     onSaveDefaults(form)
     onClose()
   }
@@ -1252,8 +1306,14 @@ export function CompanyDefaultsModal({ open, onClose, currentDefaults, employees
                         min="0"
                         step="0.5"
                         required
-                        value={form[key] ?? 0}
-                        onChange={(e) => setForm({ ...form, [key]: Number(e.target.value) })}
+                        value={form[key] !== undefined && form[key] !== null ? form[key] : ''}
+                        onChange={(e) => {
+                          const v = e.target.value
+                          setForm((prev) => ({ ...prev, [key]: v === '' ? '' : Number(v) }))
+                        }}
+                        onBlur={() => {
+                          setForm((prev) => ({ ...prev, [key]: Math.max(0, Number(prev[key] || 0)) }))
+                        }}
                         style={{ flex: 1, padding: '7px 10px', borderRadius: '6px', border: '1px solid var(--line)', fontSize: '13px', fontWeight: 700, textAlign: 'right' }}
                       />
                       <span style={{ fontSize: '12px', color: 'var(--muted)', fontWeight: 600 }}>Days</span>
@@ -1319,7 +1379,12 @@ export function CompanyDefaultsModal({ open, onClose, currentDefaults, employees
               <button type="button" className="ui-button secondary" onClick={onClose}>
                 Cancel
               </button>
-              <button type="submit" className="ui-button primary" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+              <button
+                type="submit"
+                className="ui-button primary"
+                onClick={handleSave}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+              >
                 <Save size={14} /> Save Company Defaults
               </button>
             </div>
@@ -1347,15 +1412,21 @@ export function LeaveBalanceTable({ balances = [], employees = [], onSwitchTab }
   // Helper to match a balance record to an employee
   const matchBalance = (b, emp) => {
     if (!b || !emp) return false
+    const empIdStr = String(emp.id || emp._id || '').trim().toLowerCase()
+    const empCode = String(emp.employeeId || '').trim().toLowerCase()
+
     if (typeof b.employeeId === 'object' && b.employeeId !== null) {
-      if (b.employeeId._id && (b.employeeId._id === emp._id || b.employeeId._id === emp.id)) return true
-      if (b.employeeId.id && (b.employeeId.id === emp._id || b.employeeId.id === emp.id)) return true
-      if (b.employeeId.employeeId && emp.employeeId && b.employeeId.employeeId.toUpperCase() === emp.employeeId.toUpperCase()) return true
+      const bObjId = String(b.employeeId._id || b.employeeId.id || '').trim().toLowerCase()
+      const bObjCode = String(b.employeeId.employeeId || '').trim().toLowerCase()
+      if (bObjId && empIdStr && bObjId === empIdStr) return true
+      if (bObjCode && empCode && bObjCode === empCode) return true
+      if (bObjId && empCode && bObjId === empCode) return true
+      if (bObjCode && empIdStr && bObjCode === empIdStr) return true
+    } else if (b.employeeId) {
+      const bStr = String(b.employeeId).trim().toLowerCase()
+      if (empIdStr && bStr === empIdStr) return true
+      if (empCode && bStr === empCode) return true
     }
-    const bEmpId = String(b.employeeId || '')
-    if (emp._id && bEmpId === String(emp._id)) return true
-    if (emp.id && bEmpId === String(emp.id)) return true
-    if (emp.employeeId && bEmpId.toUpperCase() === String(emp.employeeId).toUpperCase()) return true
     return false
   }
 
@@ -1915,8 +1986,16 @@ export function LeaveBalanceTable({ balances = [], employees = [], onSwitchTab }
                                 <div style={{ fontSize: '18px', fontWeight: 800, color: available > 0 ? '#006E6F' : '#dc2626' }}>
                                   {available} <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--muted)' }}>Days Rem.</span>
                                 </div>
-                                <div style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '2px' }}>
-                                  Allowance: <strong>{allowance}d</strong>
+                                <div style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '2px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                  <span>Allowance: <strong>{allowance}d</strong></span>
+                                  <button
+                                    type="button"
+                                    className="ui-button secondary"
+                                    onClick={(e) => handleEditEmployeeQuotas(emp, e)}
+                                    style={{ fontSize: '10px', padding: '1px 6px', height: 'auto', lineHeight: '1.4' }}
+                                  >
+                                    Change
+                                  </button>
                                 </div>
                               </div>
                             </div>
