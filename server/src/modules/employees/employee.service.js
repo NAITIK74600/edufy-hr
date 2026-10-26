@@ -1,5 +1,6 @@
 import { hasPermission } from '../../auth/permissions.js'
 import { hashPassword } from '../../auth/passwords.js'
+import { sendWelcomeEmail, sendDocumentStatusEmail } from '../../services/mail.service.js'
 
 const protectedFields = ['permissions', 'passwordHash', 'authVersion', 'salaryRecord']
 const editableFields = ['employeeId', 'name', 'email', 'password', 'department', 'designation', 'location', 'employmentType', 'joiningDate', 'employmentEndDate', 'managerId', 'phone', 'bankDetails', 'emergencyContact', 'exitDetails', 'onboardingChecklist', 'offboardingChecklist', 'role', 'status', 'salary', 'salaryStructure', 'parentsContact', 'identity', 'onboardingDocs', 'documents', 'onboardingStatus', 'onboardingSubmittedAt', 'onboardingVerifiedAt', 'onboardingVerifiedBy', 'onboardingNotes', 'onboardingRejectionReason', 'financeDetails', 'reportingManager', 'policyConsents', 'complianceDocs', 'avatarUrl']
@@ -161,6 +162,15 @@ export function createEmployeeService({ repository }) {
       delete values.password
       const employee = await repository.create(values)
       await repository.addAudit(auditEvent(actor, 'employee.created', employee.id ?? employee._id, Object.keys(values)))
+
+      if (employee.email) {
+        sendWelcomeEmail({
+          employee: { ...employee, ...values },
+          temporaryPassword: rawPassword,
+          loginUrl: process.env.APP_PUBLIC_URL || 'https://empoyee.edufyitechsolutions.com',
+        }).catch((err) => console.warn('[MailService] Welcome email notice:', err?.message || err))
+      }
+
       return {
         ...employee,
         temporaryPassword: rawPassword,
@@ -232,6 +242,15 @@ export function createEmployeeService({ repository }) {
       employee.status = status
       await repository.save(employee)
       await repository.addAudit(auditEvent(actor, `employee.${status}`, employee.id ?? employee._id, ['status']))
+
+      if (status === 'invited' && employee.email) {
+        sendWelcomeEmail({
+          employee,
+          temporaryPassword: 'Password@123',
+          loginUrl: process.env.APP_PUBLIC_URL || 'https://empoyee.edufyitechsolutions.com',
+        }).catch((err) => console.warn('[MailService] Invite email notice:', err?.message || err))
+      }
+
       return repository.findById(id)
     },
     async audit(id) {
@@ -282,6 +301,16 @@ export function createEmployeeService({ repository }) {
       }
       await repository.save(employee)
       await repository.addAudit(auditEvent(actor, 'document.approved', employee.id ?? employee._id, [docKey], body?.comments))
+
+      if (employee.email) {
+        sendDocumentStatusEmail({
+          employee,
+          documentName: docKey,
+          status: 'approved',
+          reviewer: actor,
+        }).catch((err) => console.warn('[MailService] Document approval email notice:', err?.message || err))
+      }
+
       return repository.findById(id)
     },
     async rejectDocument(id, docKey, reason, actor, body = {}) {
@@ -327,6 +356,17 @@ export function createEmployeeService({ repository }) {
 
       await repository.save(employee)
       await repository.addAudit(auditEvent(actor, 'document.rejected', employee.id ?? employee._id, [docKey], cleanReason))
+
+      if (employee.email) {
+        sendDocumentStatusEmail({
+          employee,
+          documentName: docKey,
+          status: 'revision_requested',
+          reason: cleanReason,
+          reviewer: actor,
+        }).catch((err) => console.warn('[MailService] Document rejection email notice:', err?.message || err))
+      }
+
       return repository.findById(id)
     },
     async uploadDocument(id, docKey, fileData, actor) {

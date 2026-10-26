@@ -46,6 +46,9 @@ export function createSeedUsers(env = process.env) {
       }
     }
     const customEmail = envEmailKey && env[envEmailKey] ? env[envEmailKey].trim().toLowerCase() : null
+    if (isProduction && (!customEmail || !password)) {
+      return users
+    }
     const finalEmail = customEmail || user.email
     const finalPassword = password || 'Password@123'
 

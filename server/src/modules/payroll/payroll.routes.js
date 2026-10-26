@@ -15,6 +15,7 @@ import {
   DEFAULT_COMPANY_SETTINGS,
 } from '../../services/payslip.service.js'
 import { generatePayslipPdf } from '../../services/pdf.service.js'
+import { sendPayslipEmail } from '../../services/mail.service.js'
 
 function invalid(message, statusCode = 400) {
   return Object.assign(new Error(message), { statusCode, code: 'PAYROLL_VALIDATION_ERROR' })
@@ -465,7 +466,7 @@ export function createPayrollRouter({ auth }) {
     } catch (error) { next(error) }
   })
 
-  // Send / Record Email dispatch
+  // Send / Dispatch Payslip via SMTP Email
   router.post('/:id/email', management, async (req, res, next) => {
     try {
       ensureConnected()
@@ -473,17 +474,95 @@ export function createPayrollRouter({ auth }) {
       const query = mongoose.isValidObjectId(rawId)
         ? PayrollRecord.findById(rawId)
         : PayrollRecord.findOne({ $or: [{ id: rawId }, { employeeId: rawId.toUpperCase() }] })
-      const record = await query.populate('employeeRef', 'name employeeId email')
+      const record = await query.populate('employeeRef', 'name employeeId email department designation location bankDetails identity joiningDate')
       if (!record) throw invalid('Payslip not found.', 404)
+
+      const targetEmail = record.employeeRef?.email
+      if (!targetEmail) {
+        throw invalid('Employee record does not have a registered email address.', 400)
+      }
+
+      const settings = await getCompanySettings()
+      const formatted = normalizePayrollData(record, record.employeeRef, settings)
+      const pdfAttachment = await generatePayslipPdf(formatted).catch(() => null)
+
+      const mailResult = await sendPayslipEmail({
+        employee: record.employeeRef,
+        record,
+        month: record.month,
+        settings,
+        pdfAttachment,
+      })
 
       record.emailSentAt = new Date()
       await record.save()
 
-      const targetEmail = record.employeeRef?.email || 'employee@company.com'
       res.json({
         success: true,
-        message: `Official payslip document for ${record.month} emailed successfully to ${targetEmail}.`,
-        emailSentAt: record.emailSentAt,
+        data: {
+          recipient: targetEmail,
+          month: record.month,
+          emailSentAt: record.emailSentAt,
+          messageId: mailResult?.messageId,
+          simulated: Boolean(mailResult?.simulated),
+          message: mailResult?.simulated
+            ? `Payslip email simulated for ${targetEmail} (SMTP credentials pending real app password in .env).`
+            : `Official payslip document for ${record.month} emailed successfully to ${targetEmail}.`,
+        },
+      })
+    } catch (error) { next(error) }
+  })
+
+  // Bulk dispatch payslip emails for a period
+  router.post('/send-bulk-email', management, async (req, res, next) => {
+    try {
+      ensureConnected()
+      const { month } = req.body ?? {}
+      payrollPeriod(month)
+
+      const records = await PayrollRecord.find({ month, status: 'processed' })
+        .populate('employeeRef', 'name employeeId email department designation location bankDetails')
+      if (records.length === 0) {
+        throw invalid(`No finalized payslips found for period ${month}.`, 404)
+      }
+
+      const settings = await getCompanySettings()
+      let sentCount = 0
+      let failedCount = 0
+
+      for (const record of records) {
+        const emp = record.employeeRef
+        if (!emp?.email) {
+          failedCount++
+          continue
+        }
+        try {
+          const formatted = normalizePayrollData(record, emp, settings)
+          const pdfAttachment = await generatePayslipPdf(formatted).catch(() => null)
+          await sendPayslipEmail({
+            employee: emp,
+            record,
+            month: record.month,
+            settings,
+            pdfAttachment,
+          })
+          record.emailSentAt = new Date()
+          await record.save()
+          sentCount++
+        } catch (err) {
+          console.warn(`[MailService] Failed to send payslip to ${emp?.email}:`, err?.message || err)
+          failedCount++
+        }
+      }
+
+      res.json({
+        success: true,
+        data: {
+          total: records.length,
+          sentCount,
+          failedCount,
+          message: `Dispatched payslips to ${sentCount} employee(s). ${failedCount > 0 ? `${failedCount} skipped or failed.` : ''}`,
+        },
       })
     } catch (error) { next(error) }
   })

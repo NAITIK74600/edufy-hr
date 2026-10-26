@@ -1,4 +1,5 @@
 import { hasPermission, PERMISSIONS } from '../../auth/permissions.js'
+import { mailService } from '../../services/mail.service.js'
 
 const ACTIVE_STATUSES = ['pending_tl', 'pending_manager', 'pending_director', 'pending_hr', 'approved']
 const TRANSITIONS = Object.freeze({
@@ -226,6 +227,22 @@ export function createLeaveService({ repository, employeeRepository, notificatio
       if (nextStatus === 'approved') await repository.commitReservation(request.employeeId, request.leaveType, request.units)
       if (nextStatus === 'pending_hr' || isDirector) await notifyHr('leave.hr_review_required', updated, isDirector ? 'Managing Director approved manager leave; synchronized to HR panel.' : 'A manager approved a leave request and HR review is required.')
       await notifyRecipient(request.employeeId, `leave.${nextStatus}`, updated, `Your leave request is ${nextStatus}.`)
+      if (['approved', 'rejected'].includes(nextStatus)) {
+        try {
+          const emp = await employeeRepository.findById(request.employeeId)
+          if (emp && emp.email) {
+            await mailService.sendLeaveStatusEmail({
+              employee: emp,
+              leaveRequest: updated,
+              action: nextStatus,
+              approver: actor,
+              reason: payload.reason || payload.comment,
+            })
+          }
+        } catch (mailErr) {
+          console.error('[leave.service] Failed to send leave status email:', mailErr?.message || mailErr)
+        }
+      }
       return publicRequest(updated)
     },
     async cancel(id, actor) {
@@ -238,6 +255,20 @@ export function createLeaveService({ repository, employeeRepository, notificatio
       if (!updated) throw error('This request has already changed.', 409, 'DUPLICATE_DECISION')
       if (request.status === 'approved') await repository.restoreCommittedBalance(request.employeeId, request.leaveType, request.units)
       else await releaseReservation(request)
+      try {
+        const emp = await employeeRepository.findById(request.employeeId)
+        if (emp && emp.email) {
+          await mailService.sendLeaveStatusEmail({
+            employee: emp,
+            leaveRequest: updated,
+            action: 'cancelled',
+            approver: actor,
+            reason: 'Leave request was cancelled',
+          })
+        }
+      } catch (mailErr) {
+        console.error('[leave.service] Failed to send leave cancel email:', mailErr?.message || mailErr)
+      }
       return publicRequest(updated)
     },
     async delete(id, actor) {

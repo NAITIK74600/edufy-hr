@@ -23,6 +23,7 @@ import { createLeaveService } from './modules/leave/leave.service.js'
 import { createLeaveRouter } from './modules/leave/leave.routes.js'
 import { seedLeavePolicies } from './modules/leave/leave.seed.js'
 import { createHierarchyRouter } from './modules/hierarchy/hierarchy.routes.js'
+import { createMailRouter } from './modules/mail/mail.routes.js'
 import { createMongoAttendanceRepository } from './modules/attendance/attendance.repository.js'
 import { createMemoryAttendanceRepository } from './modules/attendance/memoryAttendanceRepository.js'
 import { createAttendanceService } from './modules/attendance/attendance.service.js'
@@ -133,6 +134,7 @@ export function createApp(options = {}) {
   app.use('/api/v1/payroll', createPayrollRouter({ auth }))
   app.use('/api/v1/workspace', createWorkspaceRouter({ auth, useDatabase }))
   app.use('/api/v1/hierarchy', createHierarchyRouter({ auth, repository: employeeRepository }))
+  app.use('/api/v1/mail', createMailRouter({ auth }))
   app.use('/api/v1', createAccessRouter(auth))
   const verificationFormsDir = path.resolve(process.cwd(), 'public', 'verification-forms')
   if (fs.existsSync(verificationFormsDir)) {
@@ -141,6 +143,10 @@ export function createApp(options = {}) {
   const companyPoliciesDir = path.resolve(process.cwd(), 'public', 'company-policies')
   if (fs.existsSync(companyPoliciesDir)) {
     app.use('/company-policies', express.static(companyPoliciesDir))
+  }
+  const publicDir = path.resolve(process.cwd(), 'public')
+  if (fs.existsSync(publicDir)) {
+    app.use(express.static(publicDir))
   }
   if (options.staticDirectory && fs.existsSync(options.staticDirectory)) {
     app.use(express.static(options.staticDirectory))

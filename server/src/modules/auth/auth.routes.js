@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto'
 import mongoose from 'mongoose'
 import { attachOnboardingDocs } from '../../models/onboardingDocsCache.js'
 import { hashPassword } from '../../auth/passwords.js'
+import { sendPasswordResetEmail } from '../../services/mail.service.js'
 
 export function createAuthRouter({ authService, auth, userStore }) {
   const router = express.Router()
@@ -168,6 +169,15 @@ export function createAuthRouter({ authService, auth, userStore }) {
       if (!userStore.resetPassword) throw Object.assign(new Error('Password persistence is unavailable.'), { statusCode: 503, code: 'DATABASE_UNAVAILABLE' })
       const updated = await userStore.resetPassword(target.id, hashPassword(password))
       if (!updated) throw Object.assign(new Error('Account could not be updated. Refresh and try again.'), { statusCode: 409, code: 'ACCOUNT_CHANGED' })
+
+      if (target.email) {
+        sendPasswordResetEmail({
+          employee: target,
+          newPassword: password,
+          loginUrl: process.env.APP_PUBLIC_URL || 'https://empoyee.edufyitechsolutions.com',
+        }).catch((err) => console.warn('[MailService] Password reset email notice:', err?.message || err))
+      }
+
       response.json({ success: true, data: { id: target.id } })
     } catch (error) { next(error) }
   })
