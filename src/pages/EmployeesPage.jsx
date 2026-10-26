@@ -28,6 +28,7 @@ import {
 } from 'lucide-react'
 import { apiClient } from '../services/apiClient'
 import { OnboardingDossierView } from '../components/OnboardingDossierView'
+import { EmployeeComplianceStatusCard } from '../components/EmployeeComplianceStatusCard'
 import { SalaryBreakdownFields } from '../components/common/SalaryBreakdownFields'
 import { normalizeSalaryStructure } from '../utils/salaryCalculator'
 import { useAuth } from '../auth/AuthContext'
@@ -2717,6 +2718,8 @@ function EmployeeDetail({ id }) {
         </div>
       </section>
 
+
+      <EmployeeComplianceStatusCard employee={employee} />
 
       {/* ONBOARDING DOCUMENTS & STATUTORY DOSSIER */}
       <section className="panel" style={{ padding: '20px', marginTop: '20px' }}>
