@@ -940,19 +940,19 @@ function AttendanceModule() {
             </div>
           </section>
 
-          {/* GPS GEOFENCING CONFIGURATION PANEL (MAX 200M RADIUS) */}
+          {/* GPS GEOFENCING CONFIGURATION PANEL (10M - 30M RADIUS) */}
           <section className="panel">
             <div className="panel-heading">
               <div>
                 <p className="section-kicker">Geographic Coordinates</p>
-                <h2>Office GPS Geofence Perimeters (Max 200m Distance)</h2>
+                <h2>Office GPS Geofence Perimeters (10m - 30m Distance)</h2>
               </div>
               <span className="gps-verified-badge in-range">
-                <Radio size={12} /> Geofence Strict: 200 Meters
+                <Radio size={12} /> Geofence Strict: 10m - 30m
               </span>
             </div>
             <p className="foundation-copy" style={{ margin: '10px 0 16px' }}>
-              Employees punching attendance from mobile devices or laptops must be physically located within <strong>200 meters</strong> of any registered office coordinates to obtain automatic in-office GPS verification.
+              Employees punching attendance from mobile devices or laptops must be physically located within <strong>10 to 30 meters</strong> of any registered office coordinates to obtain automatic in-office GPS verification.
             </p>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '12px' }}>
@@ -975,7 +975,7 @@ function AttendanceModule() {
                       <strong style={{ fontSize: '13px' }}>{loc.name}</strong>
                     </div>
                     <span className="role-badge" style={{ fontSize: '9px', background: 'var(--soft-teal)', color: 'var(--teal)' }}>
-                      Radius: {loc.radiusMeters || 200}m
+                      Radius: {loc.radiusMeters || 30}m
                     </span>
                   </div>
 
@@ -986,7 +986,7 @@ function AttendanceModule() {
                   </div>
 
                   <div style={{ borderTop: '1px solid var(--line)', paddingTop: '6px', fontSize: '10px', color: 'var(--teal)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <CheckCircle2 size={11} /> 200m Max Distance Geofence Active
+                    <CheckCircle2 size={11} /> {loc.radiusMeters || 30}m Geofence Active
                   </div>
                 </div>
               ))}

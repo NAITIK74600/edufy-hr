@@ -6,7 +6,7 @@ export const DEFAULT_LOCATIONS = [
     name: 'IGNITE CAMPUS',
     lat: 12.9101,
     lng: 77.6517,
-    radiusMeters: 200,
+    radiusMeters: 30,
     city: 'Bengaluru',
     address: 'Ignite Campus, Bengaluru, Karnataka',
     allowedIPs: ['127.0.0.1', '::1', '::ffff:127.0.0.1', '10.0.0.0/8', '192.168.1.0/24'],
@@ -16,7 +16,7 @@ export const DEFAULT_LOCATIONS = [
     name: 'Edufyi HQ Noida',
     lat: 28.535516,
     lng: 77.391029,
-    radiusMeters: 200,
+    radiusMeters: 30,
     city: 'Noida',
     address: 'Sector 62, Noida, Uttar Pradesh',
     allowedIPs: ['127.0.0.1', '::1', '::ffff:127.0.0.1', '10.0.0.0/8', '192.168.1.0/24'],
@@ -26,7 +26,7 @@ export const DEFAULT_LOCATIONS = [
     name: 'HQ - San Francisco',
     lat: 37.789172,
     lng: -122.401449,
-    radiusMeters: 200,
+    radiusMeters: 30,
     city: 'San Francisco',
     address: '535 Mission St, San Francisco, CA',
     allowedIPs: ['127.0.0.1', '::1', '::ffff:127.0.0.1', '10.0.0.0/8', '192.168.1.0/24'],
@@ -36,7 +36,7 @@ export const DEFAULT_LOCATIONS = [
     name: 'Koramangala Innovation Hub',
     lat: 12.9352,
     lng: 77.6245,
-    radiusMeters: 200,
+    radiusMeters: 30,
     city: 'Bengaluru',
     address: '80 Feet Road, 4th Block, Koramangala',
     allowedIPs: ['127.0.0.1', '::1', '::ffff:127.0.0.1'],
@@ -46,7 +46,7 @@ export const DEFAULT_LOCATIONS = [
     name: 'Indiranagar Design Studio',
     lat: 12.9784,
     lng: 77.6408,
-    radiusMeters: 200,
+    radiusMeters: 30,
     city: 'Bengaluru',
     address: '100 Feet Road, Indiranagar',
     allowedIPs: ['127.0.0.1', '::1', '::ffff:127.0.0.1'],
@@ -56,7 +56,7 @@ export const DEFAULT_LOCATIONS = [
     name: 'Hyderabad Tech Center',
     lat: 17.4483,
     lng: 78.3915,
-    radiusMeters: 200,
+    radiusMeters: 30,
     city: 'Hyderabad',
     address: 'HITEC City, Madhapur',
     allowedIPs: ['127.0.0.1', '::1', '::ffff:127.0.0.1'],
@@ -92,7 +92,7 @@ const DEFAULT_ATTENDANCE_RULES = {
   workStartTime: '09:30',
   workEndTime: '18:30',
   gracePeriodMinutes: 15,
-  maxGeofenceRadiusMeters: 200,
+  maxGeofenceRadiusMeters: 30,
   strictGeofenceRequired: false,
   requireOfficeNetworkAndGps: true,
 }
@@ -274,7 +274,7 @@ export function createAttendanceService({ repository, companySettings = {} }) {
       })
     }
 
-    const maxAllowedRadius = nearestLocation?.radiusMeters || attendanceRules.maxGeofenceRadiusMeters || 200
+    const maxAllowedRadius = nearestLocation?.radiusMeters || attendanceRules.maxGeofenceRadiusMeters || 30
     const hasGps = hasValidCoords && minDistance !== Infinity
     const numAccuracy = typeof accuracy === 'number' && Number.isFinite(accuracy) ? accuracy : null
     const accurateGps = numAccuracy !== null ? (numAccuracy >= 0 && numAccuracy <= Math.max(maxAllowedRadius, 250)) : true

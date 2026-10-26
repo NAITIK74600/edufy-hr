@@ -1974,7 +1974,7 @@ const INITIAL_COMPANY_SETTINGS = {
     halfDayHours: 4.5,
     fullDayHours: 8.0,
     geofenceStrict: false,
-    maxGeofenceRadiusMeters: 200,
+    maxGeofenceRadiusMeters: 30,
     gpsVerificationRequired: true,
     wifiVerificationRequired: true,
     requireOfficeNetworkAndGps: false,
@@ -4300,7 +4300,7 @@ const localStore = {
       })
     }
 
-    const maxAllowedRadius = settings?.attendanceRules?.maxGeofenceRadiusMeters || nearestLocation?.radiusMeters || 200
+    const maxAllowedRadius = settings?.attendanceRules?.maxGeofenceRadiusMeters || nearestLocation?.radiusMeters || 30
     const hasGps = minDistance !== Infinity
     const isGpsVerified = hasGps && minDistance <= maxAllowedRadius
 
@@ -4444,7 +4444,7 @@ const localStore = {
       storeState.attendance = [newRecord, ...storeState.attendance]
     }
 
-    const distText = distance !== null ? ` (GPS: ${distance}m away, ≤200m geofence: ${isGpsVerified ? 'Verified' : 'Outside'})` : ''
+    const distText = distance !== null ? ` (GPS: ${distance}m away, ≤${maxAllowedRadius}m geofence: ${isGpsVerified ? 'Verified' : 'Outside'})` : ''
     this.addNotification({
       title: 'Attendance Checked In',
       message: `Checked in successfully at ${timeStr} via ${customWifi} (${isWifiVerified ? 'Verified Office Wi-Fi' : 'Remote Network'})${distText} for ${shift}.`,

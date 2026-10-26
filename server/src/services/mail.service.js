@@ -194,13 +194,14 @@ export function wrapInEmailLayout({
   contentHtml,
   callToAction = null,
   showConfidentialNotice = true,
+  inlineLogoCid = true,
 }) {
   const currentYear = new Date().getFullYear()
   const publicUrl = process.env.APP_PUBLIC_URL || 'https://empoyee.edufyitechsolutions.com'
 
-  const logoImgSrc = logoFilePath
+  const logoImgSrc = (inlineLogoCid && logoFilePath)
     ? 'cid:edufyilogo'
-    : 'https://empoyee.edufyitechsolutions.com/elythra-edufyitech-logo.png'
+    : (DEFAULT_COMPANY.logoUrl || 'https://empoyee.edufyitechsolutions.com/elythra-edufyitech-logo.png')
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -738,9 +739,11 @@ export async function sendPayslipEmail({ employee, record, month, settings = DEF
       label: 'View Detailed Payslip in Portal',
       url: `${process.env.APP_PUBLIC_URL || 'https://empoyee.edufyitechsolutions.com'}#/employee/payroll`,
     },
+    inlineLogoCid: false,
   })
 
-  const attachments = [...getLogoAttachment()]
+  // Only the PDF is attached to the email
+  const attachments = []
   if (pdfAttachment && pdfAttachment.buffer) {
     attachments.push({
       filename: pdfAttachment.filename || `Payslip-${empCode}-${payMonth.replace(/\s+/g, '_')}.pdf`,

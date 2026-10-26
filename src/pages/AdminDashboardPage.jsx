@@ -4312,7 +4312,7 @@ function AdminSettingsModule() {
   const [endTime, setEndTime] = useState(initialAtt.workEndTime || '18:30')
   const [graceMins, setGraceMins] = useState(initialAtt.gracePeriodMinutes ?? 15)
   const [wifiReq, setWifiReq] = useState(initialAtt.requireOfficeNetworkAndGps ?? true)
-  const [geofenceRadius, setGeofenceRadius] = useState(initialAtt.maxGeofenceRadiusMeters || 200)
+  const [geofenceRadius, setGeofenceRadius] = useState(initialAtt.maxGeofenceRadiusMeters || 30)
   const [casualQuota, setCasualQuota] = useState(initialLeave.casualQuota ?? 12)
   const [sickQuota, setSickQuota] = useState(initialLeave.sickQuota ?? 10)
   const [earnedQuota, setEarnedQuota] = useState(initialLeave.earnedQuota ?? 15)
@@ -4466,7 +4466,7 @@ function AdminSettingsModule() {
     e.preventDefault()
     if (!branchName.trim() || !branchCity.trim()) return
     if (branchLatitude === '' || branchLongitude === '' || !Number.isFinite(Number(branchLatitude)) || !Number.isFinite(Number(branchLongitude))) throw new Error('Enter the actual office latitude and longitude.')
-    await hrStore.addBranchLocation({ name: branchName.trim(), city: branchCity.trim(), lat: Number(branchLatitude), lng: Number(branchLongitude), radiusMeters: Number(geofenceRadius) || 200 })
+    await hrStore.addBranchLocation({ name: branchName.trim(), city: branchCity.trim(), lat: Number(branchLatitude), lng: Number(branchLongitude), radiusMeters: Number(geofenceRadius) || 30 })
     setBranchName('')
     setBranchCity('')
     setBranchLatitude('')
@@ -4506,7 +4506,7 @@ function AdminSettingsModule() {
         workEndTime: endTime,
         gracePeriodMinutes: Number(graceMins),
         requireOfficeNetworkAndGps: Boolean(wifiReq),
-        maxGeofenceRadiusMeters: Number(geofenceRadius) || 200,
+        maxGeofenceRadiusMeters: Number(geofenceRadius) || 30,
       },
       leavePolicies: {
         casualQuota: Number(casualQuota),
@@ -4602,12 +4602,12 @@ function AdminSettingsModule() {
                   />
                 </div>
                 <div>
-                  <label style={{ fontSize: '11px', display: 'block', color: 'var(--muted)', marginBottom: '3px' }}>Max Geofence Radius (Meters)</label>
+                  <label style={{ fontSize: '11px', display: 'block', color: 'var(--muted)', marginBottom: '3px' }}>Max Geofence Radius (10 - 30 Meters)</label>
                   <input
                     type="number"
-                    min="50"
-                    max="200"
-                    step="10"
+                    min="10"
+                    max="30"
+                    step="1"
                     className="text-input"
                     value={geofenceRadius}
                     onChange={(e) => setGeofenceRadius(e.target.value)}
