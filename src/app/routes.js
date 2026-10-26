@@ -70,7 +70,7 @@ export const employeeRoutes = [
 ]
 
 export const authRoutes = [
-  { path: '/login', label: 'HR Login', group: 'Auth', description: 'Edufyi Workforce Portal Sign In' },
+  { path: '/login', label: 'Management Login', group: 'Auth', description: 'Edufyi Management Terminal Authentication' },
   { path: '/admin/login', label: 'Admin Login', group: 'Auth', description: 'Edufyi Administrator Console Authentication' },
   { path: '/hr/login', label: 'HR Login', group: 'Auth', description: 'Edufyi People Operations Authentication' },
   { path: '/employee/login', label: 'Employee Login', group: 'Auth', description: 'Edufyi Employee Self-Service Authentication' },
