@@ -5717,11 +5717,35 @@ const localStore = {
     notifyListeners()
   },
   markNotificationRead(id) {
-    storeState.notifications = storeState.notifications.map((n) => n.id === id ? { ...n, read: true } : n)
+    storeState.notifications = storeState.notifications.map((n) => (n.id === id ? { ...n, read: true } : n))
+    if (typeof window !== 'undefined' && window.localStorage) {
+      try {
+        const readRaw = window.localStorage.getItem('edufyi_read_notifications_v2')
+        const readIds = readRaw ? JSON.parse(readRaw) : []
+        if (!readIds.includes(id)) {
+          readIds.push(id)
+          window.localStorage.setItem('edufyi_read_notifications_v2', JSON.stringify(readIds))
+        }
+        window.localStorage.setItem(STORAGE_PERSISTED_NOTIFICATIONS_KEY, JSON.stringify(storeState.notifications))
+      } catch (err) {
+        console.warn(err)
+      }
+    }
     notifyListeners()
   },
   markAllNotificationsRead() {
     storeState.notifications = storeState.notifications.map((n) => ({ ...n, read: true }))
+    if (typeof window !== 'undefined' && window.localStorage) {
+      try {
+        const readRaw = window.localStorage.getItem('edufyi_read_notifications_v2')
+        const readIds = new Set(readRaw ? JSON.parse(readRaw) : [])
+        storeState.notifications.forEach((n) => { if (n.id) readIds.add(n.id) })
+        window.localStorage.setItem('edufyi_read_notifications_v2', JSON.stringify([...readIds]))
+        window.localStorage.setItem(STORAGE_PERSISTED_NOTIFICATIONS_KEY, JSON.stringify(storeState.notifications))
+      } catch (err) {
+        console.warn(err)
+      }
+    }
     notifyListeners()
   },
   deleteNotification(id) {
@@ -5745,7 +5769,7 @@ const localStore = {
     storeState.notifications = []
     if (typeof window !== 'undefined' && window.localStorage) {
       try {
-        window.localStorage.removeItem(STORAGE_CLEARED_NOTIFICATIONS_KEY)
+        window.localStorage.setItem(STORAGE_CLEARED_NOTIFICATIONS_KEY, 'true')
         window.localStorage.setItem(STORAGE_PERSISTED_NOTIFICATIONS_KEY, JSON.stringify([]))
       } catch (err) {
         console.warn(err)
@@ -5757,6 +5781,13 @@ const localStore = {
     storeState.notifications = storeState.notifications.map((n) =>
       n.id === id ? { ...n, read: !n.read } : n
     )
+    if (typeof window !== 'undefined' && window.localStorage) {
+      try {
+        window.localStorage.setItem(STORAGE_PERSISTED_NOTIFICATIONS_KEY, JSON.stringify(storeState.notifications))
+      } catch (err) {
+        console.warn(err)
+      }
+    }
     notifyListeners()
   },
 

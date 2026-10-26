@@ -18,6 +18,7 @@ import {
   UserPlus,
   Users,
   WalletCards,
+  Receipt,
   Zap,
 } from 'lucide-react'
 import { useAuth } from '../auth/AuthContext'
@@ -35,6 +36,7 @@ const metricIcons = {
   attendanceExceptions: Clock3,
   upcomingHolidays: CalendarDays,
   openHelpdeskTickets: CircleHelp,
+  pendingExpenses: Receipt,
 }
 
 const metricTones = {
@@ -44,6 +46,7 @@ const metricTones = {
   attendanceExceptions: 'blue',
   upcomingHolidays: 'gold',
   openHelpdeskTickets: 'teal',
+  pendingExpenses: 'coral',
 }
 
 function MetricCard({ metric, user }) {
@@ -289,15 +292,23 @@ export function OverviewPage() {
   const lateAttendance = storeState.attendance.filter((a) => a.date === todayKey() && a.status === 'late').length
   const onLeaveToday = new Set(storeState.leaves.filter((leave) => leave.status === 'approved' && leave.startDate <= todayKey() && leave.endDate >= todayKey()).map((leave) => leave.employeeId)).size
   const openTickets = (storeState.tickets || []).filter((t) => (t.status || 'open') !== 'resolved' && t.status !== 'closed').length
+  const pendingExpenses = (storeState.expenses || []).filter((e) => (e.status || 'submitted') === 'submitted' || e.status === 'pending').length
   const upcomingHolidays = storeState.holidays.length
+
+  const todayStr = todayKey()
+  const nextHoliday = (storeState.holidays || [])
+    .filter((h) => h.date >= todayStr)
+    .sort((a, b) => a.date.localeCompare(b.date))[0]
+  const nextHolidayDetail = nextHoliday ? `Next: ${nextHoliday.name || nextHoliday.title} (${nextHoliday.date})` : 'Company annual calendar'
 
   const metrics = [
     { key: 'activeHeadcount', label: 'Active headcount', value: `${activeEmployees} Staff`, detail: 'Full-time & contracted', href: '/hr/people' },
     { key: 'onLeaveToday', label: 'On leave today', value: `${onLeaveToday} Out`, detail: 'Scheduled absence', href: '/hr/leave' },
     { key: 'pendingLeave', label: 'Pending leave requests', value: `${pendingLeaves} Requests`, detail: 'Needs HR approval', href: '/hr/leave' },
     { key: 'attendanceExceptions', label: 'Attendance exceptions', value: `${lateAttendance} Late`, detail: 'Grace period flagged', href: '/hr/attendance' },
-    { key: 'upcomingHolidays', label: 'Upcoming holidays', value: `${upcomingHolidays} Days`, detail: 'Next: Oct 2 Gandhi Jayanti', href: '/hr/holidays' },
+    { key: 'upcomingHolidays', label: 'Upcoming holidays', value: `${upcomingHolidays} Days`, detail: nextHolidayDetail, href: '/hr/holidays' },
     { key: 'openHelpdeskTickets', label: 'Open help-desk tickets', value: `${openTickets} Tickets`, detail: 'IT & Payroll queries', href: '/hr/helpdesk' },
+    { key: 'pendingExpenses', label: 'Pending expenses', value: `${pendingExpenses} Claims`, detail: 'Reimbursement queue', href: '/hr/reports' },
   ]
 
   const isAdmin = user?.role === 'admin'

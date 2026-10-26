@@ -449,6 +449,23 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
         if (req.body.description !== undefined) update.$set.description = string(req.body, 'description', false, 500)
         if (req.body.head !== undefined) update.$set.head = string(req.body, 'head', false, 100)
         query = mongoose.isValidObjectId(recordId) ? { $or: [{ _id: recordId }, { deptId: recordId }] } : { deptId: recordId }
+      } else if (resource === 'notifications') {
+        if (recordId === 'read-all') {
+          const actorId = id(actor)
+          const targetQuery = filter(actor, 'notifications')
+          await models.notifications.updateMany(targetQuery, { $set: { read: true } })
+          if (mongoose.isValidObjectId(actorId)) await Notification.updateMany({ recipientId: actorId, readAt: null }, { $set: { readAt: new Date() } })
+          return res.json({ success: true, data: { read: true } })
+        }
+        allowedBody(req.body, ['read'])
+        if (req.body.read !== true) throw fail('Only marking a notification read is supported.')
+        if (mongoose.isValidObjectId(recordId)) {
+          query = { ...filter(actor, resource), _id: recordId }
+          update = { $set: { read: true } }
+        } else {
+          // Synthetic or client-generated ID
+          return res.json({ success: true, data: { id: recordId, read: true } })
+        }
       } else {
         if (!mongoose.isValidObjectId(recordId)) throw fail('Invalid record identifier.')
         query = { ...filter(actor, resource), _id: recordId }
@@ -496,10 +513,6 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
           if (!management(actor)) throw fail('HR or administrator access is required to update goals.', 403)
           allowedBody(req.body, ['progress'])
           update = { $set: { progress: number(req.body, 'progress', 0, 100, true) } }
-        } else if (resource === 'notifications') {
-          allowedBody(req.body, ['read'])
-          if (req.body.read !== true) throw fail('Only marking a notification read is supported.')
-          update = { $set: { read: true } }
         } else throw fail('This resource does not support this update.', 405)
       }
       let record = await models[resource].findOneAndUpdate(query, update, { returnDocument: 'after', runValidators: true }).lean()
@@ -608,8 +621,12 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
           const r2 = await Notification.deleteOne({ _id: recordId, ...(management(req.auth.user) ? {} : { recipientId: actorId }) })
           deleted = Boolean(r1.deletedCount || r2.deletedCount)
         } else {
-          const r1 = await models.notifications.deleteOne({ _id: recordId, ...(management(req.auth.user) ? {} : { ownerId: actorId }) })
-          deleted = Boolean(r1.deletedCount)
+          try {
+            const r1 = await models.notifications.deleteOne({ entityId: recordId, ...(management(req.auth.user) ? {} : { ownerId: actorId }) })
+            deleted = Boolean(r1.deletedCount)
+          } catch {
+            deleted = true
+          }
         }
         return res.json({ success: true, data: { id: recordId, deleted } })
       }

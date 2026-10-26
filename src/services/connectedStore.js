@@ -162,9 +162,16 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
         : (rawLocal.getDepartments ? rawLocal.getDepartments() : [])
       const finalDepts = serverDepts || currentDepts
 
+      const isCleared = typeof window !== 'undefined' && window.localStorage.getItem('edufyi_notifications_cleared_v2') === 'true'
       const deletedRaw = typeof window !== 'undefined' ? window.localStorage.getItem('edufyi_deleted_notifications_v2') : null
       const deletedIds = new Set(deletedRaw ? JSON.parse(deletedRaw) : [])
-      const serverNotifs = (data.workspace?.notifications ?? []).filter((n) => n && n.id && !deletedIds.has(n.id))
+      const readRaw = typeof window !== 'undefined' ? window.localStorage.getItem('edufyi_read_notifications_v2') : null
+      const readIds = new Set(readRaw ? JSON.parse(readRaw) : [])
+      const serverNotifs = isCleared
+        ? []
+        : (data.workspace?.notifications ?? [])
+            .filter((n) => n && n.id && !deletedIds.has(n.id))
+            .map((n) => ({ ...n, read: Boolean(n.read || readIds.has(n.id)) }))
 
       Object.assign(state(), {
         ...Object.fromEntries(workspaceKeys.map((key) => [key, data.workspace[key] ?? []])),

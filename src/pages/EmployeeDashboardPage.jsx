@@ -1142,21 +1142,85 @@ function ESSOverview({ user }) {
     }
   }
 
-  const tasks = storeState.tasks || []
-  const myTasks = tasks.slice(0, 3)
+  const myEmployee = (storeState.employees || []).find((e) =>
+    (user?.id && (String(e.id) === String(user.id) || String(e._id) === String(user.id))) ||
+    (empId && (e.employeeId === empId || e.id === empId || e._id === empId)) ||
+    (user?.email && e.email && e.email.toLowerCase() === user.email.toLowerCase())
+  )
+  const currentEmpId = empId || user?.employeeId || myEmployee?.employeeId || ''
+  const currentUserId = String(user?.id || user?._id || '')
+  const currentEmpRef = String(myEmployee?._id || myEmployee?.id || currentUserId)
+  const currentUserName = (user?.displayName || user?.name || myEmployee?.name || '').toLowerCase()
+
+  // Filter tasks dynamically for the current employee
+  const myTasks = (storeState.tasks || []).filter((t) => {
+    if (!t) return false
+    const matchRef = t.assigneeRef && (String(t.assigneeRef) === currentUserId || String(t.assigneeRef) === currentEmpRef)
+    const matchId = t.assigneeId && currentEmpId && String(t.assigneeId).toUpperCase() === String(currentEmpId).toUpperCase()
+    const matchName = t.assigneeName && currentUserName && String(t.assigneeName).toLowerCase() === currentUserName
+    const matchOwner = !t.assigneeRef && !t.assigneeId && String(t.ownerId) === currentUserId
+    return Boolean(matchRef || matchId || matchName || matchOwner)
+  })
+  const pendingTasks = myTasks.filter((t) => t.status !== 'completed')
+  const completedTasks = myTasks.filter((t) => t.status === 'completed')
+
+  // Filter helpdesk tickets dynamically for the current employee
+  const myTickets = (storeState.tickets || []).filter((t) => {
+    if (!t) return false
+    const tEmp = String(t.employeeId || '').toUpperCase()
+    const uEmp = String(currentEmpId).toUpperCase()
+    const tOwner = String(t.ownerId || '')
+    const tName = String(t.employeeName || '').toLowerCase()
+    return (uEmp && tEmp === uEmp) || (currentUserId && tOwner === currentUserId) || (currentUserName && tName === currentUserName)
+  })
+  const openTickets = myTickets.filter((t) => (t.status || 'open') !== 'resolved' && t.status !== 'closed')
+
+  // Filter expenses dynamically for the current employee
+  const myExpenses = (storeState.expenses || []).filter((e) => {
+    if (!e) return false
+    const eEmp = String(e.employeeId || '').toUpperCase()
+    const uEmp = String(currentEmpId).toUpperCase()
+    const eOwner = String(e.ownerId || '')
+    const eName = String(e.employeeName || '').toLowerCase()
+    return (uEmp && eEmp === uEmp) || (currentUserId && eOwner === currentUserId) || (currentUserName && eName === currentUserName)
+  })
+  const pendingExpenses = myExpenses.filter((e) => (e.status || 'submitted') === 'submitted' || e.status === 'pending')
+  const totalPendingExpense = pendingExpenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0)
+
   const announcements = storeState.announcements || []
   const latestAnnouncements = announcements.slice(0, 3)
   const holidays = (storeState.holidays || []).slice(0, 3)
   const myAttendance = storeState.attendance.filter((record) => record.employeeId === empId && record.date.startsWith(todayKey().slice(0, 7)))
   const presentDays = myAttendance.filter((record) => ['present', 'late', 'half-day'].includes(record.status)).length
   const availableLeave = (storeState.leaveBalances ?? []).reduce((sum, balance) => sum + balance.allowance - balance.used - balance.reserved, 0)
+
+  // Net salary calculation (dynamic, never hardcoded fallback)
   const userMatchedPayslips = useMemo(() => {
     return (storeState.payroll || []).filter((r) => doesPayrollMatchUser(r, user, storeState.employees))
   }, [storeState.payroll, user, storeState.employees])
-  const latestPayslip = userMatchedPayslips[0] || (storeState.payroll || [])[0]
-  const netSalary = latestPayslip
-    ? (Number(latestPayslip.netPay || latestPayslip.netSalary) || (latestPayslip.earnings ? Object.values(latestPayslip.earnings).reduce((sum, value) => sum + value, 0) - Object.values(latestPayslip.deductions).reduce((sum, value) => sum + value, 0) : 84200))
-    : null
+  const latestPayslip = userMatchedPayslips[0] || null
+
+  let netSalary = null
+  let salarySubtitle = 'No finalized payslip available'
+
+  if (latestPayslip) {
+    const rawNet = Number(latestPayslip.netPay ?? latestPayslip.netSalary)
+    if (Number.isFinite(rawNet) && rawNet > 0) {
+      netSalary = rawNet
+    } else if (latestPayslip.earnings) {
+      const gross = Object.values(latestPayslip.earnings).reduce((sum, value) => sum + (Number(value) || 0), 0)
+      const ded = Object.values(latestPayslip.deductions || {}).reduce((sum, value) => sum + (Number(value) || 0), 0)
+      netSalary = gross - ded
+    }
+    salarySubtitle = `Finalized • ${latestPayslip.month || 'Current Cycle'}`
+  } else if (myEmployee?.salary) {
+    const annualCtc = Number(myEmployee.salary)
+    if (annualCtc > 0) {
+      const grossMonthly = Math.round(annualCtc / 12)
+      netSalary = Math.round(grossMonthly * 0.92)
+      salarySubtitle = `Estimated Monthly (CTC: ${formatINR(annualCtc)}/yr)`
+    }
+  }
 
   return (
     <div style={{ display: 'grid', gap: '22px' }}>
@@ -1223,8 +1287,8 @@ function ESSOverview({ user }) {
           </div>
           <div className="metric-copy">
             <span>Active Tasks</span>
-            <strong>3 Pending</strong>
-            <small>Sprint cycle deliverables</small>
+            <strong>{pendingTasks.length} Pending</strong>
+            <small>{completedTasks.length} completed • {myTasks.length} total assigned</small>
           </div>
           <ArrowRight size={14} className="metric-link-icon" />
         </a>
@@ -1235,8 +1299,32 @@ function ESSOverview({ user }) {
           </div>
           <div className="metric-copy">
             <span>Net Monthly Salary</span>
-            <strong>{netSalary === null ? 'Not finalized' : formatINR(netSalary)}</strong>
-            <small>{latestPayslip?.month ?? 'No finalized payslip available'}</small>
+            <strong>{netSalary === null ? 'Pending Setup' : formatINR(netSalary)}</strong>
+            <small>{salarySubtitle}</small>
+          </div>
+          <ArrowRight size={14} className="metric-link-icon" />
+        </a>
+
+        <a href="#/employee/helpdesk" className="metric-card metric-link">
+          <div className="metric-icon" style={{ background: '#eaf4f1', color: 'var(--teal)' }}>
+            <HelpCircle size={20} />
+          </div>
+          <div className="metric-copy">
+            <span>Help Desk</span>
+            <strong>{openTickets.length} Open Tickets</strong>
+            <small>{myTickets.length - openTickets.length} resolved • {myTickets.length} total logged</small>
+          </div>
+          <ArrowRight size={14} className="metric-link-icon" />
+        </a>
+
+        <a href="#/employee/expenses" className="metric-card metric-link">
+          <div className="metric-icon" style={{ background: '#fef3e7', color: '#c25e00' }}>
+            <Receipt size={20} />
+          </div>
+          <div className="metric-copy">
+            <span>Expense Claims</span>
+            <strong>{pendingExpenses.length} Pending</strong>
+            <small>{totalPendingExpense > 0 ? `₹${totalPendingExpense.toLocaleString('en-IN')} under review` : `${myExpenses.length} claims submitted`}</small>
           </div>
           <ArrowRight size={14} className="metric-link-icon" />
         </a>
@@ -1249,6 +1337,9 @@ function ESSOverview({ user }) {
         </a>
         <a href="#/employee/expenses" className="ui-button secondary" style={{ fontSize: '11px' }}>
           <Receipt size={13} /> Submit Expense Claim
+        </a>
+        <a href="#/employee/helpdesk" className="ui-button secondary" style={{ fontSize: '11px' }}>
+          <Ticket size={13} /> Raise Support Ticket
         </a>
         <a href="#/employee/salary" className="ui-button secondary" style={{ fontSize: '11px' }}>
           <Download size={13} /> View Latest Payslip
@@ -1273,33 +1364,41 @@ function ESSOverview({ user }) {
               </a>
             </div>
             <div style={{ display: 'grid', gap: '8px', marginTop: '14px' }}>
-              {myTasks.map((t) => (
-                <div key={t.id} className="task-row-card">
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <button
-                      type="button"
-                      className={`task-check-circle ${t.status === 'completed' ? 'checked' : ''}`}
-                      onClick={workspaceAction(hrStore, () => hrStore.updateTaskStatus(t.id, t.status === 'completed' ? 'in_progress' : 'completed'))}
-                      title="Toggle task completion"
-                    >
-                      {t.status === 'completed' && <Check size={12} />}
-                    </button>
-                    <div>
-                      <strong style={{ fontSize: '13px', textDecoration: t.status === 'completed' ? 'line-through' : 'none', color: t.status === 'completed' ? 'var(--muted)' : 'var(--ink)' }}>
-                        {t.title}
-                      </strong>
-                      <div style={{ fontSize: '10px', color: 'var(--muted)', display: 'flex', gap: '8px', marginTop: '2px' }}>
-                        <span>Due: {t.dueDate || 'This week'}</span>
-                        <span>•</span>
-                        <span>Assigned by {t.assignedBy || 'Manager'}</span>
+              {myTasks.length === 0 ? (
+                <div style={{ padding: '24px 16px', textAlign: 'center', background: '#faf9f5', borderRadius: '8px', color: 'var(--muted)', fontSize: '12px' }}>
+                  <CheckCircle2 size={24} style={{ color: 'var(--teal)', margin: '0 auto 8px', display: 'block' }} />
+                  <strong>No active tasks pending</strong>
+                  <p style={{ margin: '4px 0 0', fontSize: '11px' }}>You have no pending tasks assigned at this moment.</p>
+                </div>
+              ) : (
+                myTasks.slice(0, 5).map((t) => (
+                  <div key={t.id} className="task-row-card">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <button
+                        type="button"
+                        className={`task-check-circle ${t.status === 'completed' ? 'checked' : ''}`}
+                        onClick={workspaceAction(hrStore, () => hrStore.updateTaskStatus(t.id, t.status === 'completed' ? 'in_progress' : 'completed'))}
+                        title="Toggle task completion"
+                      >
+                        {t.status === 'completed' && <Check size={12} />}
+                      </button>
+                      <div>
+                        <strong style={{ fontSize: '13px', textDecoration: t.status === 'completed' ? 'line-through' : 'none', color: t.status === 'completed' ? 'var(--muted)' : 'var(--ink)' }}>
+                          {t.title}
+                        </strong>
+                        <div style={{ fontSize: '10px', color: 'var(--muted)', display: 'flex', gap: '8px', marginTop: '2px' }}>
+                          <span>Due: {t.dueDate || 'This week'}</span>
+                          <span>•</span>
+                          <span>Assigned by {t.assignedBy || 'Manager'}</span>
+                        </div>
                       </div>
                     </div>
+                    <StatusBadge tone={t.priority === 'high' ? 'danger' : t.priority === 'medium' ? 'warning' : 'neutral'}>
+                      {t.priority || 'Normal'}
+                    </StatusBadge>
                   </div>
-                  <StatusBadge tone={t.priority === 'high' ? 'danger' : t.priority === 'medium' ? 'warning' : 'neutral'}>
-                    {t.priority || 'Normal'}
-                  </StatusBadge>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </div>
 
