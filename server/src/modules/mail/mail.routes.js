@@ -1,5 +1,5 @@
 import express from 'express'
-import { createTransporter, sendTestEmail } from '../../services/mail.service.js'
+import { createTransporter, sendTestEmail, sendWelcomeEmail, sendPasswordResetEmail } from '../../services/mail.service.js'
 
 export function createMailRouter({ auth }) {
   const router = express.Router()
@@ -62,6 +62,77 @@ export function createMailRouter({ auth }) {
           message: result.simulated
             ? `Test email simulated (SMTP credentials pending real app password in .env). Check server logs.`
             : `Test email successfully dispatched to ${to} via ${senderType.toUpperCase()} channel.`,
+        },
+      })
+    } catch (error) {
+      next(error)
+    }
+  })
+
+  // 3. Send Welcome / Account Creation Credentials Email (Admin & HR only)
+  router.post('/welcome', auth.authenticate, async (req, res, next) => {
+    try {
+      const user = req.auth.user
+      if (!['admin', 'hr'].includes(user.role)) {
+        return res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Only Admin and HR can send credentials emails.' } })
+      }
+
+      const { employee, temporaryPassword, loginUrl } = req.body || {}
+      if (!employee || !employee.email) {
+        return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'Employee with valid email is required.' } })
+      }
+
+      const result = await sendWelcomeEmail({
+        employee,
+        temporaryPassword,
+        loginUrl: loginUrl || process.env.APP_PUBLIC_URL || 'https://empoyee.edufyitechsolutions.com',
+      })
+
+      res.json({
+        success: true,
+        data: {
+          recipient: employee.email,
+          messageId: result.messageId,
+          simulated: Boolean(result.simulated),
+          message: result.simulated
+            ? `Welcome email simulated (check server logs).`
+            : `Welcome credentials email successfully delivered to ${employee.email}.`,
+        },
+      })
+    } catch (error) {
+      next(error)
+    }
+  })
+
+  // 4. Send Password Reset / Update Email (Admin & HR only)
+  router.post('/reset-password', auth.authenticate, async (req, res, next) => {
+    try {
+      const user = req.auth.user
+      if (!['admin', 'hr'].includes(user.role)) {
+        return res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Only Admin and HR can send password reset emails.' } })
+      }
+
+      const { employee, temporaryPassword, loginUrl } = req.body || {}
+      const target = employee || req.body?.user
+      if (!target || !target.email) {
+        return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'Recipient with valid email is required.' } })
+      }
+
+      const result = await sendPasswordResetEmail({
+        employee: target,
+        temporaryPassword,
+        loginUrl: loginUrl || process.env.APP_PUBLIC_URL || 'https://empoyee.edufyitechsolutions.com',
+      })
+
+      res.json({
+        success: true,
+        data: {
+          recipient: target.email,
+          messageId: result.messageId,
+          simulated: Boolean(result.simulated),
+          message: result.simulated
+            ? `Password update email simulated.`
+            : `Password update email successfully delivered to ${target.email}.`,
         },
       })
     } catch (error) {

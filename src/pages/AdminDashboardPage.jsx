@@ -277,6 +277,9 @@ export function AdminUsersModule() {
   const [createdCredentials, setCreatedCredentials] = useState(null)
   const [copySuccess, setCopySuccess] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
+  const [sendingEmail, setSendingEmail] = useState(false)
+  const [emailStatus, setEmailStatus] = useState(null)
+  const [emailMessage, setEmailMessage] = useState('')
 
   // Form State
   const [formName, setFormName] = useState('')
@@ -478,6 +481,9 @@ export function AdminUsersModule() {
 
     // Open Credentials Sharing Modal
     setCopySuccess(false)
+    setSendingEmail(false)
+    setEmailStatus(null)
+    setEmailMessage('')
     setCreatedCredentials({
       name: payload.name,
       email: payload.email,
@@ -1284,21 +1290,67 @@ export function AdminUsersModule() {
                 <Button
                   type="button"
                   variant="secondary"
-                  onClick={() => {
-                    const text = formatCredentialsShareText({
-                      name: createdCredentials.name,
-                      email: createdCredentials.email,
-                      employeeId: createdCredentials.employeeId,
-                      password: createdCredentials.password,
-                      role: createdCredentials.role,
-                      origin: window.location.origin,
-                    })
-                    window.location.href = `mailto:${createdCredentials.email}?subject=${encodeURIComponent('Your Edufyi Workforce Login Credentials')}&body=${encodeURIComponent(text)}`
+                  disabled={sendingEmail}
+                  onClick={async () => {
+                    try {
+                      setSendingEmail(true)
+                      setEmailStatus(null)
+                      setEmailMessage('')
+                      const rolePath = createdCredentials.role === 'admin' ? 'admin/login' : (createdCredentials.role === 'hr' ? 'hr/login' : 'employee/login')
+                      const portalUrl = `${window.location.origin}/#/${rolePath}`
+
+                      const res = await apiClient.post('/mail/welcome', {
+                        employee: {
+                          name: createdCredentials.name,
+                          email: createdCredentials.email,
+                          employeeId: createdCredentials.employeeId,
+                          designation: createdCredentials.role ? createdCredentials.role.toUpperCase() : 'Staff Member',
+                          department: 'Workforce',
+                        },
+                        temporaryPassword: createdCredentials.password,
+                        loginUrl: portalUrl,
+                      })
+
+                      setEmailStatus('success')
+                      setEmailMessage(res?.data?.message || `Credentials email successfully dispatched to ${createdCredentials.email}!`)
+                    } catch (err) {
+                      console.error('Failed to dispatch welcome email:', err)
+                      setEmailStatus('error')
+                      setEmailMessage(err?.message || 'Failed to dispatch email. Check SMTP settings.')
+                    } finally {
+                      setSendingEmail(false)
+                    }
                   }}
                 >
-                  <Mail size={14} /> Send via Email
+                  {sendingEmail ? (
+                    <RefreshCw size={14} className="spinning" />
+                  ) : emailStatus === 'success' ? (
+                    <Check size={14} style={{ color: '#059669' }} />
+                  ) : (
+                    <Mail size={14} />
+                  )}
+                  {sendingEmail ? 'Sending Email...' : emailStatus === 'success' ? 'Email Sent!' : 'Send via Email'}
                 </Button>
               </div>
+
+              {emailMessage && (
+                <div style={{
+                  padding: '10px 14px',
+                  borderRadius: '8px',
+                  fontSize: '12px',
+                  fontWeight: 500,
+                  marginTop: '12px',
+                  background: emailStatus === 'success' ? '#ECFDF5' : '#FEF2F2',
+                  color: emailStatus === 'success' ? '#065F46' : '#991B1B',
+                  border: `1px solid ${emailStatus === 'success' ? '#A7F3D0' : '#FECACA'}`,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px'
+                }}>
+                  {emailStatus === 'success' ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
+                  <span>{emailMessage}</span>
+                </div>
+              )}
 
               <Button type="button" variant="secondary" onClick={() => setCreatedCredentials(null)}>
                 Done
