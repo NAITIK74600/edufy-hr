@@ -8,7 +8,6 @@ try {
   // nodemailer package is optional at boot; install via npm install to enable live SMTP
 }
 import { fileURLToPath } from 'node:url'
-import { numberToWordsINR } from '../utils/numberToWords.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const rootDir = path.resolve(__dirname, '../../..')
@@ -614,137 +613,22 @@ export async function sendPayslipEmail({ employee, record, month, settings = DEF
 
   const payMonth = month || record?.month || record?.period || new Date().toLocaleString('en-IN', { month: 'long', year: 'numeric' })
   const empName = employee?.name || record?.employeeName || 'Employee'
-  const empCode = employee?.employeeId || record?.employeeId || 'N/A'
-  const designation = employee?.designation || record?.designation || 'Staff'
-  const department = employee?.department || record?.department || 'Operations'
-  const bankName = employee?.bankDetails?.bankName || record?.bankName || 'HDFC Bank'
-  const netPay = Math.round(Number(record?.netPay || record?.netSalary || 0))
-  const netPayWords = numberToWordsINR(netPay)
-  const earnings = record?.earnings || {}
-  const deductions = record?.deductions || {}
-
-  const basic = Math.round(Number(earnings.basic || 0))
-  const hra = Math.round(Number(earnings.hra || 0))
-  const conveyance = Math.round(Number(earnings.conveyance || 0))
-  const specialAllowance = Math.round(Number(earnings.specialAllowance || 0))
-  const otherAllowance = Math.round(Number(earnings.otherAllowance || 0))
-  const gross = Math.round(Number(record?.grossTotal || record?.grossEarnings || (basic + hra + conveyance + specialAllowance + otherAllowance)))
-
-  const pf = Math.round(Number(deductions.pf || 0))
-  const pt = Math.round(Number(deductions.professionalTax || 0))
-  const tds = Math.round(Number(deductions.tdsTax || 0))
-  const totalDeductions = Math.round(Number(record?.totalDeductions || (pf + pt + tds)))
 
   const contentHtml = `
     <h2 class="title-h2">Salary Payslip — ${payMonth}</h2>
     <p>Dear <strong>${empName}</strong>,</p>
     <p>Please find attached your official salary payslip for the month of <strong>${payMonth}</strong> from <strong>${DEFAULT_COMPANY.legalName}</strong>.</p>
 
-    <!-- SUMMARY CARD -->
-    <div style="background: linear-gradient(135deg, #087E9E 0%, #0B3155 100%); color: #ffffff; border-radius: 10px; padding: 20px 24px; margin: 20px 0; box-shadow: 0 4px 15px rgba(8, 126, 158, 0.2);">
-      <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.2); padding-bottom: 12px; margin-bottom: 12px;">
-        <div>
-          <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; opacity: 0.85;">Net Take-Home Salary</div>
-          <div style="font-size: 28px; font-weight: 800; letter-spacing: -0.02em; margin-top: 4px;">₹${netPay.toLocaleString('en-IN')}</div>
-        </div>
-        <div style="text-align: right;">
-          <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; opacity: 0.85;">Pay Period</div>
-          <div style="font-size: 15px; font-weight: 700; margin-top: 4px;">${month}</div>
-        </div>
-      </div>
-      <div style="font-size: 11px; opacity: 0.9; font-style: italic;">
-        Amount in words: ${netPayWords}
-      </div>
-    </div>
-
-    <!-- EMPLOYEE INFO -->
-    <table class="data-table" style="margin-bottom: 20px;">
-      <tr>
-        <th style="width: 25%;">Employee ID</th>
-        <td style="width: 25%; font-weight: 700;">${empCode}</td>
-        <th style="width: 25%;">Department</th>
-        <td style="width: 25%; font-weight: 600;">${department}</td>
-      </tr>
-      <tr>
-        <th>Designation</th>
-        <td style="font-weight: 600;">${designation}</td>
-        <th>Bank Name</th>
-        <td>${bankName}</td>
-      </tr>
-      <tr>
-        <th>Paid / Payable Days</th>
-        <td style="font-weight: 700;">${record?.paidDays ?? record?.payableDays ?? 30} Days</td>
-        <th>Loss of Pay (LOP)</th>
-        <td>${record?.lopDays ?? 0} Day(s)</td>
-      </tr>
-    </table>
-
-    <!-- BREAKDOWN TABLE -->
-    <table class="data-table">
-      <thead>
-        <tr>
-          <th>Earnings Component</th>
-          <th style="text-align: right;">Amount (₹)</th>
-          <th>Deduction Component</th>
-          <th style="text-align: right;">Amount (₹)</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td>Basic Salary</td>
-          <td style="text-align: right; font-weight: 600;">₹${basic.toLocaleString('en-IN')}</td>
-          <td>Provident Fund (PF)</td>
-          <td style="text-align: right; font-weight: 600;">₹${pf.toLocaleString('en-IN')}</td>
-        </tr>
-        <tr>
-          <td>House Rent Allowance (HRA)</td>
-          <td style="text-align: right; font-weight: 600;">₹${hra.toLocaleString('en-IN')}</td>
-          <td>Professional Tax (PT)</td>
-          <td style="text-align: right; font-weight: 600;">₹${pt.toLocaleString('en-IN')}</td>
-        </tr>
-        <tr>
-          <td>Conveyance Allowance</td>
-          <td style="text-align: right; font-weight: 600;">₹${conveyance.toLocaleString('en-IN')}</td>
-          <td>Income Tax (TDS)</td>
-          <td style="text-align: right; font-weight: 600;">₹${tds.toLocaleString('en-IN')}</td>
-        </tr>
-        <tr>
-          <td>Special Allowance</td>
-          <td style="text-align: right; font-weight: 600;">₹${specialAllowance.toLocaleString('en-IN')}</td>
-          <td>Other Deductions</td>
-          <td style="text-align: right; font-weight: 600;">₹${(totalDeductions - pf - pt - tds).toLocaleString('en-IN')}</td>
-        </tr>
-        ${otherAllowance > 0 ? `
-          <tr>
-            <td>Other Allowances</td>
-            <td style="text-align: right; font-weight: 600;">₹${otherAllowance.toLocaleString('en-IN')}</td>
-            <td>-</td>
-            <td style="text-align: right;">-</td>
-          </tr>
-        ` : ''}
-        <tr style="background-color: #f8fafc; font-weight: 700; border-top: 2px solid #cbd5e1;">
-          <td>Total Gross Earnings</td>
-          <td style="text-align: right; color: #087E9E;">₹${gross.toLocaleString('en-IN')}</td>
-          <td>Total Deductions</td>
-          <td style="text-align: right; color: #b91c1c;">₹${totalDeductions.toLocaleString('en-IN')}</td>
-        </tr>
-      </tbody>
-    </table>
-
     <p style="font-size: 12px; color: #64748b; margin-top: 20px;">
-      This is an official computer-generated payslip disbursed by the Finance & HR department of ${DEFAULT_COMPANY.legalName}. No signature is required.
+      This is an official computer-generated payslip. No signature is required.
     </p>
   `
 
-  const subject = `Official Payslip for ${payMonth} — ${empName} (${empCode})`
+  const subject = `Salary Payslip — ${payMonth}`
   const html = wrapInEmailLayout({
     title: subject,
-    preheader: `Your official salary payslip for ${payMonth} has been processed. Net Pay: ₹${netPay.toLocaleString('en-IN')}`,
+    preheader: `Your salary payslip for ${payMonth} is attached.`,
     contentHtml,
-    callToAction: {
-      label: 'View Detailed Payslip in Portal',
-      url: `${process.env.APP_PUBLIC_URL || 'https://empoyee.edufyitechsolutions.com'}#/employee/payroll`,
-    },
     inlineLogoCid: false,
   })
 
@@ -752,7 +636,7 @@ export async function sendPayslipEmail({ employee, record, month, settings = DEF
   const attachments = []
   if (pdfAttachment && pdfAttachment.buffer) {
     attachments.push({
-      filename: pdfAttachment.filename || `Payslip-${empCode}-${payMonth.replace(/\s+/g, '_')}.pdf`,
+      filename: pdfAttachment.filename || `Payslip-${employee?.employeeId || record?.employeeId || 'N/A'}-${payMonth.replace(/\s+/g, '_')}.pdf`,
       content: pdfAttachment.buffer,
       contentType: pdfAttachment.contentType || 'application/pdf',
     })
