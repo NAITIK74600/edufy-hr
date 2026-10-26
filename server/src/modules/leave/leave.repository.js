@@ -3,6 +3,7 @@ import { LeaveBalance } from '../../models/LeaveBalance.js'
 import { LeavePolicy } from '../../models/LeavePolicy.js'
 import { LeaveRequest } from '../../models/LeaveRequest.js'
 import { Notification } from '../../models/Notification.js'
+import { Employee } from '../../models/Employee.js'
 
 function ensureConnected() {
   if (mongoose.connection.readyState !== 1) {
@@ -128,6 +129,41 @@ export function createMongoLeaveRepository() {
           b.month = currentMonthKey
         }
       }
+
+      // Auto-ensure default policy balances for any employees who don't have records yet
+      try {
+        const empQuery = { status: { $ne: 'terminated' } }
+        if (filters.employeeId) empQuery._id = objectId(filters.employeeId)
+        const allEmps = await Employee.find(empQuery).select('_id employeeId name department employmentType designation role').lean()
+        const foundEmpIds = new Set(records.map((r) => String(r.employeeId?._id || r.employeeId || '')))
+
+        for (const emp of allEmps) {
+          const empIdStr = String(emp._id)
+          if (!foundEmpIds.has(empIdStr)) {
+            const empType = String(emp.employmentType || '').toLowerCase().replace(/[-\s]/g, '_')
+            const isIntern = empType === 'intern' || String(emp.designation || '').toLowerCase().includes('intern') || String(emp.role || '').toLowerCase().includes('intern')
+            const casualQuota = isIntern ? 0 : 1
+            const sickQuota = 1
+
+            const cl = await LeaveBalance.findOneAndUpdate(
+              { employeeId: emp._id, leaveType: 'casual' },
+              { $setOnInsert: { allowance: casualQuota, used: 0, reserved: 0, month: currentMonthKey, updatedAt: new Date() } },
+              { upsert: true, new: true }
+            ).populate('employeeId', 'employeeId name department employmentType designation role').lean()
+            if (cl) records.push(cl)
+
+            const sl = await LeaveBalance.findOneAndUpdate(
+              { employeeId: emp._id, leaveType: 'sick' },
+              { $setOnInsert: { allowance: sickQuota, used: 0, reserved: 0, month: currentMonthKey, updatedAt: new Date() } },
+              { upsert: true, new: true }
+            ).populate('employeeId', 'employeeId name department employmentType designation role').lean()
+            if (sl) records.push(sl)
+
+            foundEmpIds.add(empIdStr)
+          }
+        }
+      } catch {}
+
       return records
     },
     async reserveBalance(employeeId, leaveType, units) {

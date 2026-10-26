@@ -1027,6 +1027,7 @@ export function saveDefaultCompanyQuotas(quotas) {
 export function AllInOneQuotaModal({ open, onClose, targetEmployee, employees = [], defaults, onSuccess }) {
   const [empId, setEmpId] = useState('')
   const [quotas, setQuotas] = useState(() => ({ ...(defaults || getDefaultCompanyQuotas()) }))
+  const [showExtra, setShowExtra] = useState(false)
   const [busy, setBusy] = useState(false)
   const [errorMsg, setErrorMsg] = useState('')
 
@@ -1052,8 +1053,16 @@ export function AllInOneQuotaModal({ open, onClose, targetEmployee, employees = 
         maternity: target.balances.maternity?.allowance ?? 0,
         lop: target.balances.lop?.allowance ?? 0,
       })
+      const hasExtra = (
+        (target.balances.earned?.allowance > 0) ||
+        (target.balances.comp_off?.allowance > 0) ||
+        (target.balances.maternity?.allowance > 0) ||
+        (target.balances.lop?.allowance > 0)
+      )
+      setShowExtra(Boolean(hasExtra))
     } else {
       setQuotas({ ...baseDefaults })
+      setShowExtra(false)
     }
   }, [open, targetId])
 
@@ -1093,18 +1102,73 @@ export function AllInOneQuotaModal({ open, onClose, targetEmployee, employees = 
     }
   }
 
-  const leaveKeys = ['casual', 'sick', 'earned', 'comp_off', 'maternity', 'lop']
+  const primaryKeys = ['casual', 'sick']
+  const extraKeys = ['earned', 'comp_off', 'maternity', 'lop']
+
+  const renderQuotaBox = (key) => {
+    const meta = LEAVE_TYPE_META[key]
+    const Icon = meta.icon
+    const currBalance = activeEmp?.balances?.[key]
+    const used = currBalance?.used || 0
+    const reserved = currBalance?.reserved || 0
+    const minAllowed = used + reserved
+
+    return (
+      <div key={key} className="quota-input-box" style={{ background: '#fff', border: '1px solid var(--line)', borderRadius: '10px', padding: '12px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ width: '24px', height: '24px', borderRadius: '6px', background: meta.bg, color: meta.color, display: 'grid', placeItems: 'center' }}>
+              <Icon size={13} />
+            </span>
+            <span style={{ fontSize: '12.5px', fontWeight: 700, color: 'var(--ink)' }}>
+              {meta.name}
+            </span>
+          </div>
+          <span style={{ fontSize: '10.5px', fontWeight: 800, padding: '2px 7px', borderRadius: '4px', background: meta.bg, color: meta.color }}>
+            {meta.code}
+          </span>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px' }}>
+          <input
+            type="number"
+            min={minAllowed}
+            step="0.5"
+            required
+            value={quotas[key] !== undefined && quotas[key] !== null ? quotas[key] : ''}
+            onChange={(e) => {
+              const v = e.target.value
+              setQuotas((prev) => ({ ...prev, [key]: v === '' ? '' : Number(v) }))
+            }}
+            onBlur={() => {
+              setQuotas((prev) => ({
+                ...prev,
+                [key]: Math.max(minAllowed, Number(prev[key] || 0)),
+              }))
+            }}
+            style={{ flex: 1, padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--line)', fontSize: '14px', fontWeight: 700, textAlign: 'right' }}
+          />
+          <span style={{ fontSize: '12px', color: 'var(--muted)', fontWeight: 600 }}>Days</span>
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10.5px', color: 'var(--muted)', marginTop: '4px' }}>
+          <span>Used: {used}d | Reserved: {reserved}d</span>
+          <span>Min: {minAllowed}d</span>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="quota-modal-backdrop" onClick={onClose}>
-      <div className="quota-modal-dialog" onClick={(e) => e.stopPropagation()}>
+      <div className="quota-modal-dialog" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '580px' }}>
         <div className="quota-modal-header">
           <div>
             <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: 'var(--ink)' }}>
-              Set All Leave Quotas in One Page
+              Configure Employee Leave Quotas
             </h3>
             <p style={{ margin: '3px 0 0', fontSize: '12px', color: 'var(--muted)' }}>
-              {activeEmp ? `Configuring all 6 leave allowances for ${activeEmp.name}` : 'Assign annual leave quotas for all categories'}
+              {activeEmp ? `Configuring quotas for ${activeEmp.name}` : 'Assign monthly leave quotas'}
             </p>
           </div>
           <button type="button" className="icon-button" onClick={onClose}>
@@ -1113,7 +1177,7 @@ export function AllInOneQuotaModal({ open, onClose, targetEmployee, employees = 
         </div>
 
         <form onSubmit={handleSubmit}>
-          <div className="quota-modal-body">
+          <div className="quota-modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
             {errorMsg && (
               <div style={{ padding: '10px 14px', borderRadius: '8px', background: '#fef2f2', border: '1px solid #fecaca', color: '#dc2626', fontSize: '12px', fontWeight: 600 }}>
                 {errorMsg}
@@ -1131,15 +1195,16 @@ export function AllInOneQuotaModal({ open, onClose, targetEmployee, employees = 
                   const newId = e.target.value
                   setEmpId(newId)
                   const chosen = employees.find((x) => (x.id || x._id || x.employeeId) === newId)
-                  const baseDefaults = defaults || getDefaultCompanyQuotas()
+                  const isIntern = isInternEmployee(chosen)
+                  const baseDefaults = defaults || (isIntern ? INTERN_MONTHLY_QUOTAS : FULLTIME_MONTHLY_QUOTAS)
                   if (chosen && chosen.balances) {
                     setQuotas({
-                      casual: chosen.balances.casual?.allowance ?? baseDefaults.casual ?? 12,
-                      sick: chosen.balances.sick?.allowance ?? baseDefaults.sick ?? 10,
-                      earned: chosen.balances.earned?.allowance ?? baseDefaults.earned ?? 15,
-                      comp_off: chosen.balances.comp_off?.allowance ?? baseDefaults.comp_off ?? 2,
-                      maternity: chosen.balances.maternity?.allowance ?? baseDefaults.maternity ?? 90,
-                      lop: chosen.balances.lop?.allowance ?? baseDefaults.lop ?? 0,
+                      casual: chosen.balances.casual?.allowance ?? (isIntern ? 0 : 1),
+                      sick: chosen.balances.sick?.allowance ?? 1,
+                      earned: chosen.balances.earned?.allowance ?? 0,
+                      comp_off: chosen.balances.comp_off?.allowance ?? 0,
+                      maternity: chosen.balances.maternity?.allowance ?? 0,
+                      lop: chosen.balances.lop?.allowance ?? 0,
                     })
                   } else {
                     setQuotas({ ...baseDefaults })
@@ -1156,115 +1221,89 @@ export function AllInOneQuotaModal({ open, onClose, targetEmployee, employees = 
               </select>
             </div>
 
-            {/* Monthly Policy Banner */}
-            <div style={{
-              background: '#eff6ff',
-              border: '1px solid #bfdbfe',
-              borderRadius: '8px',
-              padding: '10px 14px',
-              display: 'flex',
-              alignItems: 'flex-start',
-              gap: '10px',
-              fontSize: '11.5px',
-              color: '#1e40af',
-            }}>
-              <Info size={16} style={{ flexShrink: 0, marginTop: '2px', color: '#3b82f6' }} />
-              <div>
-                <strong>Monthly Refresh (No Carry-Forward):</strong> Quotas refresh automatically on the 1st of every month without rollover. Full-timers receive <strong>2 paid leaves</strong> (1 CL + 1 SL). Interns receive <strong>1 paid leave</strong> (1 SL).
-                <span style={{ display: 'block', marginTop: '3px', color: '#b45309', fontWeight: 600 }}>
-                  ⚠️ Month-End Policy (From 25th): Any leave on or after the 25th is considered Double LOP.
-                </span>
+            {/* Quick Policy Preset Buttons */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+              <button
+                type="button"
+                onClick={() => setQuotas({ ...FULLTIME_MONTHLY_QUOTAS })}
+                style={{
+                  padding: '10px 12px',
+                  borderRadius: '8px',
+                  border: '1.5px solid #bfdbfe',
+                  background: '#eff6ff',
+                  color: '#1d4ed8',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '2px',
+                }}
+              >
+                <span>💼 Full-Time Policy</span>
+                <span style={{ fontSize: '11px', fontWeight: 500, color: '#3b82f6' }}>2 Days (1 CL + 1 SL)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setQuotas({ ...INTERN_MONTHLY_QUOTAS })}
+                style={{
+                  padding: '10px 12px',
+                  borderRadius: '8px',
+                  border: '1.5px solid #a7f3d0',
+                  background: '#ecfdf5',
+                  color: '#047857',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '2px',
+                }}
+              >
+                <span>🎓 Intern Policy</span>
+                <span style={{ fontSize: '11px', fontWeight: 500, color: '#10b981' }}>1 Day (1 SL)</span>
+              </button>
+            </div>
+
+            {/* Primary Monthly Quota Inputs (Casual & Sick) */}
+            <div>
+              <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--ink)', marginBottom: '8px' }}>
+                Monthly Active Quotas:
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                {primaryKeys.map(renderQuotaBox)}
               </div>
             </div>
 
-            {/* Action Bar for filling defaults */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px', background: '#f8fafc', padding: '10px 14px', borderRadius: '10px', border: '1px solid var(--line)' }}>
-              <span style={{ fontSize: '11.5px', color: 'var(--muted)', fontWeight: 600 }}>
-                Presets:
-              </span>
-              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                <button
-                  type="button"
-                  className="ui-button secondary"
-                  onClick={() => setQuotas({ ...FULLTIME_MONTHLY_QUOTAS })}
-                  style={{ padding: '4px 10px', fontSize: '11px', display: 'inline-flex', alignItems: 'center', gap: '4px', background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe' }}
-                >
-                  💼 Full-Timer (1 CL + 1 SL)
-                </button>
-                <button
-                  type="button"
-                  className="ui-button secondary"
-                  onClick={() => setQuotas({ ...INTERN_MONTHLY_QUOTAS })}
-                  style={{ padding: '4px 10px', fontSize: '11px', display: 'inline-flex', alignItems: 'center', gap: '4px', background: '#ecfdf5', color: '#047857', border: '1px solid #a7f3d0' }}
-                >
-                  🎓 Intern (1 SL)
-                </button>
-                <button
-                  type="button"
-                  className="ui-button secondary"
-                  onClick={handleApplyDefaults}
-                  style={{ padding: '4px 10px', fontSize: '11px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                >
-                  <Sparkles size={11} style={{ color: 'var(--teal)' }} /> Default Template
-                </button>
-              </div>
-            </div>
+            {/* Advanced / Additional Leave Types Toggle */}
+            <div style={{ borderTop: '1px dashed var(--line)', paddingTop: '10px' }}>
+              <button
+                type="button"
+                onClick={() => setShowExtra(!showExtra)}
+                style={{
+                  border: 'none',
+                  background: 'transparent',
+                  color: 'var(--teal)',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  padding: '4px 0',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                }}
+              >
+                {showExtra ? '▲ Hide Advanced Categories' : '+ Show Advanced Categories (Privilege, Comp-Off, Maternity, LOP)'}
+              </button>
 
-            {/* 6 Leave Category Inputs Grid */}
-            <div className="quota-inputs-grid">
-              {leaveKeys.map((key) => {
-                const meta = LEAVE_TYPE_META[key]
-                const Icon = meta.icon
-                const currBalance = activeEmp?.balances?.[key]
-                const used = currBalance?.used || 0
-                const reserved = currBalance?.reserved || 0
-                const minAllowed = used + reserved
-
-                return (
-                  <div key={key} className="quota-input-box">
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <span style={{ width: '22px', height: '22px', borderRadius: '6px', background: meta.bg, color: meta.color, display: 'grid', placeItems: 'center' }}>
-                          <Icon size={12} />
-                        </span>
-                        <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--ink)' }}>
-                          {meta.name}
-                        </span>
-                      </div>
-                      <span style={{ fontSize: '10px', fontWeight: 800, padding: '1px 6px', borderRadius: '4px', background: meta.bg, color: meta.color }}>
-                        {meta.code}
-                      </span>
-                    </div>
-
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
-                      <input
-                        type="number"
-                        min={minAllowed}
-                        step="0.5"
-                        required
-                        value={quotas[key] !== undefined && quotas[key] !== null ? quotas[key] : ''}
-                        onChange={(e) => {
-                          const v = e.target.value
-                          setQuotas((prev) => ({ ...prev, [key]: v === '' ? '' : Number(v) }))
-                        }}
-                        onBlur={() => {
-                          setQuotas((prev) => ({
-                            ...prev,
-                            [key]: Math.max(minAllowed, Number(prev[key] || 0)),
-                          }))
-                        }}
-                        style={{ flex: 1, padding: '7px 10px', borderRadius: '6px', border: '1px solid var(--line)', fontSize: '13px', fontWeight: 700, textAlign: 'right' }}
-                      />
-                      <span style={{ fontSize: '12px', color: 'var(--muted)', fontWeight: 600 }}>Days</span>
-                    </div>
-
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10.5px', color: 'var(--muted)', marginTop: '2px' }}>
-                      <span>Used: {used}d | Reserved: {reserved}d</span>
-                      <span>Min: {minAllowed}d</span>
-                    </div>
-                  </div>
-                )
-              })}
+              {showExtra && (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginTop: '10px' }}>
+                  {extraKeys.map(renderQuotaBox)}
+                </div>
+              )}
             </div>
           </div>
 
@@ -1465,6 +1504,7 @@ export function CompanyDefaultsModal({ open, onClose, currentDefaults, employees
 export function LeaveBalanceTable({ balances = [], employees = [], onSwitchTab }) {
   const [search, setSearch] = useState('')
   const [selectedDept, setSelectedDept] = useState('all')
+  const [typeFilter, setTypeFilter] = useState('all') // 'all' | 'full_time' | 'intern'
   const [expandedEmpIds, setExpandedEmpIds] = useState(() => new Set())
   const [modalEmployee, setModalEmployee] = useState(null)
   const [allInOneOpen, setAllInOneOpen] = useState(false)
@@ -1472,6 +1512,7 @@ export function LeaveBalanceTable({ balances = [], employees = [], onSwitchTab }
   const [companyDefaults, setCompanyDefaults] = useState(() => getDefaultCompanyQuotas())
   const [notice, setNotice] = useState('')
   const [noticeType, setNoticeType] = useState('success')
+  const [busy, setBusy] = useState(false)
 
   // Resolve employees from prop or store
   const rawEmployees = employees.length > 0 ? employees : (hrStore.getState().employees || [])
@@ -1511,6 +1552,7 @@ export function LeaveBalanceTable({ balances = [], employees = [], onSwitchTab }
         employeeId: emp.employeeId || '',
         department: emp.department || 'General',
         designation: emp.designation || emp.role || 'Team Member',
+        employmentType: emp.employmentType || '',
         avatar: emp.avatar || '',
         balances: {},
       })
@@ -1537,6 +1579,7 @@ export function LeaveBalanceTable({ balances = [], employees = [], onSwitchTab }
         employeeId: empObj?.employeeId || (typeof b.employeeId === 'string' ? b.employeeId : ''),
         department: empObj?.department || 'General',
         designation: 'Team Member',
+        employmentType: empObj?.employmentType || '',
         avatar: '',
         balances: {},
       }
@@ -1561,6 +1604,34 @@ export function LeaveBalanceTable({ balances = [], employees = [], onSwitchTab }
 
   const allStaffList = Array.from(employeeMap.values()).map((emp) => {
     const leaveKeys = ['casual', 'sick', 'earned', 'comp_off', 'maternity', 'lop']
+    const isIntern = isInternEmployee(emp)
+
+    // Check if HR has configured leave balances with explicit values
+    const configuredList = Object.entries(emp.balances || {}).filter(([_, b]) => b?.allowance !== undefined && b?.allowance !== null && Number(b.allowance) > 0)
+    const hasConfigured = configuredList.length > 0
+
+    let isAutoFilled = false
+    if (!hasConfigured) {
+      // Auto-fill from policy: Full-Time: 2 days (1 CL + 1 SL), Intern: 1 day (1 SL)
+      isAutoFilled = true
+      const defaultCasual = isIntern ? 0 : 1
+      const defaultSick = 1
+      emp.balances.casual = { allowance: defaultCasual, used: 0, reserved: 0, available: defaultCasual }
+      emp.balances.sick = { allowance: defaultSick, used: 0, reserved: 0, available: defaultSick }
+      for (const k of ['earned', 'comp_off', 'maternity', 'lop']) {
+        if (!emp.balances[k]) {
+          emp.balances[k] = { allowance: 0, used: 0, reserved: 0, available: 0 }
+        }
+      }
+    } else {
+      // Ensure missing keys have structured objects
+      if (!emp.balances.casual) emp.balances.casual = { allowance: isIntern ? 0 : 1, used: 0, reserved: 0, available: isIntern ? 0 : 1 }
+      if (!emp.balances.sick) emp.balances.sick = { allowance: 1, used: 0, reserved: 0, available: 1 }
+      for (const k of ['earned', 'comp_off', 'maternity', 'lop']) {
+        if (!emp.balances[k]) emp.balances[k] = { allowance: 0, used: 0, reserved: 0, available: 0 }
+      }
+    }
+
     let totalAllowance = 0
     let totalUsed = 0
     let totalReserved = 0
@@ -1578,6 +1649,8 @@ export function LeaveBalanceTable({ balances = [], employees = [], onSwitchTab }
 
     return {
       ...emp,
+      isIntern,
+      isAutoFilled,
       totalAllowance,
       totalUsed,
       totalReserved,
@@ -1591,6 +1664,8 @@ export function LeaveBalanceTable({ balances = [], employees = [], onSwitchTab }
   // Filter employees
   const filteredStaff = allStaffList.filter((emp) => {
     if (selectedDept !== 'all' && emp.department !== selectedDept) return false
+    if (typeFilter === 'intern' && !emp.isIntern) return false
+    if (typeFilter === 'full_time' && emp.isIntern) return false
     if (!search.trim()) return true
     const q = search.toLowerCase().trim()
     return (
@@ -1629,21 +1704,52 @@ export function LeaveBalanceTable({ balances = [], employees = [], onSwitchTab }
     setAllInOneOpen(true)
   }
 
-  // Quick apply defaults to single employee
-  const handleApplyDefaultsToSingleEmployee = async (emp, e) => {
+  // 1-Click Auto Apply Policy to ALL employees
+  const handleApplyPolicyToAll = async () => {
+    setBusy(true)
+    try {
+      const res = await apiClient.post('/leave/hr/balances/auto-fill-policies')
+      await hrStore.refresh()
+      setNotice(res.data?.message || `Successfully applied standard policy to all ${allStaffList.length} employees (Full-Time: 2 days, Intern: 1 day)!`)
+      setNoticeType('success')
+      setTimeout(() => setNotice(''), 5000)
+    } catch {
+      // Fallback: save individually
+      try {
+        for (const emp of allStaffList) {
+          const empId = emp.id || emp._id || emp.employeeId
+          const isIntern = isInternEmployee(emp)
+          await apiClient.put(`/leave/hr/balances/${empId}/casual`, { allowance: isIntern ? 0 : 1 })
+          await apiClient.put(`/leave/hr/balances/${empId}/sick`, { allowance: 1 })
+        }
+        await hrStore.refresh()
+        setNotice(`Successfully applied standard monthly policy to all ${allStaffList.length} employees!`)
+        setNoticeType('success')
+        setTimeout(() => setNotice(''), 5000)
+      } catch (fallbackErr) {
+        setNotice(fallbackErr.message || 'Failed to auto-apply policy.')
+        setNoticeType('error')
+        setTimeout(() => setNotice(''), 5000)
+      }
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  // Quick apply standard policy to a single employee
+  const handleApplyPolicyToSingleEmployee = async (emp, e) => {
     if (e) e.stopPropagation()
     const empId = emp.id || emp._id || emp.employeeId
+    const isIntern = isInternEmployee(emp)
     try {
-      const types = ['casual', 'sick', 'earned', 'comp_off', 'maternity', 'lop']
-      for (const t of types) {
-        await apiClient.put(`/leave/hr/balances/${empId}/${t}`, { allowance: companyDefaults[t] })
-      }
+      await apiClient.put(`/leave/hr/balances/${empId}/casual`, { allowance: isIntern ? 0 : 1 })
+      await apiClient.put(`/leave/hr/balances/${empId}/sick`, { allowance: 1 })
       await hrStore.refresh()
-      setNotice(`Applied company default quotas to ${emp.name}!`)
+      setNotice(`Applied ${isIntern ? 'Intern Policy (1 SL)' : 'Full-Time Policy (1 CL + 1 SL)'} to ${emp.name}!`)
       setNoticeType('success')
       setTimeout(() => setNotice(''), 4000)
     } catch (err) {
-      setNotice(err.message || 'Failed to apply defaults.')
+      setNotice(err.message || 'Failed to apply policy.')
       setNoticeType('error')
       setTimeout(() => setNotice(''), 4000)
     }
@@ -1683,76 +1789,122 @@ export function LeaveBalanceTable({ balances = [], employees = [], onSwitchTab }
 
   return (
     <section className="panel" style={{ padding: '24px' }}>
-      {/* 1. TOP HEADER & INTRO */}
+      {/* 1. TOP HEADER & DIRECT ACTION BUTTONS */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '14px', marginBottom: '18px' }}>
         <div>
           <h2 style={{ fontSize: '18px', fontWeight: 800, margin: 0, color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Users size={18} style={{ color: 'var(--teal)' }} /> Saved Leave Balances & Entitlements
+            <Users size={18} style={{ color: 'var(--teal)' }} /> Leave Balances & Quotas
           </h2>
           <p style={{ fontSize: '12.5px', color: 'var(--muted)', margin: '3px 0 0 0' }}>
-            Grouped by employee. Click any employee row to inspect their balance breakdown, or set all leave categories in one page.
+            Monthly allocations. Unconfigured employees are automatically assigned policy leaves (Full-Time: 2 days, Interns: 1 day).
           </p>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
           <button
             type="button"
-            className="ui-button secondary"
-            onClick={() => setDefaultsModalOpen(true)}
-            style={{ fontSize: '12px', padding: '7px 14px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+            className="ui-button primary"
+            onClick={handleApplyPolicyToAll}
+            disabled={busy}
+            style={{ fontSize: '12px', padding: '8px 16px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
           >
-            <Settings size={13} /> ⚙️ Company Default Quotas
+            {busy ? <RefreshCw size={13} className="spin-slow" /> : <Sparkles size={13} />}
+            ⚡ Auto-Fill All by Policy
           </button>
           <button
             type="button"
-            className="ui-button primary"
+            className="ui-button secondary"
             onClick={() => {
               setModalEmployee(null)
               setAllInOneOpen(true)
             }}
-            style={{ fontSize: '12px', padding: '7px 16px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+            style={{ fontSize: '12px', padding: '8px 14px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
           >
-            <Plus size={14} /> + Set All Quotas for Employee
+            <Plus size={13} /> Custom Quota
+          </button>
+          <button
+            type="button"
+            className="ui-button secondary"
+            onClick={() => setDefaultsModalOpen(true)}
+            style={{ fontSize: '12px', padding: '8px 12px', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
+            title="Configure advanced templates"
+          >
+            <Settings size={13} /> Defaults
           </button>
         </div>
       </div>
 
-      {/* 1.1 MONTHLY REFRESH & MONTH-END POLICY BANNER */}
+      {/* 1.1 CLEAN, MODERN POLICY CARDS STRIP (REPLACES CROWDED TEXT WALL) */}
       <div style={{
-        background: 'linear-gradient(135deg, #f0fdf4 0%, #e0f2fe 100%)',
-        border: '1px solid #bae6fd',
-        borderRadius: '12px',
-        padding: '12px 18px',
-        marginBottom: '16px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        flexWrap: 'wrap',
-        gap: '12px',
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+        gap: '10px',
+        marginBottom: '18px',
       }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
-          <Sparkles size={18} style={{ color: '#0284c7', flexShrink: 0, marginTop: '2px' }} />
+        <div style={{
+          background: '#f0fdf4',
+          border: '1px solid #bbf7d0',
+          borderRadius: '10px',
+          padding: '10px 14px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '10px',
+        }}>
+          <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: '#dcfce7', color: '#15803d', display: 'grid', placeItems: 'center', fontSize: '15px', flexShrink: 0 }}>
+            💼
+          </div>
           <div>
-            <div style={{ fontSize: '13px', fontWeight: 800, color: '#0f172a' }}>
-              Monthly Refresh Policy & Zero Carry-Forward
+            <div style={{ fontSize: '12.5px', fontWeight: 800, color: '#166534' }}>
+              Full-Time: 2 Paid Days / mo
             </div>
-            <div style={{ fontSize: '12px', color: '#334155', marginTop: '2px' }}>
-              • <strong>Full-Timers:</strong> 2 paid leaves per month (1 Casual Leave + 1 Sick Leave). Quotas refresh on 1st of every month without rollover.<br />
-              • <strong>Interns:</strong> 1 paid leave per month (1 Sick Leave).<br />
-              • <strong style={{ color: '#b45309' }}>Month-End Policy (25th onwards):</strong> Any leave taken on or after the 25th of the month is treated as <strong>Double LOP</strong> (2 days loss of pay deduction per day in payroll).
+            <div style={{ fontSize: '11px', color: '#15803d' }}>
+              1 Casual Leave (CL) + 1 Sick Leave (SL)
             </div>
           </div>
         </div>
-        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-          <span style={{ background: '#dcfce7', color: '#166534', padding: '4px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 700 }}>
-            Full-Time: 2 Paid / Mo
-          </span>
-          <span style={{ background: '#fef3c7', color: '#92400e', padding: '4px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 700 }}>
-            Intern: 1 Paid / Mo
-          </span>
-          <span style={{ background: '#fee2e2', color: '#991b1b', padding: '4px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 700 }}>
-            25th+: Double LOP
-          </span>
+
+        <div style={{
+          background: '#f0f9ff',
+          border: '1px solid #bae6fd',
+          borderRadius: '10px',
+          padding: '10px 14px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '10px',
+        }}>
+          <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: '#e0f2fe', color: '#0369a1', display: 'grid', placeItems: 'center', fontSize: '15px', flexShrink: 0 }}>
+            🎓
+          </div>
+          <div>
+            <div style={{ fontSize: '12.5px', fontWeight: 800, color: '#075985' }}>
+              Interns: 1 Paid Day / mo
+            </div>
+            <div style={{ fontSize: '11px', color: '#0284c7' }}>
+              1 Sick Leave (SL) • Monthly refresh
+            </div>
+          </div>
+        </div>
+
+        <div style={{
+          background: '#fffbeb',
+          border: '1px solid #fde68a',
+          borderRadius: '10px',
+          padding: '10px 14px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '10px',
+        }}>
+          <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: '#fef3c7', color: '#b45309', display: 'grid', placeItems: 'center', fontSize: '15px', flexShrink: 0 }}>
+            ⚠️
+          </div>
+          <div>
+            <div style={{ fontSize: '12.5px', fontWeight: 800, color: '#92400e' }}>
+              Month-End Rule (25th+)
+            </div>
+            <div style={{ fontSize: '11px', color: '#b45309' }}>
+              Leaves from 25th onwards = Double LOP
+            </div>
+          </div>
         </div>
       </div>
 
@@ -1802,17 +1954,17 @@ export function LeaveBalanceTable({ balances = [], employees = [], onSwitchTab }
           <div style={{ fontSize: '20px', fontWeight: 800, color: 'var(--ink)', marginTop: '2px' }}>
             {totalStaffCount} Staff
           </div>
-          <span style={{ fontSize: '11px', color: 'var(--muted)' }}>Enrolled team members</span>
+          <span style={{ fontSize: '11px', color: 'var(--muted)' }}>Active enrolled team</span>
         </div>
 
         <div style={{ background: '#fafbfc', border: '1px solid var(--line)', borderRadius: '10px', padding: '12px 16px' }}>
           <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-            Total Quota Allocated
+            Monthly Quota Pool
           </span>
           <div style={{ fontSize: '20px', fontWeight: 800, color: '#0284c7', marginTop: '2px' }}>
             {totalAllocatedAll} Days
           </div>
-          <span style={{ fontSize: '11px', color: 'var(--muted)' }}>Annual company entitlement</span>
+          <span style={{ fontSize: '11px', color: 'var(--muted)' }}>Standard monthly entitlement</span>
         </div>
 
         <div style={{ background: '#fafbfc', border: '1px solid var(--line)', borderRadius: '10px', padding: '12px 16px' }}>
@@ -1822,7 +1974,7 @@ export function LeaveBalanceTable({ balances = [], employees = [], onSwitchTab }
           <div style={{ fontSize: '20px', fontWeight: 800, color: totalUsedAll > 0 ? '#d97706' : 'var(--muted)', marginTop: '2px' }}>
             {totalUsedAll} Days
           </div>
-          <span style={{ fontSize: '11px', color: 'var(--muted)' }}>Approved employee leaves</span>
+          <span style={{ fontSize: '11px', color: 'var(--muted)' }}>Approved leaves this month</span>
         </div>
 
         <div style={{ background: '#fafbfc', border: '1px solid var(--line)', borderRadius: '10px', padding: '12px 16px' }}>
@@ -1851,7 +2003,7 @@ export function LeaveBalanceTable({ balances = [], employees = [], onSwitchTab }
           border: '1px solid var(--line)',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: '1 1 280px', maxWidth: '450px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: '1 1 260px', maxWidth: '420px' }}>
           <div style={{ position: 'relative', width: '100%' }}>
             <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)' }} />
             <input
@@ -1882,6 +2034,18 @@ export function LeaveBalanceTable({ balances = [], employees = [], onSwitchTab }
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+          {/* Employment Type Filter */}
+          <select
+            value={typeFilter}
+            onChange={(e) => setTypeFilter(e.target.value)}
+            style={{ padding: '6px 10px', borderRadius: '8px', border: '1px solid var(--line)', fontSize: '12px', background: '#fff' }}
+          >
+            <option value="all">All Roles (Full-Time & Interns)</option>
+            <option value="full_time">💼 Full-Time Only</option>
+            <option value="intern">🎓 Interns Only</option>
+          </select>
+
+          {/* Department Filter */}
           {departments.length > 0 && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               <Filter size={13} style={{ color: 'var(--muted)' }} />
@@ -1913,7 +2077,7 @@ export function LeaveBalanceTable({ balances = [], employees = [], onSwitchTab }
         </div>
       </div>
 
-      {/* 5. GROUPED EMPLOYEE DIRECTORY & BREAKDOWN CARDS */}
+      {/* 5. GROUPED EMPLOYEE DIRECTORY & DE-CROWDED ROW CARDS */}
       {filteredStaff.length === 0 ? (
         <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--muted)', background: '#fafbfc', borderRadius: '12px', border: '1px dashed var(--line)' }}>
           <Users size={28} style={{ color: '#cbd5e1', marginBottom: '8px' }} />
@@ -1930,27 +2094,33 @@ export function LeaveBalanceTable({ balances = [], employees = [], onSwitchTab }
             const empKey = emp.id || emp._id || emp.employeeId
             const isExpanded = expandedEmpIds.has(empKey)
 
+            // Extract ONLY leave types where allowance > 0 (prevents 4-5 zero-badges clutter!)
+            const activeLeaveTypes = leaveKeys.filter((k) => {
+              const bal = emp.balances[k]
+              return bal && Number(bal.allowance) > 0
+            })
+
             return (
               <div key={empKey} className={`emp-balance-row-card ${isExpanded ? 'expanded' : ''}`}>
                 {/* Clickable Header Row */}
                 <div className="emp-balance-header-row" onClick={() => toggleExpand(empKey)}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: '220px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: '240px' }}>
                     <div style={{ color: isExpanded ? 'var(--teal)' : 'var(--muted)', transition: 'transform 0.2s ease', transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)' }}>
                       <ChevronDown size={18} />
                     </div>
 
                     <div
                       style={{
-                        width: '36px',
-                        height: '36px',
+                        width: '38px',
+                        height: '38px',
                         borderRadius: '50%',
-                        background: 'linear-gradient(135deg, rgba(0, 110, 111, 0.15), rgba(0, 110, 111, 0.05))',
-                        color: 'var(--teal)',
+                        background: emp.isIntern ? 'linear-gradient(135deg, rgba(2, 132, 199, 0.15), rgba(2, 132, 199, 0.05))' : 'linear-gradient(135deg, rgba(0, 110, 111, 0.15), rgba(0, 110, 111, 0.05))',
+                        color: emp.isIntern ? '#0284c7' : 'var(--teal)',
                         display: 'grid',
                         placeItems: 'center',
                         fontWeight: 800,
                         fontSize: '13px',
-                        border: '1px solid rgba(0, 110, 111, 0.2)',
+                        border: emp.isIntern ? '1px solid rgba(2, 132, 199, 0.2)' : '1px solid rgba(0, 110, 111, 0.2)',
                         flexShrink: 0,
                       }}
                     >
@@ -1958,62 +2128,83 @@ export function LeaveBalanceTable({ balances = [], employees = [], onSwitchTab }
                     </div>
 
                     <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                         <strong style={{ fontSize: '13.5px', color: 'var(--ink)' }}>{emp.name}</strong>
                         {emp.employeeId && (
                           <span style={{ fontSize: '10.5px', fontWeight: 700, padding: '1px 6px', borderRadius: '4px', background: '#f1f5f9', color: '#475569' }}>
                             {emp.employeeId}
                           </span>
                         )}
+                        {/* Clear Employment Type Badge */}
+                        {emp.isIntern ? (
+                          <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '999px', background: '#e0f2fe', color: '#0369a1', border: '1px solid #bae6fd' }}>
+                            🎓 Intern
+                          </span>
+                        ) : (
+                          <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '999px', background: '#dcfce7', color: '#15803d', border: '1px solid #bbf7d0' }}>
+                            💼 Full-Time
+                          </span>
+                        )}
+                        {emp.isAutoFilled && (
+                          <span style={{ fontSize: '9.5px', fontWeight: 600, padding: '1px 6px', borderRadius: '4px', background: '#f8fafc', color: '#64748b', border: '1px solid #e2e8f0' }} title="Automatically initialized from company monthly policy">
+                            ⚡ Auto-Policy
+                          </span>
+                        )}
                       </div>
-                      <span style={{ fontSize: '11px', color: 'var(--muted)' }}>
+                      <span style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '2px', display: 'block' }}>
                         {emp.department} • {emp.designation}
                       </span>
                     </div>
                   </div>
 
-                  {/* Summary Metric Badges */}
+                  {/* Clean Middle & Right Badges (No more crowded zeros!) */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
-                    {/* Mini Quick Badges for Main Types */}
-                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                      {leaveKeys.map((k) => {
-                        const bal = emp.balances[k]
-                        const meta = LEAVE_TYPE_META[k]
-                        if (!bal && !meta) return null
-                        return (
-                          <span
-                            key={k}
-                            style={{
-                              fontSize: '11px',
-                              fontWeight: 600,
-                              padding: '2px 7px',
-                              borderRadius: '6px',
-                              background: '#f8fafc',
-                              border: '1px solid var(--line)',
-                              color: bal ? 'var(--ink)' : 'var(--muted)',
-                            }}
-                          >
-                            <span style={{ color: meta.color, fontWeight: 800 }}>{meta.code}:</span> {bal ? bal.allowance : 0}
-                          </span>
-                        )
-                      })}
+                    {/* Active Leaves Only (Hides 0s) */}
+                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
+                      {activeLeaveTypes.length > 0 ? (
+                        activeLeaveTypes.map((k) => {
+                          const bal = emp.balances[k]
+                          const meta = LEAVE_TYPE_META[k]
+                          if (!bal || !meta) return null
+                          return (
+                            <span
+                              key={k}
+                              style={{
+                                fontSize: '11px',
+                                fontWeight: 700,
+                                padding: '2px 8px',
+                                borderRadius: '6px',
+                                background: meta.bg,
+                                border: `1px solid ${meta.color}33`,
+                                color: meta.color,
+                              }}
+                            >
+                              {meta.code}: {bal.allowance}d
+                            </span>
+                          )
+                        })
+                      ) : (
+                        <span style={{ fontSize: '11px', color: '#94a3b8', fontStyle: 'italic' }}>
+                          No active quota
+                        </span>
+                      )}
                     </div>
 
                     {/* Available Days Pill */}
-                    <div style={{ textAlign: 'right' }}>
+                    <div style={{ textAlign: 'right', minWidth: '130px' }}>
                       <span
                         style={{
                           display: 'inline-block',
-                          fontSize: '12.5px',
+                          fontSize: '12px',
                           fontWeight: 800,
                           padding: '3px 12px',
                           borderRadius: '999px',
-                          background: emp.totalAvailable > 0 ? '#e6fffa' : '#fef2f2',
-                          color: emp.totalAvailable > 0 ? '#006E6F' : '#dc2626',
-                          border: emp.totalAvailable > 0 ? '1px solid #b2f5ea' : '1px solid #fecaca',
+                          background: emp.totalAvailable > 0 ? '#ecfdf5' : '#fef2f2',
+                          color: emp.totalAvailable > 0 ? '#047857' : '#dc2626',
+                          border: emp.totalAvailable > 0 ? '1px solid #a7f3d0' : '1px solid #fecaca',
                         }}
                       >
-                        {emp.totalAvailable} Days Available
+                        {emp.totalAvailable} {emp.totalAvailable === 1 ? 'Day' : 'Days'} Available
                       </span>
                       <div style={{ fontSize: '10.5px', color: 'var(--muted)', marginTop: '2px' }}>
                         Quota: {emp.totalAllowance}d | Used: {emp.totalUsed}d
@@ -2035,26 +2226,27 @@ export function LeaveBalanceTable({ balances = [], employees = [], onSwitchTab }
                 {/* Expanded Detailed Breakdown Drawer */}
                 {isExpanded && (
                   <div className="emp-balance-details-drawer">
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                      <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--ink)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '10px' }}>
+                      <span style={{ fontSize: '12.5px', fontWeight: 700, color: 'var(--ink)' }}>
                         Detailed Leave Category Quotas for {emp.name}:
                       </span>
-                      <div style={{ display: 'flex', gap: '8px' }}>
+                      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                         <button
                           type="button"
                           className="ui-button secondary"
-                          onClick={(e) => handleApplyDefaultsToSingleEmployee(emp, e)}
-                          style={{ fontSize: '11px', padding: '4px 10px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                          onClick={(e) => handleApplyPolicyToSingleEmployee(emp, e)}
+                          style={{ fontSize: '11px', padding: '5px 12px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
                         >
-                          <Sparkles size={11} style={{ color: 'var(--teal)' }} /> Apply Company Defaults
+                          <Sparkles size={11} style={{ color: 'var(--teal)' }} />
+                          Apply {emp.isIntern ? 'Intern Policy (1 SL)' : 'Full-Time Policy (1 CL + 1 SL)'}
                         </button>
                         <button
                           type="button"
                           className="ui-button primary"
                           onClick={(e) => handleEditEmployeeQuotas(emp, e)}
-                          style={{ fontSize: '11px', padding: '4px 12px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                          style={{ fontSize: '11px', padding: '5px 12px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
                         >
-                          <Edit2 size={11} /> Modify All in One Page
+                          <Edit2 size={11} /> Customize Quotas
                         </button>
                       </div>
                     </div>

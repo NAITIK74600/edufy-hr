@@ -49,6 +49,43 @@ export function createLeaveRouter({ auth, service }) {
     } catch (error) { if (error.code === 11000) { error.statusCode = 409; error.message = 'Leave balance changed; refresh and retry.' } return next(error) }
   })
 
+  router.post('/hr/balances/auto-fill-policies', ...protectedRoute(PERMISSIONS.LEAVE_POLICY_ADMIN), async (request, response, next) => {
+    try {
+      ensureConnected()
+      const currentMonthKey = new Date().toISOString().slice(0, 7)
+      const employees = await Employee.find({ status: { $ne: 'terminated' } }).lean()
+      let updatedCount = 0
+      for (const emp of employees) {
+        const empType = String(emp.employmentType || '').toLowerCase().replace(/[-\s]/g, '_')
+        const isIntern = empType === 'intern' || String(emp.designation || '').toLowerCase().includes('intern') || String(emp.role || '').toLowerCase().includes('intern')
+        
+        const casualQuota = isIntern ? 0 : 1
+        const sickQuota = 1
+
+        // Upsert casual
+        await LeaveBalance.updateOne(
+          { employeeId: emp._id, leaveType: 'casual' },
+          { $set: { allowance: casualQuota, month: currentMonthKey, updatedAt: new Date() }, $setOnInsert: { used: 0, reserved: 0 } },
+          { upsert: true }
+        )
+        // Upsert sick
+        await LeaveBalance.updateOne(
+          { employeeId: emp._id, leaveType: 'sick' },
+          { $set: { allowance: sickQuota, month: currentMonthKey, updatedAt: new Date() }, $setOnInsert: { used: 0, reserved: 0 } },
+          { upsert: true }
+        )
+        updatedCount++
+      }
+      return response.json({
+        success: true,
+        message: `Successfully applied company leave policy to ${updatedCount} employees. Full-Time: 2 days (1 CL + 1 SL) | Interns: 1 day (1 SL).`,
+        data: { updatedCount }
+      })
+    } catch (error) {
+      return next(error)
+    }
+  })
+
   router.get('/self', ...protectedRoute(PERMISSIONS.LEAVE_SELF_READ), async (request, response, next) => { try { return response.json({ success: true, data: await service.listSelf(request.auth.user, listFilters(request.query)) }) } catch (error) { return next(error) } })
   router.post('/requests', ...protectedRoute(PERMISSIONS.LEAVE_SELF_WRITE), async (request, response, next) => { try { return response.status(201).json({ success: true, data: await service.submit(request.body ?? {}, request.auth.user) }) } catch (error) { return next(error) } })
   router.get('/requests/:id', auth.authenticate, async (request, response, next) => { try { const scope = request.query.scope === 'hr' ? 'hr' : request.query.scope === 'team' ? 'team' : 'self'; return response.json({ success: true, data: await service.detail(request.params.id, request.auth.user, scope) }) } catch (error) { return next(error) } })
