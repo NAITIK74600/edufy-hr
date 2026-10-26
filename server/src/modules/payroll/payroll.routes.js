@@ -201,13 +201,57 @@ async function context(employee, month) {
       empId ? AttendanceRecord.find({ employeeId: empId, date: { $gte: period.from, $lte: period.to } }).lean() : [],
       empObjectId ? LeaveRequest.find({ employeeId: empObjectId, status: 'approved', startDate: { $lte: period.end }, endDate: { $gte: period.start } }).lean() : [],
     ])
+
+    const countedDates = new Set()
+    let totalLopDays = 0
+
+    // 1. Process attendance records
+    for (const record of attendance) {
+      const dateStr = record.date
+      const dayOfMonth = Number(String(dateStr || '').split('-')[2]) || 1
+      const isLopRecord = record.status === 'lop' || record.isLop
+      const isLeaveRecord = record.status === 'on-leave'
+      const isMonthEndDoubleLop = dayOfMonth >= 25 || record.isDoubleLop
+
+      if (isLopRecord) {
+        totalLopDays += isMonthEndDoubleLop ? 2 : 1
+        countedDates.add(dateStr)
+      } else if (isLeaveRecord && isMonthEndDoubleLop) {
+        totalLopDays += 2
+        countedDates.add(dateStr)
+      }
+    }
+
+    // 2. Process approved leave requests (month-end from 25th is considered Double LOP)
+    for (const req of leave) {
+      const start = new Date(Math.max(new Date(req.startDate).getTime(), period.start.getTime()))
+      const end = new Date(Math.min(new Date(req.endDate).getTime(), period.end.getTime()))
+      for (const cur = new Date(start); cur <= end; cur.setUTCDate(cur.getUTCDate() + 1)) {
+        const curDateStr = cur.toISOString().slice(0, 10)
+        if (countedDates.has(curDateStr)) continue
+
+        const dayOfMonth = cur.getUTCDate()
+        if (dayOfMonth >= 25 || req.isDoubleLop) {
+          totalLopDays += 2
+          countedDates.add(curDateStr)
+        }
+      }
+    }
+
     return {
       attendanceDays: attendance.length,
       absentDays: attendance.filter((record) => record.status === 'absent').length,
       halfDays: attendance.filter((record) => record.status === 'half-day').length,
-      lopDays: attendance.filter((record) => record.status === 'lop' || record.isLop).length,
+      lopDays: totalLopDays,
       earlyLogoutDays: attendance.filter((record) => record.status === 'early-logout' || record.isEarlyLogout).length,
-      approvedLeave: leave.map(({ leaveType, startDate, endDate, units }) => ({ leaveType, startDate, endDate, units })),
+      approvedLeave: leave.map(({ leaveType, startDate, endDate, units, isDoubleLop, doubleLopDays }) => ({
+        leaveType,
+        startDate,
+        endDate,
+        units,
+        isDoubleLop,
+        doubleLopDays,
+      })),
     }
   } catch {
     return {
@@ -750,11 +794,19 @@ export function createPayrollRouter({ auth }) {
         const pf = Math.min(1800, Math.round(basic * 0.12))
         const professionalTax = 200
 
+        let empContext = { lopDays: 0 }
+        try {
+          empContext = await context(emp, month)
+        } catch {}
+        const calculatedLopDays = empContext.lopDays || 0
+        const payableDays = Math.max(0, daysInMonth - calculatedLopDays)
+        const lopDeduction = calculatedLopDays > 0 ? Math.round((monthlyGross / daysInMonth) * calculatedLopDays) : 0
+
         const draftData = validatePayroll({
           month,
           workingDays: daysInMonth,
-          paidDays: daysInMonth,
-          lopDays: 0,
+          paidDays: payableDays,
+          lopDays: calculatedLopDays,
           earnings: {
             basic,
             hra,
@@ -771,11 +823,13 @@ export function createPayrollRouter({ auth }) {
             esi: 0,
             tdsTax: 0,
             loanAdvance: 0,
-            lossOfPay: 0,
+            lossOfPay: lopDeduction,
             performanceDeduction: 0,
             otherDeductions: 0,
           },
-          notes: 'Auto-generated bulk payroll draft',
+          notes: calculatedLopDays > 0
+            ? `Auto-generated bulk payroll draft (${calculatedLopDays} LOP day(s) deducted, including month-end Double LOP)`
+            : 'Auto-generated bulk payroll draft',
         })
 
         await PayrollRecord.create({

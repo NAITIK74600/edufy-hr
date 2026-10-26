@@ -76,16 +76,73 @@ export function createMongoLeaveRepository() {
       ensureConnected()
       const id = objectId(employeeId)
       if (!id || !(Number(allowance) >= 0)) return null
+      const currentMonthKey = new Date().toISOString().slice(0, 7) // 'YYYY-MM'
       try {
-        return await LeaveBalance.findOneAndUpdate({ employeeId: id, leaveType: String(leaveType).toLowerCase() }, { $setOnInsert: { allowance: Number(allowance), used: 0, reserved: 0, updatedAt: new Date() } }, { upsert: true, returnDocument: 'after' }).lean()
+        const found = await LeaveBalance.findOne({ employeeId: id, leaveType: String(leaveType).toLowerCase() })
+        if (found) {
+          if (!found.month || found.month !== currentMonthKey) {
+            found.used = 0
+            found.reserved = 0
+            found.allowance = Number(allowance)
+            found.month = currentMonthKey
+            found.updatedAt = new Date()
+            await found.save()
+            return found.toObject()
+          }
+          return found.toObject()
+        }
+        return (await LeaveBalance.create({ employeeId: id, leaveType: String(leaveType).toLowerCase(), allowance: Number(allowance), used: 0, reserved: 0, month: currentMonthKey, updatedAt: new Date() })).toObject()
       } catch (error) {
-        if (error?.code === 11000) return null // created concurrently by another request
+        if (error?.code === 11000) return null
         throw error
       }
     },
     async getBalance(employeeId, leaveType) { ensureConnected(); return LeaveBalance.findOne({ employeeId: objectId(employeeId), leaveType: String(leaveType).toLowerCase() }).lean() },
-    async listBalances(filters = {}) { ensureConnected(); const query = {}; if (filters.employeeId) query.employeeId = objectId(filters.employeeId); if (filters.leaveType) query.leaveType = String(filters.leaveType).toLowerCase(); return LeaveBalance.find(query).populate('employeeId', 'employeeId name department').sort({ leaveType: 1 }).lean() },
-    async reserveBalance(employeeId, leaveType, units) { ensureConnected(); return LeaveBalance.findOneAndUpdate({ employeeId: objectId(employeeId), leaveType: String(leaveType).toLowerCase(), $expr: { $gte: [{ $subtract: ['$allowance', { $add: ['$used', '$reserved'] }] }, units] } }, { $inc: { reserved: units }, $set: { updatedAt: new Date() } }, { returnDocument: 'after' }).lean() },
+    async listBalances(filters = {}) {
+      ensureConnected()
+      const query = {}
+      if (filters.employeeId) query.employeeId = objectId(filters.employeeId)
+      if (filters.leaveType) query.leaveType = String(filters.leaveType).toLowerCase()
+      const records = await LeaveBalance.find(query).populate('employeeId', 'employeeId name department employmentType designation role').sort({ leaveType: 1 }).lean()
+
+      const currentMonthKey = new Date().toISOString().slice(0, 7)
+      for (const b of records) {
+        if (!b.month || b.month !== currentMonthKey) {
+          const emp = b.employeeId
+          const empType = String(emp?.employmentType || '').toLowerCase().replace(/[-\s]/g, '_')
+          const isIntern = empType === 'intern' || String(emp?.designation || '').toLowerCase().includes('intern') || String(emp?.role || '').toLowerCase().includes('intern')
+          let defaultAllowance = 0
+          if (isIntern) {
+            defaultAllowance = b.leaveType === 'sick' ? 1 : 0
+          } else {
+            defaultAllowance = (b.leaveType === 'casual' || b.leaveType === 'sick') ? 1 : 0
+          }
+          const updatedAllowance = (b.allowance > 2 || !b.month) ? defaultAllowance : b.allowance
+          await LeaveBalance.updateOne(
+            { _id: b._id },
+            { $set: { used: 0, reserved: 0, allowance: updatedAllowance, month: currentMonthKey, updatedAt: new Date() } }
+          )
+          b.used = 0
+          b.reserved = 0
+          b.allowance = updatedAllowance
+          b.month = currentMonthKey
+        }
+      }
+      return records
+    },
+    async reserveBalance(employeeId, leaveType, units) {
+      ensureConnected()
+      const currentMonthKey = new Date().toISOString().slice(0, 7)
+      return LeaveBalance.findOneAndUpdate(
+        {
+          employeeId: objectId(employeeId),
+          leaveType: String(leaveType).toLowerCase(),
+          $expr: { $gte: [{ $subtract: ['$allowance', { $add: ['$used', '$reserved'] }] }, units] },
+        },
+        { $inc: { reserved: units }, $set: { month: currentMonthKey, updatedAt: new Date() } },
+        { returnDocument: 'after' }
+      ).lean()
+    },
     async releaseReservation(employeeId, leaveType, units) { ensureConnected(); return LeaveBalance.findOneAndUpdate({ employeeId: objectId(employeeId), leaveType: String(leaveType).toLowerCase(), reserved: { $gte: units } }, { $inc: { reserved: -units }, $set: { updatedAt: new Date() } }, { returnDocument: 'after' }).lean() },
     async commitReservation(employeeId, leaveType, units) { ensureConnected(); return LeaveBalance.findOneAndUpdate({ employeeId: objectId(employeeId), leaveType: String(leaveType).toLowerCase(), reserved: { $gte: units } }, { $inc: { reserved: -units, used: units }, $set: { updatedAt: new Date() } }, { returnDocument: 'after' }).lean() },
     async restoreCommittedBalance(employeeId, leaveType, units) { ensureConnected(); return LeaveBalance.findOneAndUpdate({ employeeId: objectId(employeeId), leaveType: String(leaveType).toLowerCase(), used: { $gte: units } }, { $inc: { used: -units }, $set: { updatedAt: new Date() } }, { returnDocument: 'after' }).lean() },

@@ -12,6 +12,7 @@ const attendanceRecordSchema = new mongoose.Schema({
   status: { type: String, enum: ['present', 'late', 'half-day', 'short-hours', 'early-logout', 'lop', 'absent', 'on-leave'], default: 'present' },
   isEarlyLogout: { type: Boolean, default: false },
   isLop: { type: Boolean, default: false },
+  isDoubleLop: { type: Boolean, default: false },
   offCampusDurationMinutes: { type: Number, default: 0 },
   shift: { type: String, trim: true, default: 'General (09:30 AM – 06:30 PM)' },
   shiftCode: { type: String, trim: true, default: 'general' },

@@ -6001,13 +6001,51 @@ const localStore = {
       const pf = Math.min(1800, Math.round(basic * 0.12))
       const professionalTax = 200
 
-      // Calculate actual LOP days from attendance records (status 'lop' or isLop true)
+      // Calculate actual LOP days according to company policy:
+      // Month-end (from 25th onwards): any leave is considered double LOP (2 days deduction per day in payroll)
       const empIdStr = String(emp.employeeId || emp.id || '').toUpperCase()
       const attendanceList = storeState.attendance || []
-      const calculatedLopDays = attendanceList.filter((a) => {
-        const matchesEmp = String(a.employeeId || '').toUpperCase() === empIdStr
-        return matchesEmp && (a.status === 'lop' || a.isLop)
-      }).length
+      const leavesList = storeState.leaves || []
+      const countedDates = new Set()
+      let calculatedLopDays = 0
+
+      for (const a of attendanceList) {
+        if (String(a.employeeId || '').toUpperCase() !== empIdStr) continue
+        const dateStr = String(a.date || '')
+        const dayOfMonth = Number(dateStr.split('-')[2]) || 1
+        const isLop = a.status === 'lop' || a.isLop
+        const isLeave = a.status === 'on-leave'
+        const isMonthEndDouble = dayOfMonth >= 25 || a.isDoubleLop
+
+        if (isLop) {
+          calculatedLopDays += isMonthEndDouble ? 2 : 1
+          countedDates.add(dateStr)
+        } else if (isLeave && isMonthEndDouble) {
+          calculatedLopDays += 2
+          countedDates.add(dateStr)
+        }
+      }
+
+      for (const l of leavesList) {
+        const lEmpId = String(l.employeeId?._id || l.employeeId?.employeeId || l.employeeId || '').toUpperCase()
+        if (lEmpId !== empIdStr || l.status !== 'approved') continue
+
+        if (l.doubleLopDays && l.doubleLopDays > 0) {
+          calculatedLopDays += l.doubleLopDays * 2
+        } else if (l.isDoubleLop) {
+          calculatedLopDays += (l.units || 1) * 2
+        } else if (l.startDate && l.endDate) {
+          const s = new Date(l.startDate)
+          const e = new Date(l.endDate)
+          for (const cur = new Date(s); cur <= e; cur.setDate(cur.getDate() + 1)) {
+            const curDateStr = cur.toISOString().slice(0, 10)
+            if (cur.getDate() >= 25 && !countedDates.has(curDateStr)) {
+              calculatedLopDays += 2
+              countedDates.add(curDateStr)
+            }
+          }
+        }
+      }
 
       const standardDays = 30
       const lopDays = calculatedLopDays

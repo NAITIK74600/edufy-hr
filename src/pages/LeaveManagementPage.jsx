@@ -110,6 +110,11 @@ function RequestCard({ request, onSelect, selected, onQuickApprove, onQuickRejec
           <strong style={{ fontSize: '12px' }}>{employee}</strong>
           <span>
             {leaveTypeLabels[request.leaveType] || request.leaveType} · {formatDate(request.startDate)} to {formatDate(request.endDate)}
+            {(request.isDoubleLop || request.doubleLopDays > 0 || (new Date(request.startDate).getDate() >= 25) || (new Date(request.endDate).getDate() >= 25)) && (
+              <span style={{ marginLeft: '6px', background: '#fee2e2', color: '#b91c1c', border: '1px solid #fca5a5', fontSize: '9px', padding: '1px 5px', borderRadius: '4px', fontWeight: 700 }}>
+                Double LOP (25th+)
+              </span>
+            )}
           </span>
         </div>
         <RequestStatus status={request.status} />
@@ -267,6 +272,11 @@ function RequestDetail({ request, mode, onRefresh, onDeleteRequest }) {
         <div>
           <span>Duration</span>
           <strong>{request.days || request.units || 1} Working Day(s)</strong>
+          {(request.isDoubleLop || request.doubleLopDays > 0) && (
+            <span style={{ display: 'block', color: '#b91c1c', fontSize: '10px', fontWeight: 700, marginTop: '2px' }}>
+              ⚠️ Double LOP Applied (25th+ Month-End)
+            </span>
+          )}
         </div>
         <div>
           <span>Employee</span>
@@ -909,10 +919,10 @@ function ApplyLeaveSelf({ onSubmitted }) {
         <label>
           Leave Type
           <select value={form.leaveType} onChange={(event) => update('leaveType', event.target.value)} required>
-            <option value="casual">Casual Leave ({cl !== null ? `${cl} available` : '8 available'})</option>
-            <option value="sick">Sick / Medical Leave ({sl !== null ? `${sl} available` : '6 available'})</option>
-            <option value="earned">Earned / Privilege Leave ({el !== null ? `${el} available` : '12 available'})</option>
-            <option value="comp_off">Compensatory Off ({co !== null ? `${co} available` : '2 available'})</option>
+            <option value="casual">Casual Leave ({cl !== null ? `${cl} available` : '1 available'})</option>
+            <option value="sick">Sick / Medical Leave ({sl !== null ? `${sl} available` : '1 available'})</option>
+            <option value="earned">Earned / Privilege Leave ({el !== null ? `${el} available` : '0 available'})</option>
+            <option value="comp_off">Compensatory Off ({co !== null ? `${co} available` : '0 available'})</option>
             <option value="maternity">Maternity / Paternity Leave ({ml !== null ? `${ml} available` : 'Available'})</option>
             <option value="lop">Loss of Pay (LOP) / Unpaid ({lop !== null ? `${lop} days` : 'Allowed'})</option>
           </select>
@@ -926,6 +936,34 @@ function ApplyLeaveSelf({ onSubmitted }) {
           onChange={handleRangeChange}
           required={true}
         />
+
+        {(() => {
+          if (!form.startDate) return false
+          const s = new Date(form.startDate)
+          const e = form.endDate ? new Date(form.endDate) : s
+          for (const cur = new Date(s); cur <= e; cur.setDate(cur.getDate() + 1)) {
+            if (cur.getDate() >= 25) return true
+          }
+          return false
+        })() && (
+          <div style={{
+            background: '#fff7ed',
+            border: '1px solid #fdba74',
+            borderRadius: '8px',
+            padding: '10px 14px',
+            margin: '8px 0 12px',
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: '8px',
+            fontSize: '11.5px',
+            color: '#9a3412',
+          }}>
+            <AlertCircle size={16} style={{ flexShrink: 0, marginTop: '2px', color: '#ea580c' }} />
+            <div>
+              <strong>Month-End Policy (From 25th):</strong> Any leave on or after the 25th of the month is considered <strong>Double LOP</strong> (2 days salary deduction per day in payroll).
+            </div>
+          </div>
+        )}
 
         <label>
           Reason for Absence
@@ -1166,6 +1204,34 @@ function GrantLeaveHR({ employees, onGranted, preselectedEmpId }) {
             />
           </Field>
         </div>
+
+        {(() => {
+          if (!form.startDate) return false
+          const s = new Date(form.startDate)
+          const e = form.endDate ? new Date(form.endDate) : s
+          for (const cur = new Date(s); cur <= e; cur.setDate(cur.getDate() + 1)) {
+            if (cur.getDate() >= 25) return true
+          }
+          return false
+        })() && (
+          <div style={{
+            background: '#fff7ed',
+            border: '1px solid #fdba74',
+            borderRadius: '8px',
+            padding: '10px 14px',
+            margin: '0 0 14px',
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: '8px',
+            fontSize: '11.5px',
+            color: '#9a3412',
+          }}>
+            <AlertCircle size={16} style={{ flexShrink: 0, marginTop: '2px', color: '#ea580c' }} />
+            <div>
+              <strong>Month-End Policy Alert (From 25th):</strong> This date range includes days on or after the 25th of the month. Under company policy, these are treated as <strong>Double LOP</strong> (2 days loss of pay deduction per day in payroll).
+            </div>
+          </div>
+        )}
 
         <Field label="Reason / Administrative Justification" required>
           <textarea

@@ -973,13 +973,39 @@ export function EditPolicyModal({ open, policy, onClose, onSave, busy }) {
   )
 }
 
-export const STANDARD_DEFAULT_QUOTAS = {
-  casual: 12,
-  sick: 10,
-  earned: 15,
-  comp_off: 5,
+export const FULLTIME_MONTHLY_QUOTAS = {
+  casual: 1,
+  sick: 1,
+  earned: 0,
+  comp_off: 0,
   maternity: 0,
-  lop: 10,
+  lop: 0,
+}
+
+export const INTERN_MONTHLY_QUOTAS = {
+  casual: 0,
+  sick: 1,
+  earned: 0,
+  comp_off: 0,
+  maternity: 0,
+  lop: 0,
+}
+
+export const STANDARD_DEFAULT_QUOTAS = {
+  casual: 1,
+  sick: 1,
+  earned: 0,
+  comp_off: 0,
+  maternity: 0,
+  lop: 0,
+}
+
+export function isInternEmployee(emp) {
+  if (!emp) return false
+  const type = String(emp.employmentType || '').toLowerCase().replace(/[-\s]/g, '_')
+  const desig = String(emp.designation || '').toLowerCase()
+  const role = String(emp.role || '').toLowerCase()
+  return type === 'intern' || desig.includes('intern') || role.includes('intern')
 }
 
 const STORAGE_DEFAULT_QUOTAS_KEY = 'edufyi_default_leave_quotas'
@@ -1014,15 +1040,17 @@ export function AllInOneQuotaModal({ open, onClose, targetEmployee, employees = 
     const chosenId = target?.id || target?._id || target?.employeeId || ''
     setEmpId(chosenId)
 
-    const baseDefaults = defaults || getDefaultCompanyQuotas()
+    const isIntern = isInternEmployee(target)
+    const standardPreset = isIntern ? INTERN_MONTHLY_QUOTAS : FULLTIME_MONTHLY_QUOTAS
+    const baseDefaults = defaults || standardPreset
     if (target && target.balances) {
       setQuotas({
-        casual: target.balances.casual?.allowance ?? baseDefaults.casual ?? 12,
-        sick: target.balances.sick?.allowance ?? baseDefaults.sick ?? 10,
-        earned: target.balances.earned?.allowance ?? baseDefaults.earned ?? 15,
-        comp_off: target.balances.comp_off?.allowance ?? baseDefaults.comp_off ?? 2,
-        maternity: target.balances.maternity?.allowance ?? baseDefaults.maternity ?? 90,
-        lop: target.balances.lop?.allowance ?? baseDefaults.lop ?? 0,
+        casual: target.balances.casual?.allowance ?? (isIntern ? 0 : 1),
+        sick: target.balances.sick?.allowance ?? 1,
+        earned: target.balances.earned?.allowance ?? 0,
+        comp_off: target.balances.comp_off?.allowance ?? 0,
+        maternity: target.balances.maternity?.allowance ?? 0,
+        lop: target.balances.lop?.allowance ?? 0,
       })
     } else {
       setQuotas({ ...baseDefaults })
@@ -1128,19 +1156,58 @@ export function AllInOneQuotaModal({ open, onClose, targetEmployee, employees = 
               </select>
             </div>
 
+            {/* Monthly Policy Banner */}
+            <div style={{
+              background: '#eff6ff',
+              border: '1px solid #bfdbfe',
+              borderRadius: '8px',
+              padding: '10px 14px',
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: '10px',
+              fontSize: '11.5px',
+              color: '#1e40af',
+            }}>
+              <Info size={16} style={{ flexShrink: 0, marginTop: '2px', color: '#3b82f6' }} />
+              <div>
+                <strong>Monthly Refresh (No Carry-Forward):</strong> Quotas refresh automatically on the 1st of every month without rollover. Full-timers receive <strong>2 paid leaves</strong> (1 CL + 1 SL). Interns receive <strong>1 paid leave</strong> (1 SL).
+                <span style={{ display: 'block', marginTop: '3px', color: '#b45309', fontWeight: 600 }}>
+                  ⚠️ Month-End Policy (From 25th): Any leave on or after the 25th is considered Double LOP.
+                </span>
+              </div>
+            </div>
+
             {/* Action Bar for filling defaults */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc', padding: '10px 14px', borderRadius: '10px', border: '1px solid var(--line)' }}>
-              <span style={{ fontSize: '12px', color: 'var(--muted)', fontWeight: 600 }}>
-                Standard Company Template:
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px', background: '#f8fafc', padding: '10px 14px', borderRadius: '10px', border: '1px solid var(--line)' }}>
+              <span style={{ fontSize: '11.5px', color: 'var(--muted)', fontWeight: 600 }}>
+                Presets:
               </span>
-              <button
-                type="button"
-                className="ui-button secondary"
-                onClick={handleApplyDefaults}
-                style={{ padding: '5px 12px', fontSize: '11px', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
-              >
-                <Sparkles size={12} style={{ color: 'var(--teal)' }} /> Fill with Company Defaults
-              </button>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  className="ui-button secondary"
+                  onClick={() => setQuotas({ ...FULLTIME_MONTHLY_QUOTAS })}
+                  style={{ padding: '4px 10px', fontSize: '11px', display: 'inline-flex', alignItems: 'center', gap: '4px', background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe' }}
+                >
+                  💼 Full-Timer (1 CL + 1 SL)
+                </button>
+                <button
+                  type="button"
+                  className="ui-button secondary"
+                  onClick={() => setQuotas({ ...INTERN_MONTHLY_QUOTAS })}
+                  style={{ padding: '4px 10px', fontSize: '11px', display: 'inline-flex', alignItems: 'center', gap: '4px', background: '#ecfdf5', color: '#047857', border: '1px solid #a7f3d0' }}
+                >
+                  🎓 Intern (1 SL)
+                </button>
+                <button
+                  type="button"
+                  className="ui-button secondary"
+                  onClick={handleApplyDefaults}
+                  style={{ padding: '4px 10px', fontSize: '11px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                >
+                  <Sparkles size={11} style={{ color: 'var(--teal)' }} /> Default Template
+                </button>
+              </div>
             </div>
 
             {/* 6 Leave Category Inputs Grid */}
@@ -1647,6 +1714,45 @@ export function LeaveBalanceTable({ balances = [], employees = [], onSwitchTab }
           >
             <Plus size={14} /> + Set All Quotas for Employee
           </button>
+        </div>
+      </div>
+
+      {/* 1.1 MONTHLY REFRESH & MONTH-END POLICY BANNER */}
+      <div style={{
+        background: 'linear-gradient(135deg, #f0fdf4 0%, #e0f2fe 100%)',
+        border: '1px solid #bae6fd',
+        borderRadius: '12px',
+        padding: '12px 18px',
+        marginBottom: '16px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        flexWrap: 'wrap',
+        gap: '12px',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+          <Sparkles size={18} style={{ color: '#0284c7', flexShrink: 0, marginTop: '2px' }} />
+          <div>
+            <div style={{ fontSize: '13px', fontWeight: 800, color: '#0f172a' }}>
+              Monthly Refresh Policy & Zero Carry-Forward
+            </div>
+            <div style={{ fontSize: '12px', color: '#334155', marginTop: '2px' }}>
+              • <strong>Full-Timers:</strong> 2 paid leaves per month (1 Casual Leave + 1 Sick Leave). Quotas refresh on 1st of every month without rollover.<br />
+              • <strong>Interns:</strong> 1 paid leave per month (1 Sick Leave).<br />
+              • <strong style={{ color: '#b45309' }}>Month-End Policy (25th onwards):</strong> Any leave taken on or after the 25th of the month is treated as <strong>Double LOP</strong> (2 days loss of pay deduction per day in payroll).
+            </div>
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          <span style={{ background: '#dcfce7', color: '#166534', padding: '4px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 700 }}>
+            Full-Time: 2 Paid / Mo
+          </span>
+          <span style={{ background: '#fef3c7', color: '#92400e', padding: '4px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 700 }}>
+            Intern: 1 Paid / Mo
+          </span>
+          <span style={{ background: '#fee2e2', color: '#991b1b', padding: '4px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 700 }}>
+            25th+: Double LOP
+          </span>
         </div>
       </div>
 
