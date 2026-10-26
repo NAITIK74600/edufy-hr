@@ -4,7 +4,6 @@ import { hrStore } from '../services/hrStore'
 import { PageHeader } from '../components/ui'
 import { formatINR } from '../utils/currency'
 import { OnboardingDossierView } from '../components/OnboardingDossierView'
-import { EmployeeComplianceStatusCard } from '../components/EmployeeComplianceStatusCard'
 import { User, Mail, Phone, Building2, Calendar, ShieldCheck, Briefcase, Camera, Check, KeyRound } from 'lucide-react'
 import { apiClient } from '../services/apiClient'
 import { ChangePasswordModal } from '../components/ChangePasswordModal'
@@ -161,11 +160,6 @@ export function EmployeeProfilePage() {
           <div><span style={{ color: 'var(--text-secondary)' }}>Employment Type:</span> <strong style={{ textTransform: 'capitalize' }}>{employee.employmentType?.replace('_', ' ') || 'Full time'}</strong></div>
         </div>
       </section>
-
-      {/* Policy Consent, Document Policy & NDA Status (HR & Admin Only) */}
-      {['admin', 'hr', 'superadmin'].includes(String(user?.role || '').toLowerCase()) && (
-        <EmployeeComplianceStatusCard employee={employee} />
-      )}
 
       {/* Security & Password Credentials Section */}
       <section className="panel" style={{ padding: '22px' }}>
