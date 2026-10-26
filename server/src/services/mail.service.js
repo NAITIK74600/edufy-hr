@@ -1,6 +1,12 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import nodemailer from 'nodemailer'
+let nodemailer = null
+try {
+  const mod = await import('nodemailer')
+  nodemailer = mod.default || mod
+} catch {
+  // nodemailer package is optional at boot; install via npm install to enable live SMTP
+}
 import { fileURLToPath } from 'node:url'
 import { numberToWordsINR } from '../utils/numberToWords.js'
 
@@ -85,7 +91,7 @@ export function createTransporter(type = 'hr') {
     }
   }
 
-  const configured = !isPlaceholder(user) && !isPlaceholder(pass)
+  const configured = Boolean(nodemailer) && !isPlaceholder(user) && !isPlaceholder(pass)
 
   if (!configured) {
     return {
