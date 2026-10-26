@@ -4,330 +4,347 @@ import {
   Lock,
   Eye,
   EyeOff,
-  Fingerprint,
-  KeyRound,
-  ShieldCheck,
-  AlertCircle,
-  ArrowRight,
   Shield,
   Sparkles,
+  Key,
+  Fingerprint,
+  ArrowRight,
+  AlertCircle,
 } from 'lucide-react'
 import { useAuth } from '../auth/AuthContext'
 
 /**
- * Common shared styles for both Employee and Management login pages.
- * Ensures the exact same premium cyber-cyan aesthetic across both portals.
+ * Pixel-perfect styles matching the exact Edufy design in the user screenshot:
+ * - Deep dark navy/midnight background with top-right cyan glow
+ * - Dark navy rounded input fields (#0c1829)
+ * - Vivid cyan buttons with glowing under-drop shadows (#00a8e8 / #00b4d8)
+ * - Inactive / Active tab pills with cyan neon borders
+ * - Passkey login not configured bottom button
  */
-function AuthStyles() {
+function LoginStyles() {
   return (
     <style>{`
-      .ely-auth-wrapper,
-      .ely-auth-wrapper * {
+      .edufyi-login-root,
+      .edufyi-login-root * {
         box-sizing: border-box;
-        color-scheme: dark !important;
       }
 
-      .ely-auth-wrapper {
-        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        background: #040811 !important;
+      .edufyi-login-root {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        background-color: #050a14 !important;
         background-image: 
-          radial-gradient(circle at 18% 18%, rgba(0, 210, 255, 0.16) 0%, transparent 40%),
-          radial-gradient(circle at 82% 82%, rgba(2, 132, 199, 0.20) 0%, transparent 45%),
-          radial-gradient(rgba(0, 210, 255, 0.10) 1px, transparent 1px);
-        background-size: 100% 100%, 100% 100%, 28px 28px;
+          radial-gradient(circle at 85% 15%, rgba(0, 180, 216, 0.16) 0%, transparent 45%),
+          radial-gradient(circle at 15% 85%, rgba(2, 132, 199, 0.12) 0%, transparent 40%);
         min-height: 100vh;
         min-height: 100dvh;
         width: 100%;
         display: flex;
         justify-content: center;
         align-items: center;
-        padding: 24px 16px;
+        padding: 30px 16px;
         position: relative;
         overflow-x: hidden;
       }
 
-      .ely-ambient-glow {
-        position: absolute;
-        width: 520px;
-        height: 520px;
-        filter: blur(100px);
-        pointer-events: none;
-        z-index: 1;
-        opacity: 0.6;
-      }
-
-      .ely-card {
-        position: relative;
+      .edufyi-login-card {
         width: 100%;
-        max-width: 480px;
-        background: #08101e !important;
-        border-radius: 24px;
-        border: 1px solid rgba(0, 210, 255, 0.35) !important;
-        box-shadow: 
-          0 25px 80px rgba(0, 0, 0, 0.85),
-          0 0 35px rgba(0, 210, 255, 0.16),
-          inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
-        padding: 38px 34px;
-        z-index: 2;
-        display: flex;
-        flex-direction: column;
-      }
-
-      @media (max-width: 520px) {
-        .ely-card {
-          padding: 28px 20px;
-          border-radius: 20px;
-        }
-      }
-
-      .ely-logo-area {
+        max-width: 410px;
         display: flex;
         flex-direction: column;
         align-items: center;
         text-align: center;
-        margin-bottom: 24px;
+        z-index: 2;
       }
 
-      .ely-logo-img {
-        height: 44px;
-        max-width: 200px;
-        object-fit: contain;
-        margin-bottom: 14px;
-      }
-
-      .ely-badge {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        font-size: 10.5px;
-        font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: 0.08em;
-        padding: 4px 12px;
-        border-radius: 9999px;
-        margin-bottom: 12px;
-      }
-
-      .ely-badge-employee {
-        background: rgba(0, 210, 255, 0.12);
-        color: #00d2ff;
-        border: 1px solid rgba(0, 210, 255, 0.3);
-      }
-
-      .ely-badge-mgmt {
-        background: rgba(14, 165, 233, 0.12);
-        color: #38bdf8;
-        border: 1px solid rgba(56, 189, 248, 0.3);
-      }
-
-      .ely-title {
-        font-size: 23px;
-        font-weight: 800;
-        color: #ffffff;
-        margin: 0 0 6px 0;
-        letter-spacing: -0.02em;
-      }
-
-      .ely-subtitle {
-        font-size: 13px;
-        color: #94a3b8;
-        margin: 0;
-        line-height: 1.5;
-        max-width: 380px;
-      }
-
-      /* Tabs for Admin / HR */
-      .ely-tabs {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 6px;
-        background: rgba(15, 23, 42, 0.7);
-        padding: 4px;
-        border-radius: 12px;
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        margin-bottom: 22px;
-      }
-
-      .ely-tab-btn {
+      /* Logo */
+      .edufyi-brand-header {
         display: flex;
         align-items: center;
         justify-content: center;
-        gap: 7px;
-        background: transparent;
-        border: none;
+        gap: 12px;
+        margin-bottom: 20px;
+      }
+
+      .edufyi-brand-logo {
+        height: 48px;
+        width: 48px;
+        border-radius: 12px;
+        object-fit: cover;
+      }
+
+      .edufyi-brand-text {
+        text-align: left;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .edufyi-brand-kicker {
+        font-size: 11px;
+        letter-spacing: 0.18em;
+        font-weight: 700;
         color: #94a3b8;
-        font-size: 12.5px;
+        text-transform: uppercase;
+        line-height: 1.1;
+      }
+
+      .edufyi-brand-name {
+        font-size: 24px;
+        font-weight: 800;
+        color: #ffffff;
+        letter-spacing: -0.02em;
+        line-height: 1.15;
+      }
+
+      .edufyi-brand-name span {
+        color: #00c0f0;
+      }
+
+      /* Pill Badge */
+      .edufyi-pill-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        padding: 5px 16px;
+        border-radius: 9999px;
+        background: rgba(0, 180, 216, 0.08);
+        border: 1px solid rgba(0, 180, 216, 0.45);
+        color: #00d2ff;
+        margin-bottom: 16px;
+      }
+
+      /* Heading & Subtitle */
+      .edufyi-login-title {
+        font-size: 32px;
+        font-weight: 800;
+        color: #ffffff;
+        margin: 0 0 10px 0;
+        letter-spacing: -0.025em;
+      }
+
+      .edufyi-login-subtitle {
+        font-size: 13.5px;
+        color: #889bb5;
+        margin: 0 0 24px 0;
+        line-height: 1.45;
+        max-width: 340px;
+      }
+
+      /* Management Role Tabs */
+      .edufyi-mgmt-tabs {
+        width: 100%;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+        margin-bottom: 20px;
+      }
+
+      .edufyi-mgmt-tab {
+        height: 44px;
+        background: #0c1829;
+        border: 1px solid rgba(30, 58, 95, 0.8);
+        border-radius: 10px;
+        color: #64748b;
+        font-size: 13.5px;
         font-weight: 600;
-        padding: 9px 12px;
-        border-radius: 9px;
         cursor: pointer;
         transition: all 0.2s ease;
       }
 
-      .ely-tab-btn.active {
-        background: linear-gradient(135deg, rgba(0, 210, 255, 0.22) 0%, rgba(2, 132, 199, 0.28) 100%);
-        color: #ffffff;
-        border: 1px solid rgba(0, 210, 255, 0.45);
-        box-shadow: 0 2px 8px rgba(0, 210, 255, 0.2);
-      }
-
-      /* Form inputs */
-      .ely-form-group {
-        margin-bottom: 18px;
-        width: 100%;
-      }
-
-      .ely-label {
-        display: block;
-        font-size: 12px;
-        font-weight: 600;
+      .edufyi-mgmt-tab:hover {
         color: #cbd5e1;
-        margin-bottom: 6px;
-        text-align: left;
+        border-color: rgba(0, 180, 216, 0.4);
       }
 
-      .ely-input-box {
+      .edufyi-mgmt-tab.active {
+        background: #091a2e;
+        border: 2px solid #00b4d8;
+        color: #ffffff;
+        font-weight: 700;
+        box-shadow: 0 0 16px rgba(0, 180, 216, 0.28);
+      }
+
+      /* Form */
+      .edufyi-login-form {
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+      }
+
+      .edufyi-field-box {
         position: relative;
         display: flex;
         align-items: center;
         width: 100%;
-        background: rgba(15, 23, 42, 0.85);
-        border: 1px solid rgba(255, 255, 255, 0.12);
+        background: #0c1829;
+        border: 1px solid rgba(30, 58, 95, 0.85);
         border-radius: 12px;
         transition: all 0.2s ease;
       }
 
-      .ely-input-box:focus-within {
-        border-color: #00d2ff;
-        box-shadow: 0 0 0 3px rgba(0, 210, 255, 0.2);
-        background: rgba(15, 23, 42, 0.98);
+      .edufyi-field-box:focus-within {
+        border-color: #00b4d8;
+        box-shadow: 0 0 0 3px rgba(0, 180, 216, 0.2);
+        background: #0e1c31;
       }
 
-      .ely-input-icon {
+      .edufyi-field-icon {
         position: absolute;
-        left: 14px;
-        color: #64748b;
-        pointer-events: none;
+        left: 16px;
+        color: #5a7194;
         display: flex;
         align-items: center;
+        pointer-events: none;
       }
 
-      .ely-input-box:focus-within .ely-input-icon {
-        color: #00d2ff;
+      .edufyi-field-box:focus-within .edufyi-field-icon {
+        color: #00b4d8;
       }
 
-      .ely-input {
+      .edufyi-field-input {
         width: 100%;
-        height: 46px;
+        height: 50px;
         background: transparent;
         border: none;
         outline: none;
         color: #ffffff;
-        font-size: 14px;
-        padding: 0 42px 0 42px;
+        font-size: 14.5px;
+        padding: 0 46px 0 48px;
         font-family: inherit;
       }
 
-      .ely-input::placeholder {
-        color: #64748b;
-        font-size: 13px;
+      .edufyi-field-input::placeholder {
+        color: #5a7194;
+        font-size: 14px;
       }
 
-      .ely-eye-btn {
+      .edufyi-eye-toggle {
         position: absolute;
-        right: 12px;
+        right: 14px;
         background: transparent;
         border: none;
-        color: #64748b;
+        color: #5a7194;
         cursor: pointer;
         padding: 4px;
         display: flex;
         align-items: center;
-        transition: color 0.15s;
       }
 
-      .ely-eye-btn:hover {
-        color: #00d2ff;
+      .edufyi-eye-toggle:hover {
+        color: #00b4d8;
       }
 
-      /* Options row */
-      .ely-options-row {
+      /* Row with Remember me + recovery link */
+      .edufyi-action-row {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        margin-bottom: 22px;
-        font-size: 12.5px;
+        width: 100%;
+        margin-top: 4px;
+        margin-bottom: 8px;
+        font-size: 13px;
       }
 
-      .ely-remember-label {
+      .edufyi-remember-label {
         display: flex;
         align-items: center;
         gap: 8px;
-        color: #94a3b8;
+        color: #cbd5e1;
         cursor: pointer;
         user-select: none;
+        font-size: 13.5px;
       }
 
-      .ely-checkbox {
-        width: 15px;
-        height: 15px;
-        accent-color: #00d2ff;
+      .edufyi-checkbox {
+        width: 16px;
+        height: 16px;
+        accent-color: #00b4d8;
         cursor: pointer;
+        border-radius: 4px;
       }
 
-      .ely-help-link {
-        color: #38bdf8;
+      .edufyi-link {
+        color: #00b4d8;
+        font-weight: 600;
         text-decoration: none;
-        font-size: 12px;
-        font-weight: 500;
         cursor: pointer;
         background: none;
         border: none;
         padding: 0;
+        font-size: 13.5px;
       }
 
-      .ely-help-link:hover {
+      .edufyi-link:hover {
         text-decoration: underline;
-        color: #00d2ff;
+        color: #38bdf8;
       }
 
-      /* Submit button */
-      .ely-submit-btn {
+      /* Primary Vibrant Blue/Cyan Button with Under Glow */
+      .edufyi-primary-btn {
         width: 100%;
-        height: 48px;
-        background: linear-gradient(135deg, #00d2ff 0%, #0284c7 100%);
+        height: 50px;
+        background: #00a8e8;
         border: none;
         border-radius: 12px;
         color: #ffffff;
-        font-size: 14px;
-        font-weight: 700;
-        letter-spacing: 0.02em;
+        font-size: 13.5px;
+        font-weight: 800;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
         cursor: pointer;
         display: flex;
         align-items: center;
         justify-content: center;
         gap: 8px;
-        box-shadow: 0 4px 18px rgba(0, 210, 255, 0.35);
+        box-shadow: 0 10px 24px rgba(0, 168, 232, 0.45);
         transition: all 0.2s ease;
       }
 
-      .ely-submit-btn:hover:not(:disabled) {
+      .edufyi-primary-btn:hover:not(:disabled) {
+        background: #00b4d8;
         transform: translateY(-1px);
-        box-shadow: 0 6px 24px rgba(0, 210, 255, 0.45);
-        filter: brightness(1.06);
+        box-shadow: 0 14px 30px rgba(0, 180, 216, 0.6);
       }
 
-      .ely-submit-btn:active:not(:disabled) {
+      .edufyi-primary-btn:active:not(:disabled) {
         transform: translateY(0);
       }
 
-      .ely-submit-btn:disabled {
+      .edufyi-primary-btn:disabled {
         opacity: 0.65;
         cursor: not-allowed;
       }
 
-      /* Error alert */
-      .ely-error-box {
+      /* Secondary Outline Button */
+      .edufyi-secondary-btn {
+        width: 100%;
+        height: 48px;
+        background: rgba(10, 21, 38, 0.6);
+        border: 1px solid rgba(30, 58, 95, 0.85);
+        border-radius: 12px;
+        color: #cbd5e1;
+        font-size: 13.5px;
+        font-weight: 600;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        transition: all 0.2s ease;
+      }
+
+      .edufyi-secondary-btn:hover {
+        background: rgba(14, 28, 50, 0.8);
+        border-color: rgba(0, 180, 216, 0.4);
+        color: #ffffff;
+      }
+
+      /* Error Alert */
+      .edufyi-error-box {
         display: flex;
         align-items: center;
         gap: 10px;
@@ -335,42 +352,40 @@ function AuthStyles() {
         border: 1px solid rgba(239, 68, 68, 0.35);
         border-radius: 10px;
         padding: 10px 14px;
-        margin-bottom: 18px;
+        margin-bottom: 14px;
         color: #fca5a5;
         font-size: 12.5px;
         line-height: 1.4;
+        width: 100%;
+        text-align: left;
       }
 
-      /* Footer notice */
-      .ely-footer-notice {
-        margin-top: 24px;
-        padding-top: 18px;
-        border-top: 1px solid rgba(255, 255, 255, 0.08);
+      /* Notice Box */
+      .edufyi-notice-box {
         display: flex;
         align-items: center;
-        justify-content: center;
-        gap: 8px;
-        font-size: 11px;
-        color: #64748b;
-        text-align: center;
-      }
-
-      .spinning {
-        animation: elySpin 1s linear infinite;
-      }
-
-      @keyframes elySpin {
-        from { transform: rotate(0deg); }
-        to { transform: rotate(360deg); }
+        gap: 10px;
+        background: rgba(0, 180, 216, 0.12);
+        border: 1px solid rgba(0, 180, 216, 0.35);
+        border-radius: 10px;
+        padding: 10px 14px;
+        margin-bottom: 14px;
+        color: #7dd3fc;
+        font-size: 12.5px;
+        line-height: 1.4;
+        width: 100%;
+        text-align: left;
       }
     `}</style>
   )
 }
 
 /**
- * DEDICATED EMPLOYEE LOGIN PAGE
- * Rendered strictly at #/employee/login
- * Exclusively for employees — NO option or toggle for admin/HR!
+ * EMPLOYEE LOGIN PAGE
+ * Rendered at #/employee/login
+ * Exactly matching Image 2:
+ * - NO tabs! NO Admin Terminal / HR Operations buttons!
+ * - NO switch console option!
  */
 export function EmployeeLoginPage() {
   const { login } = useAuth()
@@ -380,15 +395,15 @@ export function EmployeeLoginPage() {
   const [remember, setRemember] = useState(true)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [helpNotice, setHelpNotice] = useState('')
+  const [notice, setNotice] = useState('')
 
   async function handleSubmit(e) {
     if (e) e.preventDefault()
     setError('')
-    setHelpNotice('')
+    setNotice('')
 
     if (!email.trim() || !password) {
-      setError('Please enter your work email or employee ID and password.')
+      setError('Please enter your work email, username, or employee ID and password.')
       return
     }
 
@@ -396,7 +411,7 @@ export function EmployeeLoginPage() {
     try {
       const loggedUser = await login(email.trim(), password, 'employee')
       if (loggedUser?.role === 'admin' || loggedUser?.role === 'hr') {
-        throw new Error('Access denied: Management accounts must log in via the Management Console.')
+        throw new Error('Access denied: Management accounts must log in via the HR / Admin Console.')
       }
       window.location.hash = '#/employee'
     } catch (err) {
@@ -407,100 +422,101 @@ export function EmployeeLoginPage() {
   }
 
   return (
-    <div className="ely-auth-wrapper">
-      <AuthStyles />
-      <div className="ely-ambient-glow" style={{ top: '15%', left: '20%', background: 'rgba(0, 210, 255, 0.18)' }} />
-      <div className="ely-ambient-glow" style={{ bottom: '15%', right: '20%', background: 'rgba(2, 132, 199, 0.22)' }} />
-
-      <div className="ely-card">
-        {/* LOGO & HEADER */}
-        <div className="ely-logo-area">
+    <div className="edufyi-login-root">
+      <LoginStyles />
+      <div className="edufyi-login-card">
+        {/* LOGO */}
+        <div className="edufyi-brand-header">
           <img
             src="/elythra-edufyitech-logo.png"
-            alt="Edufyi Tech Solutions"
-            className="ely-logo-img"
+            alt="Edufyi"
+            className="edufyi-brand-logo"
             onError={(e) => {
               e.currentTarget.style.display = 'none'
             }}
           />
-          <div className="ely-badge ely-badge-employee">
-            <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#00d2ff' }} />
-            Employee Self-Service (ESS)
+          <div className="edufyi-brand-text">
+            <span className="edufyi-brand-kicker">ELYTHRA</span>
+            <span className="edufyi-brand-name">
+              Edufyi<span>Tech</span>
+            </span>
           </div>
-          <h1 className="ely-title">Employee Portal Sign In</h1>
-          <p className="ely-subtitle">
-            Sign in with your corporate email or employee ID to access attendance, leaves, and workspace workflow.
-          </p>
         </div>
+
+        {/* BADGE: EMPLOYEE SELF-SERVICE */}
+        <div className="edufyi-pill-badge">
+          <Sparkles size={13} style={{ color: '#00d2ff' }} />
+          <span>EMPLOYEE SELF-SERVICE</span>
+        </div>
+
+        {/* TITLE & SUBTITLE */}
+        <h1 className="edufyi-login-title">Employee Login</h1>
+        <p className="edufyi-login-subtitle">
+          Sign in with your Admin or HR-created account
+        </p>
 
         {/* ERROR BOX */}
         {error && (
-          <div className="ely-error-box">
-            <AlertCircle size={16} style={{ flexShrink: 0 }} />
+          <div className="edufyi-error-box">
+            <AlertCircle size={15} style={{ flexShrink: 0 }} />
             <span>{error}</span>
           </div>
         )}
 
-        {/* HELP NOTICE */}
-        {helpNotice && (
-          <div className="ely-error-box" style={{ background: 'rgba(56, 189, 248, 0.12)', borderColor: 'rgba(56, 189, 248, 0.35)', color: '#7dd3fc' }}>
-            <Sparkles size={16} style={{ flexShrink: 0 }} />
-            <span>{helpNotice}</span>
+        {/* NOTICE BOX */}
+        {notice && (
+          <div className="edufyi-notice-box">
+            <Sparkles size={15} style={{ flexShrink: 0 }} />
+            <span>{notice}</span>
           </div>
         )}
 
-        {/* LOGIN FORM */}
-        <form onSubmit={handleSubmit}>
-          <div className="ely-form-group">
-            <label className="ely-label">Corporate Email or Employee ID</label>
-            <div className="ely-input-box">
-              <span className="ely-input-icon">
-                <Fingerprint size={16} />
-              </span>
-              <input
-                type="text"
-                className="ely-input"
-                placeholder="e.g. ETS21201 or name@edufyitechsolutions.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                autoComplete="username"
-                disabled={loading}
-              />
-            </div>
+        {/* FORM */}
+        <form onSubmit={handleSubmit} className="edufyi-login-form">
+          <div className="edufyi-field-box">
+            <span className="edufyi-field-icon">
+              <Mail size={17} />
+            </span>
+            <input
+              type="text"
+              className="edufyi-field-input"
+              placeholder="Work Email, Username or Employee ID"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              autoComplete="username"
+              disabled={loading}
+            />
           </div>
 
-          <div className="ely-form-group">
-            <label className="ely-label">Password</label>
-            <div className="ely-input-box">
-              <span className="ely-input-icon">
-                <Lock size={16} />
-              </span>
-              <input
-                type={showPassword ? 'text' : 'password'}
-                className="ely-input"
-                placeholder="Enter your account password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                autoComplete="current-password"
-                disabled={loading}
-              />
-              <button
-                type="button"
-                className="ely-eye-btn"
-                onClick={() => setShowPassword(!showPassword)}
-                tabIndex={-1}
-                aria-label={showPassword ? 'Hide password' : 'Show password'}
-              >
-                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-              </button>
-            </div>
+          <div className="edufyi-field-box">
+            <span className="edufyi-field-icon">
+              <Lock size={17} />
+            </span>
+            <input
+              type={showPassword ? 'text' : 'password'}
+              className="edufyi-field-input"
+              placeholder="Password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="current-password"
+              disabled={loading}
+            />
+            <button
+              type="button"
+              className="edufyi-eye-toggle"
+              onClick={() => setShowPassword(!showPassword)}
+              tabIndex={-1}
+              aria-label={showPassword ? 'Hide password' : 'Show password'}
+            >
+              {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+            </button>
           </div>
 
-          <div className="ely-options-row">
-            <label className="ely-remember-label">
+          <div className="edufyi-action-row">
+            <label className="edufyi-remember-label">
               <input
                 type="checkbox"
-                className="ely-checkbox"
+                className="edufyi-checkbox"
                 checked={remember}
                 onChange={(e) => setRemember(e.target.checked)}
               />
@@ -508,67 +524,70 @@ export function EmployeeLoginPage() {
             </label>
             <button
               type="button"
-              className="ely-help-link"
-              onClick={() => setHelpNotice('For password reset or portal assistance, please contact your HR Operations team.')}
+              className="edufyi-link"
+              onClick={() => setNotice('For account recovery, password resets, or credentials lookup, please reach out to your HR Operations team.')}
             >
-              Forgot Password?
+              Forgot password?
             </button>
           </div>
 
-          <button type="submit" className="ely-submit-btn" disabled={loading}>
-            {loading ? (
+          <button type="submit" className="edufyi-primary-btn" disabled={loading}>
+            {loading ? 'SIGNING IN...' : (
               <>
-                <span className="spinning">⏳</span> Signing in...
-              </>
-            ) : (
-              <>
-                Sign In to Employee Workspace <ArrowRight size={16} />
+                SIGN IN <ArrowRight size={16} />
               </>
             )}
           </button>
-        </form>
 
-        {/* FOOTER NOTICE */}
-        <div className="ely-footer-notice">
-          <Shield size={13} style={{ color: '#00d2ff' }} />
-          <span>Edufyi Tech Solutions • Employee Self-Service</span>
-        </div>
+          <button
+            type="button"
+            className="edufyi-secondary-btn"
+            onClick={() => setNotice('Hardware Passkey authentication is currently in private preview. Please use your standard credentials.')}
+          >
+            <Fingerprint size={17} style={{ color: '#00b4d8' }} />
+            Passkey login is not configured
+          </button>
+        </form>
       </div>
     </div>
   )
 }
 
 /**
- * DEDICATED MANAGEMENT (ADMIN & HR) LOGIN PAGE
+ * HR & ADMIN MANAGEMENT LOGIN PAGE
  * Rendered at #/admin/login, #/hr/login, and default #/login
- * Strictly for Admin and HR — NO option or button for employee!
+ * Exactly matching Image 1:
+ * - Tabs: Admin Terminal | HR Operations
+ * - NO option for Employee!
+ * - NO switch console option!
  */
-export function ManagementLoginPage({ defaultRole = 'admin' }) {
+export function ManagementLoginPage({ defaultRole = 'hr' }) {
   const { login } = useAuth()
 
-  // Track role: 'admin' or 'hr'
+  // Track active role: 'admin' or 'hr'
   const [role, setRole] = useState(() => {
-    if (typeof window !== 'undefined' && window.location.hash.includes('hr')) return 'hr'
+    if (typeof window !== 'undefined' && window.location.hash.includes('admin')) return 'admin'
     return defaultRole
   })
 
-  const [email, setEmail] = useState(() => (role === 'hr' ? 'hr@edufyitech.in' : 'admin@edufyitech.in'))
+  const [email, setEmail] = useState(() => (role === 'admin' ? 'admin@edufyitech.in' : 'hr@edufyitech.in'))
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [remember, setRemember] = useState(true)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
 
-  // Sync hash changes dynamically between /admin/login and /hr/login
+  // Sync hash changes dynamically
   useEffect(() => {
     const handleHash = () => {
       const hash = window.location.hash || ''
-      if (hash.includes('hr')) {
-        setRole('hr')
-        setEmail((prev) => (!prev || prev === 'admin@edufyitech.in' ? 'hr@edufyitech.in' : prev))
-      } else if (hash.includes('admin')) {
+      if (hash.includes('admin')) {
         setRole('admin')
-        setEmail((prev) => (!prev || prev === 'hr@edufyitech.in' ? 'admin@edufyitech.in' : prev))
+        setEmail((prev) => (!prev || prev === 'hr@edufyitech.in' || prev === 'hr@edufyi.in' ? 'admin@edufyitech.in' : prev))
+      } else if (hash.includes('hr')) {
+        setRole('hr')
+        setEmail((prev) => (!prev || prev === 'admin@edufyitech.in' || prev === 'admin@edufyi.in' ? 'hr@edufyitech.in' : prev))
       }
     }
     handleHash()
@@ -579,11 +598,12 @@ export function ManagementLoginPage({ defaultRole = 'admin' }) {
   function handleSelectRole(targetRole) {
     setRole(targetRole)
     setError('')
+    setNotice('')
     if (targetRole === 'admin') {
-      if (!email || email === 'hr@edufyitech.in') setEmail('admin@edufyitech.in')
+      if (!email || email === 'hr@edufyitech.in' || email === 'hr@edufyi.in') setEmail('admin@edufyitech.in')
       window.location.hash = '#/admin/login'
     } else {
-      if (!email || email === 'admin@edufyitech.in') setEmail('hr@edufyitech.in')
+      if (!email || email === 'admin@edufyitech.in' || email === 'admin@edufyi.in') setEmail('hr@edufyitech.in')
       window.location.hash = '#/hr/login'
     }
   }
@@ -591,6 +611,7 @@ export function ManagementLoginPage({ defaultRole = 'admin' }) {
   async function handleSubmit(e) {
     if (e) e.preventDefault()
     setError('')
+    setNotice('')
 
     if (!email.trim() || !password) {
       setError(
@@ -603,7 +624,7 @@ export function ManagementLoginPage({ defaultRole = 'admin' }) {
 
     setLoading(true)
     try {
-      const targetPortal = role === 'hr' ? 'hr' : 'admin'
+      const targetPortal = role === 'admin' ? 'admin' : 'hr'
       const loggedUser = await login(email.trim(), password, targetPortal)
 
       if (loggedUser?.role === 'admin') {
@@ -611,7 +632,7 @@ export function ManagementLoginPage({ defaultRole = 'admin' }) {
       } else if (loggedUser?.role === 'hr') {
         window.location.hash = '#/hr'
       } else {
-        throw new Error('Access denied: Employee accounts cannot sign into the Management Console.')
+        throw new Error('Access denied: Employee accounts cannot sign into the HR or Admin Management Console.')
       }
     } catch (err) {
       setError(err.message || 'Invalid email or password.')
@@ -620,149 +641,166 @@ export function ManagementLoginPage({ defaultRole = 'admin' }) {
     }
   }
 
-  return (
-    <div className="ely-auth-wrapper">
-      <AuthStyles />
-      <div className="ely-ambient-glow" style={{ top: '15%', left: '20%', background: 'rgba(0, 210, 255, 0.16)' }} />
-      <div className="ely-ambient-glow" style={{ bottom: '15%', right: '20%', background: 'rgba(2, 132, 199, 0.20)' }} />
+  const isHr = role === 'hr'
 
-      <div className="ely-card">
-        {/* LOGO & HEADER */}
-        <div className="ely-logo-area">
+  return (
+    <div className="edufyi-login-root">
+      <LoginStyles />
+      <div className="edufyi-login-card">
+        {/* LOGO */}
+        <div className="edufyi-brand-header">
           <img
             src="/elythra-edufyitech-logo.png"
-            alt="Edufyi Tech Solutions"
-            className="ely-logo-img"
+            alt="Edufyi"
+            className="edufyi-brand-logo"
             onError={(e) => {
               e.currentTarget.style.display = 'none'
             }}
           />
-          <div className="ely-badge ely-badge-mgmt">
-            <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#38bdf8' }} />
-            Workforce Management Console
+          <div className="edufyi-brand-text">
+            <span className="edufyi-brand-kicker">ELYTHRA</span>
+            <span className="edufyi-brand-name">
+              Edufyi<span>Tech</span>
+            </span>
           </div>
-          <h1 className="ely-title">{role === 'admin' ? 'Administrator Login' : 'HR Operations Login'}</h1>
-          <p className="ely-subtitle">
-            {role === 'admin'
-              ? 'Authorized access for System Administration, global policies, and platform control.'
-              : 'Authorized access for Human Resources People Operations and workforce management.'}
-          </p>
         </div>
 
-        {/* ROLE TABS (ADMIN vs HR ONLY) */}
-        <div className="ely-tabs">
+        {/* PILL BADGE */}
+        <div className="edufyi-pill-badge">
+          <Shield size={13} style={{ color: '#00d2ff' }} />
+          <span>{isHr ? 'HR OPERATIONS' : 'ADMIN CONSOLE'}</span>
+        </div>
+
+        {/* TITLE & SUBTITLE */}
+        <h1 className="edufyi-login-title">
+          {isHr ? 'HR Operations Sign In' : 'Admin Terminal Sign In'}
+        </h1>
+        <p className="edufyi-login-subtitle">
+          {isHr
+            ? 'People Operations & Workforce Management (Employee accounts not permitted)'
+            : 'Executive System Administration & Global Configuration (Employee accounts not permitted)'}
+        </p>
+
+        {/* ROLE TABS (ADMIN TERMINAL vs HR OPERATIONS) */}
+        <div className="edufyi-mgmt-tabs">
           <button
             type="button"
-            className={`ely-tab-btn ${role === 'admin' ? 'active' : ''}`}
+            className={`edufyi-mgmt-tab ${!isHr ? 'active' : ''}`}
             onClick={() => handleSelectRole('admin')}
           >
-            <ShieldCheck size={14} /> Admin Console
+            Admin Terminal
           </button>
           <button
             type="button"
-            className={`ely-tab-btn ${role === 'hr' ? 'active' : ''}`}
+            className={`edufyi-mgmt-tab ${isHr ? 'active' : ''}`}
             onClick={() => handleSelectRole('hr')}
           >
-            <KeyRound size={14} /> HR Operations
+            HR Operations
           </button>
         </div>
 
         {/* ERROR BOX */}
         {error && (
-          <div className="ely-error-box">
-            <AlertCircle size={16} style={{ flexShrink: 0 }} />
+          <div className="edufyi-error-box">
+            <AlertCircle size={15} style={{ flexShrink: 0 }} />
             <span>{error}</span>
           </div>
         )}
 
-        {/* LOGIN FORM */}
-        <form onSubmit={handleSubmit}>
-          <div className="ely-form-group">
-            <label className="ely-label">
-              {role === 'admin' ? 'Administrator Email or Username' : 'HR Operations Email or Username'}
-            </label>
-            <div className="ely-input-box">
-              <span className="ely-input-icon">
-                <Mail size={16} />
-              </span>
-              <input
-                type="text"
-                className="ely-input"
-                placeholder={role === 'admin' ? 'admin@edufyitech.in' : 'hr@edufyitech.in'}
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                autoComplete="username"
-                disabled={loading}
-              />
-            </div>
+        {/* NOTICE BOX */}
+        {notice && (
+          <div className="edufyi-notice-box">
+            <Shield size={15} style={{ flexShrink: 0 }} />
+            <span>{notice}</span>
+          </div>
+        )}
+
+        {/* FORM */}
+        <form onSubmit={handleSubmit} className="edufyi-login-form">
+          <div className="edufyi-field-box">
+            <span className="edufyi-field-icon">
+              <Mail size={17} />
+            </span>
+            <input
+              type="text"
+              className="edufyi-field-input"
+              placeholder={isHr ? 'hr@edufyitech.in' : 'admin@edufyitech.in'}
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              autoComplete="username"
+              disabled={loading}
+            />
           </div>
 
-          <div className="ely-form-group">
-            <label className="ely-label">Security Password</label>
-            <div className="ely-input-box">
-              <span className="ely-input-icon">
-                <Lock size={16} />
-              </span>
-              <input
-                type={showPassword ? 'text' : 'password'}
-                className="ely-input"
-                placeholder="Enter account password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                autoComplete="current-password"
-                disabled={loading}
-              />
-              <button
-                type="button"
-                className="ely-eye-btn"
-                onClick={() => setShowPassword(!showPassword)}
-                tabIndex={-1}
-                aria-label={showPassword ? 'Hide password' : 'Show password'}
-              >
-                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-              </button>
-            </div>
+          <div className="edufyi-field-box">
+            <span className="edufyi-field-icon">
+              <Lock size={17} />
+            </span>
+            <input
+              type={showPassword ? 'text' : 'password'}
+              className="edufyi-field-input"
+              placeholder="Master Password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="current-password"
+              disabled={loading}
+            />
+            <button
+              type="button"
+              className="edufyi-eye-toggle"
+              onClick={() => setShowPassword(!showPassword)}
+              tabIndex={-1}
+              aria-label={showPassword ? 'Hide password' : 'Show password'}
+            >
+              {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+            </button>
           </div>
 
-          <div className="ely-options-row">
-            <label className="ely-remember-label">
+          <div className="edufyi-action-row">
+            <label className="edufyi-remember-label">
               <input
                 type="checkbox"
-                className="ely-checkbox"
+                className="edufyi-checkbox"
                 checked={remember}
                 onChange={(e) => setRemember(e.target.checked)}
               />
-              Remember terminal session
+              Remember me
             </label>
+            <button
+              type="button"
+              className="edufyi-link"
+              onClick={() => setNotice('Master emergency recovery keys are stored securely on the host server environment (.env). Contact System Architecture if recovery is required.')}
+            >
+              Recovery Key?
+            </button>
           </div>
 
-          <button type="submit" className="ely-submit-btn" disabled={loading}>
-            {loading ? (
+          <button type="submit" className="edufyi-primary-btn" disabled={loading}>
+            {loading ? 'AUTHENTICATING...' : (
               <>
-                <span className="spinning">⏳</span> Authenticating...
-              </>
-            ) : (
-              <>
-                Authenticate {role === 'admin' ? 'Admin Terminal' : 'HR Console'} <ArrowRight size={16} />
+                {isHr ? 'SIGN IN TO HR PORTAL' : 'SIGN IN TO ADMIN PORTAL'} <ArrowRight size={16} />
               </>
             )}
           </button>
-        </form>
 
-        {/* FOOTER NOTICE */}
-        <div className="ely-footer-notice">
-          <Shield size={13} style={{ color: '#38bdf8' }} />
-          <span>Restricted Executive Console • Authorized Personnel Only</span>
-        </div>
+          <button
+            type="button"
+            className="edufyi-secondary-btn"
+            onClick={() => setNotice('Hardware Passkey authentication is currently in private preview. Please use your standard credentials.')}
+          >
+            <Key size={16} style={{ color: '#00b4d8' }} />
+            Passkey login is not configured
+          </button>
+        </form>
       </div>
     </div>
   )
 }
 
 /**
- * Main unified LoginPage router:
- * - If route is /employee/login or hash has employee -> renders EmployeeLoginPage
- * - Otherwise (/admin/login, /hr/login, /login) -> renders ManagementLoginPage
+ * Main Router for Login:
+ * - If path is /employee/login -> renders EmployeeLoginPage (matching Screenshot 2, NO switch console)
+ * - If path is /admin/login, /hr/login, or /login -> renders ManagementLoginPage (matching Screenshot 1, NO switch console)
  */
 export function LoginPage({ route }) {
   const isEmployee =
@@ -774,10 +812,10 @@ export function LoginPage({ route }) {
   }
 
   const defaultRole =
-    route?.path === '/hr/login' ||
-    (typeof window !== 'undefined' && window.location.hash.includes('hr'))
-      ? 'hr'
-      : 'admin'
+    route?.path === '/admin/login' ||
+    (typeof window !== 'undefined' && window.location.hash.includes('admin'))
+      ? 'admin'
+      : 'hr'
 
   return <ManagementLoginPage defaultRole={defaultRole} />
 }
