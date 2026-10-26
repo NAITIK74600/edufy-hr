@@ -117,7 +117,7 @@ export function createAttendanceRouter({ auth, service, useDatabase = false, per
   // 1. Attendance Configuration & Policy
   router.get('/config', auth.authenticate, (request, response) => {
     const rawConfig = service.getConfig()
-    const isPrivileged = ['admin', 'hr'].includes(request.auth?.user?.role)
+    const isPrivileged = hasPermission(request.auth?.user, PERMISSIONS.ATTENDANCE_WRITE)
     const clientIp = getClientIp(request)
     if (isPrivileged) {
       return response.json({ success: true, data: { ...rawConfig, clientIp } })
@@ -146,7 +146,7 @@ export function createAttendanceRouter({ auth, service, useDatabase = false, per
   router.post('/check-in', auth.authenticate, async (request, response, next) => {
     try {
       const user = request.auth.user
-      const isPrivileged = ['admin', 'hr'].includes(user.role)
+      const isPrivileged = hasPermission(user, PERMISSIONS.ATTENDANCE_WRITE)
       const requestedEmployeeId = request.body?.employeeId
       if (requestedEmployeeId && requestedEmployeeId !== (user.employeeId || user.id) && !isPrivileged) {
         const error = new Error('You are not authorized to record attendance for another employee.')
@@ -185,7 +185,7 @@ export function createAttendanceRouter({ auth, service, useDatabase = false, per
   router.post('/break/start', auth.authenticate, async (request, response, next) => {
     try {
       const user = request.auth.user
-      const isPrivileged = ['admin', 'hr'].includes(user.role)
+      const isPrivileged = hasPermission(user, PERMISSIONS.ATTENDANCE_WRITE)
       const requestedEmployeeId = request.body?.employeeId
       if (requestedEmployeeId && requestedEmployeeId !== (user.employeeId || user.id) && !isPrivileged) {
         const error = new Error('You are not authorized to start breaks for another employee.')
@@ -206,7 +206,7 @@ export function createAttendanceRouter({ auth, service, useDatabase = false, per
   router.post('/break/end', auth.authenticate, async (request, response, next) => {
     try {
       const user = request.auth.user
-      const isPrivileged = ['admin', 'hr'].includes(user.role)
+      const isPrivileged = hasPermission(user, PERMISSIONS.ATTENDANCE_WRITE)
       const requestedEmployeeId = request.body?.employeeId
       if (requestedEmployeeId && requestedEmployeeId !== (user.employeeId || user.id) && !isPrivileged) {
         const error = new Error('You are not authorized to end breaks for another employee.')
@@ -253,7 +253,7 @@ export function createAttendanceRouter({ auth, service, useDatabase = false, per
   router.post('/check-out', auth.authenticate, async (request, response, next) => {
     try {
       const user = request.auth.user
-      const isPrivileged = ['admin', 'hr'].includes(user.role)
+      const isPrivileged = hasPermission(user, PERMISSIONS.ATTENDANCE_WRITE)
       const requestedEmployeeId = request.body?.employeeId
       if (requestedEmployeeId && requestedEmployeeId !== (user.employeeId || user.id) && !isPrivileged) {
         const error = new Error('You are not authorized to punch out for another employee.')

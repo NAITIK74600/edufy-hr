@@ -36,7 +36,7 @@ function filter(user, resource) {
         { recipientRole: 'all' },
         { recipientRole: user.role }
       )
-      if (['admin', 'hr', 'hr_executive', 'director', 'managing_director', 'co_founder'].includes(user.role)) {
+      if (['admin', 'hr', 'hr_executive', 'director', 'managing_director', 'co_founder', 'vertical_head'].includes(user.role)) {
         orConditions.push({ recipientRole: 'admin' }, { recipientRole: 'hr' })
       }
     }
@@ -342,7 +342,7 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
         // Notification for all Admin & HR members
         const adminAndHr = await Employee.find({
           status: 'active',
-          role: { $in: ['admin', 'hr', 'hr_executive', 'director', 'managing_director', 'co_founder'] },
+          role: { $in: ['admin', 'hr', 'hr_executive', 'director', 'managing_director', 'co_founder', 'vertical_head'] },
         }).select('_id role').lean()
         if (adminAndHr.length > 0) {
           const notifDocs = adminAndHr.map((staff) => ({
@@ -368,7 +368,7 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
         // Notification for all Admin & HR members
         const adminAndHr = await Employee.find({
           status: 'active',
-          role: { $in: ['admin', 'hr', 'hr_executive', 'director', 'managing_director', 'co_founder'] },
+          role: { $in: ['admin', 'hr', 'hr_executive', 'director', 'managing_director', 'co_founder', 'vertical_head'] },
         }).select('_id role').lean()
         if (adminAndHr.length > 0) {
           const notifDocs = adminAndHr.map((staff) => ({
@@ -564,7 +564,7 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
             // Employee replied -> notify all active Admin & HR users
             const adminAndHr = await Employee.find({
               status: 'active',
-              role: { $in: ['admin', 'hr', 'hr_executive', 'director', 'managing_director', 'co_founder'] },
+              role: { $in: ['admin', 'hr', 'hr_executive', 'director', 'managing_director', 'co_founder', 'vertical_head'] },
             }).select('_id role').lean()
             if (adminAndHr.length > 0) {
               const notifDocs = adminAndHr.map((staff) => ({

@@ -277,8 +277,14 @@ export function createLeaveService({ repository, employeeRepository, notificatio
     },
     async decide(id, decision, payload, actor, scope = 'team') {
       const request = await getRequest(id, actor, scope)
+      const isSelf = idOf(request.employeeId) === idOf(actor.id) ||
+        (actor.employeeId && idOf(request.employeeId) === idOf(actor.employeeId))
+      if (isSelf) {
+        throw error('Self-approval of leave requests is strictly prohibited. You cannot decide your own leave request.', 403, 'FORBIDDEN_SELF_APPROVAL')
+      }
+      const isLeadership = ['director', 'managing_director', 'co_founder', 'vertical_head'].includes(actor.role)
       const isHr = (hasPermission(actor, PERMISSIONS.LEAVE_HR_REVIEW) || ['admin', 'hr'].includes(actor.role))
-      const isDirector = (actor.role === 'director' || ['admin', 'hr'].includes(actor.role)) && request.status === 'pending_director'
+      const isDirector = (isLeadership || ['admin', 'hr'].includes(actor.role)) && request.status === 'pending_director'
       const isManager = (hasPermission(actor, PERMISSIONS.LEAVE_TEAM_APPROVE) || ['manager', 'admin', 'hr'].includes(actor.role)) && (request.status === 'pending_manager' || request.status === 'pending_tl')
       const isTl = (hasPermission(actor, PERMISSIONS.LEAVE_TEAM_APPROVE) || ['team_lead', 'manager', 'admin', 'hr'].includes(actor.role)) && request.status === 'pending_tl'
 

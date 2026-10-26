@@ -268,7 +268,7 @@ async function context(employee, month) {
 export function createPayrollRouter({ auth }) {
   const router = express.Router()
   router.use(auth.authenticate)
-  const isManagementRole = (user) => ['admin', 'hr', 'hr_executive', 'director', 'managing_director', 'co_founder'].includes(user?.role)
+  const isManagementRole = (user) => ['admin', 'hr', 'hr_executive', 'director', 'managing_director', 'co_founder', 'vertical_head'].includes(user?.role)
   const management = (req, res, next) =>
     (isManagementRole(req.auth.user) || ['admin', 'hr'].includes(req.auth.user.role)) && hasPermission(req.auth.user, 'payroll.write')
       ? next()
@@ -411,7 +411,7 @@ export function createPayrollRouter({ auth }) {
 
   // Helper to verify payslip ownership
   async function verifyPayslipAccess(record, authUser) {
-    const isManagement = ['admin', 'hr'].includes(authUser.role)
+    const isManagement = isManagementRole(authUser) && hasPermission(authUser, 'payroll.read')
     if (isManagement) return true
 
     let userEmp = null

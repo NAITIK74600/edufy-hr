@@ -150,8 +150,26 @@ export function createEmployeeRouter({ auth, service }) {
       }
       let updateBody = request.body ?? {}
       if (isSelf && !hasPermission(request.auth.user, PERMISSIONS.EMPLOYEES_WRITE)) {
-        const allowedSelfFields = ['identity', 'parentsContact', 'emergencyContact', 'bankDetails', 'onboardingDocs', 'phone', 'financeDetails', 'complianceDocs', 'policyConsents', 'avatarUrl', 'onboardingStatus']
+        const allowedSelfFields = ['identity', 'parentsContact', 'emergencyContact', 'bankDetails', 'onboardingDocs', 'phone', 'financeDetails', 'complianceDocs', 'policyConsents', 'avatarUrl']
         updateBody = Object.fromEntries(Object.entries(updateBody).filter(([key]) => allowedSelfFields.includes(key)))
+        if (request.body?.onboardingStatus) {
+          updateBody.onboardingStatus = 'submitted'
+          updateBody.onboardingSubmittedAt = new Date()
+        }
+        if (updateBody.onboardingDocs && typeof updateBody.onboardingDocs === 'object') {
+          const sanitizedDocs = {}
+          for (const [k, doc] of Object.entries(updateBody.onboardingDocs)) {
+            if (doc && typeof doc === 'object') {
+              sanitizedDocs[k] = {
+                ...doc,
+                status: 'submitted',
+                verifiedAt: null,
+                verifiedBy: null,
+              }
+            }
+          }
+          updateBody.onboardingDocs = sanitizedDocs
+        }
       }
       return response.json({ success: true, data: await service.update(request.params.id, updateBody, request.auth.user) })
     } catch (error) { return next(error) }
