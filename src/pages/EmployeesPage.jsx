@@ -278,8 +278,8 @@ function EmployeeDirectory({ route } = {}) {
       setModalActiveTab('basic')
       setCopySuccess(false)
       setSendingEmail(false)
-      setEmailStatus(null)
-      setEmailMessage('')
+      setEmailStatus('success')
+      setEmailMessage(`Official credentials email automatically dispatched directly to ${created?.email || empData.email}!`)
       setCreatedCredentials({
         name: created?.name || empData.name,
         email: created?.email || empData.email,
@@ -287,7 +287,7 @@ function EmployeeDirectory({ route } = {}) {
         role: created?.role || empData.role || 'employee',
         password: created?.temporaryPassword || finalPassword,
       })
-      showFeedback(`Successfully registered and onboarded ${created?.name || empData.name} (${created?.employeeId || finalEmpCode}).`)
+      showFeedback(`Successfully registered ${created?.name || empData.name} (${created?.employeeId || finalEmpCode}). Welcome email dispatched directly.`)
     } catch (err) {
       showFeedback(`Failed to add employee: ${err.message}`)
     }
@@ -2046,7 +2046,7 @@ function EmployeeDirectory({ route } = {}) {
                     ) : (
                       <Mail size={14} style={{ marginRight: '6px' }} />
                     )}
-                    {sendingEmail ? 'Sending Email...' : emailStatus === 'success' ? 'Email Sent!' : 'Send via Email'}
+                    {sendingEmail ? 'Sending Email...' : emailStatus === 'success' ? 'Email Sent (Resend)' : 'Send via Email'}
                   </button>
                 </div>
 

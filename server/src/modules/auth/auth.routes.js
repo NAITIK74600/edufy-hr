@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto'
 import mongoose from 'mongoose'
 import { attachOnboardingDocs } from '../../models/onboardingDocsCache.js'
 import { hashPassword } from '../../auth/passwords.js'
-import { sendPasswordResetEmail } from '../../services/mail.service.js'
+import { sendPasswordResetEmail, sendWelcomeEmail } from '../../services/mail.service.js'
 
 export function createAuthRouter({ authService, auth, userStore }) {
   const router = express.Router()
@@ -135,6 +135,29 @@ export function createAuthRouter({ authService, auth, userStore }) {
       }
       const savedUser = await userStore.addUser(newUser)
       if (!savedUser) throw new Error('Account could not be saved.')
+
+      if (cleanEmail) {
+        const rolePath = (role === 'admin') ? 'admin/login' : (role === 'hr' ? 'hr/login' : 'employee/login')
+        const publicBase = (process.env.APP_PUBLIC_URL || 'https://empoyee.edufyitechsolutions.com').replace(/\/+$/, '')
+        const portalUrl = `${publicBase}/#/${rolePath}`
+
+        sendWelcomeEmail({
+          employee: {
+            name: newUser.name,
+            displayName: newUser.displayName,
+            email: cleanEmail,
+            employeeId: assignedEmpId,
+            designation: newUser.designation,
+            department: newUser.department,
+            role: newUser.role,
+          },
+          temporaryPassword: password,
+          loginUrl: portalUrl,
+        })
+          .then(() => console.log(`[MailService:SUCCESS] Account creation welcome email dispatched directly to ${cleanEmail}`))
+          .catch((err) => console.error(`[MailService:ERROR] Failed sending account creation email to ${cleanEmail}:`, err?.message || err))
+      }
+
       return response.status(201).json({ success: true, data: authService.toPublicUser(savedUser) })
     } catch (error) {
       return next(error)

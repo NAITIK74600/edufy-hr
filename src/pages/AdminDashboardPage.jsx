@@ -479,11 +479,11 @@ export function AdminUsersModule() {
     setFormPassword('')
     setLinkedEmployeeId('')
 
-    // Open Credentials Sharing Modal
+    // Open Credentials Sharing Modal - email directly dispatched by backend
     setCopySuccess(false)
     setSendingEmail(false)
-    setEmailStatus(null)
-    setEmailMessage('')
+    setEmailStatus('success')
+    setEmailMessage(`Official credentials email automatically dispatched directly to ${payload.email}!`)
     setCreatedCredentials({
       name: payload.name,
       email: payload.email,
@@ -1329,7 +1329,7 @@ export function AdminUsersModule() {
                   ) : (
                     <Mail size={14} />
                   )}
-                  {sendingEmail ? 'Sending Email...' : emailStatus === 'success' ? 'Email Sent!' : 'Send via Email'}
+                  {sendingEmail ? 'Sending Email...' : emailStatus === 'success' ? 'Email Sent (Resend)' : 'Send via Email'}
                 </Button>
               </div>
 

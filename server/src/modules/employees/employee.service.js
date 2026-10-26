@@ -165,10 +165,14 @@ export function createEmployeeService({ repository }) {
       await repository.addAudit(auditEvent(actor, 'employee.created', employee.id ?? employee._id, Object.keys(values)))
 
       if (employee.email) {
+        const rolePath = (values.role === 'admin') ? 'admin/login' : (values.role === 'hr' ? 'hr/login' : 'employee/login')
+        const publicBase = (process.env.APP_PUBLIC_URL || 'https://empoyee.edufyitechsolutions.com').replace(/\/+$/, '')
+        const portalUrl = `${publicBase}/#/${rolePath}`
+
         sendWelcomeEmail({
           employee: { ...employee, ...values },
           temporaryPassword: rawPassword,
-          loginUrl: process.env.APP_PUBLIC_URL || 'https://empoyee.edufyitechsolutions.com',
+          loginUrl: portalUrl,
         })
           .then(() => console.log(`[MailService:SUCCESS] Welcome email delivered to ${employee.email} via ADMIN channel`))
           .catch((err) => console.error(`[MailService:ERROR] Failed sending welcome email to ${employee.email}:`, err?.message || err))
@@ -247,11 +251,14 @@ export function createEmployeeService({ repository }) {
       await repository.addAudit(auditEvent(actor, `employee.${status}`, employee.id ?? employee._id, ['status']))
 
       if (status === 'invited' && employee.email) {
+        const rolePath = (employee.role === 'admin') ? 'admin/login' : (employee.role === 'hr' ? 'hr/login' : 'employee/login')
+        const publicBase = (process.env.APP_PUBLIC_URL || 'https://empoyee.edufyitechsolutions.com').replace(/\/+$/, '')
+        const portalUrl = `${publicBase}/#/${rolePath}`
         const envPassword = process.env.DEFAULT_EMPLOYEE_PASSWORD || process.env.EMPLOYEE_PASSWORD || 'Password@123'
         sendWelcomeEmail({
           employee,
           temporaryPassword: envPassword,
-          loginUrl: process.env.APP_PUBLIC_URL || 'https://empoyee.edufyitechsolutions.com',
+          loginUrl: portalUrl,
         })
           .then(() => console.log(`[MailService:SUCCESS] Invite email delivered to ${employee.email} via ADMIN channel`))
           .catch((err) => console.error(`[MailService:ERROR] Failed sending invite email to ${employee.email}:`, err?.message || err))

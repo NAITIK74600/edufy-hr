@@ -464,7 +464,13 @@ export async function sendWelcomeEmail({ employee, temporaryPassword, loginUrl }
   const to = employee.email
   if (!to) return { success: false, reason: 'No recipient email' }
 
-  const portalUrl = loginUrl || process.env.APP_PUBLIC_URL || 'https://empoyee.edufyitechsolutions.com'
+  const rolePath = employee.role === 'admin' ? 'admin/login' : (employee.role === 'hr' ? 'hr/login' : 'employee/login')
+  const baseAppUrl = (process.env.APP_PUBLIC_URL || 'https://empoyee.edufyitechsolutions.com').replace(/\/+$/, '')
+  let portalUrl = loginUrl || `${baseAppUrl}/#/${rolePath}`
+  if (!portalUrl.includes('#/')) {
+    portalUrl = `${portalUrl.replace(/\/+$/, '')}/#/${rolePath}`
+  }
+
   const empName = employee.name || employee.displayName || 'Team Member'
   const empCode = employee.employeeId || 'Assigned on Login'
   const designation = employee.designation || 'Staff Associate'
