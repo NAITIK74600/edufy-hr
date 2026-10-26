@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react'
 import {
   Mail,
   Lock,
+  Eye,
+  EyeOff,
   Fingerprint,
   KeyRound,
   ShieldCheck,
@@ -15,7 +17,7 @@ import {
 import { useAuth } from '../auth/AuthContext'
 
 export function LoginPage({ route }) {
-  const { login, logout, user } = useAuth()
+  const { login, user } = useAuth()
 
   // Determine starting mode based on route/hash
   const initialIsManagement =
@@ -24,46 +26,63 @@ export function LoginPage({ route }) {
     (typeof window !== 'undefined' &&
       (window.location.hash.includes('admin') || window.location.hash.includes('hr')))
 
+  const initialRole =
+    route?.path === '/hr/login' ||
+    (typeof window !== 'undefined' && window.location.hash.includes('hr'))
+      ? 'hr'
+      : 'admin'
+
   const [isManagement, setIsManagement] = useState(initialIsManagement)
 
   // Employee Login form state
   const [empEmail, setEmpEmail] = useState('')
   const [empPassword, setEmpPassword] = useState('')
+  const [showEmpPassword, setShowEmpPassword] = useState(false)
   const [empRemember, setEmpRemember] = useState(true)
   const [empLoading, setEmpLoading] = useState(false)
   const [empError, setEmpError] = useState('')
 
   // Management Login form state
-  const [mgmtEmail, setMgmtEmail] = useState('')
+  const [mgmtEmail, setMgmtEmail] = useState(initialRole === 'hr' ? 'hr@edufyi.in' : 'admin@edufyi.in')
   const [mgmtPassword, setMgmtPassword] = useState('')
+  const [showMgmtPassword, setShowMgmtPassword] = useState(false)
   const [mgmtRemember, setMgmtRemember] = useState(true)
-  const [mgmtRoleType, setMgmtRoleType] = useState('admin') // 'admin' or 'hr'
+  const [mgmtRoleType, setMgmtRoleType] = useState(initialRole) // 'admin' or 'hr'
   const [mgmtLoading, setMgmtLoading] = useState(false)
   const [mgmtError, setMgmtError] = useState('')
 
-  // Sync hash changes
+  // Sync hash changes dynamically
   useEffect(() => {
-    const hash = window.location.hash
-    if (hash.includes('admin') || hash.includes('hr')) {
-      setIsManagement(true)
-      if (hash.includes('hr')) {
-        setMgmtRoleType('hr')
-        setMgmtEmail((prev) => (!prev || prev === 'admin@edufyi.in' ? 'hr@edufyi.in' : prev))
-      } else {
-        setMgmtRoleType('admin')
-        setMgmtEmail((prev) => (!prev || prev === 'hr@edufyi.in' ? 'admin@edufyi.in' : prev))
+    const handleHash = () => {
+      const hash = window.location.hash || ''
+      if (hash.includes('admin') || hash.includes('hr')) {
+        setIsManagement(true)
+        if (hash.includes('hr')) {
+          setMgmtRoleType('hr')
+          setMgmtEmail((prev) => (!prev || prev === 'admin@edufyi.in' ? 'hr@edufyi.in' : prev))
+        } else {
+          setMgmtRoleType('admin')
+          setMgmtEmail((prev) => (!prev || prev === 'hr@edufyi.in' ? 'admin@edufyi.in' : prev))
+        }
+      } else if (hash.includes('employee')) {
+        setIsManagement(false)
       }
-    } else if (hash.includes('employee')) {
-      setIsManagement(false)
     }
+
+    handleHash()
+    window.addEventListener('hashchange', handleHash)
+    return () => window.removeEventListener('hashchange', handleHash)
   }, [route?.path])
 
   function handleSwitchToManagement() {
     setIsManagement(true)
     setEmpError('')
     setMgmtError('')
-    if (!mgmtEmail) setMgmtEmail('admin@edufyi.in')
-    window.location.hash = '#/admin/login'
+    const targetRole = mgmtRoleType || 'admin'
+    if (!mgmtEmail) {
+      setMgmtEmail(targetRole === 'hr' ? 'hr@edufyi.in' : 'admin@edufyi.in')
+    }
+    window.location.hash = targetRole === 'hr' ? '#/hr/login' : '#/admin/login'
   }
 
   function handleSwitchToEmployee() {
@@ -101,8 +120,8 @@ export function LoginPage({ route }) {
 
     setEmpLoading(true)
     try {
-      const user = await login(empEmail.trim(), empPassword, 'employee')
-      if (user?.role === 'admin' || user?.role === 'hr') {
+      const loggedUser = await login(empEmail.trim(), empPassword, 'employee')
+      if (loggedUser?.role === 'admin' || loggedUser?.role === 'hr') {
         throw new Error('Access denied: Management (Admin/HR) accounts must log in via the Executive Management Console.')
       }
       window.location.hash = '#/employee'
@@ -128,11 +147,11 @@ export function LoginPage({ route }) {
     setMgmtLoading(true)
     try {
       const targetPortal = mgmtRoleType === 'hr' ? 'hr' : 'admin'
-      const user = await login(mgmtEmail.trim(), mgmtPassword, targetPortal)
+      const loggedUser = await login(mgmtEmail.trim(), mgmtPassword, targetPortal)
 
-      if (user?.role === 'admin') {
+      if (loggedUser?.role === 'admin') {
         window.location.hash = '#/admin'
-      } else if (user?.role === 'hr') {
+      } else if (loggedUser?.role === 'hr') {
         window.location.hash = '#/hr'
       } else {
         throw new Error('Access denied: Employee accounts cannot sign into the Admin or HR Management Console.')
@@ -167,9 +186,9 @@ export function LoginPage({ route }) {
           display: flex;
           justify-content: center;
           align-items: center;
-          padding: 24px;
+          padding: 24px 16px;
           position: relative;
-          overflow: hidden;
+          overflow-x: hidden;
         }
 
         /* Ambient Cyber Lights (Cohesive Blue & Cyan) */
@@ -229,6 +248,7 @@ export function LoginPage({ route }) {
           grid-column: 1 / 2;
           grid-row: 1 / 2;
           background: transparent !important;
+          width: 100%;
         }
 
         .ely-form.mgmt-form {
@@ -254,7 +274,7 @@ export function LoginPage({ route }) {
           background: #ffffff;
         }
 
-        /* PORTAL ROLE BADGE (BLUE / CYAN FOR BOTH) */
+        /* PORTAL ROLE BADGE */
         .ely-portal-badge {
           font-size: 0.72rem;
           font-weight: 700;
@@ -268,13 +288,7 @@ export function LoginPage({ route }) {
           gap: 6px;
         }
 
-        .ely-portal-badge.emp {
-          background: rgba(0, 210, 255, 0.14) !important;
-          color: #00d2ff !important;
-          border: 1px solid rgba(0, 210, 255, 0.45) !important;
-          box-shadow: 0 0 14px rgba(0, 210, 255, 0.25) !important;
-        }
-
+        .ely-portal-badge.emp,
         .ely-portal-badge.mgmt {
           background: rgba(0, 210, 255, 0.14) !important;
           color: #00d2ff !important;
@@ -289,6 +303,7 @@ export function LoginPage({ route }) {
           font-weight: 800;
           letter-spacing: -0.02em;
           text-shadow: 0 2px 14px rgba(0, 0, 0, 0.8) !important;
+          text-align: center;
         }
 
         .ely-subtitle {
@@ -320,12 +335,13 @@ export function LoginPage({ route }) {
           margin: 7px 0;
           height: 48px;
           border-radius: 12px;
-          display: grid;
-          grid-template-columns: 14% 86%;
-          padding: 0 0.8rem;
+          display: flex;
+          align-items: center;
+          padding: 0 12px;
           position: relative;
           transition: 0.25s ease;
           border: 1px solid rgba(0, 210, 255, 0.25) !important;
+          gap: 10px;
         }
 
         .ely-input-field:focus-within {
@@ -340,6 +356,7 @@ export function LoginPage({ route }) {
           justify-content: center;
           color: #64748b;
           transition: 0.25s;
+          flex-shrink: 0;
         }
 
         .ely-input-field:focus-within i {
@@ -350,16 +367,36 @@ export function LoginPage({ route }) {
           background: transparent !important;
           outline: none;
           border: none;
-          line-height: 1;
+          line-height: 1.2;
           font-weight: 500;
-          font-size: 0.92rem;
+          font-size: 16px;
           color: #ffffff !important;
           width: 100%;
+          padding: 0;
         }
 
         .ely-input-field input::placeholder {
           color: #64748b !important;
           font-weight: 400;
+          font-size: 0.88rem;
+        }
+
+        .ely-pass-toggle-btn {
+          background: transparent;
+          border: none;
+          color: #64748b;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 4px;
+          border-radius: 6px;
+          flex-shrink: 0;
+          transition: 0.2s;
+        }
+
+        .ely-pass-toggle-btn:hover {
+          color: #00d2ff;
         }
 
         /* REMEMBER ME & RECOVERY OPTIONS */
@@ -416,7 +453,7 @@ export function LoginPage({ route }) {
           text-decoration: underline;
         }
 
-        /* VIBRANT HIGH-CONTRAST PRIMARY BUTTON (BLUE FOR BOTH) */
+        /* PRIMARY BUTTON */
         .ely-btn-primary {
           width: 100%;
           max-width: 360px;
@@ -480,20 +517,7 @@ export function LoginPage({ route }) {
           transform: translateY(-1px);
         }
 
-        .ely-passkey-btn.active {
-          border-color: #00d2ff !important;
-          background: rgba(0, 210, 255, 0.18) !important;
-          color: #00d2ff !important;
-          animation: elyPulse 1.2s infinite;
-        }
-
-        @keyframes elyPulse {
-          0% { box-shadow: 0 0 5px rgba(0, 210, 255, 0.3); }
-          50% { box-shadow: 0 0 22px rgba(0, 210, 255, 0.7); }
-          100% { box-shadow: 0 0 5px rgba(0, 210, 255, 0.3); }
-        }
-
-        /* MANAGEMENT ROLE SELECTOR (BLUE ACCENTS) */
+        /* MANAGEMENT ROLE SELECTOR */
         .ely-mgmt-selector {
           display: flex;
           gap: 10px;
@@ -665,76 +689,138 @@ export function LoginPage({ route }) {
           pointer-events: all;
         }
 
+        /* ============================================================
+           MOBILE & TABLET CLEAN RESPONSIVE FIX (NO OVERLAPPING!)
+           ============================================================ */
         @media (max-width: 870px) {
+          .ely-auth-wrapper {
+            padding: 16px 12px;
+            align-items: center;
+          }
+
           .ely-container {
-            min-height: 840px;
+            min-height: auto;
+            height: auto;
+            max-width: 460px;
+            border-radius: 24px;
+            display: flex;
+            flex-direction: column;
+            overflow: visible;
+          }
+
+          /* Prevent 1500px background circle from clipping or overlapping forms on mobile */
+          .ely-container:before {
+            display: none !important;
+          }
+
+          .ely-forms-container {
+            position: static;
+            width: 100%;
             height: auto;
           }
+
           .ely-signin-slot {
+            position: static;
+            transform: none !important;
             width: 100%;
-            top: 92%;
-            transform: translate(-50%, -100%);
-            transition: 1s 0.8s ease-in-out;
+            top: auto;
+            left: auto !important;
+            display: block;
+            padding: 28px 20px 20px 20px;
           }
-          .ely-signin-slot,
-          .ely-container.role-management-mode .ely-signin-slot {
-            left: 50%;
+
+          .ely-form {
+            padding: 0;
+            width: 100%;
+            display: none !important;
+            grid-column: auto;
+            grid-row: auto;
+            transition: none;
           }
+
+          /* Show only the active form on mobile without position collisions */
+          .ely-container:not(.role-management-mode) .ely-form.emp-form {
+            display: flex !important;
+            opacity: 1 !important;
+            pointer-events: all !important;
+          }
+
+          .ely-container.role-management-mode .ely-form.mgmt-form {
+            display: flex !important;
+            opacity: 1 !important;
+            pointer-events: all !important;
+          }
+
+          .ely-title {
+            font-size: 1.5rem;
+          }
+
+          .ely-input-field {
+            max-width: 100%;
+          }
+
+          .ely-btn-primary,
+          .ely-passkey-btn,
+          .ely-mgmt-selector,
+          .ely-options-row,
+          .ely-alert-box {
+            max-width: 100%;
+          }
+
+          /* Bottom Switcher Panel on mobile (Clean, visible, tap-friendly) */
           .ely-panels-container {
-            grid-template-columns: 1fr;
-            grid-template-rows: 1fr 2fr 1fr;
+            position: static;
+            display: block;
+            width: 100%;
+            height: auto;
+            border-top: 1px solid rgba(0, 210, 255, 0.2);
+            background: rgba(4, 18, 31, 0.85);
+            border-radius: 0 0 24px 24px;
+            padding: 20px 20px 24px 20px;
           }
+
           .ely-panel {
-            flex-direction: row;
-            justify-content: space-around;
+            display: none !important;
             align-items: center;
-            padding: 2.5rem 8%;
-            grid-column: 1 / 2;
+            text-align: center;
+            padding: 0;
+            flex-direction: column;
+            width: 100%;
           }
-          .ely-right-panel {
-            grid-row: 3 / 4;
+
+          .ely-container:not(.role-management-mode) .ely-left-panel {
+            display: flex !important;
           }
-          .ely-left-panel {
-            grid-row: 1 / 2;
+
+          .ely-container.role-management-mode .ely-right-panel {
+            display: flex !important;
           }
+
           .ely-panel .ely-content {
-            padding-right: 15%;
-            transition: transform 0.9s ease-in-out;
-            transition-delay: 0.8s;
+            transform: none !important;
+            padding: 0;
+            width: 100%;
+            align-items: center;
           }
+
           .ely-panel h3 {
-            font-size: 1.25rem;
+            font-size: 1.2rem;
+            margin: 10px 0 6px 0;
           }
+
           .ely-panel p {
-            font-size: 0.78rem;
+            font-size: 0.8rem;
+            margin-bottom: 14px;
+            max-width: 100%;
+            line-height: 1.5;
           }
-          .ely-container:before {
-            width: 1500px;
-            height: 1500px;
-            transform: translateX(-50%);
-            left: 30%;
-            bottom: 68%;
-            right: initial;
-            top: initial;
-            transition: 2s ease-in-out;
-          }
-          .ely-container.role-management-mode:before {
-            transform: translate(-50%, 100%);
-            bottom: 32%;
-            right: initial;
-          }
-          .ely-container.role-management-mode .ely-left-panel .ely-content {
-            transform: translateY(-300px);
-          }
-          .ely-container.role-management-mode .ely-right-panel .ely-content {
-            transform: translateY(0px);
-          }
-          .ely-right-panel .ely-content {
-            transform: translateY(300px);
-          }
-          .ely-container.role-management-mode .ely-signin-slot {
-            top: 6%;
-            transform: translate(-50%, 0);
+
+          .ely-btn-switch {
+            width: 100%;
+            max-width: 320px;
+            justify-content: center;
+            height: 44px;
+            font-size: 0.82rem;
           }
         }
       `}</style>
@@ -746,7 +832,7 @@ export function LoginPage({ route }) {
       <div className={isManagement ? 'ely-container role-management-mode' : 'ely-container'}>
         <div className="ely-forms-container">
           <div className="ely-signin-slot">
-            {/* 1. EMPLOYEE LOGIN FORM */}
+            {/* 1. EMPLOYEE LOGIN FORM (URL: #/employee/login) */}
             <form className="ely-form emp-form" onSubmit={handleEmployeeLogin}>
               <EdufyiOfficialBrandUnit />
 
@@ -810,7 +896,7 @@ export function LoginPage({ route }) {
               <div className="ely-input-field">
                 <i><Lock size={18} /></i>
                 <input
-                  type="password"
+                  type={showEmpPassword ? 'text' : 'password'}
                   required
                   placeholder="Password"
                   value={empPassword}
@@ -819,8 +905,15 @@ export function LoginPage({ route }) {
                     setEmpError('')
                   }}
                 />
+                <button
+                  type="button"
+                  className="ely-pass-toggle-btn"
+                  onClick={() => setShowEmpPassword(!showEmpPassword)}
+                  aria-label={showEmpPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showEmpPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
               </div>
-
 
               {/* REMEMBER ME & FORGOT PASSWORD */}
               <div className="ely-options-row">
@@ -859,7 +952,7 @@ export function LoginPage({ route }) {
               </button>
             </form>
 
-            {/* 2. MANAGEMENT LOGIN FORM (ADMIN / HR) - Styled in same Blue/Cyan */}
+            {/* 2. MANAGEMENT LOGIN FORM (ADMIN / HR) (URL: #/admin/login or #/hr/login) */}
             <form className="ely-form mgmt-form" onSubmit={handleManagementLogin}>
               <EdufyiOfficialBrandUnit />
 
@@ -937,8 +1030,8 @@ export function LoginPage({ route }) {
                   spellCheck={false}
                   placeholder={
                     mgmtRoleType === 'admin'
-                      ? 'Admin Email or Username (e.g. admin@edufyi.in)'
-                      : 'HR Email or Username (e.g. hr@edufyi.in)'
+                      ? 'Admin Email or Username (admin@edufyi.in)'
+                      : 'HR Email or Username (hr@edufyi.in)'
                   }
                   value={mgmtEmail}
                   onChange={(e) => {
@@ -951,7 +1044,7 @@ export function LoginPage({ route }) {
               <div className="ely-input-field">
                 <i><Lock size={18} /></i>
                 <input
-                  type="password"
+                  type={showMgmtPassword ? 'text' : 'password'}
                   required
                   placeholder="Master Password"
                   value={mgmtPassword}
@@ -960,8 +1053,15 @@ export function LoginPage({ route }) {
                     setMgmtError('')
                   }}
                 />
+                <button
+                  type="button"
+                  className="ely-pass-toggle-btn"
+                  onClick={() => setShowMgmtPassword(!showMgmtPassword)}
+                  aria-label={showMgmtPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showMgmtPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
               </div>
-
 
               {/* REMEMBER ME & RECOVERY KEY */}
               <div className="ely-options-row">
@@ -983,7 +1083,7 @@ export function LoginPage({ route }) {
                 </a>
               </div>
 
-              {/* PRIMARY SIGN IN BUTTON (BLUE SAME AS EMPLOYEE) */}
+              {/* PRIMARY SIGN IN BUTTON */}
               <button type="submit" disabled={mgmtLoading} className="ely-btn-primary">
                 {mgmtLoading
                   ? 'Authenticating...'
@@ -1008,7 +1108,7 @@ export function LoginPage({ route }) {
 
         {/* SIDE PANELS TRIGGERING THE SLIDING ROLE ANIMATION */}
         <div className="ely-panels-container">
-          {/* LEFT PANEL: Shown in Employee mode -> Prompts to slide to Management */}
+          {/* LEFT PANEL: Shown in Employee mode -> Prompts to switch to Management */}
           <div className="ely-panel ely-left-panel">
             <div className="ely-content">
               <EdufyiOfficialBrandUnit large />
@@ -1027,7 +1127,7 @@ export function LoginPage({ route }) {
             </div>
           </div>
 
-          {/* RIGHT PANEL: Shown in Management mode -> Prompts to slide to Employee */}
+          {/* RIGHT PANEL: Shown in Management mode -> Prompts to switch to Employee */}
           <div className="ely-panel ely-right-panel">
             <div className="ely-content">
               <EdufyiOfficialBrandUnit large />
@@ -1072,7 +1172,7 @@ export function EdufyiOfficialBrandUnit({ large = false }) {
       {/* Official Edufyi Logo Image from user */}
       <img
         src="/edufyi%20logo.jpg.jpeg"
-        alt="Edufy"
+        alt="Edufyi"
         style={{
           width: sizePx + 'px',
           height: sizePx + 'px',
