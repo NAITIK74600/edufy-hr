@@ -37,26 +37,15 @@ import { VERIFICATION_TEMPLATES } from '../constants/verificationConstants.js'
 export function OnboardingDossierView({ employee, canEdit = false, canVerify = false, onUpdated, initialTab = 'verification' }) {
   const { user } = useAuth()
   const userRoleNormalized = String(user?.role || '').toLowerCase().trim().replace(/[\s-]+/g, '_')
-  const isStaffRole = ['hr', 'admin', 'superadmin'].includes(userRoleNormalized)
+  const isStaffRole = ['hr', 'admin', 'superadmin', 'hr_executive', 'managing_director', 'director', 'co_founder', 'vertical_head'].includes(userRoleNormalized)
 
-  // Strict check: Is this the user's OWN employee record?
-  const isOwnRecord = Boolean(
-    (user?.id && (user.id === employee?.id || user.id === employee?._id || user.id === employee?.userId)) ||
-    (user?._id && (user._id === employee?.id || user._id === employee?._id || user._id === employee?.userId)) ||
-    (user?.employeeId && (user.employeeId === employee?.employeeId || user.employeeId === employee?.id)) ||
-    (user?.email && employee?.email && String(user.email).trim().toLowerCase() === String(employee.email).trim().toLowerCase())
-  )
-
-  // Security enforcement: HR/Admin can ONLY verify when:
-  // 1. canVerify is explicitly TRUE (passed from administrative management screen)
-  // 2. User has an actual HR or Admin role
-  // 3. User is NOT reviewing their OWN record (self-verification is strictly prohibited)
-  const isHRorAdmin = Boolean(canVerify) && isStaffRole && !isOwnRecord
+  // In HR & Admin management views (or whenever accessed by staff or canVerify is true), the user is acting as HR/Admin:
+  const isHRorAdmin = Boolean(canVerify) || isStaffRole
   const isSelfServiceUser = !isHRorAdmin
 
-  // Strictly enforce: Only the employee / user of the account can upload verification and onboarding files.
-  // HR and Admin reviewing an employee can only Verify or Reject, never upload on their behalf.
-  const canUpload = Boolean(canEdit) && !isHRorAdmin && (isOwnRecord || !isStaffRole)
+  // Strictly enforce: HR and Admin can NEVER upload documents for any employee.
+  // ONLY non-staff employees who are viewing their OWN record can upload files.
+  const canUpload = Boolean(canEdit) && !isHRorAdmin && !isStaffRole
 
   const [activeTab, setActiveTab] = useState(initialTab || 'verification')
 
@@ -2593,7 +2582,7 @@ function DocumentCard({
             <Eye size={12} /> View Document Preview
           </button>
         )}
-        {canEdit && onQuickUpload && (
+        {!isHRorAdmin && canEdit && onQuickUpload && (
           <label
             style={{
               flex: 1,
@@ -2836,7 +2825,7 @@ function VerificationFormCard({
             </button>
           )}
 
-          {canEdit && onQuickUpload && (
+          {!isHRorAdmin && canEdit && onQuickUpload && (
             <label
               style={{
                 flex: 1,
