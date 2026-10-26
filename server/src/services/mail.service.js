@@ -43,6 +43,16 @@ export const DEFAULT_COMPANY = {
   secondaryColor: '#0B3155',
 }
 
+function cleanPassword(val) {
+  if (!val || typeof val !== 'string') return ''
+  let cleaned = val.trim().replace(/^["']|["']$/g, '').trim()
+  // Strip spaces if user pasted 16-character Google App Password with spaces ("xxxx xxxx xxxx xxxx")
+  if (/^[a-zA-Z0-9]{4}(\s+[a-zA-Z0-9]{4}){3}$/.test(cleaned) || (cleaned.length >= 16 && cleaned.includes(' '))) {
+    cleaned = cleaned.replace(/\s+/g, '')
+  }
+  return cleaned
+}
+
 function isPlaceholder(val) {
   if (!val || typeof val !== 'string') return true
   const lower = val.trim().toLowerCase()
@@ -51,21 +61,21 @@ function isPlaceholder(val) {
     lower.includes('yourdomain.com') ||
     lower.includes('admin_app_password') ||
     lower.includes('hr_app_password') ||
-    lower === 'password@123' ||
+    lower === 'changeme' ||
     lower === 'change-me'
   )
 }
 
 function getMailConfig() {
-  const host = process.env.SMTP_HOST || 'smtp.gmail.com'
+  const host = (process.env.SMTP_HOST || 'smtp.gmail.com').trim()
   const port = parseInt(process.env.SMTP_PORT || '587', 10)
   const secure = process.env.SMTP_SECURE === 'true' || port === 465
 
-  const adminEmail = process.env.ADMIN_EMAIL || 'admin@edufyitech.in'
-  const adminPass = process.env.ADMIN_EMAIL_PASS || ''
+  const adminEmail = (process.env.ADMIN_EMAIL || 'admin@edufyitech.in').trim()
+  const adminPass = cleanPassword(process.env.ADMIN_EMAIL_PASS || process.env.ADMIN_PASSWORD)
 
-  const hrEmail = process.env.HR_EMAIL || 'hr@edufyitech.in'
-  const hrPass = process.env.HR_EMAIL_PASS || ''
+  const hrEmail = (process.env.HR_EMAIL || 'hr@edufyitech.in').trim()
+  const hrPass = cleanPassword(process.env.HR_EMAIL_PASS || process.env.HR_PASSWORD)
 
   const publicUrl = process.env.APP_PUBLIC_URL || 'https://empoyee.edufyitechsolutions.com'
 
@@ -117,19 +127,18 @@ export function createTransporter(type = 'hr') {
     }
   }
 
+  const is465 = config.port === 465 || config.secure === true
   const transportOpts = {
     host: config.host,
     port: config.port,
-    secure: config.secure,
+    secure: is465,
     auth: { user, pass },
     tls: {
       rejectUnauthorized: false, // Prevents self-signed / local proxy cert errors
     },
-  }
-
-  // Gmail optimizations
-  if (config.host.toLowerCase().includes('gmail.com')) {
-    transportOpts.service = 'gmail'
+    connectionTimeout: 15000,
+    greetingTimeout: 15000,
+    socketTimeout: 20000,
   }
 
   const transporter = nodemailer.createTransport(transportOpts)
@@ -144,14 +153,25 @@ export function createTransporter(type = 'hr') {
         from: `"${fromName}" <${user}>`,
         ...mailOptions,
       }
-      const info = await transporter.sendMail(fullOptions)
-      return {
-        ...info,
-        to: mailOptions.to,
-        recipient: mailOptions.to,
-        subject: mailOptions.subject,
-        fromRole: type,
-        configured: true,
+      console.log(`[MailService:DISPATCH] Attempting email via [${type.toUpperCase()}] from "${user}" to "${mailOptions.to}" | Subject: "${mailOptions.subject}"`)
+      try {
+        const info = await transporter.sendMail(fullOptions)
+        console.log(`[MailService:SUCCESS] Delivered to "${mailOptions.to}" (Message ID: ${info.messageId})`)
+        return {
+          ...info,
+          success: true,
+          to: mailOptions.to,
+          recipient: mailOptions.to,
+          subject: mailOptions.subject,
+          fromRole: type,
+          configured: true,
+        }
+      } catch (sendErr) {
+        console.error(`[MailService:ERROR] Failed sending [${type.toUpperCase()}] to "${mailOptions.to}":`, sendErr?.message || sendErr)
+        if (sendErr?.code === 'EAUTH' || sendErr?.responseCode === 535) {
+          console.error(`[MailService:AUTH_HINT] Authentication failed for ${user}. For Gmail/Workspace, ensure 2-Step Verification is ON and a 16-character App Password (not your portal password) is placed in ADMIN_EMAIL_PASS / HR_EMAIL_PASS in .env.`)
+        }
+        throw sendErr
       }
     },
     async verify() {
@@ -439,7 +459,7 @@ function getLogoAttachment() {
 // 1. WELCOME EMAIL (On Account Creation / Employee Onboarding)
 // ---------------------------------------------------------------------------
 export async function sendWelcomeEmail({ employee, temporaryPassword, loginUrl }) {
-  const transporter = createTransporter('hr')
+  const transporter = createTransporter('admin')
   const to = employee.email
   if (!to) return { success: false, reason: 'No recipient email' }
 

@@ -155,9 +155,10 @@ export function createEmployeeService({ repository }) {
       values.name = String(payload.name).trim()
       values.status ??= 'invited'
       values.role ??= 'employee'
-      const rawPassword = values.password && String(values.password).trim().length >= 8
+      const envPassword = process.env.DEFAULT_EMPLOYEE_PASSWORD || process.env.EMPLOYEE_PASSWORD
+      const rawPassword = envPassword || (values.password && String(values.password).trim().length >= 8
         ? String(values.password).trim()
-        : 'Password@123'
+        : 'Password@123')
       values.passwordHash = hashPassword(rawPassword)
       delete values.password
       const employee = await repository.create(values)
@@ -168,7 +169,9 @@ export function createEmployeeService({ repository }) {
           employee: { ...employee, ...values },
           temporaryPassword: rawPassword,
           loginUrl: process.env.APP_PUBLIC_URL || 'https://empoyee.edufyitechsolutions.com',
-        }).catch((err) => console.warn('[MailService] Welcome email notice:', err?.message || err))
+        })
+          .then(() => console.log(`[MailService:SUCCESS] Welcome email delivered to ${employee.email} via ADMIN channel`))
+          .catch((err) => console.error(`[MailService:ERROR] Failed sending welcome email to ${employee.email}:`, err?.message || err))
       }
 
       return {
@@ -244,11 +247,14 @@ export function createEmployeeService({ repository }) {
       await repository.addAudit(auditEvent(actor, `employee.${status}`, employee.id ?? employee._id, ['status']))
 
       if (status === 'invited' && employee.email) {
+        const envPassword = process.env.DEFAULT_EMPLOYEE_PASSWORD || process.env.EMPLOYEE_PASSWORD || 'Password@123'
         sendWelcomeEmail({
           employee,
-          temporaryPassword: 'Password@123',
+          temporaryPassword: envPassword,
           loginUrl: process.env.APP_PUBLIC_URL || 'https://empoyee.edufyitechsolutions.com',
-        }).catch((err) => console.warn('[MailService] Invite email notice:', err?.message || err))
+        })
+          .then(() => console.log(`[MailService:SUCCESS] Invite email delivered to ${employee.email} via ADMIN channel`))
+          .catch((err) => console.error(`[MailService:ERROR] Failed sending invite email to ${employee.email}:`, err?.message || err))
       }
 
       return repository.findById(id)
