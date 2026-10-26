@@ -14,369 +14,482 @@ import {
 import { useAuth } from '../auth/AuthContext'
 
 /**
- * Pixel-perfect styles matching the exact Edufy design in the user screenshot:
- * - Deep dark navy/midnight background with top-right cyan glow
- * - Dark navy rounded input fields (#0c1829)
- * - Vivid cyan buttons with glowing under-drop shadows (#00a8e8 / #00b4d8)
- * - Inactive / Active tab pills with cyan neon borders
- * - Passkey login not configured bottom button
+ * Pixel-perfect styles matching the exact Edufyi design in the user reference screenshots:
+ * - Deep midnight background with top-right cyan glow
+ * - Dark navy rounded input fields (#0c1829) with perfect icon clearance
+ * - Solid cyan primary buttons with glowing under-drop shadows (#00a8e8 / #00b4d8)
+ * - Stylized brand badge + ELYTHRA EdufyiTech typography
+ * - High-specificity scoped rules to prevent global styles.css override
  */
 function LoginStyles() {
   return (
     <style>{`
       .edufyi-login-root,
       .edufyi-login-root * {
-        box-sizing: border-box;
+        box-sizing: border-box !important;
       }
 
       .edufyi-login-root {
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif !important;
         background-color: #050a14 !important;
         background-image: 
-          radial-gradient(circle at 85% 15%, rgba(0, 180, 216, 0.16) 0%, transparent 45%),
-          radial-gradient(circle at 15% 85%, rgba(2, 132, 199, 0.12) 0%, transparent 40%);
-        min-height: 100vh;
-        min-height: 100dvh;
-        width: 100%;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        padding: 30px 16px;
-        position: relative;
-        overflow-x: hidden;
+          radial-gradient(circle at 85% 15%, rgba(0, 180, 216, 0.18) 0%, transparent 45%),
+          radial-gradient(circle at 15% 85%, rgba(2, 132, 199, 0.12) 0%, transparent 40%) !important;
+        min-height: 100vh !important;
+        min-height: 100dvh !important;
+        width: 100% !important;
+        display: flex !important;
+        justify-content: center !important;
+        align-items: center !important;
+        padding: 30px 16px !important;
+        position: relative !important;
+        overflow-x: hidden !important;
       }
 
       .edufyi-login-card {
-        width: 100%;
-        max-width: 410px;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        text-align: center;
-        z-index: 2;
+        width: 100% !important;
+        max-width: 410px !important;
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: center !important;
+        text-align: center !important;
+        z-index: 2 !important;
       }
 
-      /* Logo */
+      /* Logo Header */
       .edufyi-brand-header {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 12px;
-        margin-bottom: 20px;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        gap: 12px !important;
+        margin-bottom: 22px !important;
+        filter: drop-shadow(0 0 18px rgba(0, 180, 216, 0.35)) !important;
       }
 
-      .edufyi-brand-logo {
-        height: 48px;
-        width: 48px;
-        border-radius: 12px;
-        object-fit: cover;
+      .edufyi-brand-emblem-box {
+        width: 46px !important;
+        height: 46px !important;
+        background: #ffffff !important;
+        border-radius: 12px !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        box-shadow: 0 0 20px rgba(0, 180, 216, 0.5) !important;
+        flex-shrink: 0 !important;
       }
 
       .edufyi-brand-text {
-        text-align: left;
-        display: flex;
-        flex-direction: column;
+        text-align: left !important;
+        display: flex !important;
+        flex-direction: column !important;
       }
 
       .edufyi-brand-kicker {
-        font-size: 11px;
-        letter-spacing: 0.18em;
-        font-weight: 700;
-        color: #94a3b8;
-        text-transform: uppercase;
-        line-height: 1.1;
+        font-size: 11px !important;
+        letter-spacing: 0.22em !important;
+        font-weight: 700 !important;
+        color: #94a3b8 !important;
+        text-transform: uppercase !important;
+        line-height: 1.1 !important;
       }
 
       .edufyi-brand-name {
-        font-size: 24px;
-        font-weight: 800;
-        color: #ffffff;
-        letter-spacing: -0.02em;
-        line-height: 1.15;
+        font-size: 25px !important;
+        font-weight: 800 !important;
+        color: #ffffff !important;
+        letter-spacing: -0.02em !important;
+        line-height: 1.15 !important;
       }
 
       .edufyi-brand-name span {
-        color: #00c0f0;
+        color: #00b4d8 !important;
       }
 
       /* Pill Badge */
       .edufyi-pill-badge {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        font-size: 11px;
-        font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: 0.08em;
-        padding: 5px 16px;
-        border-radius: 9999px;
-        background: rgba(0, 180, 216, 0.08);
-        border: 1px solid rgba(0, 180, 216, 0.45);
-        color: #00d2ff;
-        margin-bottom: 16px;
+        display: inline-flex !important;
+        align-items: center !important;
+        gap: 6px !important;
+        font-size: 11px !important;
+        font-weight: 700 !important;
+        text-transform: uppercase !important;
+        letter-spacing: 0.08em !important;
+        padding: 5px 16px !important;
+        border-radius: 9999px !important;
+        background: rgba(0, 180, 216, 0.08) !important;
+        border: 1px solid rgba(0, 180, 216, 0.45) !important;
+        color: #00d2ff !important;
+        margin-bottom: 16px !important;
       }
 
       /* Heading & Subtitle */
       .edufyi-login-title {
-        font-size: 32px;
-        font-weight: 800;
-        color: #ffffff;
-        margin: 0 0 10px 0;
-        letter-spacing: -0.025em;
+        font-size: 32px !important;
+        font-weight: 800 !important;
+        color: #ffffff !important;
+        margin: 0 0 10px 0 !important;
+        letter-spacing: -0.025em !important;
+        line-height: 1.2 !important;
       }
 
       .edufyi-login-subtitle {
-        font-size: 13.5px;
-        color: #889bb5;
-        margin: 0 0 24px 0;
-        line-height: 1.45;
-        max-width: 340px;
+        font-size: 13.5px !important;
+        color: #7d8fa9 !important;
+        margin: 0 0 24px 0 !important;
+        line-height: 1.45 !important;
+        max-width: 340px !important;
       }
 
       /* Management Role Tabs */
       .edufyi-mgmt-tabs {
-        width: 100%;
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 10px;
-        margin-bottom: 20px;
+        width: 100% !important;
+        display: grid !important;
+        grid-template-columns: 1fr 1fr !important;
+        gap: 10px !important;
+        margin-bottom: 20px !important;
       }
 
       .edufyi-mgmt-tab {
-        height: 44px;
-        background: #0c1829;
-        border: 1px solid rgba(30, 58, 95, 0.8);
-        border-radius: 10px;
-        color: #64748b;
-        font-size: 13.5px;
-        font-weight: 600;
-        cursor: pointer;
-        transition: all 0.2s ease;
+        height: 44px !important;
+        background: #0c1829 !important;
+        border: 1px solid rgba(30, 58, 95, 0.8) !important;
+        border-radius: 10px !important;
+        color: #64748b !important;
+        font-size: 13.5px !important;
+        font-weight: 600 !important;
+        cursor: pointer !important;
+        transition: all 0.2s ease !important;
       }
 
       .edufyi-mgmt-tab:hover {
-        color: #cbd5e1;
-        border-color: rgba(0, 180, 216, 0.4);
+        color: #cbd5e1 !important;
+        border-color: rgba(0, 180, 216, 0.4) !important;
       }
 
       .edufyi-mgmt-tab.active {
-        background: #091a2e;
-        border: 2px solid #00b4d8;
-        color: #ffffff;
-        font-weight: 700;
-        box-shadow: 0 0 16px rgba(0, 180, 216, 0.28);
+        background: #091a2e !important;
+        border: 2px solid #00b4d8 !important;
+        color: #ffffff !important;
+        font-weight: 700 !important;
+        box-shadow: 0 0 16px rgba(0, 180, 216, 0.28) !important;
       }
 
       /* Form */
       .edufyi-login-form {
-        width: 100%;
-        display: flex;
-        flex-direction: column;
-        gap: 14px;
+        width: 100% !important;
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 14px !important;
       }
 
-      .edufyi-field-box {
-        position: relative;
-        display: flex;
-        align-items: center;
-        width: 100%;
-        background: #0c1829;
-        border: 1px solid rgba(30, 58, 95, 0.85);
-        border-radius: 12px;
-        transition: all 0.2s ease;
+      /* Input Box Container */
+      .edufyi-login-root .edufyi-field-box {
+        position: relative !important;
+        display: flex !important;
+        align-items: center !important;
+        width: 100% !important;
+        height: 52px !important;
+        background: #0c1829 !important;
+        background-color: #0c1829 !important;
+        border: 1px solid rgba(30, 58, 95, 0.85) !important;
+        border-radius: 12px !important;
+        box-shadow: none !important;
+        transition: all 0.2s ease !important;
+        overflow: hidden !important;
       }
 
-      .edufyi-field-box:focus-within {
-        border-color: #00b4d8;
-        box-shadow: 0 0 0 3px rgba(0, 180, 216, 0.2);
-        background: #0e1c31;
+      .edufyi-login-root .edufyi-field-box:focus-within {
+        border-color: #00b4d8 !important;
+        box-shadow: 0 0 0 3px rgba(0, 180, 216, 0.2) !important;
+        background: #0e1c31 !important;
+        background-color: #0e1c31 !important;
       }
 
-      .edufyi-field-icon {
-        position: absolute;
-        left: 16px;
-        color: #5a7194;
-        display: flex;
-        align-items: center;
-        pointer-events: none;
+      /* Input Icon */
+      .edufyi-login-root .edufyi-field-icon {
+        position: absolute !important;
+        left: 18px !important;
+        top: 50% !important;
+        transform: translateY(-50%) !important;
+        color: #5a7194 !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        pointer-events: none !important;
+        z-index: 5 !important;
       }
 
-      .edufyi-field-box:focus-within .edufyi-field-icon {
-        color: #00b4d8;
+      .edufyi-login-root .edufyi-field-box:focus-within .edufyi-field-icon {
+        color: #00b4d8 !important;
       }
 
-      .edufyi-field-input {
-        width: 100%;
-        height: 50px;
-        background: transparent;
-        border: none;
-        outline: none;
-        color: #ffffff;
-        font-size: 14.5px;
-        padding: 0 46px 0 48px;
-        font-family: inherit;
+      /* Actual HTML Input Field (High specificity override) */
+      .edufyi-login-root input.edufyi-field-input,
+      .edufyi-login-root .edufyi-field-box input,
+      .edufyi-login-root .edufyi-field-box input[type="text"],
+      .edufyi-login-root .edufyi-field-box input[type="email"],
+      .edufyi-login-root .edufyi-field-box input[type="password"] {
+        display: block !important;
+        width: 100% !important;
+        height: 52px !important;
+        min-height: 52px !important;
+        max-height: 52px !important;
+        background: transparent !important;
+        background-color: transparent !important;
+        border: none !important;
+        border-width: 0 !important;
+        outline: none !important;
+        box-shadow: none !important;
+        color: #ffffff !important;
+        font-size: 14.5px !important;
+        font-weight: 500 !important;
+        padding: 0 46px 0 52px !important;
+        margin: 0 !important;
+        line-height: 52px !important;
+        font-family: inherit !important;
       }
 
-      .edufyi-field-input::placeholder {
-        color: #5a7194;
-        font-size: 14px;
+      .edufyi-login-root input.edufyi-field-input:focus,
+      .edufyi-login-root .edufyi-field-box input:focus,
+      .edufyi-login-root .edufyi-field-box input[type="text"]:focus,
+      .edufyi-login-root .edufyi-field-box input[type="email"]:focus,
+      .edufyi-login-root .edufyi-field-box input[type="password"]:focus {
+        background: transparent !important;
+        background-color: transparent !important;
+        border: none !important;
+        outline: none !important;
+        box-shadow: none !important;
+        color: #ffffff !important;
       }
 
-      .edufyi-eye-toggle {
-        position: absolute;
-        right: 14px;
-        background: transparent;
-        border: none;
-        color: #5a7194;
-        cursor: pointer;
-        padding: 4px;
-        display: flex;
-        align-items: center;
+      .edufyi-login-root input.edufyi-field-input::placeholder,
+      .edufyi-login-root .edufyi-field-box input::placeholder {
+        color: #556d8f !important;
+        font-size: 14px !important;
+        opacity: 1 !important;
       }
 
-      .edufyi-eye-toggle:hover {
-        color: #00b4d8;
+      /* Chrome autofill dark background preservation */
+      .edufyi-login-root input:-webkit-autofill,
+      .edufyi-login-root input:-webkit-autofill:hover,
+      .edufyi-login-root input:-webkit-autofill:focus,
+      .edufyi-login-root input:-webkit-autofill:active {
+        -webkit-box-shadow: 0 0 0 1000px #0c1829 inset !important;
+        -webkit-text-fill-color: #ffffff !important;
+        caret-color: #ffffff !important;
+        transition: background-color 5000s ease-in-out 0s !important;
+      }
+
+      /* Password Eye Toggle */
+      .edufyi-login-root .edufyi-eye-toggle {
+        position: absolute !important;
+        right: 14px !important;
+        top: 50% !important;
+        transform: translateY(-50%) !important;
+        background: transparent !important;
+        border: none !important;
+        color: #5a7194 !important;
+        cursor: pointer !important;
+        padding: 4px !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        z-index: 5 !important;
+      }
+
+      .edufyi-login-root .edufyi-eye-toggle:hover {
+        color: #00b4d8 !important;
       }
 
       /* Row with Remember me + recovery link */
-      .edufyi-action-row {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        width: 100%;
-        margin-top: 4px;
-        margin-bottom: 8px;
-        font-size: 13px;
+      .edufyi-login-root .edufyi-action-row {
+        display: flex !important;
+        align-items: center !important;
+        justify-content: space-between !important;
+        width: 100% !important;
+        margin-top: 4px !important;
+        margin-bottom: 8px !important;
+        font-size: 13.5px !important;
       }
 
-      .edufyi-remember-label {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        color: #cbd5e1;
-        cursor: pointer;
-        user-select: none;
-        font-size: 13.5px;
+      .edufyi-login-root .edufyi-remember-label {
+        display: flex !important;
+        align-items: center !important;
+        gap: 8px !important;
+        color: #cbd5e1 !important;
+        cursor: pointer !important;
+        user-select: none !important;
+        font-size: 13.5px !important;
       }
 
-      .edufyi-checkbox {
-        width: 16px;
-        height: 16px;
-        accent-color: #00b4d8;
-        cursor: pointer;
-        border-radius: 4px;
+      .edufyi-login-root .edufyi-checkbox {
+        appearance: none !important;
+        -webkit-appearance: none !important;
+        width: 18px !important;
+        height: 18px !important;
+        border: 1.5px solid #00b4d8 !important;
+        border-radius: 4px !important;
+        background: #091a2e !important;
+        cursor: pointer !important;
+        display: inline-grid !important;
+        place-content: center !important;
+        position: relative !important;
+        margin: 0 !important;
+        transition: all 0.2s ease !important;
       }
 
-      .edufyi-link {
-        color: #00b4d8;
-        font-weight: 600;
-        text-decoration: none;
-        cursor: pointer;
-        background: none;
-        border: none;
-        padding: 0;
-        font-size: 13.5px;
+      .edufyi-login-root .edufyi-checkbox:checked {
+        background: #00b4d8 !important;
+        box-shadow: 0 0 10px rgba(0, 180, 216, 0.6) !important;
       }
 
-      .edufyi-link:hover {
-        text-decoration: underline;
-        color: #38bdf8;
+      .edufyi-login-root .edufyi-checkbox:checked::before {
+        content: "" !important;
+        width: 10px !important;
+        height: 5px !important;
+        border-left: 2px solid #ffffff !important;
+        border-bottom: 2px solid #ffffff !important;
+        transform: rotate(-45deg) translate(1px, -1px) !important;
       }
 
-      /* Primary Vibrant Blue/Cyan Button with Under Glow */
-      .edufyi-primary-btn {
-        width: 100%;
-        height: 50px;
-        background: #00a8e8;
-        border: none;
-        border-radius: 12px;
-        color: #ffffff;
-        font-size: 13.5px;
-        font-weight: 800;
-        letter-spacing: 0.05em;
-        text-transform: uppercase;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 8px;
-        box-shadow: 0 10px 24px rgba(0, 168, 232, 0.45);
-        transition: all 0.2s ease;
+      .edufyi-login-root .edufyi-link {
+        color: #00b4d8 !important;
+        font-weight: 600 !important;
+        text-decoration: none !important;
+        cursor: pointer !important;
+        background: none !important;
+        border: none !important;
+        padding: 0 !important;
+        font-size: 13.5px !important;
       }
 
-      .edufyi-primary-btn:hover:not(:disabled) {
-        background: #00b4d8;
-        transform: translateY(-1px);
-        box-shadow: 0 14px 30px rgba(0, 180, 216, 0.6);
+      .edufyi-login-root .edufyi-link:hover {
+        text-decoration: underline !important;
+        color: #38bdf8 !important;
       }
 
-      .edufyi-primary-btn:active:not(:disabled) {
-        transform: translateY(0);
+      /* Primary Vibrant Cyan Button with Glowing Under Drop Shadow */
+      .edufyi-login-root .edufyi-primary-btn {
+        width: 100% !important;
+        height: 50px !important;
+        background: #00a8e8 !important;
+        border: none !important;
+        border-radius: 12px !important;
+        color: #ffffff !important;
+        font-size: 14px !important;
+        font-weight: 800 !important;
+        letter-spacing: 0.05em !important;
+        text-transform: uppercase !important;
+        cursor: pointer !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        gap: 8px !important;
+        box-shadow: 0 8px 24px rgba(0, 168, 232, 0.45) !important;
+        transition: all 0.2s ease !important;
       }
 
-      .edufyi-primary-btn:disabled {
-        opacity: 0.65;
-        cursor: not-allowed;
+      .edufyi-login-root .edufyi-primary-btn:hover:not(:disabled) {
+        background: #00b4d8 !important;
+        transform: translateY(-1px) !important;
+        box-shadow: 0 12px 30px rgba(0, 180, 216, 0.6) !important;
+      }
+
+      .edufyi-login-root .edufyi-primary-btn:active:not(:disabled) {
+        transform: translateY(0) !important;
+      }
+
+      .edufyi-login-root .edufyi-primary-btn:disabled {
+        opacity: 0.65 !important;
+        cursor: not-allowed !important;
       }
 
       /* Secondary Outline Button */
-      .edufyi-secondary-btn {
-        width: 100%;
-        height: 48px;
-        background: rgba(10, 21, 38, 0.6);
-        border: 1px solid rgba(30, 58, 95, 0.85);
-        border-radius: 12px;
-        color: #cbd5e1;
-        font-size: 13.5px;
-        font-weight: 600;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 10px;
-        transition: all 0.2s ease;
+      .edufyi-login-root .edufyi-secondary-btn {
+        width: 100% !important;
+        height: 48px !important;
+        background: #0c1829 !important;
+        border: 1px solid rgba(30, 58, 95, 0.85) !important;
+        border-radius: 12px !important;
+        color: #ffffff !important;
+        font-size: 13.5px !important;
+        font-weight: 600 !important;
+        cursor: pointer !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        gap: 10px !important;
+        transition: all 0.2s ease !important;
       }
 
-      .edufyi-secondary-btn:hover {
-        background: rgba(14, 28, 50, 0.8);
-        border-color: rgba(0, 180, 216, 0.4);
-        color: #ffffff;
+      .edufyi-login-root .edufyi-secondary-btn:hover {
+        background: #112239 !important;
+        border-color: rgba(0, 180, 216, 0.4) !important;
+        color: #ffffff !important;
       }
 
       /* Error Alert */
-      .edufyi-error-box {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        background: rgba(239, 68, 68, 0.12);
-        border: 1px solid rgba(239, 68, 68, 0.35);
-        border-radius: 10px;
-        padding: 10px 14px;
-        margin-bottom: 14px;
-        color: #fca5a5;
-        font-size: 12.5px;
-        line-height: 1.4;
-        width: 100%;
-        text-align: left;
+      .edufyi-login-root .edufyi-error-box {
+        display: flex !important;
+        align-items: center !important;
+        gap: 10px !important;
+        background: rgba(239, 68, 68, 0.12) !important;
+        border: 1px solid rgba(239, 68, 68, 0.35) !important;
+        border-radius: 10px !important;
+        padding: 10px 14px !important;
+        margin-bottom: 14px !important;
+        color: #fca5a5 !important;
+        font-size: 12.5px !important;
+        line-height: 1.4 !important;
+        width: 100% !important;
+        text-align: left !important;
       }
 
       /* Notice Box */
-      .edufyi-notice-box {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        background: rgba(0, 180, 216, 0.12);
-        border: 1px solid rgba(0, 180, 216, 0.35);
-        border-radius: 10px;
-        padding: 10px 14px;
-        margin-bottom: 14px;
-        color: #7dd3fc;
-        font-size: 12.5px;
-        line-height: 1.4;
-        width: 100%;
-        text-align: left;
+      .edufyi-login-root .edufyi-notice-box {
+        display: flex !important;
+        align-items: center !important;
+        gap: 10px !important;
+        background: rgba(0, 180, 216, 0.12) !important;
+        border: 1px solid rgba(0, 180, 216, 0.35) !important;
+        border-radius: 10px !important;
+        padding: 10px 14px !important;
+        margin-bottom: 14px !important;
+        color: #7dd3fc !important;
+        font-size: 12.5px !important;
+        line-height: 1.4 !important;
+        width: 100% !important;
+        text-align: left !important;
       }
     `}</style>
+  )
+}
+
+/**
+ * Pixel-perfect EdufyiTech Brand Header matching Screenshot 1 & 2
+ */
+function BrandLogo() {
+  return (
+    <div className="edufyi-brand-header">
+      <div className="edufyi-brand-emblem-box">
+        <svg width="28" height="28" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="18" cy="18" r="13" stroke="#00b4d8" strokeWidth="2.5" />
+          <path
+            d="M12 13.5H23C23.8 13.5 24.5 14.2 24.5 15C24.5 15.8 23.8 16.5 23 16.5H15.5M12 18H21C21.8 18 22.5 18.7 22.5 19.5C22.5 20.3 21.8 21 21 21H12M12 22.5H24"
+            stroke="#0096c7"
+            strokeWidth="2.4"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </div>
+      <div className="edufyi-brand-text">
+        <span className="edufyi-brand-kicker">ELYTHRA</span>
+        <span className="edufyi-brand-name">
+          Edufyi<span>Tech</span>
+        </span>
+      </div>
+    </div>
   )
 }
 
@@ -425,23 +538,8 @@ export function EmployeeLoginPage() {
     <div className="edufyi-login-root">
       <LoginStyles />
       <div className="edufyi-login-card">
-        {/* LOGO */}
-        <div className="edufyi-brand-header">
-          <img
-            src="/elythra-edufyitech-logo.png"
-            alt="Edufyi"
-            className="edufyi-brand-logo"
-            onError={(e) => {
-              e.currentTarget.style.display = 'none'
-            }}
-          />
-          <div className="edufyi-brand-text">
-            <span className="edufyi-brand-kicker">ELYTHRA</span>
-            <span className="edufyi-brand-name">
-              Edufyi<span>Tech</span>
-            </span>
-          </div>
-        </div>
+        {/* BRAND LOGO */}
+        <BrandLogo />
 
         {/* BADGE: EMPLOYEE SELF-SERVICE */}
         <div className="edufyi-pill-badge">
@@ -544,7 +642,7 @@ export function EmployeeLoginPage() {
             className="edufyi-secondary-btn"
             onClick={() => setNotice('Hardware Passkey authentication is currently in private preview. Please use your standard credentials.')}
           >
-            <Fingerprint size={17} style={{ color: '#00b4d8' }} />
+            <Fingerprint size={17} style={{ color: '#00d2ff' }} />
             Passkey login is not configured
           </button>
         </form>
@@ -570,7 +668,7 @@ export function ManagementLoginPage({ defaultRole = 'hr' }) {
     return defaultRole
   })
 
-  const [email, setEmail] = useState(() => (role === 'admin' ? 'admin@edufyitech.in' : 'hr@edufyitech.in'))
+  const [email, setEmail] = useState(() => (role === 'admin' ? 'admin@edufyitech.in' : 'hr@edufyi.in'))
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [remember, setRemember] = useState(true)
@@ -584,10 +682,10 @@ export function ManagementLoginPage({ defaultRole = 'hr' }) {
       const hash = window.location.hash || ''
       if (hash.includes('admin')) {
         setRole('admin')
-        setEmail((prev) => (!prev || prev === 'hr@edufyitech.in' || prev === 'hr@edufyi.in' ? 'admin@edufyitech.in' : prev))
+        setEmail((prev) => (!prev || prev === 'hr@edufyi.in' || prev === 'hr@edufyitech.in' ? 'admin@edufyitech.in' : prev))
       } else if (hash.includes('hr')) {
         setRole('hr')
-        setEmail((prev) => (!prev || prev === 'admin@edufyitech.in' || prev === 'admin@edufyi.in' ? 'hr@edufyitech.in' : prev))
+        setEmail((prev) => (!prev || prev === 'admin@edufyitech.in' || prev === 'admin@edufyi.in' ? 'hr@edufyi.in' : prev))
       }
     }
     handleHash()
@@ -600,10 +698,10 @@ export function ManagementLoginPage({ defaultRole = 'hr' }) {
     setError('')
     setNotice('')
     if (targetRole === 'admin') {
-      if (!email || email === 'hr@edufyitech.in' || email === 'hr@edufyi.in') setEmail('admin@edufyitech.in')
+      if (!email || email === 'hr@edufyi.in' || email === 'hr@edufyitech.in') setEmail('admin@edufyitech.in')
       window.location.hash = '#/admin/login'
     } else {
-      if (!email || email === 'admin@edufyitech.in' || email === 'admin@edufyi.in') setEmail('hr@edufyitech.in')
+      if (!email || email === 'admin@edufyitech.in' || email === 'admin@edufyi.in') setEmail('hr@edufyi.in')
       window.location.hash = '#/hr/login'
     }
   }
@@ -647,23 +745,8 @@ export function ManagementLoginPage({ defaultRole = 'hr' }) {
     <div className="edufyi-login-root">
       <LoginStyles />
       <div className="edufyi-login-card">
-        {/* LOGO */}
-        <div className="edufyi-brand-header">
-          <img
-            src="/elythra-edufyitech-logo.png"
-            alt="Edufyi"
-            className="edufyi-brand-logo"
-            onError={(e) => {
-              e.currentTarget.style.display = 'none'
-            }}
-          />
-          <div className="edufyi-brand-text">
-            <span className="edufyi-brand-kicker">ELYTHRA</span>
-            <span className="edufyi-brand-name">
-              Edufyi<span>Tech</span>
-            </span>
-          </div>
-        </div>
+        {/* BRAND LOGO */}
+        <BrandLogo />
 
         {/* PILL BADGE */}
         <div className="edufyi-pill-badge">
@@ -724,7 +807,7 @@ export function ManagementLoginPage({ defaultRole = 'hr' }) {
             <input
               type="text"
               className="edufyi-field-input"
-              placeholder={isHr ? 'hr@edufyitech.in' : 'admin@edufyitech.in'}
+              placeholder={isHr ? 'hr@edufyi.in' : 'admin@edufyitech.in'}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               autoComplete="username"
@@ -788,7 +871,7 @@ export function ManagementLoginPage({ defaultRole = 'hr' }) {
             className="edufyi-secondary-btn"
             onClick={() => setNotice('Hardware Passkey authentication is currently in private preview. Please use your standard credentials.')}
           >
-            <Key size={16} style={{ color: '#00b4d8' }} />
+            <Key size={16} style={{ color: '#00d2ff' }} />
             Passkey login is not configured
           </button>
         </form>
