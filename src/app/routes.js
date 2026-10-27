@@ -65,12 +65,13 @@ export const employeeRoutes = [
   { path: '/employee/notifications', label: 'Notifications', group: 'Organization', description: 'System alerts, leave updates, and task reminders', permission: 'dashboard.read', workspace: true },
   { path: '/employee/profile', label: 'My Profile', group: 'Organization', description: 'Personal, employment, and emergency info', permission: 'dashboard.read' },
   { path: '/employee/hierarchy', label: 'Org Hierarchy', group: 'Organization', description: 'Visual organization chart and company reporting structure', permission: 'dashboard.read' },
+  { path: '/employee/organization', label: 'Org Hierarchy', group: 'Organization', description: 'Visual organization chart and company reporting structure', permission: 'dashboard.read' },
   { path: '/employee/team-leave', label: 'Team Approvals', group: 'Manager Controls', description: 'Review and approve direct reports leave', permission: 'leave.team.read' },
   { path: '/employee/my-team', label: 'My Team', group: 'Manager Controls', description: 'Direct reports roster and contact details', permission: 'leave.team.read' },
 ]
 
 export const authRoutes = [
-  { path: '/login', label: 'Management Login', group: 'Auth', description: 'Edufyi Management Terminal Authentication' },
+  { path: '/login', label: 'HR Login', group: 'Auth', description: 'Edufyi Management Terminal Authentication' },
   { path: '/admin/login', label: 'Admin Login', group: 'Auth', description: 'Edufyi Administrator Console Authentication' },
   { path: '/hr/login', label: 'HR Login', group: 'Auth', description: 'Edufyi People Operations Authentication' },
   { path: '/employee/login', label: 'Employee Login', group: 'Auth', description: 'Edufyi Employee Self-Service Authentication' },

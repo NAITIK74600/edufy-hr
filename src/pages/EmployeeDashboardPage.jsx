@@ -103,9 +103,46 @@ function GPSAttendanceStation({ user, todayRecord, onPunch, onStartBreak, onEndB
 
   const settings = storeState.companySettings
   const officeNetworkIPs = settings?.officeNetworkIPs || []
+  const empKey = user?.employeeId || user?.id || 'STAFF'
+  const todayDate = todayRecord?.date || todayKey()
+  const cachedCoordsKey = `att_cached_coords_${empKey}`
 
-  const [customCoords, setCustomCoords] = useState(null)
-  const [gpsLive, setGpsLive] = useState(false)
+  const [customCoords, setCustomCoords] = useState(() => {
+    if (todayRecord?.latitude && todayRecord?.longitude) {
+      const lat = Number(todayRecord.latitude)
+      const lng = Number(todayRecord.longitude)
+      if (!isNaN(lat) && !isNaN(lng)) {
+        return {
+          latitude: lat,
+          longitude: lng,
+          accuracy: Number(todayRecord.accuracy) || 10,
+        }
+      }
+    }
+    if (typeof sessionStorage !== 'undefined') {
+      try {
+        const raw = sessionStorage.getItem(cachedCoordsKey)
+        if (raw) {
+          const parsed = JSON.parse(raw)
+          if (parsed && typeof parsed.latitude === 'number' && typeof parsed.longitude === 'number') {
+            return parsed
+          }
+        }
+      } catch (_) {}
+    }
+    return null
+  })
+
+  const updateCustomCoords = (coords) => {
+    setCustomCoords(coords)
+    if (coords && typeof coords.latitude === 'number' && typeof sessionStorage !== 'undefined') {
+      try {
+        sessionStorage.setItem(cachedCoordsKey, JSON.stringify(coords))
+      } catch (_) {}
+    }
+  }
+
+  const [gpsLive, setGpsLive] = useState(() => Boolean(customCoords?.latitude))
   const [detectingGps, setDetectingGps] = useState(false)
   const [isPunching, setIsPunching] = useState(false)
   const [isBreaking, setIsBreaking] = useState(false)
@@ -153,12 +190,13 @@ function GPSAttendanceStation({ user, todayRecord, onPunch, onStartBreak, onEndB
       navigator.geolocation.getCurrentPosition(
         (pos) => {
           if (!active) return
-          setCustomCoords({ latitude: pos.coords.latitude, longitude: pos.coords.longitude, accuracy: Math.ceil(pos.coords.accuracy) })
+          const coords = { latitude: pos.coords.latitude, longitude: pos.coords.longitude, accuracy: Math.ceil(pos.coords.accuracy) }
+          updateCustomCoords(coords)
           setGpsLive(true)
           setPermissionStatus('granted')
         },
         () => { },
-        { enableHighAccuracy: true, timeout: 10000, maximumAge: 10000 }
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 15000 }
       )
     }
     return () => { active = false }
@@ -179,7 +217,7 @@ function GPSAttendanceStation({ user, todayRecord, onPunch, onStartBreak, onEndB
           longitude: pos.coords.longitude,
           accuracy: Math.ceil(pos.coords.accuracy),
         }
-        setCustomCoords(coords)
+        updateCustomCoords(coords)
         setGpsLive(true)
         setPermissionStatus('granted')
 
@@ -214,9 +252,11 @@ function GPSAttendanceStation({ user, todayRecord, onPunch, onStartBreak, onEndB
       setPublicIp(result.data.clientIp)
       setServerVerification(result.data)
       setGpsError('')
+      return result.data
     } catch (error) {
       setServerVerification(null)
       setGpsError(error.message)
+      return null
     } finally { setIpLoading(false) }
   }
 
@@ -341,15 +381,27 @@ function GPSAttendanceStation({ user, todayRecord, onPunch, onStartBreak, onEndB
   const maxGeofenceRadius = Number(settings?.attendanceRules?.maxGeofenceRadiusMeters) || Number(verification?.maxAllowedRadius) || 50
 
   // Inside campus requires office Wi-Fi / IP verification OR verified GPS geofence (<=maxGeofenceRadius)
+  // When an employee has already verified and checked in, if GPS is temporarily acquiring (!hasGps),
+  // they remain marked inside campus so refreshing the page does not falsely pause work.
+  const isCheckInVerified = Boolean(todayRecord?.gpsVerified || todayRecord?.wifiVerified)
   const isDistanceInside = distance != null && distance <= maxGeofenceRadius
   const isInsideCampus = Boolean(
-    (serverVerification && (serverVerification.isGpsVerified || serverVerification.isWifiVerified || serverVerification.isIpVerified)) ||
-    isDistanceInside
+    isOnOfficeNetwork ||
+    verification.isGpsVerified ||
+    verification.isWifiVerified ||
+    verification.isIpVerified ||
+    isDistanceInside ||
+    (isCheckInVerified && !hasGps)
   )
-  const isOutsideCampus = Boolean(isCheckedIn && !isCompleted && serverVerification && !isInsideCampus)
+  const isOutsideCampus = Boolean(
+    isCheckedIn &&
+    !isCompleted &&
+    !isOnOfficeNetwork &&
+    hasGps &&
+    distance != null &&
+    distance > maxGeofenceRadius
+  )
 
-  const empKey = user?.employeeId || user?.id || 'STAFF'
-  const todayDate = todayRecord?.date || todayKey()
   const offCampusAccumKey = `att_offcampus_accum_${empKey}_${todayDate}`
   const offCampusStartKey = `att_offcampus_start_${empKey}_${todayDate}`
 
@@ -476,6 +528,8 @@ function GPSAttendanceStation({ user, todayRecord, onPunch, onStartBreak, onEndB
       if (typeof navigator === 'undefined' || !navigator.geolocation) {
         return reject(new Error('Geolocation is not supported by your browser or environment.'))
       }
+
+      // Stage 1: High-accuracy GPS fix (fast response if GPS receiver is locked)
       navigator.geolocation.getCurrentPosition(
         (pos) => {
           const coords = {
@@ -486,18 +540,47 @@ function GPSAttendanceStation({ user, todayRecord, onPunch, onStartBreak, onEndB
           resolve(coords)
         },
         (err) => {
-          let msg = 'Unable to acquire location.'
           if (err.code === 1) {
-            msg = 'Location permission was denied. Please allow location access in your browser settings.'
             setPermissionStatus('denied')
-          } else if (err.code === 2) {
-            msg = 'Location unavailable. Ensure device GPS / Location Services is turned on.'
-          } else if (err.code === 3) {
-            msg = 'Location request timed out. Please retry in an area with better GPS reception.'
+            return reject(new Error('Location permission was denied. Please allow location access in your browser settings.'))
           }
-          reject(new Error(msg))
+          // Stage 2: Fallback to standard network/Wi-Fi triangulation (essential for indoor laptops/desktops)
+          navigator.geolocation.getCurrentPosition(
+            (pos2) => {
+              const coords2 = {
+                latitude: pos2.coords.latitude,
+                longitude: pos2.coords.longitude,
+                accuracy: Math.ceil(pos2.coords.accuracy),
+              }
+              resolve(coords2)
+            },
+            (err2) => {
+              // Stage 3: If checked in and existing coords are saved, use them as graceful fallback
+              if (customCoords?.latitude && customCoords?.longitude) {
+                return resolve(customCoords)
+              }
+              if (todayRecord?.latitude && todayRecord?.longitude) {
+                return resolve({
+                  latitude: Number(todayRecord.latitude),
+                  longitude: Number(todayRecord.longitude),
+                  accuracy: 50,
+                })
+              }
+              let msg = 'Unable to acquire location.'
+              if (err2.code === 1) {
+                msg = 'Location permission was denied. Please allow location access in your browser settings.'
+                setPermissionStatus('denied')
+              } else if (err2.code === 2) {
+                msg = 'Location unavailable. Ensure device GPS / Location Services is turned on.'
+              } else if (err2.code === 3) {
+                msg = 'Location request timed out. Please retry or connect to office Wi-Fi.'
+              }
+              reject(new Error(msg))
+            },
+            { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 }
+          )
         },
-        { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
+        { enableHighAccuracy: true, timeout: 7000, maximumAge: 15000 }
       )
     })
   }
@@ -507,10 +590,18 @@ function GPSAttendanceStation({ user, todayRecord, onPunch, onStartBreak, onEndB
     setGpsError('')
     try {
       const coords = await getFreshCoordinates()
-      setCustomCoords(coords)
+      updateCustomCoords(coords)
       setGpsLive(true)
       setPermissionStatus('granted')
-      await handleRefreshNetwork(coords)
+      const verifyData = await handleRefreshNetwork(coords)
+      const dist = verifyData?.distanceMeters
+      const maxR = Number(settings?.attendanceRules?.maxGeofenceRadiusMeters) || Number(verifyData?.maxAllowedRadius) || maxGeofenceRadius || 50
+      if (verifyData?.isGpsVerified || verifyData?.isWifiVerified || verifyData?.isIpVerified || (dist != null && dist <= maxR)) {
+        if (typeof localStorage !== 'undefined') {
+          localStorage.removeItem(offCampusStartKey)
+        }
+        setOffCampusStartEpoch(null)
+      }
     } catch (err) {
       setGpsError(err.message)
     } finally {
@@ -914,11 +1005,21 @@ function GPSAttendanceStation({ user, todayRecord, onPunch, onStartBreak, onEndB
 
       {/* OUTSIDE CAMPUS / DISCONNECTED TIMER PAUSED BANNER */}
       {isCheckedIn && !isCompleted && isOutsideCampus && (
-        <div style={{ marginTop: '12px', background: '#fff7ed', border: '1px solid #fed7aa', color: '#9a3412', padding: '9px 13px', borderRadius: '8px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <Pause size={16} style={{ flexShrink: 0, color: '#ea580c' }} />
-          <div>
-            <strong>Work Timer Paused (Outside Campus / Off-Network):</strong> You are outside the office geofence and not connected to verified office Wi-Fi. The active work counter timer has stopped and will automatically resume once you return within campus (≤{maxGeofenceRadius}m) or reconnect to office Wi-Fi.
+        <div style={{ marginTop: '12px', background: '#fff7ed', border: '1px solid #fed7aa', color: '#9a3412', padding: '9px 13px', borderRadius: '8px', fontSize: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Pause size={16} style={{ flexShrink: 0, color: '#ea580c' }} />
+            <div>
+              <strong>Work Timer Paused (Outside Campus / Off-Network):</strong> You are outside the office geofence and not connected to verified office Wi-Fi. The active work counter timer has stopped and will automatically resume once you return within campus (≤{maxGeofenceRadius}m) or reconnect to office Wi-Fi.
+            </div>
           </div>
+          <button
+            type="button"
+            onClick={handleDetectRealGPS}
+            disabled={detectingGps}
+            style={{ flexShrink: 0, padding: '5px 11px', borderRadius: '6px', background: '#ea580c', color: '#fff', border: 0, fontWeight: 700, fontSize: '11px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
+          >
+            <LocateFixed size={12} className={detectingGps ? 'animate-spin' : ''} /> {detectingGps ? 'Detecting…' : 'Re-detect GPS to Resume'}
+          </button>
         </div>
       )}
 

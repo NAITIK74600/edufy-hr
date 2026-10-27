@@ -4040,7 +4040,7 @@ const localStore = {
   },
 
   // Expenses Approval Flow
-  async approveExpense(id, reviewerRole = 'Manager') {
+  approveExpense(id, reviewerRole = 'Manager') {
     storeState.expenses = (storeState.expenses || []).map((e) => {
       if (e.id === id || e._id === id) {
         return { ...e, status: 'approved' }
@@ -4056,15 +4056,14 @@ const localStore = {
     })
     this.addAuditLog(reviewerRole, 'EXPENSE_APPROVE', `Approved expense claim ${id}`)
     notifyListeners()
-    try {
-      await apiClient.patch(`/workspace/expenses/${encodeURIComponent(id)}`, { status: 'approved' })
-      await this.refresh?.()
-    } catch (err) {
-      console.warn('Backend expense approve sync:', err.message)
+    if (typeof apiClient !== 'undefined') {
+      apiClient.patch(`/workspace/expenses/${encodeURIComponent(id)}`, { status: 'approved' })
+        .then(() => this.refresh?.())
+        .catch((err) => console.warn('Backend expense approve sync:', err.message))
     }
-    return (storeState.expenses || []).find((e) => e.id === id || e._id === id)
+    return exp
   },
-  async rejectExpense(id, reviewerRole = 'Manager', reason = 'Insufficient invoice receipt') {
+  rejectExpense(id, reviewerRole = 'Manager', reason = 'Insufficient invoice receipt') {
     storeState.expenses = (storeState.expenses || []).map((e) => {
       if (e.id === id || e._id === id) {
         return { ...e, status: 'rejected', rejectionReason: reason }
@@ -4080,13 +4079,12 @@ const localStore = {
     })
     this.addAuditLog(reviewerRole, 'EXPENSE_REJECT', `Rejected expense claim ${id}: ${reason}`)
     notifyListeners()
-    try {
-      await apiClient.patch(`/workspace/expenses/${encodeURIComponent(id)}`, { status: 'rejected', rejectionReason: reason })
-      await this.refresh?.()
-    } catch (err) {
-      console.warn('Backend expense reject sync:', err.message)
+    if (typeof apiClient !== 'undefined') {
+      apiClient.patch(`/workspace/expenses/${encodeURIComponent(id)}`, { status: 'rejected', rejectionReason: reason })
+        .then(() => this.refresh?.())
+        .catch((err) => console.warn('Backend expense reject sync:', err.message))
     }
-    return (storeState.expenses || []).find((e) => e.id === id || e._id === id)
+    return exp
   },
 
   // Backup and Restore

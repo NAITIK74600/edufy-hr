@@ -56,6 +56,7 @@ export function createWorkspaceStore(store, mutate, getUser = null, rawLocal = {
     sendKudos: (data) => (isLocal() && rawLocal.sendKudos ? rawLocal.sendKudos(data) : create('kudos', { recipientId: data.recipientId ?? data.to, badge: data.badge ?? data.tag, message: data.message })),
     addPerformanceGoal: (data) => (isLocal() && rawLocal.addPerformanceGoal ? rawLocal.addPerformanceGoal(data) : create('performanceGoals', pick(data, ['employeeId', 'title', 'target', 'dueDate', 'progress']))),
     updatePerformanceGoal: (id, progress) => (isLocal() && rawLocal.updatePerformanceGoal ? rawLocal.updatePerformanceGoal(id, progress) : patch('performanceGoals', id, { progress })),
+    addPerformanceReview: (data) => (isLocal() && rawLocal.addPerformanceReview ? rawLocal.addPerformanceReview(data) : create('performanceReviews', pick(data, ['employeeId', 'period', 'rating', 'comments']))),
     addNotification: (data) => {
       rawLocal.addNotification?.(data)
       if (isLocal()) return Promise.resolve(data)
