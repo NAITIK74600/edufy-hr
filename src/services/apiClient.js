@@ -50,6 +50,10 @@ export async function apiRequest(path, options = {}, retries = 3) {
   const body = await response.json().catch(() => null)
   if (!response.ok) {
     const error = body?.error ?? {}
+    if (response.status === 401 && accessToken && !path.startsWith('/auth/login')) {
+      window.dispatchEvent(new Event('edufyi:auth-expired'))
+      throw new ApiError('Your session expired. Please sign in again.', { status: 401, code: 'AUTH_REQUIRED' })
+    }
     throw new ApiError(error.message ?? 'The request could not be completed.', {
       status: response.status,
       code: error.code ?? 'REQUEST_FAILED',

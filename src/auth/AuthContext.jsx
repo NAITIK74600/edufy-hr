@@ -64,6 +64,12 @@ export function AuthProvider({ children }) {
   }, [status, user?.id, token])
 
   useEffect(() => {
+    const onExpired = () => clearSession()
+    window.addEventListener('edufyi:auth-expired', onExpired)
+    return () => window.removeEventListener('edufyi:auth-expired', onExpired)
+  }, [])
+
+  useEffect(() => {
     let active = true
     setAccessToken(token)
     if (token) {
