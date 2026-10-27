@@ -1,7 +1,14 @@
 import fs from 'node:fs'
 import express from 'express'
-import compression from 'compression'
 import path from 'node:path'
+
+let compressionMiddleware = null
+try {
+  const comp = await import('compression')
+  compressionMiddleware = comp.default || comp
+} catch {
+  // compression optional if node_modules not yet updated
+}
 import { createPayrollRouter } from './modules/payroll/payroll.routes.js'
 import { createWorkspaceRouter } from './modules/workspace/workspace.routes.js'
 import crypto from 'node:crypto'
@@ -101,15 +108,17 @@ export function createApp(options = {}) {
   const auth = createAuthMiddleware({ userStore, jwtSecret, revokedTokens: options.revokedTokens ?? new Set() })
   const authService = createAuthService({ userStore, jwtSecret, accessTokenTtl: process.env.ACCESS_TOKEN_TTL || '30d', revokedTokens: auth.revokedTokens })
   app.disable('x-powered-by')
-  app.use(compression({
-    threshold: 1024,
-    filter: (request, response) => {
-      if (request.headers['x-no-compression']) return false
-      const contentType = String(response.getHeader('Content-Type') || '')
-      if (contentType.includes('text/event-stream')) return false
-      return compression.filter(request, response)
-    },
-  }))
+  if (compressionMiddleware) {
+    app.use(compressionMiddleware({
+      threshold: 1024,
+      filter: (request, response) => {
+        if (request.headers['x-no-compression']) return false
+        const contentType = String(response.getHeader('Content-Type') || '')
+        if (contentType.includes('text/event-stream')) return false
+        return compressionMiddleware.filter ? compressionMiddleware.filter(request, response) : true
+      },
+    }))
+  }
   app.use((request, response, next) => {
     response.setHeader('X-Content-Type-Options', 'nosniff')
     response.setHeader('X-Frame-Options', 'SAMEORIGIN')

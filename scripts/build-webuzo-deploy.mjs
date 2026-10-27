@@ -155,16 +155,7 @@ fs.writeFileSync(path.join(BUILD_DIR, '.env'), envContent)
 
 // ─── Step 8: Create .htaccess ────────────────────────────
 console.log('🌐 Creating .htaccess...')
-const htaccessContent = `<IfModule mod_headers.c>
-  Header set Connection "keep-alive"
-  Header set Keep-Alive "timeout=65, max=1000"
-</IfModule>
-<IfModule mod_proxy.c>
-  SetEnv proxy-initial-not-pooled 1
-  SetEnv proxy-nokeepalive 0
-</IfModule>
-
-RewriteEngine On
+const htaccessContent = `RewriteEngine On
 RewriteRule ^(.*)$ http://localhost:30006/$1 [P,L]
 `
 fs.writeFileSync(path.join(BUILD_DIR, '.htaccess'), htaccessContent)
