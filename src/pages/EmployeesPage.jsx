@@ -341,6 +341,7 @@ function EmployeeDirectory({ route } = {}) {
   })
 
   function startEditEmployee(emp) {
+    setModalError('')
     const isDir = emp.role === 'director' || emp.email === 'jagadishbabu@edufyitech.in' || emp.email === 'director@edufyitech.in'
     const cleanDept = isDir ? 'Executive' : (emp.department || 'Executive')
     const rec = getRecommendedRoleConfig(emp.role, cleanDept)
@@ -378,9 +379,15 @@ function EmployeeDirectory({ route } = {}) {
       salaryStructure: editingEmployee.salaryStructure || {},
     }
 
-    await hrStore.updateEmployee(editingEmployee.id, updates)
-    setEditingEmployee(null)
-    showFeedback(`Updated profile for ${editingEmployee.name} (${editingEmployee.employeeId}).`)
+    setModalError('')
+    try {
+      await hrStore.updateEmployee(editingEmployee.id, updates)
+      setEditingEmployee(null)
+      showFeedback(`Updated profile for ${editingEmployee.name} (${editingEmployee.employeeId}).`)
+    } catch (err) {
+      const details = err?.fields ? ` (${Object.entries(err.fields).map(([k, v]) => `${k}: ${v}`).join(', ')})` : ''
+      setModalError(`Failed to save: ${err.message}${details}`)
+    }
   })
 
   const handleDeleteEmployee = storeAction(async () => {
@@ -2259,7 +2266,7 @@ function EmployeeDirectory({ route } = {}) {
                 ✕
               </button>
             </div>
-            <form onSubmit={handleUpdateEmployee}>
+            <form noValidate onSubmit={handleUpdateEmployee}>
               <div className="hr-modal-body">
                 <p className="form-section-title">Official Employment & Contact Info</p>
 
@@ -2590,8 +2597,13 @@ function EmployeeDirectory({ route } = {}) {
                 </div>
               </div>
 
+              {modalError && (
+                <div role="alert" style={{ margin: '0 20px 12px', padding: '10px 12px', background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', borderRadius: '6px', fontSize: '13px' }}>
+                  {modalError}
+                </div>
+              )}
               <div className="hr-modal-footer">
-                <Button variant="secondary" onClick={() => setEditingEmployee(null)}>
+                <Button type="button" variant="secondary" onClick={() => setEditingEmployee(null)}>
                   Cancel
                 </Button>
                 <Button type="submit">Save Changes</Button>
