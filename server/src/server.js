@@ -54,8 +54,15 @@ const port = Number(process.env.PORT || 30006)
 logStartup(`Configured Port: ${port}`)
 
 if (!process.env.JWT_SECRET) {
-  process.env.JWT_SECRET = 'edufyi-secure-jwt-key-' + crypto.randomBytes(32).toString('hex')
-  logStartup('[WARN] JWT_SECRET was not set in environment; auto-generated random key.')
+  const secretPath = path.resolve(rootDir, '.jwt_secret')
+  try {
+    if (fs.existsSync(secretPath)) process.env.JWT_SECRET = fs.readFileSync(secretPath, 'utf8').trim()
+  } catch {}
+  if (!process.env.JWT_SECRET) {
+    process.env.JWT_SECRET = 'edufyi-secure-jwt-key-' + crypto.randomBytes(32).toString('hex')
+    try { fs.writeFileSync(secretPath, process.env.JWT_SECRET, { mode: 0o600 }) } catch {}
+    logStartup('[WARN] JWT_SECRET was not set; generated one and saved it to .jwt_secret so logins survive restarts. Set JWT_SECRET in .env to override.')
+  }
 }
 
 // A configured database must connect; never silently lose accounts in a temporary store.

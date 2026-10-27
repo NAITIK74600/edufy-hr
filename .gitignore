@@ -49,3 +49,5 @@ WhatsApp*.jpeg
 
 # Test files
 test/
+
+.jwt_secret
