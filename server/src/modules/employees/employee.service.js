@@ -3,7 +3,7 @@ import { hashPassword } from '../../auth/passwords.js'
 import { sendWelcomeEmail, sendDocumentStatusEmail } from '../../services/mail.service.js'
 
 const protectedFields = ['permissions', 'passwordHash', 'authVersion', 'salaryRecord']
-const editableFields = ['employeeId', 'name', 'email', 'password', 'department', 'designation', 'location', 'employmentType', 'joiningDate', 'employmentEndDate', 'managerId', 'phone', 'bankDetails', 'emergencyContact', 'exitDetails', 'onboardingChecklist', 'offboardingChecklist', 'role', 'status', 'salary', 'salaryStructure', 'parentsContact', 'identity', 'onboardingDocs', 'documents', 'onboardingStatus', 'onboardingSubmittedAt', 'onboardingVerifiedAt', 'onboardingVerifiedBy', 'onboardingNotes', 'onboardingRejectionReason', 'financeDetails', 'reportingManager', 'policyConsents', 'complianceDocs', 'avatarUrl']
+const editableFields = ['employeeId', 'name', 'email', 'password', 'department', 'designation', 'location', 'campus', 'employmentType', 'joiningDate', 'employmentEndDate', 'managerId', 'phone', 'bankDetails', 'emergencyContact', 'exitDetails', 'onboardingChecklist', 'offboardingChecklist', 'role', 'status', 'salary', 'salaryStructure', 'parentsContact', 'identity', 'onboardingDocs', 'documents', 'onboardingStatus', 'onboardingSubmittedAt', 'onboardingVerifiedAt', 'onboardingVerifiedBy', 'onboardingNotes', 'onboardingRejectionReason', 'financeDetails', 'reportingManager', 'policyConsents', 'complianceDocs', 'avatarUrl']
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 function validationError(message, fields = {}) {
@@ -39,7 +39,7 @@ function validatePayload(payload, { partial = false, canAssignManager = false, c
     }
     if (Object.keys(errors).length) throw validationError('Please provide all required employee fields.', errors)
   }
-  for (const field of ['name', 'email', 'employeeId', 'phone', 'department', 'designation', 'location']) {
+  for (const field of ['name', 'email', 'employeeId', 'phone', 'department', 'designation', 'location', 'campus']) {
     if (payload[field] !== undefined && typeof payload[field] !== 'string') errors[field] = 'Enter text.'
   }
   if (payload.email !== undefined && !emailPattern.test(String(payload.email).trim())) errors.email = 'Enter a valid email address.'
@@ -155,6 +155,7 @@ export function createEmployeeService({ repository }) {
       values.name = String(payload.name).trim()
       values.status ??= 'invited'
       values.role ??= 'employee'
+      values.campus ??= payload.campus || 'Ignite Campus'
       const envPassword = process.env.DEFAULT_EMPLOYEE_PASSWORD || process.env.EMPLOYEE_PASSWORD
       const rawPassword = envPassword || (values.password && String(values.password).trim().length >= 8
         ? String(values.password).trim()

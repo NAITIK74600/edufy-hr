@@ -96,14 +96,14 @@ export function createAuthRouter({ authService, auth, userStore }) {
 
       const cleanEmail = String(email).trim().toLowerCase()
       const existing = await userStore.findByEmail(cleanEmail)
-      if (existing) {
+      if (existing && existing.passwordHash) {
         return response.status(409).json({ success: false, error: { code: 'DUPLICATE_USER', message: 'An account with this email already exists.' } })
       }
 
       let assignedEmpId = employeeId ? String(employeeId).trim().toUpperCase() : ''
       if (assignedEmpId) {
         const existingEmp = await userStore.findByEmail(assignedEmpId)
-        if (existingEmp) {
+        if (existingEmp && String(existingEmp.email).trim().toLowerCase() !== cleanEmail) {
           return response.status(409).json({ success: false, error: { code: 'DUPLICATE_USER', message: 'An account with this employee ID already exists.' } })
         }
       }

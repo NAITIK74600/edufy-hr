@@ -167,8 +167,10 @@ function EmployeeDirectory({ route } = {}) {
   const [sendingEmail, setSendingEmail] = useState(false)
   const [emailStatus, setEmailStatus] = useState(null)
   const [emailMessage, setEmailMessage] = useState('')
+  const [modalError, setModalError] = useState('')
 
   function openAddModal() {
+    setModalError('')
     const nextCode = generateNextEmployeeCode(allEmployees, storeState.users)
     const autoPass = generateAutoPassword()
     setNewEmpForm({ ...defaultNewForm, employeeId: nextCode, password: autoPass })
@@ -271,8 +273,17 @@ function EmployeeDirectory({ route } = {}) {
 
   const handleCreateEmployee = storeAction(async (e) => {
     e.preventDefault()
-    if (!newEmpForm.name || !newEmpForm.email) {
-      showFeedback('Please provide employee full name and work email.')
+    setModalError('')
+    const rec = getRecommendedRoleConfig(newEmpForm.role, newEmpForm.department)
+    const designation = (newEmpForm.designation || '').trim() || rec.designation || 'Employee'
+    const missing = []
+    if (!newEmpForm.name?.trim()) missing.push('Full Name')
+    if (!newEmpForm.email?.trim()) missing.push('Work Email')
+    if (!newEmpForm.phone?.trim()) missing.push('Phone Number')
+    if (!newEmpForm.joiningDate) missing.push('Joining Date')
+    if (missing.length) {
+      setModalActiveTab('basic')
+      setModalError(`Please fill: ${missing.join(', ')}.`)
       return
     }
 
@@ -287,6 +298,7 @@ function EmployeeDirectory({ route } = {}) {
     const mgr = allEmployees.find((m) => m.id === newEmpForm.managerId || m.employeeId === newEmpForm.managerId)
     const empData = {
       ...newEmpForm,
+      designation,
       campus: newEmpForm.campus || 'Ignite Campus',
       location: newEmpForm.campus || newEmpForm.location || 'Ignite Campus',
       employmentType: newEmpForm.employmentType || (newEmpForm.role?.includes('intern') ? 'intern' : 'full_time'),
@@ -323,7 +335,8 @@ function EmployeeDirectory({ route } = {}) {
       })
       showFeedback(`Successfully registered ${created?.name || empData.name} (${created?.employeeId || finalEmpCode}). Welcome email dispatched directly.`)
     } catch (err) {
-      showFeedback(`Failed to add employee: ${err.message}`)
+      const details = err?.fields ? ` (${Object.entries(err.fields).map(([k, v]) => `${k}: ${v}`).join(', ')})` : ''
+      setModalError(`Failed to add employee: ${err.message}${details}`)
     }
   })
 
@@ -1644,7 +1657,12 @@ function EmployeeDirectory({ route } = {}) {
               ))}
             </div>
 
-            <form onSubmit={handleCreateEmployee} style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+            <form noValidate onSubmit={handleCreateEmployee} style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+              {modalError && (
+                <div role="alert" style={{ margin: '12px 20px 0', padding: '10px 12px', background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', borderRadius: '6px', fontSize: '13px' }}>
+                  {modalError}
+                </div>
+              )}
               <div className="hr-modal-body" style={{ flex: 1, overflowY: 'auto', padding: '20px' }}>
                 {modalActiveTab === 'basic' && (
                   <div>
@@ -2025,7 +2043,7 @@ function EmployeeDirectory({ route } = {}) {
                 </div>
 
                 <div style={{ display: 'flex', gap: '8px' }}>
-                  <Button variant="secondary" onClick={() => setShowAddModal(false)}>
+                  <Button type="button" variant="secondary" onClick={() => setShowAddModal(false)}>
                     Cancel
                   </Button>
                   <Button type="submit">
