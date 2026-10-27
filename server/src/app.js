@@ -109,7 +109,7 @@ export function createApp(options = {}) {
   const authService = createAuthService({ userStore, jwtSecret, accessTokenTtl: process.env.ACCESS_TOKEN_TTL || '30d', revokedTokens: auth.revokedTokens })
   app.disable('x-powered-by')
   if (compressionMiddleware) {
-    app.use(compressionMiddleware({
+    const compHandler = compressionMiddleware({
       threshold: 1024,
       filter: (request, response) => {
         if (request.headers['x-no-compression']) return false
@@ -117,7 +117,13 @@ export function createApp(options = {}) {
         if (contentType.includes('text/event-stream')) return false
         return compressionMiddleware.filter ? compressionMiddleware.filter(request, response) : true
       },
-    }))
+    })
+    app.use((request, response, next) => {
+      if (request.path === '/events' || request.originalUrl?.includes('/events')) {
+        return next()
+      }
+      return compHandler(request, response, next)
+    })
   }
   app.use((request, response, next) => {
     response.setHeader('X-Content-Type-Options', 'nosniff')

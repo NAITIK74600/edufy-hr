@@ -26,6 +26,13 @@ export function createDataEvents(auth) {
     next()
   }
   router.get('/events', auth.authenticate, (request, response) => {
+    // Disable socket timeouts for persistent event stream
+    if (request.socket) {
+      request.socket.setTimeout(0)
+      request.socket.setNoDelay(true)
+      request.socket.setKeepAlive(true)
+    }
+
     response.set({
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache, no-transform',
@@ -67,13 +74,19 @@ export function createDataEvents(auth) {
       }
     }, 15000)
 
-    const remaining = request.auth.claims.exp * 1000 - Date.now()
+    const remaining = request.auth.claims?.exp ? (request.auth.claims.exp * 1000 - Date.now()) : (30 * 60 * 1000)
+    // Maintain long-lived connection for up to 30 minutes instead of abruptly killing at 60s
+    const maxStreamDuration = 30 * 60 * 1000
+    const timeoutMs = Math.max(0, Math.min(maxStreamDuration, remaining))
     expiry = setTimeout(() => {
       try {
-        if (!response.writableEnded && !response.destroyed) response.end()
+        if (!response.writableEnded && !response.destroyed) {
+          response.write('event: reconnect\ndata: refresh\n\n')
+          response.end()
+        }
       } catch {}
       cleanup()
-    }, Math.max(0, Math.min(60000, remaining)))
+    }, timeoutMs)
   })
   return { router, changed }
 }

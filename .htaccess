@@ -1,0 +1,14 @@
+RewriteEngine On
+
+# Disable compression and buffering for Server-Sent Events (SSE)
+<IfModule mod_env.c>
+  SetEnvIf Request_URI "^/api/v1/events" no-gzip=1
+  SetEnvIf Request_URI "^/api/v1/events" dont-vary=1
+</IfModule>
+
+<IfModule mod_proxy.c>
+  SetEnvIf Request_URI "^/api/v1/events" proxy-nokeepalive=1
+  SetEnvIf Request_URI "^/api/v1/events" proxy-sendchunked=1
+</IfModule>
+
+RewriteRule ^(.*)$ http://localhost:30006/$1 [P,L]
