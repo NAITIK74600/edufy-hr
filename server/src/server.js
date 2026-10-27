@@ -117,6 +117,11 @@ const server = app.listen(port, '0.0.0.0', () => {
   if (useDatabase) warmOnboardingDocsCache().catch((error) => logStartup(`Onboarding docs cache warm-up failed: ${error.message}`))
 })
 
+// Enable persistent HTTP Keep-Alive to eliminate TCP+TLS handshake latency on every request
+server.keepAliveTimeout = 65000
+server.headersTimeout = 66000
+server.requestTimeout = 30000
+
 server.on('error', (err) => {
   if (err.code === 'EADDRINUSE') {
     logStartup(`[FATAL] Port ${port} is already in use by another process. Please close conflicting process and restart.`)

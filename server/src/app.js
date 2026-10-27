@@ -115,6 +115,8 @@ export function createApp(options = {}) {
     response.setHeader('X-Frame-Options', 'SAMEORIGIN')
     response.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin')
     response.setHeader('X-XSS-Protection', '1; mode=block')
+    response.setHeader('Connection', 'keep-alive')
+    response.setHeader('Keep-Alive', 'timeout=65, max=1000')
     const origin = request.headers.origin
     if (origin) {
       response.setHeader('Access-Control-Allow-Origin', origin)
