@@ -359,8 +359,10 @@ export function createPayrollRouter({ auth }) {
         if (codeIds.length > 0) {
           orClauses.push({ employeeId: { $in: codeIds } })
         }
-        if (userEmp?.name) orClauses.push({ employeeName: userEmp.name })
-        if (req.auth.user.name) orClauses.push({ employeeName: req.auth.user.name })
+        if (orClauses.length === 0) {
+          if (userEmp?.name) orClauses.push({ employeeName: userEmp.name })
+          else if (req.auth.user.name) orClauses.push({ employeeName: req.auth.user.name })
+        }
 
         filter = orClauses.length > 0 ? { $or: orClauses } : { employeeId: '__none__' }
       }

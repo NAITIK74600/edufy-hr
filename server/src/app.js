@@ -134,10 +134,26 @@ export function createApp(options = {}) {
     response.setHeader('Keep-Alive', 'timeout=65, max=1000')
     const origin = request.headers.origin
     if (origin) {
-      response.setHeader('Access-Control-Allow-Origin', origin)
-      response.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS')
-      response.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With')
-      response.setHeader('Access-Control-Allow-Credentials', 'true')
+      let isAllowed = false
+      try {
+        const parsed = new URL(origin)
+        const host = parsed.hostname.toLowerCase()
+        const isEdufyiDomain = host === 'edufyitechsolutions.com' || host.endsWith('.edufyitechsolutions.com') ||
+          host === 'edufyi.in' || host.endsWith('.edufyi.in') ||
+          host === 'edufyi.local' || host.endsWith('.edufyi.local')
+        const isLocal = host === 'localhost' || host === '127.0.0.1' || host.startsWith('192.168.') || host.startsWith('10.')
+        const isConfigured = process.env.APP_PUBLIC_URL && origin.startsWith(process.env.APP_PUBLIC_URL.replace(/\/+$/, ''))
+        isAllowed = isEdufyiDomain || isLocal || Boolean(isConfigured) || (process.env.NODE_ENV !== 'production')
+      } catch {
+        isAllowed = false
+      }
+
+      if (isAllowed) {
+        response.setHeader('Access-Control-Allow-Origin', origin)
+        response.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS')
+        response.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With')
+        response.setHeader('Access-Control-Allow-Credentials', 'true')
+      }
     }
     if (request.method === 'OPTIONS') {
       return response.sendStatus(204)
