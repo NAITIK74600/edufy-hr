@@ -82,6 +82,7 @@ function AdminOverviewModule({ onNavigate }) {
   const locations = storeState.companySettings?.locations || []
   const roles = hrStore.getRoles()
   const departments = hrStore.getDepartments()
+  const pendingAdminLeaves = (storeState.leaves || []).filter((l) => l.status === 'pending_admin')
 
   return (
     <div style={{ display: 'grid', gap: '22px' }}>
@@ -98,6 +99,56 @@ function AdminOverviewModule({ onNavigate }) {
           <a href="#/admin/users" className="ui-button secondary"><UserPlus size={13} /> Manage System Users</a>
         </div>
       </PageHeader>
+
+      {/* 25TH MONTH LOP ADMIN ACTION REQUIRED BANNER */}
+      {pendingAdminLeaves.length > 0 && (
+        <div
+          style={{
+            background: 'linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%)',
+            border: '1px solid #f87171',
+            borderRadius: '12px',
+            padding: '14px 18px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            boxShadow: '0 2px 8px rgba(239, 68, 68, 0.08)',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{ background: '#ef4444', color: '#fff', borderRadius: '8px', padding: '8px', display: 'flex' }}>
+              <ShieldAlert size={20} />
+            </div>
+            <div>
+              <strong style={{ color: '#991b1b', fontSize: '13px', display: 'block' }}>
+                Action Required: {pendingAdminLeaves.length} Month-End (25th+) LOP Leave Request(s) Awaiting Admin Sign-off
+              </strong>
+              <small style={{ color: '#b91c1c', fontSize: '11px' }}>
+                HR Operations has verified these 25th month LOP requests and escalated them to the Admin Panel for final administrative authorization.
+              </small>
+            </div>
+          </div>
+          <a
+            href="#/admin/leave?tab=approvals"
+            className="ui-button"
+            style={{
+              background: '#b91c1c',
+              color: '#ffffff',
+              border: 'none',
+              padding: '8px 16px',
+              borderRadius: '8px',
+              fontSize: '12px',
+              fontWeight: 600,
+              textDecoration: 'none',
+              whiteSpace: 'nowrap',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+            }}
+          >
+            Review LOP Approvals <ArrowRight size={13} />
+          </a>
+        </div>
+      )}
 
       {/* SYSTEM KPI METRICS */}
       <section className="metric-grid">
@@ -3076,11 +3127,13 @@ export function AdminDepartmentsModule() {
       const id = editDept.id || editDept.deptId
       const newHead = editDept.head?.trim() || 'Unassigned'
       const newCode = (editDept.code || name.slice(0, 4)).trim().toUpperCase()
+      const oldName = (editDept.originalName || editDept.name || '').trim()
       await hrStore.updateDepartment(id, {
         name,
         code: newCode,
         head: newHead,
         description: editDept.description || '',
+        oldName,
       })
 
       // If a specific employee is chosen as department head, dynamically ensure they belong to this department
@@ -3446,7 +3499,7 @@ export function AdminDepartmentsModule() {
                                 type="button"
                                 className="ui-button secondary"
                                 style={{ padding: '4px 8px', fontSize: '11px' }}
-                                onClick={() => setEditDept({ ...d })}
+                                onClick={() => setEditDept({ ...d, originalName: d.name })}
                                 title="Edit Department"
                               >
                                 <Edit size={12} /> Edit

@@ -315,7 +315,7 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
           }
           break
         case 'departments':
-          allowedBody(body, ['deptId', 'id', 'name', 'code', 'description', 'head'])
+          allowedBody(body, ['deptId', 'id', 'name', 'code', 'description', 'head', 'isCustom'])
           values = {
             ...values,
             deptId: string(body, 'deptId', false, 100) || string(body, 'id', false, 100) || string(body, 'name', true, 100).toLowerCase().replace(/[^a-z0-9]/g, '_'),
@@ -323,6 +323,7 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
             code: string(body, 'code', false, 50) || string(body, 'name', true, 100).slice(0, 4).toUpperCase(),
             description: string(body, 'description', false, 500),
             head: string(body, 'head', false, 100) || 'Unassigned',
+            isCustom: body.isCustom !== undefined ? Boolean(body.isCustom) : true,
           }
           break
       }
@@ -442,7 +443,7 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
         query = mongoose.isValidObjectId(recordId) ? { $or: [{ _id: recordId }, { roleId: recordId }] } : { roleId: recordId }
       } else if (resource === 'departments') {
         if (!management(actor)) throw fail('HR or administrator access is required to update departments.', 403)
-        allowedBody(req.body, ['name', 'code', 'description', 'head'])
+        allowedBody(req.body, ['name', 'code', 'description', 'head', 'oldName'])
         update = { $set: {} }
         if (req.body.name !== undefined) update.$set.name = string(req.body, 'name', true, 100)
         if (req.body.code !== undefined) update.$set.code = string(req.body, 'code', false, 50)
@@ -537,8 +538,32 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
           code: req.body.code || recordId.slice(0, 4).toUpperCase(),
           description: req.body.description || '',
           head: req.body.head || 'Unassigned',
+          isCustom: true,
         })
         record = createdDept.toObject()
+      }
+      if (resource === 'departments' && record) {
+        const newName = update.$set?.name || record.name
+        const reqOldName = (req.body.oldName && typeof req.body.oldName === 'string') ? req.body.oldName.trim() : ''
+        const candidateOldNames = new Set([reqOldName, recordId].filter(Boolean))
+        for (const oldName of candidateOldNames) {
+          if (oldName && newName && oldName.toLowerCase() !== newName.toLowerCase()) {
+            const escaped = oldName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+            const oldRegex = new RegExp(`^${escaped}$`, 'i')
+            await Employee.updateMany(
+              { department: { $regex: oldRegex } },
+              { $set: { department: newName } }
+            )
+            await models.requisitions.updateMany(
+              { department: { $regex: oldRegex } },
+              { $set: { department: newName } }
+            )
+            await models.announcements.updateMany(
+              { targetAudience: { $regex: oldRegex } },
+              { $set: { targetAudience: newName } }
+            )
+          }
+        }
       }
       if (!record && resource === 'notifications' && mongoose.isValidObjectId(id(actor))) {
         const leave = await Notification.findOneAndUpdate({ _id: recordId, recipientId: id(actor) }, { $set: { readAt: new Date() } }, { returnDocument: 'after' }).lean()
@@ -656,6 +681,18 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
         deleteQuery = mongoose.isValidObjectId(recordId) ? { $or: [{ _id: recordId }, { roleId: recordId }] } : { roleId: recordId }
       } else if (resource === 'departments') {
         deleteQuery = mongoose.isValidObjectId(recordId) ? { $or: [{ _id: recordId }, { deptId: recordId }] } : { deptId: recordId }
+        const deptToDelete = await models.departments.findOne(deleteQuery).lean()
+        const result = await models.departments.deleteOne(deleteQuery)
+        if (!result.deletedCount) throw fail('Record not found.', 404)
+        const deptName = deptToDelete?.name
+        if (deptName) {
+          const escaped = deptName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+          await Employee.updateMany(
+            { department: { $regex: new RegExp(`^${escaped}$`, 'i') } },
+            { $set: { department: 'Unassigned' } }
+          )
+        }
+        return res.json({ success: true, data: { id: recordId } })
       } else {
         if (!mongoose.isValidObjectId(recordId)) throw fail('Invalid record identifier.')
         deleteQuery = { _id: recordId }

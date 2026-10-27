@@ -83,8 +83,20 @@ export function createWorkspaceStore(store, mutate, getUser = null, rawLocal = {
     addRole: (data) => (isLocal() && rawLocal.addRole ? rawLocal.addRole(data) : create('roles', pick(data, ['id', 'roleId', 'name', 'description', 'badge', 'isSystem', 'permissions']))),
     updateRole: (id, data) => (isLocal() && rawLocal.updateRole ? rawLocal.updateRole(id, data) : patch('roles', id, pick(data, ['name', 'description', 'badge', 'permissions']))),
     deleteRole: (id) => (isLocal() && rawLocal.deleteRole ? rawLocal.deleteRole(id) : save('delete', `/roles/${encodeURIComponent(id)}`)),
-    addDepartment: (data) => (isLocal() && rawLocal.addDepartment ? rawLocal.addDepartment(data) : create('departments', pick(data, ['id', 'deptId', 'name', 'code', 'description', 'head', 'isCustom']))),
-    updateDepartment: (id, data) => (isLocal() && rawLocal.updateDepartment ? rawLocal.updateDepartment(id, data) : patch('departments', id, pick(data, ['name', 'code', 'description', 'head']))),
-    deleteDepartment: (id) => (isLocal() && rawLocal.deleteDepartment ? rawLocal.deleteDepartment(id) : save('delete', `/departments/${encodeURIComponent(id)}`)),
+    addDepartment: (data) => {
+      const res = rawLocal.addDepartment ? rawLocal.addDepartment(data) : data
+      if (isLocal()) return res
+      return create('departments', pick(data, ['id', 'deptId', 'name', 'code', 'description', 'head', 'isCustom'])).then(() => res)
+    },
+    updateDepartment: (id, data) => {
+      const res = rawLocal.updateDepartment ? rawLocal.updateDepartment(id, data) : true
+      if (isLocal()) return res
+      return patch('departments', id, pick(data, ['name', 'code', 'description', 'head', 'oldName'])).then(() => res)
+    },
+    deleteDepartment: (id) => {
+      const res = rawLocal.deleteDepartment ? rawLocal.deleteDepartment(id) : true
+      if (isLocal()) return res
+      return save('delete', `/departments/${encodeURIComponent(id)}`).then(() => res)
+    },
   }
 }

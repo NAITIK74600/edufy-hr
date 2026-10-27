@@ -1,16 +1,32 @@
 import { hasPermission, PERMISSIONS } from '../../auth/permissions.js'
 import { mailService } from '../../services/mail.service.js'
 
-const ACTIVE_STATUSES = ['pending_tl', 'pending_manager', 'pending_director', 'pending_hr', 'approved']
+const ACTIVE_STATUSES = ['pending_tl', 'pending_manager', 'pending_director', 'pending_hr', 'pending_admin', 'approved']
 const TRANSITIONS = Object.freeze({
   pending_tl: ['approved', 'rejected', 'cancelled'],
   pending_manager: ['approved', 'pending_hr', 'rejected', 'cancelled'],
   pending_director: ['approved', 'rejected', 'cancelled'],
-  pending_hr: ['approved', 'rejected', 'cancelled'],
+  pending_hr: ['approved', 'pending_admin', 'rejected', 'cancelled'],
+  pending_admin: ['approved', 'rejected', 'cancelled'],
   approved: ['cancelled'],
   rejected: [],
   cancelled: [],
 })
+
+export function is25thMonthLop(startDate, endDate, leaveType, isDoubleLop, doubleLopDays) {
+  if (isDoubleLop || (Number(doubleLopDays) > 0)) return true
+  const s = new Date(startDate)
+  const e = new Date(endDate || startDate)
+  if (!Number.isNaN(s.getTime()) && !Number.isNaN(e.getTime())) {
+    for (const cur = new Date(s); cur <= e; cur.setUTCDate(cur.getUTCDate() + 1)) {
+      if (cur.getUTCDate() >= 25) return true
+    }
+  }
+  if (String(leaveType).toLowerCase() === 'lop') {
+    if (s.getUTCDate() >= 25 || e.getUTCDate() >= 25) return true
+  }
+  return false
+}
 
 function error(message, statusCode = 400, code = 'LEAVE_VALIDATION_ERROR', fields = {}) {
   const result = new Error(message)
@@ -149,6 +165,13 @@ export function createLeaveService({ repository, employeeRepository, notificatio
     await Promise.all(recipients.map((employee) => notifyRecipient(idOf(employee), event, request, message)))
   }
 
+  async function notifyAdmin(event, request, message) {
+    if (!notifier?.notify || !employeeRepository.list) return
+    const result = await employeeRepository.list({ limit: 100, status: 'active' })
+    const recipients = (result.records ?? result ?? []).filter((employee) => employee.role === 'admin')
+    await Promise.all(recipients.map((employee) => notifyRecipient(idOf(employee), event, request, message)))
+  }
+
   return {
     async submit(payload, actor, targetEmployeeId) {
       if (targetEmployeeId ? (!hasPermission(actor, PERMISSIONS.LEAVE_HR_REVIEW) && !['admin', 'hr'].includes(actor.role)) : !hasPermission(actor, PERMISSIONS.LEAVE_SELF_WRITE)) throw error('You cannot submit leave requests.', 403, 'FORBIDDEN')
@@ -164,7 +187,7 @@ export function createLeaveService({ repository, employeeRepository, notificatio
       const units = totalUnits
       const overlap = await repository.findOverlap({ employeeId: idOf(employee), startDate, endDate })
       if (overlap) {
-        const canCancel = ['pending_tl', 'pending_manager', 'pending_director', 'pending_hr', 'approved'].includes(overlap.status)
+        const canCancel = ['pending_tl', 'pending_manager', 'pending_director', 'pending_hr', 'pending_admin', 'approved'].includes(overlap.status)
         if (payload.replaceOverlap && canCancel) {
           await this.cancel(idOf(overlap), actor)
         } else {
@@ -207,7 +230,10 @@ export function createLeaveService({ repository, employeeRepository, notificatio
       const isTlApplicant = employee.role === 'team_lead'
       let manager = managerId ? await employeeRepository.findById(managerId) : null
       const isReportingToTl = manager?.role === 'team_lead'
-      const status = isManagerApplicant
+      const isLopMonthLeave = is25thMonthLop(startDate, endDate, leaveType, isDoubleLop, doubleLopDays)
+      const status = isLopMonthLeave
+        ? 'pending_hr'
+        : isManagerApplicant
         ? 'pending_director'
         : isTlApplicant
         ? 'pending_manager'
@@ -236,8 +262,13 @@ export function createLeaveService({ repository, employeeRepository, notificatio
         if (paidUnits > 0) await repository.releaseReservation(idOf(employee), leaveType, paidUnits)
         throw saveError
       }
-      await notifyRecipient(managerId, 'leave.submitted', request, `${employee.name} submitted a leave request for ${units} unit(s).`)
-      if (!managerId) await notifyHr('leave.hr_review_required', request, `${employee.name} submitted a leave request requiring HR review.`)
+      if (isLopMonthLeave) {
+        await notifyHr('leave.hr_review_required', request, `${employee.name} submitted a 25th Month LOP leave request requiring HR review before Admin approval.`)
+        if (managerId) await notifyRecipient(managerId, 'leave.submitted', request, `${employee.name} submitted a 25th Month LOP leave request (routed to HR & Admin).`)
+      } else {
+        await notifyRecipient(managerId, 'leave.submitted', request, `${employee.name} submitted a leave request for ${units} unit(s).`)
+        if (!managerId) await notifyHr('leave.hr_review_required', request, `${employee.name} submitted a leave request requiring HR review.`)
+      }
       return publicRequest(request)
     },
     async grant(payload, actor) {
@@ -282,24 +313,66 @@ export function createLeaveService({ repository, employeeRepository, notificatio
       if (isSelf) {
         throw error('Self-approval of leave requests is strictly prohibited. You cannot decide your own leave request.', 403, 'FORBIDDEN_SELF_APPROVAL')
       }
+      const isAdmin = actor.role === 'admin' || (actor.permissions || []).includes('admin.access')
       const isLeadership = ['director', 'managing_director', 'co_founder', 'vertical_head'].includes(actor.role)
       const isHr = (hasPermission(actor, PERMISSIONS.LEAVE_HR_REVIEW) || ['admin', 'hr'].includes(actor.role))
+      const isAdminApprover = (isAdmin || actor.role === 'admin') && request.status === 'pending_admin'
       const isDirector = (isLeadership || ['admin', 'hr'].includes(actor.role)) && request.status === 'pending_director'
       const isManager = (hasPermission(actor, PERMISSIONS.LEAVE_TEAM_APPROVE) || ['manager', 'admin', 'hr'].includes(actor.role)) && (request.status === 'pending_manager' || request.status === 'pending_tl')
       const isTl = (hasPermission(actor, PERMISSIONS.LEAVE_TEAM_APPROVE) || ['team_lead', 'manager', 'admin', 'hr'].includes(actor.role)) && request.status === 'pending_tl'
 
-      if (!isHr && !isDirector && !isManager && !isTl) throw error('You are not authorized to decide this request at its current stage.', 403, 'FORBIDDEN')
+      if (!isAdminApprover && !isHr && !isDirector && !isManager && !isTl) throw error('You are not authorized to decide this request at its current stage.', 403, 'FORBIDDEN')
       if (decision === 'reject' && !String(payload.reason ?? payload.comment ?? '').trim()) throw error('A rejection reason is required.', 400, 'REJECTION_REASON_REQUIRED', { reason: 'Required.' })
       const policy = await getPolicy(request.leaveType)
-      const nextStatus = decision === 'reject' ? 'rejected' : isManager && !isHr && policy.approvalStage === 'manager_hr' && request.status === 'pending_manager' ? 'pending_hr' : 'approved'
+      const isLopMonth = is25thMonthLop(request.startDate, request.endDate, request.leaveType, request.isDoubleLop, request.doubleLopDays)
+      
+      let nextStatus
+      if (decision === 'reject') {
+        nextStatus = 'rejected'
+      } else if (request.status === 'pending_admin') {
+        nextStatus = 'approved'
+      } else if (request.status === 'pending_hr') {
+        // ONLY for 25th month LOP does HR approval advance to pending_admin! Regular leaves become approved directly.
+        nextStatus = isLopMonth ? 'pending_admin' : 'approved'
+      } else if (isManager && !isHr && policy.approvalStage === 'manager_hr' && request.status === 'pending_manager') {
+        nextStatus = 'pending_hr'
+      } else if (isManager && isLopMonth && request.status === 'pending_manager') {
+        nextStatus = 'pending_hr'
+      } else {
+        nextStatus = 'approved'
+      }
       assertTransition(request.status, nextStatus)
       const timestamp = new Date()
-      const updated = await repository.transitionRequest(id, [request.status], { set: { status: nextStatus, decisionReason: payload.reason ? String(payload.reason).trim() : undefined, ...(isManager ? { managerDecisionAt: timestamp } : isDirector ? { directorDecisionAt: timestamp } : { hrDecisionAt: timestamp }) }, push: { action: decision === 'reject' ? 'rejected' : 'approved', fromStatus: request.status, toStatus: nextStatus, actorId: actor.id, actorRole: actor.role, comment: payload.comment ?? payload.reason, createdAt: timestamp } })
+      const updateSet = {
+        status: nextStatus,
+        decisionReason: payload.reason ? String(payload.reason).trim() : undefined,
+        ...(isAdminApprover ? { adminDecisionAt: timestamp, adminApprovedBy: actor.displayName || actor.name || 'Administrator' }
+          : isHr && request.status === 'pending_hr' ? { hrDecisionAt: timestamp, hrApprovedBy: actor.displayName || actor.name || 'HR Operations' }
+          : isDirector ? { directorDecisionAt: timestamp }
+          : { managerDecisionAt: timestamp })
+      }
+      const updated = await repository.transitionRequest(id, [request.status], {
+        set: updateSet,
+        push: {
+          action: decision === 'reject' ? 'rejected' : 'approved',
+          fromStatus: request.status,
+          toStatus: nextStatus,
+          actorId: actor.id,
+          actorRole: actor.role,
+          comment: payload.comment ?? payload.reason,
+          createdAt: timestamp
+        }
+      })
       if (!updated) throw error('This leave request has already been decided by another action.', 409, 'DUPLICATE_DECISION')
       const paidUnits = request.paidUnits !== undefined ? request.paidUnits : request.units
       if (nextStatus === 'rejected') await releaseReservation(request)
       if (nextStatus === 'approved' && paidUnits > 0) await repository.commitReservation(request.employeeId, request.leaveType, paidUnits)
-      if (nextStatus === 'pending_hr' || isDirector) await notifyHr('leave.hr_review_required', updated, isDirector ? 'Managing Director approved manager leave; synchronized to HR panel.' : 'A manager approved a leave request and HR review is required.')
+      if (nextStatus === 'pending_admin') {
+        await notifyAdmin('leave.admin_review_required', updated, `HR verified 25th Month LOP leave for ${updated.employeeName || 'employee'}. Admin final approval required.`)
+        await notifyRecipient(request.employeeId, 'leave.pending_admin', updated, 'Your 25th Month LOP leave was verified by HR and submitted to Administrator for final approval.')
+      } else if (nextStatus === 'pending_hr' || isDirector) {
+        await notifyHr('leave.hr_review_required', updated, isDirector ? 'Managing Director approved manager leave; synchronized to HR panel.' : 'A manager approved a leave request and HR review is required.')
+      }
       await notifyRecipient(request.employeeId, `leave.${nextStatus}`, updated, `Your leave request is ${nextStatus}.`)
       if (['approved', 'rejected'].includes(nextStatus)) {
         try {
@@ -322,7 +395,7 @@ export function createLeaveService({ repository, employeeRepository, notificatio
     async cancel(id, actor) {
       const request = await getRequest(id, actor, 'self')
       const policy = await getPolicy(request.leaveType)
-      const isPending = ['pending_tl', 'pending_manager', 'pending_director', 'pending_hr'].includes(request.status)
+      const isPending = ['pending_tl', 'pending_manager', 'pending_director', 'pending_hr', 'pending_admin'].includes(request.status)
       const canCancelApproved = request.status === 'approved' && (policy.allowCancellationAfterApproval !== false || ['admin', 'hr'].includes(actor.role))
       if (!isPending && !canCancelApproved) throw error('This request cannot be cancelled under the configured policy.', 409, 'CANCELLATION_NOT_ALLOWED')
       const updated = await repository.transitionRequest(id, [request.status], { set: { status: 'cancelled' }, push: { action: 'cancelled', fromStatus: request.status, toStatus: 'cancelled', actorId: actor.id, actorRole: actor.role, createdAt: new Date() } })
@@ -353,7 +426,7 @@ export function createLeaveService({ repository, employeeRepository, notificatio
       const request = await repository.findRequest(id)
       if (!request) throw error('Leave request not found.', 404, 'NOT_FOUND')
       const paidUnits = request.paidUnits !== undefined ? request.paidUnits : request.units
-      if (['pending_tl', 'pending_manager', 'pending_director', 'pending_hr'].includes(request.status)) {
+      if (['pending_tl', 'pending_manager', 'pending_director', 'pending_hr', 'pending_admin'].includes(request.status)) {
         if (paidUnits > 0) await releaseReservation(request).catch(() => null)
       } else if (request.status === 'approved') {
         if (paidUnits > 0) await repository.restoreCommittedBalance(request.employeeId, request.leaveType, paidUnits).catch(() => null)
@@ -364,7 +437,7 @@ export function createLeaveService({ repository, employeeRepository, notificatio
     async amend(id, payload, actor) {
       const request = await getRequest(id, actor, 'self')
       const policy = await getPolicy(request.leaveType)
-      if (!policy.allowAmendment || !['pending_tl', 'pending_manager', 'pending_director', 'pending_hr'].includes(request.status)) throw error('This request cannot be amended under the configured policy.', 409, 'AMENDMENT_NOT_ALLOWED')
+      if (!policy.allowAmendment || !['pending_tl', 'pending_manager', 'pending_director', 'pending_hr', 'pending_admin'].includes(request.status)) throw error('This request cannot be amended under the configured policy.', 409, 'AMENDMENT_NOT_ALLOWED')
       const startDate = parseDate(payload.startDate, 'startDate')
       const endDate = parseDate(payload.endDate, 'endDate')
       if (endDate < startDate) throw error('End date must be on or after start date.', 400, 'INVALID_LEAVE_RANGE')

@@ -38,6 +38,7 @@ const labels = {
   pending_manager: 'Pending Manager Approval',
   pending_director: 'Pending Director Sign-Off',
   pending_hr: 'Pending HR Review',
+  pending_admin: 'Pending Admin Approval (LOP)',
   approved: 'Approved',
   rejected: 'Rejected',
   cancelled: 'Cancelled',
@@ -76,12 +77,16 @@ function RequestStatus({ status }) {
       ? 'info'
       : status === 'rejected' || status === 'cancelled'
       ? 'warning'
+      : status === 'pending_admin'
+      ? 'danger'
       : status === 'pending_director'
       ? 'purple'
       : status === 'pending_manager'
       ? 'blue'
       : status === 'pending_tl'
       ? 'teal'
+      : status === 'pending_hr'
+      ? 'warning'
       : 'neutral'
 
   return (
@@ -97,7 +102,8 @@ function RequestCard({ request, onSelect, selected, onQuickApprove, onQuickRejec
     request.status === 'pending_tl' ||
     request.status === 'pending_manager' ||
     request.status === 'pending_director' ||
-    request.status === 'pending_hr'
+    request.status === 'pending_hr' ||
+    request.status === 'pending_admin'
 
   return (
     <div
@@ -170,6 +176,7 @@ function RequestDetail({ request, mode, onRefresh, onDeleteRequest }) {
     )
   }
 
+  const isAdmin = user?.role === 'admin' || (user?.permissions || []).includes('admin.access')
   const isDirector = user?.role === 'director'
   const isManager = user?.role === 'manager'
   const isTeamLead = user?.role === 'team_lead'
@@ -184,16 +191,22 @@ function RequestDetail({ request, mode, onRefresh, onDeleteRequest }) {
   // Can Director decide? (Manager leave pending Director approval)
   const canDirectorDecide = (isDirector || isHrOrAdmin) && (request.status === 'pending_director' || request.currentApproverRole === 'director')
 
+  // Can Admin decide? (25th Month LOP leave pending final Admin sign-off)
+  const canAdminDecide = isAdmin && (request.status === 'pending_admin' || request.currentApproverRole === 'admin')
+
+  // Can HR decide? (HR reviews pending_hr or advances 25th month LOP to admin)
   const canHrDecide = isHrOrAdmin && ['pending_hr', 'pending_manager', 'pending_director'].includes(request.status)
-  const canDecide = canManagerDecide || canDirectorDecide || canHrDecide
-  const canCancel = (mode === 'self' || isHrOrAdmin) && ['pending_tl', 'pending_manager', 'pending_director', 'pending_hr', 'approved'].includes(request.status)
+  const canDecide = canAdminDecide || canManagerDecide || canDirectorDecide || canHrDecide
+  const canCancel = (mode === 'self' || isHrOrAdmin) && ['pending_tl', 'pending_manager', 'pending_director', 'pending_hr', 'pending_admin', 'approved'].includes(request.status)
 
   async function handleApprove() {
     setBusy(true)
     setError('')
     try {
       let role = 'hr'
-      if (canTlDecide && !isHrOrAdmin) {
+      if (canAdminDecide || (isAdmin && request.status === 'pending_admin')) {
+        role = 'admin'
+      } else if (canTlDecide && !isHrOrAdmin) {
         role = 'team_lead'
       } else if (canManagerDecide && !isHrOrAdmin) {
         role = 'manager'
@@ -207,6 +220,8 @@ function RequestDetail({ request, mode, onRefresh, onDeleteRequest }) {
         role = 'manager'
       } else if (request.status === 'pending_director') {
         role = 'director'
+      } else if (request.status === 'pending_admin') {
+        role = 'admin'
       }
       await hrStore.approveLeave(request.id, role, decisionReason, user)
       setDecisionReason('')
@@ -227,7 +242,9 @@ function RequestDetail({ request, mode, onRefresh, onDeleteRequest }) {
     setError('')
     try {
       let role = 'hr'
-      if (canTlDecide && !isHrOrAdmin) {
+      if (canAdminDecide || (isAdmin && request.status === 'pending_admin')) {
+        role = 'admin'
+      } else if (canTlDecide && !isHrOrAdmin) {
         role = 'team_lead'
       } else if (canManagerDecide && !isHrOrAdmin) {
         role = 'manager'
@@ -241,6 +258,8 @@ function RequestDetail({ request, mode, onRefresh, onDeleteRequest }) {
         role = 'manager'
       } else if (request.status === 'pending_director') {
         role = 'director'
+      } else if (request.status === 'pending_admin') {
+        role = 'admin'
       }
       await hrStore.rejectLeave(request.id, role, decisionReason, user)
       setDecisionReason('')
@@ -347,13 +366,27 @@ function RequestDetail({ request, mode, onRefresh, onDeleteRequest }) {
             <div className="timeline-item">
               <span className="timeline-dot" />
               <div>
-                <strong>HR Panel Synchronization</strong>
+                <strong>HR Panel Verification</strong>
                 <small>
                   {request.status === 'approved'
                     ? 'Synced to HR Panel for Payroll & Leave Balance Deductions'
-                    : 'HR Operations Notification'}
+                    : request.status === 'pending_admin'
+                    ? 'Verified by HR Operations — Escalated to Admin for 25th Month LOP Approval'
+                    : 'HR Operations Review'}
                 </small>
                 {request.hrComment && <p>{request.hrComment}</p>}
+              </div>
+            </div>
+          )}
+          {(request.adminComment || request.adminApprovedBy || request.adminDecisionAt) && (
+            <div className="timeline-item">
+              <span className="timeline-dot" />
+              <div>
+                <strong>Admin LOP Approval Sign-off</strong>
+                <small>
+                  Executive LOP Authorization by {request.adminApprovedBy || 'Administrator'}
+                </small>
+                {request.adminComment && <p>{request.adminComment}</p>}
               </div>
             </div>
           )}
@@ -368,7 +401,9 @@ function RequestDetail({ request, mode, onRefresh, onDeleteRequest }) {
               value={decisionReason}
               onChange={(event) => setDecisionReason(event.target.value)}
               placeholder={
-                canTlDecide
+                canAdminDecide
+                  ? 'Add Administrator remarks for 25th Month LOP approval...'
+                  : canTlDecide
                   ? 'Add Team Lead remarks (Manager & Director will be notified; not Admin)...'
                   : canManagerDecide
                   ? 'Add Manager remarks (Director will be notified; not Admin)...'
@@ -381,7 +416,12 @@ function RequestDetail({ request, mode, onRefresh, onDeleteRequest }) {
           </label>
           <div className="detail-actions">
             <Button disabled={busy} onClick={handleApprove}>
-              <Check size={14} /> Approve Request
+              <Check size={14} />
+              {request.status === 'pending_admin'
+                ? 'Approve LOP (Admin Sign-off)'
+                : (request.status === 'pending_hr' && (request.isDoubleLop || request.doubleLopDays > 0 || (new Date(request.startDate).getDate() >= 25) || (new Date(request.endDate).getDate() >= 25)))
+                ? 'Verify & Advance to Admin'
+                : 'Approve Request'}
             </Button>
             <Button variant="secondary" disabled={busy} onClick={handleReject}>
               <X size={14} /> Reject Request
@@ -737,7 +777,7 @@ function ApplyLeaveSelf({ onSubmitted }) {
   const myPendingLeaves = storeLeaves.filter((l) => {
     const isOwner = (userEmpId && (l.employeeId === userEmpId || l.employeeRef === userEmpId)) ||
       (userId && (l.employeeRef === userId || l.employeeId === userId))
-    return isOwner && ['pending_tl', 'pending_manager', 'pending_director', 'pending_hr'].includes(l.status)
+    return isOwner && ['pending_tl', 'pending_manager', 'pending_director', 'pending_hr', 'pending_admin'].includes(l.status)
   })
 
   const getAvailDays = (type) => {
@@ -1274,7 +1314,11 @@ export function LeaveManagementPage({ mode = 'self' }) {
       if (hash.includes('tab=approvals')) return 'approvals'
       if (hash.includes('tab=grant')) return 'grant'
       if (hash.includes('tab=quotas')) return 'quotas'
-      if (hash.startsWith('#/admin/leave')) return 'policy'
+      if (hash.startsWith('#/admin/leave')) {
+        const state = hrStore.getState()
+        const hasPendingAdmin = (state.leaves || []).some((l) => l.status === 'pending_admin')
+        return hasPendingAdmin ? 'approvals' : 'policy'
+      }
     }
     return 'approvals'
   })
@@ -1386,7 +1430,8 @@ export function LeaveManagementPage({ mode = 'self' }) {
     (l) =>
       l.status === 'pending_manager' ||
       l.status === 'pending_director' ||
-      l.status === 'pending_hr'
+      l.status === 'pending_hr' ||
+      l.status === 'pending_admin'
   ).length
   const approvedCount = allLeaves.filter((l) => l.status === 'approved').length
 
@@ -1397,7 +1442,8 @@ export function LeaveManagementPage({ mode = 'self' }) {
 
   const handleQuickApprove = storeAction(async (request) => {
     let role = 'hr'
-    if (user?.role === 'manager' || request.status === 'pending_manager') role = 'manager'
+    if (user?.role === 'admin' || request.status === 'pending_admin') role = 'admin'
+    else if (user?.role === 'manager' || request.status === 'pending_manager') role = 'manager'
     else if (user?.role === 'director' || request.status === 'pending_director') role = 'director'
     await hrStore.approveLeave(request.id, role, 'Approved after review', user)
     showFeedback(`Approved ${leaveTypeLabels[request.leaveType] || request.leaveType} for ${request.employeeName}.`)
@@ -1412,7 +1458,8 @@ export function LeaveManagementPage({ mode = 'self' }) {
     if (!rejectingLeave) return
     const reason = rejectReason.trim() || 'Declined due to operational coverage requirements.'
     let role = 'hr'
-    if (user?.role === 'manager' || rejectingLeave.status === 'pending_manager') role = 'manager'
+    if (user?.role === 'admin' || rejectingLeave.status === 'pending_admin') role = 'admin'
+    else if (user?.role === 'manager' || rejectingLeave.status === 'pending_manager') role = 'manager'
     else if (user?.role === 'director' || rejectingLeave.status === 'pending_director') role = 'director'
     await hrStore.rejectLeave(rejectingLeave.id, role, reason, user)
     setRejectingLeave(null)
@@ -1811,7 +1858,7 @@ export function LeaveManagementPage({ mode = 'self' }) {
                     key: 'actions',
                     label: 'Actions',
                     render: (r) => {
-                      const isPending = (r.status === 'pending_hr' || r.status === 'pending_manager' || r.status === 'pending_director') && user?.role !== 'team_lead'
+                      const isPending = (r.status === 'pending_hr' || r.status === 'pending_manager' || r.status === 'pending_director' || r.status === 'pending_admin') && user?.role !== 'team_lead'
                       return (
                         <div className="emp-action-group">
                           {isPending && (

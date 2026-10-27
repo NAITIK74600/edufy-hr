@@ -25,5 +25,5 @@ export const workspaceModels = {
   requisitions: model('WorkspaceRequisition', { ownerId, title: text, department: text, location: text, openings: Number, status: String }),
   notifications: model('WorkspaceNotification', { ownerId, recipientId: String, title: text, message: text, type: text, read: Boolean, event: String, entityId: String, dedupeKey: { type: String, unique: true, sparse: true }, recipientRole: text }),
   roles: model('WorkspaceRole', { ownerId, roleId: text, name: text, description: text, badge: text, isSystem: Boolean, permissions: [String] }),
-  departments: model('WorkspaceDepartment', { ownerId, deptId: text, name: text, code: text, description: text, head: text }),
+  departments: model('WorkspaceDepartment', { ownerId, deptId: text, name: text, code: text, description: text, head: text, isCustom: Boolean }),
 }

@@ -66,7 +66,7 @@ export function createMongoLeaveRepository() {
     },
     async findOverlap({ employeeId, startDate, endDate, excludeId }) {
       ensureConnected()
-      const query = { employeeId: objectId(employeeId), status: { $in: ['pending_tl', 'pending_manager', 'pending_director', 'pending_hr', 'approved'] }, startDate: { $lte: endDate }, endDate: { $gte: startDate } }
+      const query = { employeeId: objectId(employeeId), status: { $in: ['pending_tl', 'pending_manager', 'pending_director', 'pending_hr', 'pending_admin', 'approved'] }, startDate: { $lte: endDate }, endDate: { $gte: startDate } }
       if (excludeId && objectId(excludeId)) query._id = { $ne: excludeId }
       return LeaveRequest.findOne(query).lean()
     },

@@ -2722,7 +2722,18 @@ function loadStore() {
           }
         }
         if (Array.isArray(parsed.departments) && parsed.departments.length > 0) {
-          parsed.departments = parsed.departments.filter(Boolean)
+          const deptMap = new Map()
+          INITIAL_DEPARTMENTS.forEach((d) => {
+            deptMap.set((d.deptId || d.id || d.name).toLowerCase(), { ...d })
+          })
+          parsed.departments.filter(Boolean).forEach((d) => {
+            const key = (d.deptId || d.id || d.name || '').toLowerCase()
+            if (key) {
+              const prev = deptMap.get(key) || {}
+              deptMap.set(key, { ...prev, ...d })
+            }
+          })
+          parsed.departments = Array.from(deptMap.values())
         } else {
           parsed.departments = INITIAL_DEPARTMENTS.map((d) => ({ ...d }))
         }
@@ -2811,9 +2822,18 @@ const listeners = new Set()
 function notifyListeners() {
   if (typeof window !== 'undefined' && window.localStorage) {
     try {
+      const ephemeralKeys = workspaceKeys.filter((k) => k !== 'departments' && k !== 'roles')
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify({
-        ...storeState, employees: [], users: [], attendance: [], leaves: [], payroll: [], leaveBalances: [],
-        ...Object.fromEntries(workspaceKeys.map((key) => [key, []])),
+        ...storeState,
+        employees: [],
+        users: [],
+        attendance: [],
+        leaves: [],
+        payroll: [],
+        leaveBalances: [],
+        ...Object.fromEntries(ephemeralKeys.map((key) => [key, []])),
+        departments: storeState.departments || [],
+        roles: storeState.roles || [],
       }))
       if (Array.isArray(storeState.notifications)) {
         window.localStorage.setItem(STORAGE_PERSISTED_NOTIFICATIONS_KEY, JSON.stringify(storeState.notifications))
@@ -2827,6 +2847,26 @@ function notifyListeners() {
   // and the UI only updates after a manual refresh.
   const snapshot = { ...storeState }
   listeners.forEach((callback) => callback(snapshot))
+}
+
+export function is25thMonthLop(requestOrData) {
+  if (!requestOrData) return false
+  if (requestOrData.isDoubleLop || (requestOrData.doubleLopDays && requestOrData.doubleLopDays > 0)) return true
+  const startDateStr = requestOrData.startDate
+  const endDateStr = requestOrData.endDate || startDateStr
+  if (!startDateStr) return false
+  
+  const start = new Date(startDateStr)
+  const end = new Date(endDateStr)
+  if (isNaN(start.getTime())) return false
+
+  for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+    if (d.getDate() >= 25) return true
+  }
+  if (String(requestOrData.leaveType).toLowerCase() === 'lop') {
+    if (start.getDate() >= 25 || end.getDate() >= 25) return true
+  }
+  return false
 }
 
 const localStore = {
@@ -3288,13 +3328,14 @@ const localStore = {
   },
   updateDepartment(deptId, updates) {
     const list = this.getDepartments()
-    let oldName = null
+    let oldName = updates.oldName || null
     const target = list.find((d) => d.id === deptId || d.deptId === deptId || d._id === deptId || d.name?.toLowerCase() === String(deptId).toLowerCase())
-    if (target) {
+    if (target && !oldName) {
       oldName = target.name
     }
 
     const cleanUpdates = { ...updates }
+    delete cleanUpdates.oldName
     if (cleanUpdates.code !== undefined) cleanUpdates.code = String(cleanUpdates.code).trim().toUpperCase()
     if (cleanUpdates.name !== undefined) cleanUpdates.name = String(cleanUpdates.name).trim()
     if (cleanUpdates.head !== undefined) cleanUpdates.head = String(cleanUpdates.head).trim()
@@ -3320,7 +3361,7 @@ const localStore = {
       storeState.departments = [...storeState.departments, { ...base, ...cleanUpdates }]
     }
 
-    // Cascade department name rename to employees and users so nobody becomes orphaned
+    // Cascade department name rename to employees, users, and teams so nobody becomes orphaned
     if (oldName && cleanUpdates.name && oldName.toLowerCase() !== cleanUpdates.name.toLowerCase()) {
       const newName = cleanUpdates.name
       storeState.employees = (storeState.employees || []).map((emp) => {
@@ -3335,6 +3376,12 @@ const localStore = {
         }
         return u
       })
+      storeState.teams = (storeState.teams || []).map((t) => {
+        if ((t.department || '').trim().toLowerCase() === oldName.toLowerCase()) {
+          return { ...t, department: newName }
+        }
+        return t
+      })
     }
 
     this.addAuditLog('Admin', 'DEPARTMENT_UPDATE', `Updated department details for '${cleanUpdates.name || deptId}' (${cleanUpdates.code || ''})`)
@@ -3342,10 +3389,12 @@ const localStore = {
     return true
   },
   deleteDepartment(deptId) {
+    if (!deptId) throw new Error('Department ID is required.')
     const list = this.getDepartments()
-    const dept = list.find((d) => d.id === deptId || d.deptId === deptId || d._id === deptId || d.name?.toLowerCase() === String(deptId).toLowerCase())
+    const targetId = String(deptId).trim().toLowerCase()
+    const dept = list.find((d) => (d.id && String(d.id).toLowerCase() === targetId) || (d.deptId && String(d.deptId).toLowerCase() === targetId) || (d._id && String(d._id).toLowerCase() === targetId) || (d.name && d.name.toLowerCase() === targetId))
     if (!dept) throw new Error('Department not found.')
-    const isCore = INITIAL_DEPARTMENTS.some((d) => d.id === dept.id)
+    const isCore = INITIAL_DEPARTMENTS.some((d) => d.id === dept.id || d.name.toLowerCase() === dept.name.toLowerCase())
     if (isCore) {
       throw new Error(`System core department '${dept.name}' cannot be deleted.`)
     }
@@ -3362,6 +3411,12 @@ const localStore = {
         return { ...u, department: 'Unassigned' }
       }
       return u
+    })
+    storeState.teams = (storeState.teams || []).map((t) => {
+      if ((t.department || '').toLowerCase() === deptName) {
+        return { ...t, department: 'Unassigned' }
+      }
+      return t
     })
     this.addAuditLog('Admin', 'DEPARTMENT_DELETE', `Deleted custom department '${dept.name}'`)
     notifyListeners()
@@ -4396,6 +4451,7 @@ const localStore = {
     const isGpsVerified = verification.isGpsVerified
     const distance = gpsData?.distanceMeters !== undefined ? gpsData.distanceMeters : verification.distanceMeters
     const nearestLoc = gpsData?.locationName || verification.nearestLocation
+    const maxAllowedRadius = verification.maxAllowedRadius || 150
 
     const now = new Date()
     const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })
@@ -4759,6 +4815,9 @@ const localStore = {
   },
 
   // Leaves Workflow
+  is25thMonthLop(requestOrData) {
+    return is25thMonthLop(requestOrData)
+  },
   getLeaves() {
     return storeState.leaves
   },
@@ -4790,10 +4849,28 @@ const localStore = {
       applicantUser?.department ||
       'General'
 
+    // Calculate month-end 25th LOP status
+    let doubleLopDays = 0
+    let isDoubleLop = Boolean(requestData.isDoubleLop)
+    if (requestData.startDate) {
+      const s = new Date(requestData.startDate)
+      const e = new Date(requestData.endDate || requestData.startDate)
+      if (!isNaN(s.getTime()) && !isNaN(e.getTime())) {
+        for (let cur = new Date(s); cur <= e; cur.setDate(cur.getDate() + 1)) {
+          if (cur.getDate() >= 25) {
+            doubleLopDays += 1
+            isDoubleLop = true
+          }
+        }
+      }
+    }
+    const isLopMonthLeave = isDoubleLop || doubleLopDays > 0 || (String(requestData.leaveType).toLowerCase() === 'lop' && (new Date(requestData.startDate).getDate() >= 25 || new Date(requestData.endDate || requestData.startDate).getDate() >= 25))
+
     // Determine approver hierarchy based on applicant role:
     // 1. Employee -> Assigned Manager approves; Team Lead & Squad peers get notified (not to Admin)
     // 2. Team Lead -> Manager approves; Director gets notified (not to Admin)
     // 3. Manager -> Managing Director approves, then goes to HR Panel
+    // 4. 25th Month LOP Leave -> Goes to HR Panel first, then upon HR approval goes to Admin Panel for LOP approval!
     let status = 'pending_manager'
     let currentApproverRole = 'manager'
     let approverId = null
@@ -4808,6 +4885,18 @@ const localStore = {
     if (requestData.status === 'approved') {
       status = 'approved'
       currentApproverRole = null
+    } else if (isLopMonthLeave) {
+      // 25th Month LOP Leave:
+      // Policy requires 25th month LOP leave to go to HR Panel, and upon HR approval, to Admin Panel for LOP approval
+      status = 'pending_hr'
+      currentApproverRole = 'hr'
+      approverId = 'emp-4'
+      approverName = 'HR Operations'
+      const mgr = (applicantEmp?.managerId && employees.find(e => String(e.id || e._id) === String(applicantEmp.managerId) || e.employeeId === applicantEmp.managerId))
+        || employees.find(e => (e.role === 'manager' || e.role?.includes('manager')) && e.department === department)
+        || null
+      managerId = mgr?.id || 'emp-r2'
+      managerName = mgr?.name || 'Department Manager'
     } else if (!hasExplicitRole) {
       // Legacy uncontextualized direct call (e.g., system-flowchart test fixture)
       status = 'pending_manager'
@@ -4908,6 +4997,8 @@ const localStore = {
       directorName: 'Managing Director',
       directorComment: null,
       directorDecisionAt: null,
+      isDoubleLop,
+      doubleLopDays,
       hrNotified: false,
       hrComment: requestData.hrComment || (requestData.status === 'approved' ? 'Approved by HR Operations' : null),
       createdAt: new Date().toISOString().split('T')[0],
@@ -4935,6 +5026,30 @@ const localStore = {
         type: 'leave',
         recipientId: newLeave.employeeId,
       })
+    } else if (isLopMonthLeave) {
+      // 25th Month LOP Leave -> Routed to HR Operations first!
+      this.addNotification({
+        title: '[HR Review Required] 25th Month LOP Leave Request',
+        message: `${newLeave.employeeName} (${newLeave.department}) submitted a 25th Month LOP leave request (${newLeave.startDate} to ${newLeave.endDate}, ${newLeave.days} days). Requires HR verification before Admin approval.`,
+        type: 'leave_hr',
+        leaveId: newLeave.id,
+        recipientRole: 'hr',
+        recipientId: 'emp-4',
+        isHrActionRequired: true,
+        metadata: { leaveId: newLeave.id, is25thMonthLop: true },
+      })
+      if (newLeave.managerId) {
+        this.addNotification({
+          title: 'Squad Member 25th Month LOP Notice',
+          message: `${newLeave.employeeName} submitted a 25th Month LOP leave request. Policy routes this request to HR and Admin for loss-of-pay approval.`,
+          type: 'info_notice',
+          leaveId: newLeave.id,
+          recipientId: newLeave.managerId,
+          recipientRole: 'manager',
+          excludeRoles: ['admin'],
+          metadata: { leaveId: newLeave.id, is25thMonthLop: true },
+        })
+      }
     } else if (!hasExplicitRole) {
       this.addNotification({
         title: 'New Leave Request',
@@ -5024,163 +5139,263 @@ const localStore = {
     const teamLeadEmp = (applicantEmp?.managerId && employees.find(e => String(e.id || e._id) === String(applicantEmp.managerId)))
       || (req.tlId ? { id: req.tlId, name: req.tlName || 'Team Lead' } : null)
 
+    const isLopMonth = is25thMonthLop(req)
+
     // Check which tier is approving:
-    // Case 1: Employee leave approved by Team Lead (pending_tl -> approved)
-    if (reviewerRole === 'team_lead' || req.status === 'pending_tl') {
+    // Case 0: Admin final approval for 25th month LOP leave (pending_admin -> approved)
+    if (reviewerRole === 'admin' || req.status === 'pending_admin') {
       storeState.leaves = storeState.leaves.map((l) =>
         l.id === leaveId
           ? {
               ...l,
               status: 'approved',
-              tlComment: comment,
-              tlDecisionAt: timestamp,
-              tlName: approverName,
-              tlApprovedBy: approverName,
+              adminComment: comment,
+              adminDecisionAt: timestamp,
+              adminApprovedBy: approverName,
             }
           : l
       )
 
       // 1. Notify Employee
       this.addNotification({
-        title: 'Leave Approved by Team Lead',
-        message: `Your leave request (${req.days} days, ${req.startDate} to ${req.endDate}) was approved by Team Lead ${approverName}.`,
+        title: '25th Month LOP Leave Approved by Admin',
+        message: `Your 25th month LOP leave (${req.days} days, ${req.startDate} to ${req.endDate}) has been granted final approval by Administrator ${approverName}.`,
         type: 'leave',
         leaveId,
         recipientId: req.employeeId,
         metadata: { leaveId },
       })
 
-      // 2. Notify their Manager (NOT to Admin!)
+      // 2. Notify HR
       this.addNotification({
-        title: 'Team Member Leave Approved by Team Lead',
-        message: `Team Lead ${approverName} approved ${req.days} day(s) leave for ${req.employeeName} (${req.startDate} to ${req.endDate}).`,
-        type: 'leave',
+        title: '[Admin Sign-off] 25th Month LOP Approved',
+        message: `Administrator ${approverName} has approved 25th month LOP leave for ${req.employeeName} (${req.days} days). HR panel records updated.`,
+        type: 'leave_hr',
         leaveId,
-        recipientId: deptManager?.id || 'manager-1',
-        recipientRole: 'manager',
-        excludeRoles: ['admin'], // NOT to admin!
-        metadata: { leaveId },
-      })
-
-      // 3. Notify Director (NOT to Admin!)
-      this.addNotification({
-        title: 'Department Leave Notice (Approved by Team Lead)',
-        message: `${req.employeeName} (${req.department}) leave approved by TL ${approverName} (Manager: ${deptManager?.name || 'Manager'}).`,
-        type: 'leave',
-        leaveId,
-        recipientId: directorEmp?.id || 'director-1',
-        recipientRole: 'director',
-        excludeRoles: ['admin'], // NOT to admin!
-        metadata: { leaveId },
+        recipientRole: 'hr',
+        metadata: { leaveId, adminApproved: true },
       })
     }
-    // Case 2: Employee or Team Lead leave approved by Manager (pending_manager -> approved)
+    // Case 1: Employee leave approved by Team Lead (pending_tl -> approved or pending_hr if 25th LOP)
+    else if (reviewerRole === 'team_lead' || req.status === 'pending_tl') {
+      if (isLopMonth) {
+        storeState.leaves = storeState.leaves.map((l) =>
+          l.id === leaveId
+            ? {
+                ...l,
+                status: 'pending_hr',
+                currentApproverRole: 'hr',
+                tlComment: comment,
+                tlDecisionAt: timestamp,
+                tlName: approverName,
+                tlApprovedBy: approverName,
+              }
+            : l
+        )
+
+        this.addNotification({
+          title: '[HR Review Required] 25th Month LOP Leave Request',
+          message: `Team Lead ${approverName} endorsed 25th month LOP leave for ${req.employeeName}. Awaiting HR verification.`,
+          type: 'leave_hr',
+          leaveId,
+          recipientRole: 'hr',
+          isHrActionRequired: true,
+          metadata: { leaveId, is25thMonthLop: true },
+        })
+      } else {
+        storeState.leaves = storeState.leaves.map((l) =>
+          l.id === leaveId
+            ? {
+                ...l,
+                status: 'approved',
+                tlComment: comment,
+                tlDecisionAt: timestamp,
+                tlName: approverName,
+                tlApprovedBy: approverName,
+              }
+            : l
+        )
+
+        // 1. Notify Employee
+        this.addNotification({
+          title: 'Leave Approved by Team Lead',
+          message: `Your leave request (${req.days} days, ${req.startDate} to ${req.endDate}) was approved by Team Lead ${approverName}.`,
+          type: 'leave',
+          leaveId,
+          recipientId: req.employeeId,
+          metadata: { leaveId },
+        })
+
+        // 2. Notify their Manager (NOT to Admin!)
+        this.addNotification({
+          title: 'Team Member Leave Approved by Team Lead',
+          message: `Team Lead ${approverName} approved ${req.days} day(s) leave for ${req.employeeName} (${req.startDate} to ${req.endDate}).`,
+          type: 'leave',
+          leaveId,
+          recipientId: deptManager?.id || 'manager-1',
+          recipientRole: 'manager',
+          excludeRoles: ['admin'], // NOT to admin!
+          metadata: { leaveId },
+        })
+
+        // 3. Notify Director (NOT to Admin!)
+        this.addNotification({
+          title: 'Department Leave Notice (Approved by Team Lead)',
+          message: `${req.employeeName} (${req.department}) leave approved by TL ${approverName} (Manager: ${deptManager?.name || 'Manager'}).`,
+          type: 'leave',
+          leaveId,
+          recipientId: directorEmp?.id || 'director-1',
+          recipientRole: 'director',
+          excludeRoles: ['admin'], // NOT to admin!
+          metadata: { leaveId },
+        })
+      }
+    }
+    // Case 2: Employee or Team Lead leave approved by Manager
     else if (
       reviewerRole === 'manager' ||
       req.status === 'pending_manager' ||
       req.currentApproverRole === 'manager'
     ) {
-      const isEmployeeApplicant = req.applicantRole === 'employee' || !req.applicantRole
+      if (isLopMonth) {
+        // 25th Month LOP: advances to HR review instead of direct approval
+        storeState.leaves = storeState.leaves.map((l) =>
+          l.id === leaveId
+            ? {
+                ...l,
+                status: 'pending_hr',
+                currentApproverRole: 'hr',
+                managerComment: comment,
+                managerDecisionAt: timestamp,
+                managerName: approverName,
+                managerApprovedBy: approverName,
+              }
+            : l
+        )
 
-      storeState.leaves = storeState.leaves.map((l) =>
-        l.id === leaveId
-          ? {
-              ...l,
-              status: 'approved',
-              managerComment: comment,
-              managerDecisionAt: timestamp,
-              managerName: approverName,
-              managerApprovedBy: approverName,
-            }
-          : l
-      )
-
-      if (isEmployeeApplicant) {
         // 1. Notify Employee
         this.addNotification({
-          title: 'Leave Approved by Manager',
-          message: `Your leave request (${req.days} days, ${req.startDate} to ${req.endDate}) was approved by Manager ${approverName}.`,
+          title: 'Leave Endorsed by Manager - Pending HR & Admin Review',
+          message: `Your 25th month LOP leave was endorsed by Manager ${approverName} and routed to HR for verification.`,
           type: 'leave',
           leaveId,
           recipientId: req.employeeId,
           metadata: { leaveId },
         })
 
-        // 2. Notify Director (NOT to Admin!)
+        // 2. Notify HR
         this.addNotification({
-          title: 'Department Leave Notice (Approved by Manager)',
-          message: `${req.employeeName} (${req.department}) leave request approved by Manager ${approverName}.`,
-          type: 'leave',
+          title: '[HR Review Required] 25th Month LOP Leave Request',
+          message: `Manager ${approverName} endorsed leave for ${req.employeeName} (${req.startDate} to ${req.endDate}, ${req.days} days). Because this leave falls on/after the 25th (LOP Month), HR review is required before forwarding to Admin.`,
+          type: 'leave_hr',
           leaveId,
-          recipientId: directorEmp?.id || 'director-1',
-          recipientRole: 'director',
-          excludeRoles: ['admin'], // NOT to admin!
-          metadata: { leaveId },
-        })
-
-        // 3. Notify Team Lead that employee is on approved leave
-        this.addNotification({
-          title: 'Team Member On Leave (Manager Approved)',
-          message: `Leave notice: Your team member ${req.employeeName} is on approved leave from ${req.startDate} to ${req.endDate}. Approved by Manager ${approverName}.`,
-          type: 'leave',
-          leaveId,
-          recipientId: req.tlId || teamLeadEmp?.id || 'tl-1',
-          recipientRole: 'team_lead',
-          excludeRoles: ['admin'], // NOT to admin!
-          metadata: { leaveId },
-        })
-
-        // 4. Notify Squad members that employee is on approved leave
-        const squadMembers = employees.filter((e) => {
-          if (String(e.id || e._id) === String(req.employeeId) || e.employeeId === req.employeeId) return false
-          if (['admin', 'hr', 'director', 'managing_director', 'manager'].includes(e.role)) return false
-          if (req.tlId && (String(e.managerId) === String(req.tlId) || e.managerId === req.tlId || String(e.teamLeadId) === String(req.tlId))) {
-            return true
-          }
-          if (req.managerId && (String(e.managerId) === String(req.managerId) || e.managerId === req.managerId)) {
-            return true
-          }
-          if (e.department && req.department && e.department === req.department) {
-            return true
-          }
-          return false
-        })
-
-        squadMembers.forEach((peer) => {
-          this.addNotification({
-            title: 'Squad Member on Approved Leave',
-            message: `${req.employeeName} (${req.department}) is on approved leave from ${req.startDate} to ${req.endDate}. Please coordinate squad coverage.`,
-            type: 'leave',
-            leaveId,
-            recipientId: peer.id || peer._id || peer.employeeId,
-            recipientRole: peer.role || 'employee',
-            excludeRoles: ['admin'],
-            metadata: { leaveId, type: 'squad_notice' },
-          })
+          recipientRole: 'hr',
+          isHrActionRequired: true,
+          metadata: { leaveId, is25thMonthLop: true },
         })
       } else {
-        // Team Lead applicant:
-        // 1. Notify Team Lead
-        this.addNotification({
-          title: 'Leave Approved by Manager',
-          message: `Your leave request (${req.days} days, ${req.startDate} to ${req.endDate}) was approved by Manager ${approverName}.`,
-          type: 'leave',
-          leaveId,
-          recipientId: req.employeeId,
-          metadata: { leaveId },
-        })
+        const isEmployeeApplicant = req.applicantRole === 'employee' || !req.applicantRole
 
-        // 2. Director will get notified (NOT to Admin!)
-        this.addNotification({
-          title: 'TL Leave Approved by Manager',
-          message: `Manager ${approverName} has approved leave for Team Lead ${req.employeeName} (${req.department}, ${req.days} days).`,
-          type: 'leave',
-          leaveId,
-          recipientId: directorEmp?.id || 'director-1',
-          recipientRole: 'director',
-          excludeRoles: ['admin'], // NOT to admin!
-          metadata: { leaveId },
-        })
+        storeState.leaves = storeState.leaves.map((l) =>
+          l.id === leaveId
+            ? {
+                ...l,
+                status: 'approved',
+                managerComment: comment,
+                managerDecisionAt: timestamp,
+                managerName: approverName,
+                managerApprovedBy: approverName,
+              }
+            : l
+        )
+
+        if (isEmployeeApplicant) {
+          // 1. Notify Employee
+          this.addNotification({
+            title: 'Leave Approved by Manager',
+            message: `Your leave request (${req.days} days, ${req.startDate} to ${req.endDate}) was approved by Manager ${approverName}.`,
+            type: 'leave',
+            leaveId,
+            recipientId: req.employeeId,
+            metadata: { leaveId },
+          })
+
+          // 2. Notify Director (NOT to Admin!)
+          this.addNotification({
+            title: 'Department Leave Notice (Approved by Manager)',
+            message: `${req.employeeName} (${req.department}) leave request approved by Manager ${approverName}.`,
+            type: 'leave',
+            leaveId,
+            recipientId: directorEmp?.id || 'director-1',
+            recipientRole: 'director',
+            excludeRoles: ['admin'], // NOT to admin!
+            metadata: { leaveId },
+          })
+
+          // 3. Notify Team Lead that employee is on approved leave
+          this.addNotification({
+            title: 'Team Member On Leave (Manager Approved)',
+            message: `Leave notice: Your team member ${req.employeeName} is on approved leave from ${req.startDate} to ${req.endDate}. Approved by Manager ${approverName}.`,
+            type: 'leave',
+            leaveId,
+            recipientId: req.tlId || teamLeadEmp?.id || 'tl-1',
+            recipientRole: 'team_lead',
+            excludeRoles: ['admin'], // NOT to admin!
+            metadata: { leaveId },
+          })
+
+          // 4. Notify Squad members that employee is on approved leave
+          const squadMembers = employees.filter((e) => {
+            if (String(e.id || e._id) === String(req.employeeId) || e.employeeId === req.employeeId) return false
+            if (['admin', 'hr', 'director', 'managing_director', 'manager'].includes(e.role)) return false
+            if (req.tlId && (String(e.managerId) === String(req.tlId) || e.managerId === req.tlId || String(e.teamLeadId) === String(req.tlId))) {
+              return true
+            }
+            if (req.managerId && (String(e.managerId) === String(req.managerId) || e.managerId === req.managerId)) {
+              return true
+            }
+            if (e.department && req.department && e.department === req.department) {
+              return true
+            }
+            return false
+          })
+
+          squadMembers.forEach((peer) => {
+            this.addNotification({
+              title: 'Squad Member on Approved Leave',
+              message: `${req.employeeName} (${req.department}) is on approved leave from ${req.startDate} to ${req.endDate}. Please coordinate squad coverage.`,
+              type: 'leave',
+              leaveId,
+              recipientId: peer.id || peer._id || peer.employeeId,
+              recipientRole: peer.role || 'employee',
+              excludeRoles: ['admin'],
+              metadata: { leaveId, type: 'squad_notice' },
+            })
+          })
+        } else {
+          // Team Lead applicant:
+          // 1. Notify Team Lead
+          this.addNotification({
+            title: 'Leave Approved by Manager',
+            message: `Your leave request (${req.days} days, ${req.startDate} to ${req.endDate}) was approved by Manager ${approverName}.`,
+            type: 'leave',
+            leaveId,
+            recipientId: req.employeeId,
+            metadata: { leaveId },
+          })
+
+          // 2. Director will get notified (NOT to Admin!)
+          this.addNotification({
+            title: 'TL Leave Approved by Manager',
+            message: `Manager ${approverName} has approved leave for Team Lead ${req.employeeName} (${req.department}, ${req.days} days).`,
+            type: 'leave',
+            leaveId,
+            recipientId: directorEmp?.id || 'director-1',
+            recipientRole: 'director',
+            excludeRoles: ['admin'], // NOT to admin!
+            metadata: { leaveId },
+          })
+        }
       }
     }
     // Case 3: Manager leave approved by Managing Director (pending_director -> approved -> HR Panel)
@@ -5216,29 +5431,67 @@ const localStore = {
         type: 'leave_hr',
         leaveId,
         recipientRole: 'hr',
-        recipientId: 'emp-4',
         isHrActionRequired: true,
         metadata: { leaveId, isHrActionRequired: true, managerName: req.employeeName },
       })
     }
-    // Case 4: Final HR approval
+    // Case 4: HR review/approval
     else {
-      storeState.leaves = storeState.leaves.map((l) =>
-        l.id === leaveId
-          ? {
-              ...l,
-              status: 'approved',
-              hrComment: comment,
-            }
-          : l
-      )
+      if (isLopMonth) {
+        // 25th Month LOP: Advances from HR to Admin panel!
+        storeState.leaves = storeState.leaves.map((l) =>
+          l.id === leaveId
+            ? {
+                ...l,
+                status: 'pending_admin',
+                currentApproverRole: 'admin',
+                hrComment: comment,
+                hrDecisionAt: timestamp,
+                hrApprovedBy: approverName,
+              }
+            : l
+        )
 
-      this.addNotification({
-        title: 'Leave Approved by HR',
-        message: `Leave request for ${req.employeeName} was fully approved by HR Operations.`,
-        type: 'leave',
-        recipientId: req.employeeId,
-      })
+        // 1. Notify Admin for final sign-off
+        this.addNotification({
+          title: '[Admin Action Required] 25th Month LOP Leave Approval',
+          message: `HR Operations (${approverName}) has verified 25th month LOP leave for ${req.employeeName} (${req.days} days, ${req.startDate} to ${req.endDate}). Final Admin approval is required.`,
+          type: 'leave_admin',
+          leaveId,
+          recipientRole: 'admin',
+          metadata: { leaveId, is25thMonthLop: true, pendingAdminApproval: true },
+        })
+
+        // 2. Notify employee
+        this.addNotification({
+          title: 'Leave Verified by HR - Awaiting Final Admin Approval',
+          message: `Your 25th month LOP leave has been verified by HR (${approverName}) and forwarded to Admin for final sign-off.`,
+          type: 'leave',
+          leaveId,
+          recipientId: req.employeeId,
+          metadata: { leaveId },
+        })
+      } else {
+        // Regular non-25th leave: full HR approval
+        storeState.leaves = storeState.leaves.map((l) =>
+          l.id === leaveId
+            ? {
+                ...l,
+                status: 'approved',
+                hrComment: comment,
+                hrDecisionAt: timestamp,
+                hrApprovedBy: approverName,
+              }
+            : l
+        )
+
+        this.addNotification({
+          title: 'Leave Approved by HR',
+          message: `Leave request for ${req.employeeName} was fully approved by HR Operations.`,
+          type: 'leave',
+          recipientId: req.employeeId,
+        })
+      }
     }
 
     const updated = storeState.leaves.find((l) => l.id === leaveId)
@@ -5283,6 +5536,7 @@ const localStore = {
           managerComment: reviewerRole === 'manager' ? reason : l.managerComment,
           directorComment: reviewerRole === 'director' ? reason : l.directorComment,
           hrComment: reviewerRole === 'hr' ? reason : l.hrComment,
+          adminComment: reviewerRole === 'admin' ? reason : l.adminComment,
         }
       }
       return l
@@ -5296,8 +5550,18 @@ const localStore = {
       recipientId: req.employeeId,
     })
 
+    // If Admin rejected -> Notify HR
+    if (reviewerRole === 'admin' || req.status === 'pending_admin') {
+      this.addNotification({
+        title: '[Admin Decision] 25th Month LOP Leave Rejected',
+        message: `Administrator ${approverName} declined 25th month LOP leave for ${req.employeeName}. Reason: ${reason}`,
+        type: 'leave_hr',
+        recipientRole: 'hr',
+        metadata: { leaveId: req.id, rejectedByAdmin: true },
+      })
+    }
     // If Manager rejected an employee or TL request -> Notify TL (if squad member) and Director (not to admin)
-    if (reviewerRole === 'manager' || req.status === 'pending_manager') {
+    else if (reviewerRole === 'manager' || req.status === 'pending_manager') {
       if (req.tlId) {
         this.addNotification({
           title: 'Squad Member Leave Request Declined',

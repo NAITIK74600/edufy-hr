@@ -9,7 +9,9 @@ import { ensureConnected } from '../leave/leave.repository.js'
 const titles = {
   'leave.submitted': 'Leave request submitted',
   'leave.hr_review_required': 'Leave review required',
+  'leave.admin_review_required': 'Admin LOP approval required',
   'leave.pending_hr': 'Leave awaiting HR review',
+  'leave.pending_admin': 'Leave awaiting Admin sign-off',
   'leave.approved': 'Leave approved',
   'leave.rejected': 'Leave rejected',
   'leave.cancelled': 'Leave cancelled',

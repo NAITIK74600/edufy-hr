@@ -154,13 +154,38 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
       const finalEmployees = resolvedEmployees
       const resolvedUsers = Array.isArray(data.users) ? data.users : []
 
-      const serverDepts = Array.isArray(data.workspace?.departments) && data.workspace.departments.length > 0
-        ? data.workspace.departments
-        : null
+      const baseDepts = rawLocal.getDepartments ? rawLocal.getDepartments() : []
       const currentDepts = (state().departments && state().departments.length > 0)
         ? state().departments
-        : (rawLocal.getDepartments ? rawLocal.getDepartments() : [])
-      const finalDepts = serverDepts || currentDepts
+        : baseDepts
+      const serverDepts = Array.isArray(data.workspace?.departments) ? data.workspace.departments : []
+
+      const deptMap = new Map()
+      currentDepts.forEach((d) => {
+        if (!d) return
+        const key = (d.deptId || d.id || d.name || '').toLowerCase()
+        if (key) deptMap.set(key, { ...d })
+      })
+      baseDepts.forEach((d) => {
+        if (!d) return
+        const key = (d.deptId || d.id || d.name || '').toLowerCase()
+        if (key && !deptMap.has(key)) deptMap.set(key, { ...d })
+      })
+      serverDepts.forEach((s) => {
+        if (!s) return
+        const key = (s.deptId || s.id || s.name || '').toLowerCase()
+        if (key) {
+          const prev = deptMap.get(key) || {}
+          deptMap.set(key, {
+            ...prev,
+            ...s,
+            id: s.id || s.deptId || prev.id,
+            deptId: s.deptId || s.id || prev.deptId,
+            isCustom: s.isCustom !== undefined ? s.isCustom : (prev.isCustom !== undefined ? prev.isCustom : true),
+          })
+        }
+      })
+      const finalDepts = Array.from(deptMap.values())
 
       const isCleared = typeof window !== 'undefined' && window.localStorage.getItem('edufyi_notifications_cleared_v2') === 'true'
       const deletedRaw = typeof window !== 'undefined' ? window.localStorage.getItem('edufyi_deleted_notifications_v2') : null
@@ -251,6 +276,16 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
   }
   return {
     ...createWorkspaceStore(store, mutate, () => user, rawLocal),
+    deleteDepartment(deptId) {
+      if (!deptId) throw new Error('Department ID is required.')
+      const res = rawLocal.deleteDepartment ? rawLocal.deleteDepartment(deptId) : true
+      state().departments = (state().departments || []).filter(
+        (d) => (d.id || d.deptId) !== deptId && d.name?.toLowerCase() !== String(deptId).toLowerCase()
+      )
+      notify()
+      if (!user) return res
+      return mutate(() => apiClient.delete(`/workspace/departments/${encodeURIComponent(deptId)}`)).then(() => res)
+    },
     updateMyAvatar(avatarUrl) {
       return mutate(() => apiClient.patch('/employees/me/avatar', { avatarUrl }))
     },
@@ -1203,14 +1238,19 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
       const activeUser = approverUser || user
       if (!user && rawLocal.approveLeave) return rawLocal.approveLeave(leaveId, reviewerRole, comment, activeUser)
       return mutate(async () => {
+        const isAdmin = reviewerRole === 'admin'
         const isManager = reviewerRole === 'manager' || reviewerRole === 'team_lead'
-        const endpoint = isManager ? `/leave/team/${leaveId}/approve` : `/leave/hr/${leaveId}/approve`
+        const endpoint = isAdmin
+          ? `/leave/admin/${leaveId}/approve`
+          : (isManager ? `/leave/team/${leaveId}/approve` : `/leave/hr/${leaveId}/approve`)
         try {
           const res = await apiClient.post(endpoint, { comment: comment || 'Approved.' })
           if (rawLocal.approveLeave) rawLocal.approveLeave(leaveId, reviewerRole, comment, activeUser)
           return res.data
         } catch (postErr) {
-          const fallbackEndpoint = isManager ? `/leave/hr/${leaveId}/approve` : `/leave/team/${leaveId}/approve`
+          const fallbackEndpoint = isAdmin
+            ? `/leave/hr/${leaveId}/approve`
+            : (isManager ? `/leave/hr/${leaveId}/approve` : `/leave/team/${leaveId}/approve`)
           const res = await apiClient.post(fallbackEndpoint, { comment: comment || 'Approved.' })
           if (rawLocal.approveLeave) rawLocal.approveLeave(leaveId, reviewerRole, comment, activeUser)
           return res.data
@@ -1229,14 +1269,19 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
           if (rawLocal.rejectLeave) rawLocal.rejectLeave(leaveId, roleOrReason, maybeReason, activeUser)
           return res.data
         }
+        const isAdmin = reviewerRole === 'admin'
         const isManager = reviewerRole === 'manager' || reviewerRole === 'team_lead'
-        const endpoint = isManager ? `/leave/team/${leaveId}/reject` : `/leave/hr/${leaveId}/reject`
+        const endpoint = isAdmin
+          ? `/leave/admin/${leaveId}/reject`
+          : (isManager ? `/leave/team/${leaveId}/reject` : `/leave/hr/${leaveId}/reject`)
         try {
           const res = await apiClient.post(endpoint, { reason })
           if (rawLocal.rejectLeave) rawLocal.rejectLeave(leaveId, roleOrReason, maybeReason, activeUser)
           return res.data
         } catch (postErr) {
-          const fallbackEndpoint = isManager ? `/leave/hr/${leaveId}/reject` : `/leave/team/${leaveId}/reject`
+          const fallbackEndpoint = isAdmin
+            ? `/leave/hr/${leaveId}/reject`
+            : (isManager ? `/leave/hr/${leaveId}/reject` : `/leave/team/${leaveId}/reject`)
           const res = await apiClient.post(fallbackEndpoint, { reason })
           if (rawLocal.rejectLeave) rawLocal.rejectLeave(leaveId, roleOrReason, maybeReason, activeUser)
           return res.data

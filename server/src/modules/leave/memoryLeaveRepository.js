@@ -109,7 +109,7 @@ export function createMemoryLeaveRepository() {
           (r) =>
             r.employeeId === employeeId &&
             r.id !== excludeId &&
-            ['pending_tl', 'pending_manager', 'pending_director', 'pending_hr', 'approved'].includes(r.status) &&
+            ['pending_tl', 'pending_manager', 'pending_director', 'pending_hr', 'pending_admin', 'approved'].includes(r.status) &&
             new Date(r.startDate) <= endDate &&
             new Date(r.endDate) >= startDate
         ) ?? null
