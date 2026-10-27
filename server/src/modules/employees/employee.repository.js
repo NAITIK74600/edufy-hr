@@ -148,6 +148,28 @@ export function createMongoEmployeeRepository() {
         : { $or: [{ employeeId: String(id).toUpperCase() }, { id: String(id) }, { email: String(id).toLowerCase() }] }
       return Employee.findOne({ ...query, role: { $in: managerRoles }, status: { $ne: 'inactive' } }).select('_id employeeId name email role status').lean()
     },
+    async getNextEmployeeCode() {
+      ensureConnected()
+      const records = await Employee.find({ employeeId: { $exists: true } }).select('employeeId').lean()
+      let maxNum = 21200
+      for (const rec of records) {
+        const str = String(rec.employeeId || '').trim()
+        const m = str.match(/^ETS(\d+)$/i)
+        if (m) {
+          const n = parseInt(m[1], 10)
+          if (n > maxNum) maxNum = n
+        } else {
+          const digits = str.match(/\d{4,}/g)
+          if (digits) {
+            for (const d of digits) {
+              const n = parseInt(d, 10)
+              if (n > maxNum) maxNum = n
+            }
+          }
+        }
+      }
+      return `ETS${maxNum + 1}`
+    },
     async create(data) {
       ensureConnected()
       clearCache()

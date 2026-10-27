@@ -1,9 +1,10 @@
 import express from 'express'
-import { randomUUID } from 'node:crypto'
+import { randomUUID, randomBytes } from 'node:crypto'
 import mongoose from 'mongoose'
 import { attachOnboardingDocs } from '../../models/onboardingDocsCache.js'
-import { hashPassword } from '../../auth/passwords.js'
+import { hashPassword, verifyPassword } from '../../auth/passwords.js'
 import { sendPasswordResetEmail, sendWelcomeEmail } from '../../services/mail.service.js'
+import { Employee } from '../../models/Employee.js'
 
 export function createAuthRouter({ authService, auth, userStore }) {
   const router = express.Router()
@@ -104,7 +105,11 @@ export function createAuthRouter({ authService, auth, userStore }) {
       if (assignedEmpId) {
         const existingEmp = await userStore.findByEmail(assignedEmpId)
         if (existingEmp && String(existingEmp.email).trim().toLowerCase() !== cleanEmail) {
-          return response.status(409).json({ success: false, error: { code: 'DUPLICATE_USER', message: 'An account with this employee ID already exists.' } })
+          if (/^ETS\d+$/i.test(assignedEmpId)) {
+            assignedEmpId = ''
+          } else {
+            return response.status(409).json({ success: false, error: { code: 'DUPLICATE_USER', message: 'An account with this employee ID already exists.' } })
+          }
         }
       }
       if (!assignedEmpId) {
@@ -303,6 +308,271 @@ export function createAuthRouter({ authService, auth, userStore }) {
   router.post('/logout', auth.authenticate, (request, response) => {
     authService.logout(request.auth.claims.jti)
     return response.status(204).send()
+  })
+
+  // ─── PASSKEY / WEBAUTHN AUTHENTICATION ──────────────────
+  const passkeyChallenges = new Map()
+
+  function getRpId(request) {
+    const rawHost = request.hostname || request.get('host')?.split(':')[0] || 'localhost'
+    return rawHost === '127.0.0.1' ? 'localhost' : rawHost
+  }
+
+  // 1. Passkey Login Options (Get Challenge)
+  router.post('/passkey/login-options', async (request, response, next) => {
+    try {
+      const { email, identifier, portal } = request.body ?? {}
+      const loginIdentifier = (typeof identifier === 'string' && identifier.trim())
+        || (typeof email === 'string' && email.trim())
+        || ''
+
+      let allowCredentials = []
+      let user = null
+      if (loginIdentifier) {
+        user = await userStore.findByEmail(loginIdentifier)
+        if (user && Array.isArray(user.passkeys) && user.passkeys.length > 0) {
+          allowCredentials = user.passkeys.map((k) => ({
+            id: k.credentialId,
+            type: 'public-key',
+          }))
+        }
+      }
+
+      const challengeId = randomUUID()
+      const challenge = randomBytes(32).toString('base64url')
+      passkeyChallenges.set(challengeId, {
+        challenge,
+        email: loginIdentifier || user?.email || '',
+        portal,
+        createdAt: Date.now(),
+      })
+
+      // Clean old challenges (> 5 mins)
+      for (const [key, val] of passkeyChallenges) {
+        if (Date.now() - val.createdAt > 300000) passkeyChallenges.delete(key)
+      }
+
+      return response.json({
+        success: true,
+        data: {
+          challengeId,
+          challenge,
+          rpId: getRpId(request),
+          allowCredentials,
+          hasRegisteredPasskey: allowCredentials.length > 0,
+          timeout: 60000,
+          userVerification: 'preferred',
+        },
+      })
+    } catch (error) { next(error) }
+  })
+
+  // 2. Passkey Verify Login
+  router.post('/passkey/verify-login', async (request, response, next) => {
+    try {
+      const { challengeId, credential, email, portal } = request.body ?? {}
+      if (!challengeId || !credential || !credential.response) {
+        return response.status(400).json({ success: false, error: { code: 'INVALID_PASSKEY_PAYLOAD', message: 'Passkey assertion payload is incomplete.' } })
+      }
+
+      const session = passkeyChallenges.get(challengeId)
+      if (!session) {
+        return response.status(400).json({ success: false, error: { code: 'CHALLENGE_EXPIRED', message: 'Passkey verification session expired. Please try again.' } })
+      }
+      passkeyChallenges.delete(challengeId)
+
+      // Decode and verify clientDataJSON
+      let clientData
+      try {
+        const clientDataStr = Buffer.from(credential.response.clientDataJSON, 'base64url').toString('utf8')
+        clientData = JSON.parse(clientDataStr)
+      } catch {
+        return response.status(400).json({ success: false, error: { code: 'INVALID_CLIENT_DATA', message: 'Malformed clientDataJSON.' } })
+      }
+
+      if (clientData.type !== 'webauthn.get' && clientData.type !== 'webauthn.create') {
+        return response.status(400).json({ success: false, error: { code: 'INVALID_TYPE', message: 'Invalid WebAuthn operation.' } })
+      }
+
+      if (clientData.challenge !== session.challenge) {
+        return response.status(400).json({ success: false, error: { code: 'CHALLENGE_MISMATCH', message: 'Security challenge mismatch. Authentication rejected.' } })
+      }
+
+      // Locate user by email, or search users with this credentialId
+      const targetEmail = (email && typeof email === 'string' && email.trim()) || session.email
+      let user = null
+      if (targetEmail) {
+        user = await userStore.findByEmail(targetEmail)
+      }
+      if (!user && credential.id) {
+        const found = await Employee.findOne({ 'passkeys.credentialId': credential.id }).lean()
+        if (found) user = await userStore.findById(found._id)
+      }
+
+      if (!user) {
+        return response.status(401).json({
+          success: false,
+          error: {
+            code: 'PASSKEY_NOT_FOUND',
+            message: 'No registered passkey found for this account. Please sign in with your email and password first to enroll this device.',
+          },
+        })
+      }
+
+      if (user.status === 'inactive') {
+        return response.status(403).json({ success: false, error: { code: 'ACCOUNT_INACTIVE', message: 'This employee account is inactive.' } })
+      }
+
+      // Check strict portal access
+      const userRole = user.role
+      const targetPortal = portal || session.portal
+      if (targetPortal === 'admin' && userRole !== 'admin') {
+        return response.status(403).json({ success: false, error: { code: 'PORTAL_ACCESS_DENIED', message: 'Access denied: Employee credentials cannot be used to log into Admin portal.' } })
+      }
+      if (targetPortal === 'hr' && !['hr', 'admin'].includes(userRole)) {
+        return response.status(403).json({ success: false, error: { code: 'PORTAL_ACCESS_DENIED', message: 'Access denied: Employee credentials cannot be used to log into HR portal.' } })
+      }
+      if (targetPortal === 'management' && !['hr', 'admin'].includes(userRole)) {
+        return response.status(403).json({ success: false, error: { code: 'PORTAL_ACCESS_DENIED', message: 'Access denied: Employee credentials cannot be used to log into Management Console.' } })
+      }
+      if (targetPortal === 'employee' && ['admin', 'hr'].includes(userRole)) {
+        return response.status(403).json({ success: false, error: { code: 'PORTAL_ACCESS_DENIED', message: 'Administrative accounts must sign into the Management Console.' } })
+      }
+
+      const result = authService.issueToken(user)
+      return response.json({ success: true, data: result })
+    } catch (error) { next(error) }
+  })
+
+  // 3. Passkey Register Options (Generate challenge to enroll device)
+  router.post('/passkey/register-options', async (request, response, next) => {
+    try {
+      const { email, password } = request.body ?? {}
+      let user = null
+
+      if (request.headers.authorization?.startsWith('Bearer ')) {
+        try {
+          await new Promise((resolve, reject) => auth.authenticate(request, response, (err) => err ? reject(err) : resolve()))
+          user = request.auth.user
+        } catch {}
+      }
+
+      if (!user) {
+        if (!email || !password) {
+          return response.status(401).json({ success: false, error: { code: 'AUTH_REQUIRED', message: 'Enter your email and password to link a new passkey device.' } })
+        }
+        const candidate = await userStore.findByEmail(email)
+        const passwordValid = candidate && candidate.passwordHash && verifyPassword(password, candidate.passwordHash)
+        if (!candidate || !passwordValid) {
+          return response.status(401).json({ success: false, error: { code: 'INVALID_CREDENTIALS', message: 'Invalid email or password.' } })
+        }
+        user = candidate
+      }
+
+      const challengeId = randomUUID()
+      const challenge = randomBytes(32).toString('base64url')
+      passkeyChallenges.set(challengeId, {
+        challenge,
+        userId: String(user.id || user._id),
+        email: user.email,
+        isRegister: true,
+        createdAt: Date.now(),
+      })
+
+      const userIdBase64 = Buffer.from(String(user.id || user._id)).toString('base64url')
+      const rpId = getRpId(request)
+
+      return response.json({
+        success: true,
+        data: {
+          challengeId,
+          challenge,
+          rp: { name: 'Edufyi Tech Solutions', id: rpId },
+          user: {
+            id: userIdBase64,
+            name: user.email,
+            displayName: user.displayName || user.name || user.email,
+          },
+          pubKeyCredParams: [
+            { alg: -7, type: 'public-key' },
+            { alg: -257, type: 'public-key' },
+          ],
+          authenticatorSelection: {
+            userVerification: 'preferred',
+            residentKey: 'preferred',
+          },
+          timeout: 60000,
+        },
+      })
+    } catch (error) { next(error) }
+  })
+
+  // 4. Passkey Verify Registration & Save Credential
+  router.post('/passkey/register-verify', async (request, response, next) => {
+    try {
+      const { challengeId, credential, deviceName } = request.body ?? {}
+      if (!challengeId || !credential || !credential.response) {
+        return response.status(400).json({ success: false, error: { code: 'INVALID_PASSKEY_PAYLOAD', message: 'Passkey registration payload is incomplete.' } })
+      }
+
+      const session = passkeyChallenges.get(challengeId)
+      if (!session || !session.isRegister) {
+        return response.status(400).json({ success: false, error: { code: 'CHALLENGE_EXPIRED', message: 'Passkey registration session expired. Please try again.' } })
+      }
+      passkeyChallenges.delete(challengeId)
+
+      let clientData
+      try {
+        const clientDataStr = Buffer.from(credential.response.clientDataJSON, 'base64url').toString('utf8')
+        clientData = JSON.parse(clientDataStr)
+      } catch {
+        return response.status(400).json({ success: false, error: { code: 'INVALID_CLIENT_DATA', message: 'Malformed clientDataJSON.' } })
+      }
+
+      if (clientData.type !== 'webauthn.create') {
+        return response.status(400).json({ success: false, error: { code: 'INVALID_TYPE', message: 'Expected webauthn.create registration.' } })
+      }
+
+      if (clientData.challenge !== session.challenge) {
+        return response.status(400).json({ success: false, error: { code: 'CHALLENGE_MISMATCH', message: 'Security challenge mismatch.' } })
+      }
+
+      const user = await userStore.findById(session.userId)
+      if (!user) {
+        return response.status(404).json({ success: false, error: { code: 'USER_NOT_FOUND', message: 'User account not found.' } })
+      }
+
+      const newPasskey = {
+        credentialId: credential.id,
+        publicKey: credential.response.attestationObject ? credential.response.attestationObject.slice(0, 500) : '',
+        counter: 0,
+        deviceName: (typeof deviceName === 'string' && deviceName.trim()) ? deviceName.trim() : 'Biometric / Passkey Device',
+        createdAt: new Date(),
+      }
+
+      try {
+        await Employee.updateOne(
+          { _id: user.id || user._id },
+          { $push: { passkeys: newPasskey } }
+        )
+      } catch {}
+
+      const existingPasskeys = Array.isArray(user.passkeys) ? user.passkeys : []
+      await userStore.updateUser(user.id, {
+        passkeys: [...existingPasskeys.filter((k) => k.credentialId !== credential.id), newPasskey],
+      })
+
+      const refreshedUser = await userStore.findById(user.id)
+      const result = authService.issueToken(refreshedUser || user)
+
+      return response.json({
+        success: true,
+        data: {
+          ...result,
+          message: 'Passkey registered successfully! You can now sign in with your fingerprint, Face ID, or security key.',
+        },
+      })
+    } catch (error) { next(error) }
   })
 
   return router

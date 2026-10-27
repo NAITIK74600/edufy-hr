@@ -1,6 +1,6 @@
 import { apiClient } from './apiClient.js'
 
-export const workspaceKeys = ['announcements', 'tasks', 'courses', 'enrollments', 'tickets', 'expenses', 'dailyReports', 'kudos', 'performanceGoals', 'performanceReviews', 'holidays', 'documents', 'requisitions', 'notifications', 'workspacePeople', 'roles', 'departments']
+export const workspaceKeys = ['announcements', 'tasks', 'courses', 'enrollments', 'tickets', 'expenses', 'dailyReports', 'kudos', 'performanceGoals', 'performanceReviews', 'holidays', 'documents', 'requisitions', 'notifications', 'workspacePeople', 'roles', 'departments', 'teams']
 
 export function workspaceAction(store, handler) {
   return async (...args) => {
@@ -98,6 +98,21 @@ export function createWorkspaceStore(store, mutate, getUser = null, rawLocal = {
       const res = rawLocal.deleteDepartment ? rawLocal.deleteDepartment(id) : true
       if (isLocal()) return res
       return save('delete', `/departments/${encodeURIComponent(id)}`).then(() => res)
+    },
+    addTeam: (data) => {
+      const res = rawLocal.addTeam ? rawLocal.addTeam(data) : data
+      if (isLocal()) return res
+      return create('teams', pick(data, ['id', 'teamId', 'name', 'department', 'managerId', 'managerName', 'teamLeadId', 'teamLeadName', 'description', 'flaggedForVerification', 'verificationNote'])).then(() => res)
+    },
+    updateTeam: (id, data) => {
+      const res = rawLocal.updateTeam ? rawLocal.updateTeam(id, data) : true
+      if (isLocal()) return res
+      return patch('teams', id, pick(data, ['name', 'department', 'managerId', 'managerName', 'teamLeadId', 'teamLeadName', 'description', 'flaggedForVerification', 'verificationNote'])).then(() => res)
+    },
+    deleteTeam: (id) => {
+      const res = rawLocal.deleteTeam ? rawLocal.deleteTeam(id) : true
+      if (isLocal()) return res
+      return save('delete', `/teams/${encodeURIComponent(id)}`).then(() => res)
     },
   }
 }

@@ -24,11 +24,23 @@ export function createAuthService({ userStore, jwtSecret, issuer = 'edufyi-hr-ap
     return { token, user: toPublicUser(user), expiresIn: accessTokenTtl }
   }
 
+  function issueToken(user) {
+    if (!user || user.status === 'inactive') {
+      const error = new Error('Account is inactive or disabled.')
+      error.statusCode = 403
+      error.code = 'ACCOUNT_INACTIVE'
+      throw error
+    }
+    const jti = randomUUID()
+    const token = jwt.sign({ sub: String(user.id), role: user.role, version: user.authVersion ?? 0, jti }, jwtSecret, { algorithm: 'HS256', expiresIn: accessTokenTtl, issuer, audience })
+    return { token, user: toPublicUser(user), expiresIn: accessTokenTtl }
+  }
+
   function logout(jti) {
     if (jti) revokedTokens.add(jti)
   }
 
-  return { login, logout, toPublicUser }
+  return { login, logout, issueToken, toPublicUser }
 }
 
 export function toPublicUser(user) {

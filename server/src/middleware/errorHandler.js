@@ -6,7 +6,9 @@ export function errorHandler(error, request, response, next) {
   if (response.headersSent) return next(error)
   console.error(`[API Error] ${request.method} ${request.originalUrl}:`, error)
   if (error?.code === 11000) {
-    return response.status(409).json({ success: false, error: { code: 'CONFLICT', message: 'An employee with that identifier or email already exists.' } })
+    const field = error.keyPattern ? Object.keys(error.keyPattern)[0] : (error.message?.includes('email') ? 'email' : 'employeeId')
+    const msg = field === 'email' ? 'An account with that email already exists.' : 'An account with that employee identifier already exists.'
+    return response.status(409).json({ success: false, error: { code: 'CONFLICT', message: msg, fields: { [field]: msg } } })
   }
   if (error?.name === 'ValidationError') {
     const fields = Object.fromEntries(Object.entries(error.errors).map(([field, value]) => [field, value.message]))

@@ -193,6 +193,38 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
       })
       const finalDepts = Array.from(deptMap.values())
 
+      const baseTeams = rawLocal.getTeams ? rawLocal.getTeams() : []
+      const currentTeams = (state().teams && state().teams.length > 0)
+        ? state().teams
+        : baseTeams
+      const serverTeams = Array.isArray(data.workspace?.teams) ? data.workspace.teams : []
+
+      const teamMap = new Map()
+      currentTeams.forEach((t) => {
+        if (!t) return
+        const key = (t.teamId || t.id || t.name || '').toLowerCase()
+        if (key) teamMap.set(key, { ...t })
+      })
+      baseTeams.forEach((t) => {
+        if (!t) return
+        const key = (t.teamId || t.id || t.name || '').toLowerCase()
+        if (key && !teamMap.has(key)) teamMap.set(key, { ...t })
+      })
+      serverTeams.forEach((s) => {
+        if (!s) return
+        const key = (s.teamId || s.id || s.name || '').toLowerCase()
+        if (key) {
+          const prev = teamMap.get(key) || {}
+          teamMap.set(key, {
+            ...prev,
+            ...s,
+            id: s.id || s.teamId || prev.id,
+            teamId: s.teamId || s.id || prev.teamId,
+          })
+        }
+      })
+      const finalTeams = Array.from(teamMap.values())
+
       const isCleared = typeof window !== 'undefined' && window.localStorage.getItem('edufyi_notifications_cleared_v2') === 'true'
       const deletedRaw = typeof window !== 'undefined' ? window.localStorage.getItem('edufyi_deleted_notifications_v2') : null
       const deletedIds = new Set(deletedRaw ? JSON.parse(deletedRaw) : [])
@@ -208,6 +240,7 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
         ...Object.fromEntries(workspaceKeys.map((key) => [key, data.workspace[key] ?? []])),
         notifications: serverNotifs,
         departments: finalDepts,
+        teams: finalTeams,
         employees: finalEmployees,
         users: resolvedUsers, attendance: data.attendance,
         leaves: [...new Map([...data.leaves, ...data.teamLeaves].map((request) => [request.id ?? request._id, request])).values()].map((request) => normalizeLeave(request, employees)),

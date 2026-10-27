@@ -26,4 +26,5 @@ export const workspaceModels = {
   notifications: model('WorkspaceNotification', { ownerId, recipientId: String, title: text, message: text, type: text, read: Boolean, event: String, entityId: String, dedupeKey: { type: String, unique: true, sparse: true }, recipientRole: text }),
   roles: model('WorkspaceRole', { ownerId, roleId: text, name: text, description: text, badge: text, isSystem: Boolean, permissions: [String] }),
   departments: model('WorkspaceDepartment', { ownerId, deptId: text, name: text, code: text, description: text, head: text, isCustom: Boolean }),
+  teams: model('WorkspaceTeam', { ownerId, teamId: text, name: text, department: text, managerId: text, managerName: text, teamLeadId: text, teamLeadName: text, description: text, flaggedForVerification: Boolean, verificationNote: text }),
 }

@@ -295,6 +295,21 @@ export function AuthProvider({ children }) {
     return res?.data || { success: true }
   }
 
+  function completeSession(newToken, newUser) {
+    setAccessToken(newToken)
+    setToken(newToken)
+    setUser(newUser)
+    persistToken(newToken)
+    persistUser(newUser)
+    setStatus('authenticated')
+    hrStore.addAuditLog(
+      newUser.name,
+      'USER_LOGIN_PASSKEY',
+      `Authenticated via Passkey / WebAuthn as ${newUser.role?.toUpperCase() || 'USER'}`
+    )
+    return newUser
+  }
+
   const value = useMemo(
     () => ({
       token,
@@ -304,6 +319,7 @@ export function AuthProvider({ children }) {
       logout,
       changePassword,
       updateUser,
+      completeSession,
     }),
     [token, user, status]
   )

@@ -6,9 +6,9 @@ import { Notification } from '../../models/Notification.js'
 import { hasPermission } from '../../auth/permissions.js'
 import { ensureConnected } from '../leave/leave.repository.js'
 
-const permissions = { announcements: 'announcements.read', tasks: 'tasks.read', courses: 'training.read', enrollments: 'training.read', tickets: 'helpdesk.read', expenses: 'reports.read', dailyReports: 'reports.read', kudos: 'performance.read', performanceGoals: 'performance.read', performanceReviews: 'performance.read', holidays: 'holidays.read', documents: 'documents.read', requisitions: 'recruitment.read', notifications: 'dashboard.read', roles: 'dashboard.read', departments: 'dashboard.read' }
-const shared = new Set(['announcements', 'courses', 'holidays', 'documents', 'roles', 'departments'])
-const managementOnly = new Set([...shared, 'tasks', 'requisitions', 'performanceGoals', 'performanceReviews', 'roles', 'departments'])
+const permissions = { announcements: 'announcements.read', tasks: 'tasks.read', courses: 'training.read', enrollments: 'training.read', tickets: 'helpdesk.read', expenses: 'reports.read', dailyReports: 'reports.read', kudos: 'performance.read', performanceGoals: 'performance.read', performanceReviews: 'performance.read', holidays: 'holidays.read', documents: 'documents.read', requisitions: 'recruitment.read', notifications: 'dashboard.read', roles: 'dashboard.read', departments: 'dashboard.read', teams: 'dashboard.read' }
+const shared = new Set(['announcements', 'courses', 'holidays', 'documents', 'roles', 'departments', 'teams'])
+const managementOnly = new Set([...shared, 'tasks', 'requisitions', 'performanceGoals', 'performanceReviews', 'roles', 'departments', 'teams'])
 function fail(message, statusCode = 400) {
   return Object.assign(new Error(message), { statusCode, code: statusCode === 403 ? 'FORBIDDEN' : 'WORKSPACE_VALIDATION_ERROR' })
 }
@@ -120,6 +120,11 @@ function serialize(resource, record, actor, people = new Map()) {
     data.id = record.deptId || String(record._id)
     data._id = String(record._id)
     data.deptId = record.deptId || String(record._id)
+  }
+  if (resource === 'teams') {
+    data.id = record.teamId || String(record._id)
+    data._id = String(record._id)
+    data.teamId = record.teamId || String(record._id)
   }
   if (resource === 'announcements') { data.likes = likedBy?.length ?? 0; data.liked = likedBy?.includes(id(actor)) ?? false }
   if (resource === 'dailyReports') { data.summary = data.tasksSummary; data.submittedAt = data.createdAt }
@@ -326,6 +331,22 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
             isCustom: body.isCustom !== undefined ? Boolean(body.isCustom) : true,
           }
           break
+        case 'teams':
+          allowedBody(body, ['teamId', 'id', 'name', 'department', 'managerId', 'managerName', 'teamLeadId', 'teamLeadName', 'description', 'flaggedForVerification', 'verificationNote'])
+          values = {
+            ...values,
+            teamId: string(body, 'teamId', false, 100) || string(body, 'id', false, 100) || `team-${string(body, 'name', true, 100).toLowerCase().replace(/[^a-z0-9]/g, '_')}`,
+            name: string(body, 'name', true, 100),
+            department: string(body, 'department', false, 100) || 'Revenue Growth',
+            managerId: string(body, 'managerId', false, 100) || null,
+            managerName: string(body, 'managerName', false, 100) || '',
+            teamLeadId: string(body, 'teamLeadId', false, 100) || null,
+            teamLeadName: string(body, 'teamLeadName', false, 100) || '',
+            description: string(body, 'description', false, 1000) || '',
+            flaggedForVerification: Boolean(body.flaggedForVerification),
+            verificationNote: string(body, 'verificationNote', false, 500) || '',
+          }
+          break
       }
       const record = await models[resource].create(values)
 
@@ -450,6 +471,20 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
         if (req.body.description !== undefined) update.$set.description = string(req.body, 'description', false, 500)
         if (req.body.head !== undefined) update.$set.head = string(req.body, 'head', false, 100)
         query = mongoose.isValidObjectId(recordId) ? { $or: [{ _id: recordId }, { deptId: recordId }] } : { deptId: recordId }
+      } else if (resource === 'teams') {
+        if (!management(actor)) throw fail('HR or administrator access is required to update teams.', 403)
+        allowedBody(req.body, ['name', 'department', 'managerId', 'managerName', 'teamLeadId', 'teamLeadName', 'description', 'flaggedForVerification', 'verificationNote'])
+        update = { $set: {} }
+        if (req.body.name !== undefined) update.$set.name = string(req.body, 'name', true, 100)
+        if (req.body.department !== undefined) update.$set.department = string(req.body, 'department', false, 100)
+        if (req.body.managerId !== undefined) update.$set.managerId = req.body.managerId ? string(req.body, 'managerId', false, 100) : null
+        if (req.body.managerName !== undefined) update.$set.managerName = string(req.body, 'managerName', false, 100)
+        if (req.body.teamLeadId !== undefined) update.$set.teamLeadId = req.body.teamLeadId ? string(req.body, 'teamLeadId', false, 100) : null
+        if (req.body.teamLeadName !== undefined) update.$set.teamLeadName = string(req.body, 'teamLeadName', false, 100)
+        if (req.body.description !== undefined) update.$set.description = string(req.body, 'description', false, 1000)
+        if (req.body.flaggedForVerification !== undefined) update.$set.flaggedForVerification = Boolean(req.body.flaggedForVerification)
+        if (req.body.verificationNote !== undefined) update.$set.verificationNote = string(req.body, 'verificationNote', false, 500)
+        query = mongoose.isValidObjectId(recordId) ? { $or: [{ _id: recordId }, { teamId: recordId }] } : { teamId: recordId }
       } else if (resource === 'notifications') {
         if (recordId === 'read-all') {
           const actorId = id(actor)
@@ -541,6 +576,22 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
           isCustom: true,
         })
         record = createdDept.toObject()
+      }
+      if (!record && resource === 'teams') {
+        const createdTeam = await models.teams.create({
+          ownerId: id(actor),
+          teamId: recordId,
+          name: req.body.name || recordId,
+          department: req.body.department || 'Revenue Growth',
+          managerId: req.body.managerId || null,
+          managerName: req.body.managerName || '',
+          teamLeadId: req.body.teamLeadId || null,
+          teamLeadName: req.body.teamLeadName || '',
+          description: req.body.description || '',
+          flaggedForVerification: Boolean(req.body.flaggedForVerification),
+          verificationNote: req.body.verificationNote || '',
+        })
+        record = createdTeam.toObject()
       }
       if (resource === 'departments' && record) {
         const newName = update.$set?.name || record.name
@@ -675,7 +726,7 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
         if (!result.deletedCount) throw fail('Record not found or deletion not permitted.', 404)
         return res.json({ success: true, data: { id: recordId } })
       }
-      if (!management(req.auth.user) || !['announcements', 'courses', 'holidays', 'documents', 'requisitions', 'roles', 'departments'].includes(resource)) throw fail('Deletion is not permitted.', 403)
+      if (!management(req.auth.user) || !['announcements', 'courses', 'holidays', 'documents', 'requisitions', 'roles', 'departments', 'teams'].includes(resource)) throw fail('Deletion is not permitted.', 403)
       let deleteQuery
       if (resource === 'roles') {
         deleteQuery = mongoose.isValidObjectId(recordId) ? { $or: [{ _id: recordId }, { roleId: recordId }] } : { roleId: recordId }
@@ -690,6 +741,20 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
           await Employee.updateMany(
             { department: { $regex: new RegExp(`^${escaped}$`, 'i') } },
             { $set: { department: 'Unassigned' } }
+          )
+        }
+        return res.json({ success: true, data: { id: recordId } })
+      } else if (resource === 'teams') {
+        deleteQuery = mongoose.isValidObjectId(recordId) ? { $or: [{ _id: recordId }, { teamId: recordId }] } : { teamId: recordId }
+        const teamToDelete = await models.teams.findOne(deleteQuery).lean()
+        const result = await models.teams.deleteOne(deleteQuery)
+        if (!result.deletedCount) throw fail('Record not found.', 404)
+        const teamName = teamToDelete?.name
+        if (teamName) {
+          const escaped = teamName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+          await Employee.updateMany(
+            { team: { $regex: new RegExp(`^${escaped}$`, 'i') } },
+            { $set: { team: '', teamId: '' } }
           )
         }
         return res.json({ success: true, data: { id: recordId } })

@@ -12,6 +12,7 @@ import {
   AlertCircle,
 } from 'lucide-react'
 import { useAuth } from '../auth/AuthContext'
+import { isPasskeySupported, loginWithPasskey, registerPasskey } from '../services/passkeyAuth'
 
 /**
  * Premium Card Layout & Pixel-Perfect Theme:
@@ -453,18 +454,61 @@ function LoginStyles() {
  * - NO switch console option!
  */
 export function EmployeeLoginPage() {
-  const { login, changePassword } = useAuth()
+  const { login, changePassword, completeSession } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [remember, setRemember] = useState(true)
   const [loading, setLoading] = useState(false)
+  const [passkeyLoading, setPasskeyLoading] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [mustSetNewPassword, setMustSetNewPassword] = useState(false)
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [showNewPassword, setShowNewPassword] = useState(false)
+
+  async function handlePasskeyLogin() {
+    setError('')
+    setNotice('')
+    if (!isPasskeySupported()) {
+      setError('Biometric Passkeys (Touch ID, Windows Hello, Face ID) are not supported on this browser.')
+      return
+    }
+    setPasskeyLoading(true)
+    try {
+      const res = await loginWithPasskey({ email: email.trim(), portal: 'employee' })
+      if (res.token && res.user) {
+        completeSession(res.token, res.user)
+        window.location.hash = '#/employee'
+      }
+    } catch (err) {
+      if (err.name === 'NotAllowedError') {
+        setError('Passkey prompt was cancelled.')
+      } else if (err.code === 'NO_PASSKEY_REGISTERED' || err.message?.includes('No registered passkey')) {
+        if (password && email.trim()) {
+          try {
+            setNotice('Registering this device as your trusted passkey...')
+            const reg = await registerPasskey({ email: email.trim(), password, deviceName: navigator.userAgent.includes('Windows') ? 'Windows Hello' : 'Biometric Key' })
+            if (reg.token && reg.user) {
+              completeSession(reg.token, reg.user)
+              window.location.hash = '#/employee'
+              return
+            }
+          } catch (regErr) {
+            setError(regErr.message || 'Passkey registration cancelled.')
+          }
+        } else {
+          setError('No passkey registered for this account yet. Please enter your password once to register your device.')
+        }
+      } else {
+        setError(err.message || 'Passkey verification failed.')
+      }
+    } finally {
+      setPasskeyLoading(false)
+      setNotice('')
+    }
+  }
 
   async function handleSubmit(e) {
     if (e) e.preventDefault()
@@ -684,10 +728,11 @@ export function EmployeeLoginPage() {
             <button
               type="button"
               className="edufyi-secondary-btn"
-              onClick={() => setNotice('Hardware Passkey authentication is currently in private preview. Please use your standard credentials.')}
+              onClick={handlePasskeyLogin}
+              disabled={loading || passkeyLoading}
             >
               <Fingerprint size={17} style={{ color: '#00d2ff' }} />
-              Passkey login is not configured
+              {passkeyLoading ? 'VERIFYING PASSKEY...' : 'Sign in with Passkey / Biometrics'}
             </button>
           </form>
         )}
@@ -707,7 +752,7 @@ export function EmployeeLoginPage() {
  * - NO switch console option!
  */
 export function ManagementLoginPage({ defaultRole = 'hr' }) {
-  const { login, changePassword } = useAuth()
+  const { login, changePassword, completeSession } = useAuth()
 
   // Track active role: 'admin' or 'hr'
   const [role, setRole] = useState(() => {
@@ -720,12 +765,55 @@ export function ManagementLoginPage({ defaultRole = 'hr' }) {
   const [showPassword, setShowPassword] = useState(false)
   const [remember, setRemember] = useState(true)
   const [loading, setLoading] = useState(false)
+  const [passkeyLoading, setPasskeyLoading] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [mustSetNewPassword, setMustSetNewPassword] = useState(false)
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [showNewPassword, setShowNewPassword] = useState(false)
+
+  async function handlePasskeyLogin() {
+    setError('')
+    setNotice('')
+    if (!isPasskeySupported()) {
+      setError('Biometric Passkeys (Touch ID, Windows Hello, Face ID) are not supported on this browser.')
+      return
+    }
+    setPasskeyLoading(true)
+    try {
+      const res = await loginWithPasskey({ email: email.trim(), portal: role })
+      if (res.token && res.user) {
+        completeSession(res.token, res.user)
+        window.location.hash = role === 'admin' ? '#/admin' : '#/hr'
+      }
+    } catch (err) {
+      if (err.name === 'NotAllowedError') {
+        setError('Passkey prompt was cancelled.')
+      } else if (err.code === 'NO_PASSKEY_REGISTERED' || err.message?.includes('No registered passkey')) {
+        if (password && email.trim()) {
+          try {
+            setNotice('Registering this device as your trusted passkey...')
+            const reg = await registerPasskey({ email: email.trim(), password, deviceName: navigator.userAgent.includes('Windows') ? 'Windows Hello' : 'Biometric Key' })
+            if (reg.token && reg.user) {
+              completeSession(reg.token, reg.user)
+              window.location.hash = role === 'admin' ? '#/admin' : '#/hr'
+              return
+            }
+          } catch (regErr) {
+            setError(regErr.message || 'Passkey registration cancelled.')
+          }
+        } else {
+          setError('No passkey registered for this account yet. Please enter your password once to register your device.')
+        }
+      } else {
+        setError(err.message || 'Passkey verification failed.')
+      }
+    } finally {
+      setPasskeyLoading(false)
+      setNotice('')
+    }
+  }
 
   // Sync hash changes dynamically
   useEffect(() => {
@@ -1006,10 +1094,11 @@ export function ManagementLoginPage({ defaultRole = 'hr' }) {
           <button
             type="button"
             className="edufyi-secondary-btn"
-            onClick={() => setNotice('Hardware Passkey authentication is currently in private preview. Please use your standard credentials.')}
+            onClick={handlePasskeyLogin}
+            disabled={loading || passkeyLoading}
           >
-            <Key size={16} style={{ color: '#00b4d8' }} />
-            Passkey login is not configured
+            <Fingerprint size={16} style={{ color: '#00b4d8' }} />
+            {passkeyLoading ? 'VERIFYING PASSKEY...' : 'Sign in with Passkey / Biometrics'}
           </button>
         </form>
         )}

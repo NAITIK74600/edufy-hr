@@ -137,20 +137,24 @@ export function createEmployeeService({ repository }) {
     async create(payload, actor) {
       const values = validatePayload(payload, options(actor))
       if (values.managerId !== undefined) values.managerId = await validateManager(repository, values.managerId)
-      if (!payload.employeeId || !String(payload.employeeId).trim()) {
-        let maxCode = 21200
-        const allList = (await repository.list({ limit: 1000 }))?.records || []
-        for (const emp of allList) {
-          const m = String(emp.employeeId || '').match(/^ETS(\d+)$/i)
-          if (m) {
-            const n = parseInt(m[1], 10)
-            if (n >= maxCode) maxCode = n
-          }
-        }
-        values.employeeId = `ETS${maxCode + 1}`
+      
+      const requestedId = payload.employeeId ? String(payload.employeeId).trim().toUpperCase() : ''
+      if (!requestedId) {
+        values.employeeId = repository.getNextEmployeeCode ? await repository.getNextEmployeeCode() : `ETS${Date.now()}`
       } else {
-        values.employeeId = String(payload.employeeId).trim().toUpperCase()
+        // If an employee with this code already exists, auto-allocate the next unused ETS code if it's an ETS pattern
+        const existingWithCode = await repository.findById(requestedId).catch(() => null)
+        if (existingWithCode) {
+          if (/^ETS\d+$/i.test(requestedId) && repository.getNextEmployeeCode) {
+            values.employeeId = await repository.getNextEmployeeCode()
+          } else {
+            values.employeeId = requestedId
+          }
+        } else {
+          values.employeeId = requestedId
+        }
       }
+
       values.email = String(payload.email).trim().toLowerCase()
       values.name = String(payload.name).trim()
       values.status ??= 'invited'
@@ -163,7 +167,45 @@ export function createEmployeeService({ repository }) {
       values.passwordHash = hashPassword(rawPassword)
       values.mustChangePassword = true
       delete values.password
-      const employee = await repository.create(values)
+
+      // Check if employee with this email already exists
+      const existingWithEmail = await repository.findById(values.email).catch(() => null)
+      if (existingWithEmail) {
+        // If they don't have login credentials or were invited/draft, update them instead of crashing with 409
+        if (!existingWithEmail.hasLogin || ['invited', 'draft', 'onboarding'].includes(existingWithEmail.status)) {
+          const updated = await repository.save ? await repository.save(Object.assign(existingWithEmail, values)) : existingWithEmail
+          await repository.addAudit(auditEvent(actor, 'employee.updated', updated.id ?? updated._id, Object.keys(values)))
+          return {
+            ...updated,
+            temporaryPassword: rawPassword,
+            hasLogin: true,
+          }
+        }
+        throw Object.assign(new Error(`An account with email "${values.email}" already exists (${existingWithEmail.name || 'Staff'} - ${existingWithEmail.employeeId}).`), {
+          statusCode: 409,
+          code: 'DUPLICATE_EMAIL',
+          fields: { email: 'Email already registered.' },
+        })
+      }
+
+      let employee
+      try {
+        employee = await repository.create(values)
+      } catch (err) {
+        // Handle race conditions where two clients created employees with the same code or email simultaneously
+        if (err?.code === 11000 && (err.keyPattern?.employeeId || err.message?.includes('employeeId')) && repository.getNextEmployeeCode) {
+          values.employeeId = await repository.getNextEmployeeCode()
+          employee = await repository.create(values)
+        } else if (err?.code === 11000 && (err.keyPattern?.email || err.message?.includes('email'))) {
+          throw Object.assign(new Error(`An account with email "${values.email}" already exists.`), {
+            statusCode: 409,
+            code: 'DUPLICATE_EMAIL',
+            fields: { email: 'Email already registered.' },
+          })
+        } else {
+          throw err
+        }
+      }
       await repository.addAudit(auditEvent(actor, 'employee.created', employee.id ?? employee._id, Object.keys(values)))
 
       if (employee.email) {
