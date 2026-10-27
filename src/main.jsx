@@ -101,7 +101,7 @@ function DataStatus({ children }) {
       setTookLong(false)
       return
     }
-    const timer = setTimeout(() => setTookLong(true), 6000)
+    const timer = setTimeout(() => setTookLong(true), 20000)
     return () => clearTimeout(timer)
   }, [state.dataReady])
 
@@ -176,42 +176,23 @@ function DataStatus({ children }) {
               Retry Connection
             </button>
           </div>
-        ) : tookLong ? (
-          <div style={{ padding: '60px 24px', textAlign: 'center' }}>
-            <p style={{ color: '#0A2328', fontWeight: 600, fontSize: '16px', marginBottom: '8px' }}>
-              Preparing workspace is taking longer than expected
-            </p>
-            <p style={{ color: '#586D72', fontSize: '13.5px', marginBottom: '20px' }}>
-              The API service might be starting up or syncing records. You can retry the connection or re-authenticate.
-            </p>
-            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
-              <button
-                type="button"
-                className="ui-button primary"
-                onClick={() => hrStore.perform(() => hrStore.refresh())}
-              >
-                Retry Connection
-              </button>
-              <button
-                type="button"
-                className="ui-button secondary"
-                onClick={() => {
-                  try {
-                    window.sessionStorage?.clear()
-                    window.localStorage?.removeItem('edufyi.accessToken')
-                    window.localStorage?.removeItem('edufyi.authUser')
-                    window.localStorage?.removeItem('edufyi.activePersona')
-                  } catch {}
-                  window.location.hash = '#/login'
-                  window.location.reload()
-                }}
-              >
-                Reset & Sign In Again
-              </button>
-            </div>
-          </div>
         ) : (
-          <LoadingState />
+          <div style={{ textAlign: 'center' }}>
+            <LoadingState />
+            {tookLong && (
+              <div style={{ marginTop: '16px', color: '#586D72', fontSize: '13px' }}>
+                <p>Syncing enterprise database records... Still working.</p>
+                <button
+                  type="button"
+                  className="ui-button secondary"
+                  style={{ marginTop: '8px', padding: '4px 12px', fontSize: '12px' }}
+                  onClick={() => hrStore.perform(() => hrStore.refresh())}
+                >
+                  Retry Sync
+                </button>
+              </div>
+            )}
+          </div>
         )
       ) : children}
     </>

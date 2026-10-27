@@ -83,27 +83,31 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
     const actor = user
     refreshing = (async () => {
       const management = ['admin', 'hr'].includes(actor.role)
-      let employees
-      if (management) {
-        employees = []
-        let page = 1
-        let total
-        do {
-          const result = await apiClient.get(`/employees?limit=100&page=${page++}`)
-          employees.push(...result.data.map(normalizeEmployee))
-          total = result.meta.total
-        } while (employees.length < total)
-      } else {
-        const result = await apiClient.get('/auth/me')
-        employees = [normalizeEmployee(result.data.user)]
-      }
-      if (generation !== activeGeneration) return
-      const permissions = management ? actor.permissions ?? [] : (employees[0]?.permissions?.length ? employees[0].permissions : (actor.permissions ?? []))
+      const permissions = actor.permissions ?? []
       const can = (permission) => permissions.includes('*') || permissions.includes(permission)
       const payrollAllowed = management
         ? (can('payroll.read') || actor.role === 'admin')
         : can('payroll.self.read')
+
+      async function fetchEmployees() {
+        if (management) {
+          const list = []
+          let page = 1
+          let total
+          do {
+            const result = await apiClient.get(`/employees?limit=100&page=${page++}`)
+            list.push(...result.data.map(normalizeEmployee))
+            total = result.meta.total
+          } while (list.length < total)
+          return { data: list }
+        } else {
+          const result = await apiClient.get('/auth/me')
+          return { data: [normalizeEmployee(result.data.user)] }
+        }
+      }
+
       const requests = {
+        employees: fetchEmployees(),
         attendance: apiClient.get(management ? '/attendance' : '/attendance/self'),
         leaves: apiClient.get(management ? '/leave/hr/requests' : '/leave/self'),
         payroll: payrollAllowed ? apiClient.get('/payroll') : Promise.resolve({ data: [] }),
@@ -135,6 +139,7 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
           data[key] = key === 'config' || key === 'workspace' ? {} : []
         }
       })
+      const employees = data.employees || []
       if (!payrollAllowed) dataErrors.payroll = 'Your account does not have payroll access. Contact HR.'
       const prevEmployees = state().employees || []
       const listToProcess = management ? employees : [...employees, ...data.directory.filter((record) => record.id !== employees[0].id).map(normalizeEmployee)]
