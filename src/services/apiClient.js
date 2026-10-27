@@ -1,12 +1,22 @@
 const API_BASE_URL = import.meta.env?.VITE_API_BASE_URL ?? '/api/v1'
-let accessToken = null
+
+function readStoredToken() {
+  try {
+    if (typeof window === 'undefined') return null
+    return window.localStorage?.getItem('edufyi.accessToken') || window.sessionStorage?.getItem('edufyi.accessToken') || null
+  } catch {
+    return null
+  }
+}
+
+let accessToken = readStoredToken()
 
 export function setAccessToken(token) {
   accessToken = token
 }
 
 export function getAccessToken() {
-  return accessToken
+  return accessToken || readStoredToken()
 }
 
 export class ApiError extends Error {
@@ -22,13 +32,14 @@ export class ApiError extends Error {
 const inFlightGets = new Map()
 
 async function executeApiRequest(path, options = {}, retries = 3) {
+  const activeToken = accessToken || readStoredToken()
   let response
   try {
     response = await fetch(`${API_BASE_URL}${path}`, {
       headers: {
         Accept: 'application/json',
         'Content-Type': 'application/json',
-        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        ...(activeToken ? { Authorization: `Bearer ${activeToken}` } : {}),
         ...options.headers
       },
       ...options
@@ -52,7 +63,14 @@ async function executeApiRequest(path, options = {}, retries = 3) {
   const body = await response.json().catch(() => null)
   if (!response.ok) {
     const error = body?.error ?? {}
-    if (response.status === 401 && accessToken && !path.startsWith('/auth/login')) {
+    if (response.status === 401 && !path.startsWith('/auth/login')) {
+      accessToken = null
+      try {
+        window.localStorage?.removeItem('edufyi.accessToken')
+        window.sessionStorage?.removeItem('edufyi.accessToken')
+        window.localStorage?.removeItem('edufyi.authUser')
+        window.sessionStorage?.removeItem('edufyi.authUser')
+      } catch {}
       window.dispatchEvent(new Event('edufyi:auth-expired'))
       throw new ApiError('Your session expired. Please sign in again.', { status: 401, code: 'AUTH_REQUIRED' })
     }

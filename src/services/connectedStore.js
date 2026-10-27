@@ -67,6 +67,7 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
   const state = () => store.getState()
   function reportError(error) {
     console.error('Connected data operation failed:', error)
+    if (error?.status === 401) return
     if (!state().dataReady) {
       state().dataError = error?.message || 'The service is temporarily unavailable.'
     }

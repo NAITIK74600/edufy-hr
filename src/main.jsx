@@ -197,8 +197,10 @@ function DataStatus({ children }) {
                 className="ui-button secondary"
                 onClick={() => {
                   try {
-                    sessionStorage.clear()
-                    localStorage.removeItem('edufyi.authUser')
+                    window.sessionStorage?.clear()
+                    window.localStorage?.removeItem('edufyi.accessToken')
+                    window.localStorage?.removeItem('edufyi.authUser')
+                    window.localStorage?.removeItem('edufyi.activePersona')
                   } catch {}
                   window.location.hash = '#/login'
                   window.location.reload()

@@ -28,6 +28,12 @@ export function AuthProvider({ children }) {
   const [token, setToken] = useState(readStoredToken)
   const [user, setUser] = useState(readStoredUser)
   const [status, setStatus] = useState(() => (readStoredToken() ? (readStoredUser() ? 'authenticated' : 'loading') : 'signed-out'))
+
+  // Synchronize token synchronously so initial mounts never send unauthenticated requests
+  if (token) {
+    setAccessToken(token)
+  }
+
   useEffect(() => hrStore.subscribe((state) => {
     setUser((current) => {
       if (!current || ['admin', 'hr'].includes(current.role)) return current
@@ -246,6 +252,8 @@ export function AuthProvider({ children }) {
       }
 
       setAccessToken(result.data.token)
+      setToken(result.data.token)
+      setUser(result.data.user)
       persistToken(result.data.token)
       persistUser(result.data.user)
       setStatus('authenticated')
