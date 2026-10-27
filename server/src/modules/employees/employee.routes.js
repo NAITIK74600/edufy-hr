@@ -17,6 +17,28 @@ function parseListQuery(query) {
 
 export function createEmployeeRouter({ auth, service }) {
   const router = express.Router()
+  // Shared short-TTL cache of list results (same for every HR/Admin); any write clears it.
+  const listCache = new Map()
+  const LIST_TTL_MS = 8000
+  router.use((request, response, next) => {
+    if (request.method !== 'GET') {
+      response.once('finish', () => {
+        listCache.clear()
+        service?.repository?.clearCache?.()
+      })
+    }
+    next()
+  })
+  function cachedList(query) {
+    const key = JSON.stringify(query)
+    const hit = listCache.get(key)
+    if (hit && hit.expires > Date.now()) return hit.promise
+    const promise = service.list(query)
+    listCache.set(key, { promise, expires: Date.now() + LIST_TTL_MS })
+    promise.catch(() => listCache.delete(key))
+    if (listCache.size > 200) listCache.clear()
+    return promise
+  }
   router.get('/me/onboarding', auth.authenticate, async (request, response, next) => {
     try {
       const employee = (await service.get(request.auth.user.id)) || (await service.get(request.auth.user.employeeId))
@@ -104,7 +126,7 @@ export function createEmployeeRouter({ auth, service }) {
   })
 
   router.get('/', auth.authenticate, auth.requirePermission(PERMISSIONS.EMPLOYEES_READ), async (request, response, next) => {
-    try { const result = await service.list(parseListQuery(request.query)); return response.json({ success: true, data: result.records, meta: result.meta }) } catch (error) { return next(error) }
+    try { const result = await cachedList(parseListQuery(request.query)); return response.json({ success: true, data: result.records, meta: result.meta }) } catch (error) { return next(error) }
   })
   router.post('/', auth.authenticate, auth.requirePermission(PERMISSIONS.EMPLOYEES_WRITE), async (request, response, next) => {
     try { const employee = await service.create(request.body ?? {}, request.auth.user); return response.status(201).json({ success: true, data: employee }) } catch (error) { return next(error) }

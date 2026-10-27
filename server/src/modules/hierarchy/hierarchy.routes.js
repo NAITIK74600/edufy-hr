@@ -10,7 +10,19 @@ function directoryRecord(employee) {
   }
 }
 
+let directoryCache = null
+let directoryCacheExpiry = 0
+const DIRECTORY_TTL_MS = 15000 // 15-second shared directory cache
+
+export function clearDirectoryCache() {
+  directoryCache = null
+  directoryCacheExpiry = 0
+}
+
 async function directory(repository) {
+  if (directoryCache && directoryCacheExpiry > Date.now()) {
+    return directoryCache
+  }
   const records = []
   let page = 1
   let total
@@ -19,6 +31,8 @@ async function directory(repository) {
     records.push(...result.records.map(directoryRecord))
     total = result.meta.total
   } while (records.length < total)
+  directoryCache = records
+  directoryCacheExpiry = Date.now() + DIRECTORY_TTL_MS
   return records
 }
 
@@ -226,6 +240,15 @@ function checkCircularAssignment(employees, employeeId, newManagerId) {
 
 export function createHierarchyRouter({ auth, repository }) {
   const router = express.Router()
+  router.use((req, res, next) => {
+    if (req.method !== 'GET') {
+      res.once('finish', () => {
+        clearDirectoryCache()
+        repository?.clearCache?.()
+      })
+    }
+    next()
+  })
   router.get('/directory', auth.authenticate, async (request, response, next) => {
     try {
       response.json({ success: true, data: await directory(repository) })

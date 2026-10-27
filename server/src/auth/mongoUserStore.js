@@ -19,6 +19,23 @@ function toPublicUser(user) {
 
 export function createMongoUserStore({ managementUsers = [] } = {}) {
   let initialization
+  const userCache = new Map()
+  const USER_TTL_MS = 8000 // 8-second short auth-user cache
+
+  function clearUserCache(idOrEmail) {
+    if (!idOrEmail) {
+      userCache.clear()
+      return
+    }
+    const clean = String(idOrEmail).trim().toLowerCase()
+    userCache.delete(clean)
+    userCache.delete(`id:${clean}`)
+    userCache.delete(`email:${clean}`)
+    for (const [k, v] of userCache) {
+      if (k.includes(clean)) userCache.delete(k)
+    }
+  }
+
   function ensureConnected() {
     if (mongoose.connection.readyState !== 1) {
       throw Object.assign(new Error('MongoDB is unavailable. Accounts cannot be loaded or saved.'), { statusCode: 503, code: 'DATABASE_UNAVAILABLE' })
@@ -52,6 +69,7 @@ export function createMongoUserStore({ managementUsers = [] } = {}) {
   }
   return {
     initialize,
+    clearUserCache,
     async listUsers() {
       await initialize()
       const users = await Employee.find({
@@ -90,6 +108,8 @@ export function createMongoUserStore({ managementUsers = [] } = {}) {
             { returnDocument: 'after', runValidators: true },
           ).select('+passwordHash').lean()
 
+          clearUserCache(cleanEmail)
+          if (cleanEmpId) clearUserCache(cleanEmpId)
           return toAuthUser(linked)
         }
 
@@ -128,6 +148,8 @@ export function createMongoUserStore({ managementUsers = [] } = {}) {
           employmentType: 'full_time',
           joiningDate: userData.joiningDate || new Date(),
         })
+        clearUserCache(cleanEmail)
+        if (cleanEmpId) clearUserCache(cleanEmpId)
         return toAuthUser(created.toObject())
       } catch (error) {
         if (error.code === 11000) {
@@ -142,66 +164,107 @@ export function createMongoUserStore({ managementUsers = [] } = {}) {
       await initialize()
       if (!identifier) return null
       const clean = String(identifier).trim()
-      const escaped = clean.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-      const regex = new RegExp(`^${escaped}$`, 'i')
+      const cacheKey = `email:${clean.toLowerCase()}`
+      const hit = userCache.get(cacheKey)
+      if (hit && hit.expires > Date.now()) return hit.promise
 
-      const user = await Employee.findOne({
-        $or: [
-          { email: regex },
-          { username: regex },
-          { employeeId: regex },
-          { name: regex },
-          { displayName: regex },
-        ],
-      })
-        .select('+passwordHash +authVersion')
-        .lean()
-      return toAuthUser(user)
+      const promise = (async () => {
+        const escaped = clean.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+        const regex = new RegExp(`^${escaped}$`, 'i')
+
+        const user = await Employee.findOne({
+          $or: [
+            { email: regex },
+            { username: regex },
+            { employeeId: regex },
+            { name: regex },
+            { displayName: regex },
+          ],
+        })
+          .select('+passwordHash +authVersion')
+          .lean()
+        const authUser = toAuthUser(user)
+        if (authUser && authUser.id) {
+          userCache.set(`id:${authUser.id}`, { promise: Promise.resolve(authUser), expires: Date.now() + USER_TTL_MS })
+        }
+        return authUser
+      })()
+
+      userCache.set(cacheKey, { promise, expires: Date.now() + USER_TTL_MS })
+      promise.catch(() => userCache.delete(cacheKey))
+      if (userCache.size > 2000) {
+        for (const [k, v] of userCache) if (v.expires < Date.now()) userCache.delete(k)
+      }
+      return promise
     },
     async findById(id) {
       await initialize()
       if (!id) return null
-      let user = null
-      if (mongoose.isValidObjectId(id)) {
-        user = await Employee.findById(id).select('+passwordHash +authVersion').lean()
+      const cacheKey = `id:${String(id).trim()}`
+      const hit = userCache.get(cacheKey)
+      if (hit && hit.expires > Date.now()) return hit.promise
+
+      const promise = (async () => {
+        let user = null
+        if (mongoose.isValidObjectId(id)) {
+          user = await Employee.findById(id).select('+passwordHash +authVersion').lean()
+        }
+        if (!user && typeof id === 'string') {
+          const clean = id.trim()
+          user = await Employee.findOne({
+            $or: [
+              { employeeId: clean.toUpperCase() },
+              { id: clean },
+              { email: clean.toLowerCase() },
+              { username: clean.toLowerCase() },
+            ],
+          }).select('+passwordHash +authVersion').lean()
+        }
+        const authUser = toAuthUser(user)
+        if (authUser?.email) {
+          userCache.set(`email:${authUser.email.toLowerCase()}`, { promise: Promise.resolve(authUser), expires: Date.now() + USER_TTL_MS })
+        }
+        return authUser
+      })()
+
+      userCache.set(cacheKey, { promise, expires: Date.now() + USER_TTL_MS })
+      promise.catch(() => userCache.delete(cacheKey))
+      if (userCache.size > 2000) {
+        for (const [k, v] of userCache) if (v.expires < Date.now()) userCache.delete(k)
       }
-      if (!user && typeof id === 'string') {
-        const clean = id.trim()
-        user = await Employee.findOne({
-          $or: [
-            { employeeId: clean.toUpperCase() },
-            { id: clean },
-            { email: clean.toLowerCase() },
-            { username: clean.toLowerCase() },
-          ],
-        }).select('+passwordHash +authVersion').lean()
-      }
-      return toAuthUser(user)
+      return promise
     },
     async resetPassword(id, passwordHash) {
       await initialize()
+      clearUserCache(id)
       const query = mongoose.isValidObjectId(id)
         ? { _id: id }
         : { $or: [{ employeeId: String(id).toUpperCase() }, { id: String(id) }, { email: String(id).toLowerCase() }] }
-      return toAuthUser(await Employee.findOneAndUpdate(
+      const res = toAuthUser(await Employee.findOneAndUpdate(
         query,
         { $set: { passwordHash, mustChangePassword: true }, $inc: { authVersion: 1 } },
         { returnDocument: 'after', runValidators: true },
       ).lean())
+      if (res?.email) clearUserCache(res.email)
+      return res
     },
     async changePassword(id, passwordHash) {
       await initialize()
+      clearUserCache(id)
       const query = mongoose.isValidObjectId(id)
         ? { _id: id }
         : { $or: [{ employeeId: String(id).toUpperCase() }, { id: String(id) }, { email: String(id).toLowerCase() }] }
-      return toAuthUser(await Employee.findOneAndUpdate(
+      const res = toAuthUser(await Employee.findOneAndUpdate(
         query,
         { $set: { passwordHash, mustChangePassword: false }, $inc: { authVersion: 1 } },
         { returnDocument: 'after', runValidators: true },
       ).lean())
+      if (res?.email) clearUserCache(res.email)
+      return res
     },
     async updateUser(id, updates) {
       await initialize()
+      clearUserCache(id)
       const query = mongoose.isValidObjectId(id)
         ? { _id: id }
         : { $or: [{ employeeId: String(id).toUpperCase() }, { email: String(id).toLowerCase() }] }
@@ -210,10 +273,12 @@ export function createMongoUserStore({ managementUsers = [] } = {}) {
         { $set: updates },
         { returnDocument: 'after', runValidators: true },
       ).lean()
+      if (updated?.email) clearUserCache(updated.email)
       return toPublicUser(toAuthUser(updated))
     },
     async deleteUser(id) {
       await initialize()
+      clearUserCache(id)
       const query = mongoose.isValidObjectId(id)
         ? { _id: id }
         : { $or: [{ employeeId: String(id).toUpperCase() }, { email: String(id).toLowerCase() }] }

@@ -1,5 +1,6 @@
 import fs from 'node:fs'
 import express from 'express'
+import compression from 'compression'
 import path from 'node:path'
 import { createPayrollRouter } from './modules/payroll/payroll.routes.js'
 import { createWorkspaceRouter } from './modules/workspace/workspace.routes.js'
@@ -58,13 +59,11 @@ export function createApp(options = {}) {
       return databaseStore ? allowedAccount(await databaseStore.findById(id)) : managementStore.findById(id)
     },
     async addUser(user) {
-      if (!databaseStore) {
-        const error = new Error('MongoDB is not configured. Employee accounts cannot be saved.')
-        error.statusCode = 503
-        error.code = 'DATABASE_UNAVAILABLE'
-        throw error
-      }
-      return databaseStore.addUser(user)
+      if (databaseStore) return databaseStore.addUser(user)
+      const error = new Error('MongoDB is not configured. Employee accounts cannot be saved.')
+      error.statusCode = 503
+      error.code = 'DATABASE_UNAVAILABLE'
+      throw error
     },
     async resetPassword(id, passwordHash) {
       if (databaseStore) return databaseStore.resetPassword(id, passwordHash)
@@ -102,6 +101,15 @@ export function createApp(options = {}) {
   const auth = createAuthMiddleware({ userStore, jwtSecret, revokedTokens: options.revokedTokens ?? new Set() })
   const authService = createAuthService({ userStore, jwtSecret, accessTokenTtl: process.env.ACCESS_TOKEN_TTL || '30d', revokedTokens: auth.revokedTokens })
   app.disable('x-powered-by')
+  app.use(compression({
+    threshold: 1024,
+    filter: (request, response) => {
+      if (request.headers['x-no-compression']) return false
+      const contentType = String(response.getHeader('Content-Type') || '')
+      if (contentType.includes('text/event-stream')) return false
+      return compression.filter(request, response)
+    },
+  }))
   app.use((request, response, next) => {
     response.setHeader('X-Content-Type-Options', 'nosniff')
     response.setHeader('X-Frame-Options', 'SAMEORIGIN')
@@ -149,7 +157,16 @@ export function createApp(options = {}) {
     app.use(express.static(publicDir))
   }
   if (options.staticDirectory && fs.existsSync(options.staticDirectory)) {
-    app.use(express.static(options.staticDirectory))
+    app.use(express.static(options.staticDirectory, {
+      maxAge: '1d',
+      setHeaders: (res, filePath) => {
+        if (filePath.endsWith('.html')) {
+          res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
+        } else if (filePath.includes(`${path.sep}assets${path.sep}`) || filePath.includes('/assets/')) {
+          res.setHeader('Cache-Control', 'public, max-age=31536000, immutable')
+        }
+      },
+    }))
     app.use((request, response, next) => {
       if (request.method !== 'GET') return next()
       if (request.path.startsWith('/api') || request.path.startsWith('/verification-forms') || request.path.startsWith('/company-policies')) {

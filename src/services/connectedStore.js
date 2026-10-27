@@ -241,7 +241,7 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
       if (refreshing) await refreshing
       if (actorGeneration !== generation || !user) throw new Error('Your session changed. Sign in before saving.')
       const result = await operation()
-      if (actorGeneration === generation) refresh().catch((error) => reportError(error))
+      if (actorGeneration === generation) await refresh()
       return result && result.data !== undefined ? result.data : result
     })
     mutationQueue = pending.then(() => undefined, () => undefined)

@@ -19,7 +19,9 @@ export class ApiError extends Error {
   }
 }
 
-export async function apiRequest(path, options = {}, retries = 3) {
+const inFlightGets = new Map()
+
+async function executeApiRequest(path, options = {}, retries = 3) {
   let response
   try {
     response = await fetch(`${API_BASE_URL}${path}`, {
@@ -35,7 +37,7 @@ export async function apiRequest(path, options = {}, retries = 3) {
     if (retries > 0 && (!options.method || options.method === 'GET')) {
       const delay = (4 - retries) * 300
       await new Promise((r) => setTimeout(r, delay))
-      return apiRequest(path, options, retries - 1)
+      return executeApiRequest(path, options, retries - 1)
     }
     throw new ApiError('The service is temporarily unavailable. Reconnecting...', { status: 0, code: 'NETWORK_ERROR' })
   }
@@ -44,7 +46,7 @@ export async function apiRequest(path, options = {}, retries = 3) {
   if ((response.status === 502 || response.status === 503 || response.status === 504) && retries > 0 && (!options.method || options.method === 'GET')) {
     const delay = (4 - retries) * 350
     await new Promise((r) => setTimeout(r, delay))
-    return apiRequest(path, options, retries - 1)
+    return executeApiRequest(path, options, retries - 1)
   }
 
   const body = await response.json().catch(() => null)
@@ -61,6 +63,22 @@ export async function apiRequest(path, options = {}, retries = 3) {
     })
   }
   return body
+}
+
+export async function apiRequest(path, options = {}, retries = 3) {
+  const isGet = !options.method || options.method === 'GET'
+  if (isGet && retries === 3) {
+    const cacheKey = `${path}::${accessToken || ''}`
+    if (inFlightGets.has(cacheKey)) {
+      return inFlightGets.get(cacheKey)
+    }
+    const promise = executeApiRequest(path, options, retries).finally(() => {
+      inFlightGets.delete(cacheKey)
+    })
+    inFlightGets.set(cacheKey, promise)
+    return promise
+  }
+  return executeApiRequest(path, options, retries)
 }
 
 export async function downloadBlob(path, options = {}) {

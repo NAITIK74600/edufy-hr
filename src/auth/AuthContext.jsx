@@ -51,15 +51,31 @@ export function AuthProvider({ children }) {
       else hrStore.reportError(error)
     }
     hrStore.connectUser(user).catch(failed)
-    const refresh = () => hrStore.refresh().catch(failed)
+    // Background refreshes (live events, polling, focus) are throttled with jitter so many clients don't reload at once.
+    let lastRun = Date.now()
+    let pending = null
+    const MIN_GAP_MS = 30000
+    const refresh = () => {
+      if (!active || pending || document.hidden) return
+      const wait = Math.max(0, lastRun + MIN_GAP_MS - Date.now()) + Math.random() * 5000
+      pending = window.setTimeout(() => {
+        pending = null
+        lastRun = Date.now()
+        hrStore.refresh().catch(failed)
+      }, wait)
+    }
     const disconnect = connectLiveUpdates(token, refresh, failed)
-    const timer = window.setInterval(refresh, 15000)
-    window.addEventListener('focus', refresh)
+    const timer = window.setInterval(refresh, 120000)
+    const onFocus = () => {
+      if (Date.now() - lastRun >= MIN_GAP_MS) refresh()
+    }
+    window.addEventListener('focus', onFocus)
     return () => {
       active = false
+      window.clearTimeout(pending)
       window.clearInterval(timer)
       disconnect()
-      window.removeEventListener('focus', refresh)
+      window.removeEventListener('focus', onFocus)
     }
   }, [status, user?.id, token])
 
