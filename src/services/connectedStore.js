@@ -241,7 +241,7 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
       if (refreshing) await refreshing
       if (actorGeneration !== generation || !user) throw new Error('Your session changed. Sign in before saving.')
       const result = await operation()
-      if (actorGeneration === generation) await refresh()
+      if (actorGeneration === generation) refresh().catch((error) => reportError(error))
       return result && result.data !== undefined ? result.data : result
     })
     mutationQueue = pending.then(() => undefined, () => undefined)
@@ -1012,7 +1012,10 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
         const record = employee(id)
         try {
           const updated = await apiClient.patch(`/employees/${record.id}`, employeePayload(data))
-          return normalizeEmployee(updated.data)
+          const fresh = normalizeEmployee(updated.data)
+          state().employees = (state().employees || []).map((e) => (e.id === record.id ? { ...e, ...fresh } : e))
+          notify()
+          return fresh
         } catch (err) {
           if (err?.message?.includes('not editable')) {
             const clean = employeePayload(data)
