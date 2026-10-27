@@ -248,11 +248,13 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
     return pending
   }
   function employeePayload(data) {
-    const allowed = ['employeeId', 'name', 'email', 'password', 'phone', 'department', 'designation', 'location', 'joiningDate', 'employmentEndDate', 'onboardingChecklist', 'offboardingChecklist', 'exitDetails', 'emergencyContact', 'role', 'status', 'salary', 'salaryStructure', 'parentsContact', 'onboardingDocs', 'documents', 'identity', 'onboardingStatus', 'onboardingSubmittedAt', 'onboardingVerifiedAt', 'onboardingVerifiedBy', 'onboardingNotes', 'onboardingRejectionReason', 'financeDetails', 'reportingManager', 'policyConsents', 'complianceDocs']
+    const allowed = ['employeeId', 'name', 'email', 'password', 'phone', 'department', 'designation', 'location', 'campus', 'employmentType', 'joiningDate', 'employmentEndDate', 'onboardingChecklist', 'offboardingChecklist', 'exitDetails', 'emergencyContact', 'role', 'status', 'salary', 'salaryStructure', 'parentsContact', 'onboardingDocs', 'documents', 'identity', 'onboardingStatus', 'onboardingSubmittedAt', 'onboardingVerifiedAt', 'onboardingVerifiedBy', 'onboardingNotes', 'onboardingRejectionReason', 'financeDetails', 'reportingManager', 'policyConsents', 'complianceDocs']
     const payload = Object.fromEntries(allowed.filter((key) => data[key] !== undefined).map((key) => [key, data[key]]))
     if (data.employmentType) {
       const et = String(data.employmentType).trim().toLowerCase().replace(/[-\s]/g, '_')
       payload.employmentType = et === 'contract' ? 'contractor' : (['full_time', 'part_time', 'contractor', 'intern'].includes(et) ? et : 'full_time')
+    } else if (data.role && (data.role === 'intern' || String(data.role).toLowerCase().includes('intern'))) {
+      payload.employmentType = 'intern'
     }
     if (data.managerId !== undefined) payload.managerId = data.managerId || null
     if (data.salary !== undefined) payload.salary = Number(data.salary)
@@ -442,6 +444,62 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
       return mutate(() => {
         const config = state().companySettings
         return apiClient.patch('/attendance/config', { locations: (config.locations || []).filter((l) => l.id !== id) })
+      })
+    },
+    uploadHolidayCalendarImages(newImages, actor = 'Admin') {
+      const imagesArray = Array.isArray(newImages) ? newImages : [newImages]
+      const prepared = imagesArray.filter(Boolean).map((img, i) => ({
+        id: img.id || `cal-img-${Date.now()}-${i}-${Math.random().toString(36).slice(2, 7)}`,
+        url: img.url || img.dataUrl || img.src || '',
+        title: img.title || img.name || `Holiday Calendar Page ${i + 1}`,
+        uploadedAt: img.uploadedAt || todayKey(),
+        uploadedBy: img.uploadedBy || actor || 'Admin',
+      }))
+      const current = state().companySettings?.holidayCalendarImages || state().holidayCalendarImages || []
+      const updated = [...current, ...prepared]
+      state().holidayCalendarImages = updated
+      state().companySettings = {
+        ...(state().companySettings || {}),
+        holidayCalendarImages: updated,
+      }
+      if (typeof window !== 'undefined' && window.localStorage) {
+        try {
+          window.localStorage.setItem('edufyi_holiday_calendar_images_v1', JSON.stringify(updated))
+        } catch (_) {}
+      }
+      if (!user) {
+        notify()
+        return Promise.resolve(updated)
+      }
+      return mutate(async () => {
+        await apiClient.patch('/attendance/config', { holidayCalendarImages: updated }).catch((err) => {
+          console.warn('Could not sync holidayCalendarImages with server config', err)
+        })
+        return updated
+      })
+    },
+    deleteHolidayCalendarImage(imageId) {
+      const current = state().companySettings?.holidayCalendarImages || state().holidayCalendarImages || []
+      const updated = current.filter((img) => img.id !== imageId && img._id !== imageId)
+      state().holidayCalendarImages = updated
+      state().companySettings = {
+        ...(state().companySettings || {}),
+        holidayCalendarImages: updated,
+      }
+      if (typeof window !== 'undefined' && window.localStorage) {
+        try {
+          window.localStorage.setItem('edufyi_holiday_calendar_images_v1', JSON.stringify(updated))
+        } catch (_) {}
+      }
+      if (!user) {
+        notify()
+        return Promise.resolve(true)
+      }
+      return mutate(async () => {
+        await apiClient.patch('/attendance/config', { holidayCalendarImages: updated }).catch((err) => {
+          console.warn('Could not sync holidayCalendarImages with server config', err)
+        })
+        return true
       })
     },
     addUser(data) {

@@ -57,6 +57,7 @@ import { PerformanceWorkspace, WorkspaceReports, WorkspaceNotifications } from '
 import { CompanyPoliciesView } from '../components/CompanyPoliciesView'
 import { CompanyDocumentsView } from '../components/CompanyDocumentsView'
 import { AdminUsersModule } from './AdminDashboardPage'
+import { HolidayCalendarShowcase } from '../components/HolidayCalendarShowcase'
 import { todayKey } from '../services/connectedStore'
 import { useAuth } from '../auth/AuthContext'
 import { formatINR, formatINRRaw, amountInWordsINR } from '../utils/currency'
@@ -4379,32 +4380,18 @@ function AnnouncementsModule() {
 // 9. HOLIDAY CALENDAR MODULE
 // ==========================================
 function HolidaysModule() {
-  const [storeState, setStoreState] = useState(() => hrStore.getState())
-
-  useEffect(() => {
-    return hrStore.subscribe((state) => setStoreState(state))
-  }, [])
+  const { user } = useAuth()
+  const canManage = Boolean(user && (user.role === 'admin' || user.role === 'hr' || user.role === 'operations_executive'))
 
   return (
     <>
       <PageHeader
         eyebrow="Time Off Schedules"
         title="Company Holiday Calendar"
-        description="Published national, festival, and corporate holidays."
+        description="Official company holiday schedule with published flyers, national observances, and festival calendar gallery."
       />
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
-        {storeState.holidays.map((h, i) => (
-          <div key={i} className="panel" style={{ padding: '20px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-              <span style={{ fontSize: '9px', textTransform: 'uppercase', color: 'var(--teal)', fontWeight: 700 }}>{h.type}</span>
-              <StatusBadge tone="info">{h.day}</StatusBadge>
-            </div>
-            <h3 style={{ margin: '0 0 6px', fontSize: '15px' }}>{h.name}</h3>
-            <p style={{ margin: 0, fontSize: '12px', color: 'var(--ink)', fontWeight: 600 }}>{h.date}</p>
-          </div>
-        ))}
-      </div>
+      <HolidayCalendarShowcase canManage={canManage} user={user} />
     </>
   )
 }

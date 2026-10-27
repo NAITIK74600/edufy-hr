@@ -78,6 +78,7 @@ import { PayslipPreviewModal } from '../components/payroll/PayslipPreviewModal'
 import { doesPayrollMatchUser, unmaskBankAccount, findEmployeeForUser } from '../utils/payrollMatcher'
 import { OnboardingDossierView } from '../components/OnboardingDossierView'
 import { CompanyPoliciesView } from '../components/CompanyPoliciesView'
+import { HolidayCalendarShowcase } from '../components/HolidayCalendarShowcase'
 import { CompanyDocumentsView } from '../components/CompanyDocumentsView'
 
 // ==============================================================
@@ -157,11 +158,47 @@ function GPSAttendanceStation({ user, todayRecord, onPunch, onStartBreak, onEndB
           setPermissionStatus('granted')
         },
         () => { },
-        { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 10000 }
       )
     }
     return () => { active = false }
   }, [])
+
+  // Continuous background geolocation tracking while checked in:
+  // Automatically acquires real-time GPS fixes so entering campus immediately clears pauses
+  // without forcing the user to manually click "GPS Detect".
+  useEffect(() => {
+    if (!isCheckedIn || isCompleted) return
+    if (typeof navigator === 'undefined' || !navigator.geolocation) return
+
+    let lastVerifyEpoch = 0
+    const watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        const coords = {
+          latitude: pos.coords.latitude,
+          longitude: pos.coords.longitude,
+          accuracy: Math.ceil(pos.coords.accuracy),
+        }
+        setCustomCoords(coords)
+        setGpsLive(true)
+        setPermissionStatus('granted')
+
+        const now = Date.now()
+        if (now - lastVerifyEpoch >= 15000) {
+          lastVerifyEpoch = now
+          handleRefreshNetwork(coords)
+        }
+      },
+      () => {},
+      { enableHighAccuracy: true, maximumAge: 10000, timeout: 15000 }
+    )
+
+    return () => {
+      if (typeof navigator !== 'undefined' && navigator.geolocation) {
+        navigator.geolocation.clearWatch(watchId)
+      }
+    }
+  }, [isCheckedIn, isCompleted])
 
   const primaryWifiSSID = settings?.allowedWifiSSIDs?.[0] || 'Edufyi'
   const matchedNetwork = (settings?.wifiNetworks || []).find((n) => n.ssid === primaryWifiSSID)
@@ -304,9 +341,10 @@ function GPSAttendanceStation({ user, todayRecord, onPunch, onStartBreak, onEndB
   const maxGeofenceRadius = Number(settings?.attendanceRules?.maxGeofenceRadiusMeters) || Number(verification?.maxAllowedRadius) || 50
 
   // Inside campus requires office Wi-Fi / IP verification OR verified GPS geofence (<=maxGeofenceRadius)
+  const isDistanceInside = distance != null && distance <= maxGeofenceRadius
   const isInsideCampus = Boolean(
-    serverVerification &&
-    (serverVerification.isGpsVerified || serverVerification.isWifiVerified || serverVerification.isIpVerified)
+    (serverVerification && (serverVerification.isGpsVerified || serverVerification.isWifiVerified || serverVerification.isIpVerified)) ||
+    isDistanceInside
   )
   const isOutsideCampus = Boolean(isCheckedIn && !isCompleted && serverVerification && !isInsideCampus)
 
@@ -4576,38 +4614,17 @@ function ESSHelpDeskView({ user }) {
 // 14. ESS HOLIDAY CALENDAR VIEW
 // ==============================================================
 function ESSHolidaysView() {
-  const [storeState, setStoreState] = useState(() => hrStore.getState())
-
-  useEffect(() => {
-    return hrStore.subscribe((state) => setStoreState(state))
-  }, [])
-
-  const holidays = storeState.holidays || []
+  const { user } = useAuth()
+  const canManage = Boolean(user && (user.role === 'admin' || user.role === 'hr' || user.role === 'operations_executive'))
 
   return (
     <div style={{ display: 'grid', gap: '22px' }}>
       <PageHeader
         eyebrow="Company Schedule"
         title="Holiday Calendar (2026)"
-        description="Official list of national holidays, festival holidays, and optional company leave observances."
+        description="Official company holiday schedule with published flyers, national observances, and festival calendar gallery."
       />
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '12px' }}>
-        {holidays.map((h, i) => (
-          <div key={i} className="panel" style={{ padding: '16px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
-              <span className="role-badge" style={{ fontSize: '9px', background: '#f5f8f7', color: 'var(--teal)' }}>
-                {h.type || 'Festival Holiday'}
-              </span>
-              <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--teal)' }}>{h.date}</span>
-            </div>
-            <h3 style={{ margin: '0 0 4px', fontSize: '15px' }}>{h.name || h.title}</h3>
-            <p style={{ margin: 0, fontSize: '11px', color: 'var(--muted)' }}>
-              {h.day}
-            </p>
-          </div>
-        ))}
-      </div>
+      <HolidayCalendarShowcase canManage={canManage} user={user} />
     </div>
   )
 }

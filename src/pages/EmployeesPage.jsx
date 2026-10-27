@@ -51,10 +51,22 @@ const emptyFilters = {
   search: '',
   department: '',
   designation: '',
+  campus: '',
+  employmentType: '',
   status: '',
   page: 1,
   limit: 10,
 }
+
+export const CAMPUSES = [
+  'Ignite Campus',
+  'Velocity Hub',
+]
+
+export const EMPLOYMENT_TYPES = [
+  { id: 'full_time', label: 'Full-Time Staff' },
+  { id: 'intern', label: 'Intern / Trainee' },
+]
 
 const statusLabels = {
   invited: 'Invited',
@@ -115,12 +127,19 @@ function EmployeeDirectory({ route } = {}) {
 
   const allEmployees = storeState.employees || []
 
+  const allRoleOptions = useMemo(() => {
+    const list = storeState.roles?.length ? storeState.roles : (hrStore.getRoles ? hrStore.getRoles() : [])
+    return list.map((r) => ({ id: r.id || r.roleId, name: r.name || r.label || r.id }))
+  }, [storeState.roles])
+
   const defaultNewForm = {
     employeeId: '',
     name: '',
     email: '',
     phone: '',
     password: '',
+    campus: 'Ignite Campus',
+    employmentType: 'full_time',
     department: 'Technology',
     team: '',
     teamId: '',
@@ -196,7 +215,11 @@ function EmployeeDirectory({ route } = {}) {
 
   // Managers list for dropdowns
   const availableManagers = allEmployees.filter(
-    (e) => e.status === 'active' && ['director', 'manager', 'admin', 'hr', 'team_lead'].includes(e.role)
+    (e) => e.status === 'active' && [
+      'director', 'manager', 'admin', 'hr', 'team_lead', 'team_leader',
+      'senior_manager', 'general_manager', 'assistant_general_manager',
+      'head_of_sales', 'head_of_marketing', 'vertical_head', 'managing_director',
+    ].includes(e.role)
   )
 
   const filteredEmployees = allEmployees.filter((emp) => {
@@ -213,6 +236,14 @@ function EmployeeDirectory({ route } = {}) {
     if (filters.status === 'notice' ? !emp.exitDetails || emp.status === 'inactive' : filters.status && emp.status !== filters.status) return false
     if (filters.department && !String(emp.department ?? '').toLowerCase().includes(filters.department.toLowerCase())) return false
     if (filters.designation && !String(emp.designation ?? '').toLowerCase().includes(filters.designation.toLowerCase())) return false
+    if (filters.campus && (emp.campus || 'Ignite Campus') !== filters.campus) return false
+    if (filters.employmentType) {
+      const isIntern = String(emp.employmentType || '').toLowerCase().includes('intern') ||
+        String(emp.role || '').toLowerCase().includes('intern') ||
+        String(emp.designation || '').toLowerCase().includes('intern')
+      if (filters.employmentType === 'intern' && !isIntern) return false
+      if (filters.employmentType === 'full_time' && isIntern) return false
+    }
     return true
   })
 
@@ -256,6 +287,9 @@ function EmployeeDirectory({ route } = {}) {
     const mgr = allEmployees.find((m) => m.id === newEmpForm.managerId || m.employeeId === newEmpForm.managerId)
     const empData = {
       ...newEmpForm,
+      campus: newEmpForm.campus || 'Ignite Campus',
+      location: newEmpForm.campus || newEmpForm.location || 'Ignite Campus',
+      employmentType: newEmpForm.employmentType || (newEmpForm.role?.includes('intern') ? 'intern' : 'full_time'),
       employeeId: finalEmpCode,
       password: finalPassword,
       managerName: mgr?.name || '',
@@ -297,8 +331,13 @@ function EmployeeDirectory({ route } = {}) {
     const isDir = emp.role === 'director' || emp.email === 'jagadishbabu@edufyitech.in' || emp.email === 'director@edufyitech.in'
     const cleanDept = isDir ? 'Executive' : (emp.department || 'Executive')
     const rec = getRecommendedRoleConfig(emp.role, cleanDept)
+    const isInternEmp = String(emp.employmentType || '').toLowerCase().includes('intern') ||
+      String(emp.role || '').toLowerCase().includes('intern') ||
+      String(emp.designation || '').toLowerCase().includes('intern')
     setEditingEmployee({
       ...emp,
+      campus: emp.campus || 'Ignite Campus',
+      employmentType: emp.employmentType || (isInternEmp ? 'intern' : 'full_time'),
       department: cleanDept,
       designation: isDir ? (emp.designation && emp.designation.toLowerCase().includes('director') ? emp.designation : 'Managing Director') : (emp.designation || rec.designation),
       bankName: emp.bankDetails?.bankName || '',
@@ -318,6 +357,9 @@ function EmployeeDirectory({ route } = {}) {
     const mgr = allEmployees.find((m) => m.id === editingEmployee.managerId || m.employeeId === editingEmployee.managerId)
     const updates = {
       ...editingEmployee,
+      campus: editingEmployee.campus || 'Ignite Campus',
+      location: editingEmployee.campus || editingEmployee.location || 'Ignite Campus',
+      employmentType: editingEmployee.employmentType || (editingEmployee.role?.includes('intern') ? 'intern' : 'full_time'),
       managerName: mgr ? mgr.name : editingEmployee.managerName,
       salary: Number(editingEmployee.salary),
       salaryStructure: editingEmployee.salaryStructure || {},
@@ -613,6 +655,24 @@ function EmployeeDirectory({ route } = {}) {
                 value={filters.designation}
                 onChange={(event) => updateFilter('designation', event.target.value)}
               />
+              <select
+                aria-label="Filter by campus"
+                value={filters.campus}
+                onChange={(event) => updateFilter('campus', event.target.value)}
+              >
+                <option value="">All campuses</option>
+                <option value="Ignite Campus">Ignite Campus</option>
+                <option value="Velocity Hub">Velocity Hub</option>
+              </select>
+              <select
+                aria-label="Filter by employment type"
+                value={filters.employmentType}
+                onChange={(event) => updateFilter('employmentType', event.target.value)}
+              >
+                <option value="">All Types (Full-Time & Interns)</option>
+                <option value="full_time">Full-Time Staff</option>
+                <option value="intern">🎓 Interns Only</option>
+              </select>
             </div>
           </section>
 
@@ -668,8 +728,10 @@ function EmployeeDirectory({ route } = {}) {
 
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', fontSize: '11px', background: 'var(--surface-sunken)', padding: '8px 10px', borderRadius: '6px' }}>
                       <div><span style={{ color: 'var(--muted)' }}>ID: </span><strong>{emp.employeeId}</strong></div>
+                      <div><span style={{ color: 'var(--muted)' }}>Campus: </span><strong style={{ color: 'var(--teal)' }}>{emp.campus || 'Ignite Campus'}</strong></div>
                       <div><span style={{ color: 'var(--muted)' }}>Dept: </span><strong>{emp.department}</strong></div>
                       <div><span style={{ color: 'var(--muted)' }}>Role: </span><strong>{emp.designation}</strong></div>
+                      <div><span style={{ color: 'var(--muted)' }}>Type: </span><strong style={{ color: (emp.employmentType === 'intern' || String(emp.role || '').includes('intern') || String(emp.designation || '').toLowerCase().includes('intern')) ? '#0284c7' : 'inherit' }}>{(emp.employmentType === 'intern' || String(emp.role || '').includes('intern') || String(emp.designation || '').toLowerCase().includes('intern')) ? '🎓 Intern' : 'Full-Time'}</strong></div>
                       <div><span style={{ color: 'var(--muted)' }}>CTC: </span><strong style={{ color: 'var(--teal)' }}>{formatINR(emp.salary ?? 0)}</strong></div>
                     </div>
 
@@ -727,7 +789,64 @@ function EmployeeDirectory({ route } = {}) {
                   },
                   { key: 'employeeId', label: 'Employee ID' },
                   { key: 'department', label: 'Department' },
-                  { key: 'designation', label: 'Designation' },
+                  {
+                    key: 'designation',
+                    label: 'Designation',
+                    render: (employee) => {
+                      const isIntern = employee.employmentType === 'intern' ||
+                        String(employee.role || '').toLowerCase().includes('intern') ||
+                        String(employee.designation || '').toLowerCase().includes('intern')
+                      return (
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                          <span>{employee.designation}</span>
+                          {isIntern && (
+                            <span
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                padding: '1px 6px',
+                                borderRadius: '10px',
+                                fontSize: '10px',
+                                fontWeight: 700,
+                                background: '#e0f2fe',
+                                color: '#0284c7',
+                                border: '1px solid #bae6fd',
+                                whiteSpace: 'nowrap',
+                              }}
+                            >
+                              🎓 Intern
+                            </span>
+                          )}
+                        </div>
+                      )
+                    },
+                  },
+                  {
+                    key: 'campus',
+                    label: 'Campus',
+                    render: (e) => {
+                      const isVelocity = (e.campus || '').toLowerCase().includes('velocity')
+                      return (
+                        <span
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            padding: '2px 8px',
+                            borderRadius: '12px',
+                            fontSize: '11px',
+                            fontWeight: 600,
+                            background: isVelocity ? '#eff6ff' : '#f0fdf4',
+                            color: isVelocity ? '#1d4ed8' : '#15803d',
+                            border: `1px solid ${isVelocity ? '#bfdbfe' : '#bbf7d0'}`,
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {e.campus || 'Ignite Campus'}
+                        </span>
+                      )
+                    },
+                  },
                   {
                     key: 'salary',
                     label: 'Annual CTC',
@@ -1618,20 +1737,19 @@ function EmployeeDirectory({ route } = {}) {
                             const newRole = e.target.value
                             const rec = getRecommendedRoleConfig(newRole, newEmpForm.department)
                             const shouldSwitchDept = ['director', 'admin', 'hr'].includes(newRole) || !newEmpForm.department || (newRole === 'director' && newEmpForm.department !== 'Executive')
+                            const isInternRole = newRole === 'intern' || newRole.includes('intern')
                             setNewEmpForm({
                               ...newEmpForm,
                               role: newRole,
+                              employmentType: isInternRole ? 'intern' : (newEmpForm.employmentType === 'intern' ? 'full_time' : newEmpForm.employmentType),
                               department: shouldSwitchDept ? rec.department : newEmpForm.department,
                               designation: rec.designation,
                             })
                           }}
                         >
-                          <option value="employee">Employee</option>
-                          <option value="team_lead">Team Lead</option>
-                          <option value="manager">Manager</option>
-                          <option value="director">Managing Director / Executive Head</option>
-                          <option value="hr">HR Lead & Operations</option>
-                          <option value="admin">System Administrator</option>
+                          {allRoleOptions.map((r) => (
+                            <option key={r.id} value={r.id}>{r.name}</option>
+                          ))}
                         </select>
                       </Field>
                       <Field label="Department" required>
@@ -1649,6 +1767,36 @@ function EmployeeDirectory({ route } = {}) {
                         >
                           {DEPARTMENTS.map((dept) => (
                             <option key={dept} value={dept}>{dept}</option>
+                          ))}
+                        </select>
+                      </Field>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginTop: '12px' }}>
+                      <Field label="Assigned Campus" hint="Office campus for geofence & attendance" required>
+                        <select
+                          value={newEmpForm.campus || 'Ignite Campus'}
+                          onChange={(e) => setNewEmpForm({ ...newEmpForm, campus: e.target.value })}
+                        >
+                          {CAMPUSES.map((c) => (
+                            <option key={c} value={c}>{c}</option>
+                          ))}
+                        </select>
+                      </Field>
+                      <Field label="Employment Type" hint="Determines leave quota policy (Full-Time: 2 days, Intern: 1 day)" required>
+                        <select
+                          value={newEmpForm.employmentType || 'full_time'}
+                          onChange={(e) => {
+                            const et = e.target.value
+                            setNewEmpForm({
+                              ...newEmpForm,
+                              employmentType: et,
+                              role: et === 'intern' && newEmpForm.role === 'employee' ? 'intern' : newEmpForm.role,
+                            })
+                          }}
+                        >
+                          {EMPLOYMENT_TYPES.map((t) => (
+                            <option key={t.id} value={t.id}>{t.label}</option>
                           ))}
                         </select>
                       </Field>
@@ -2162,20 +2310,19 @@ function EmployeeDirectory({ route } = {}) {
                         const newRole = e.target.value
                         const rec = getRecommendedRoleConfig(newRole, editingEmployee.department)
                         const shouldSwitchDept = ['director', 'admin', 'hr'].includes(newRole) || !editingEmployee.department || (newRole === 'director' && editingEmployee.department !== 'Executive')
+                        const isInternRole = newRole === 'intern' || newRole.includes('intern')
                         setEditingEmployee({
                           ...editingEmployee,
                           role: newRole,
+                          employmentType: isInternRole ? 'intern' : (editingEmployee.employmentType === 'intern' ? 'full_time' : editingEmployee.employmentType),
                           department: shouldSwitchDept ? rec.department : editingEmployee.department,
                           designation: rec.designation,
                         })
                       }}
                     >
-                      <option value="employee">Employee</option>
-                      <option value="team_lead">Team Lead</option>
-                      <option value="manager">Manager</option>
-                      <option value="director">Managing Director / Executive Head</option>
-                      <option value="hr">HR Lead & Operations</option>
-                      <option value="admin">System Administrator</option>
+                      {allRoleOptions.map((r) => (
+                        <option key={r.id} value={r.id}>{r.name}</option>
+                      ))}
                     </select>
                   </Field>
 
@@ -2196,6 +2343,36 @@ function EmployeeDirectory({ route } = {}) {
                         <option key={dept} value={dept}>
                           {dept}
                         </option>
+                      ))}
+                    </select>
+                  </Field>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginTop: '12px' }}>
+                  <Field label="Assigned Campus" hint="Office campus for geofence & attendance" required>
+                    <select
+                      value={editingEmployee.campus || 'Ignite Campus'}
+                      onChange={(e) => setEditingEmployee({ ...editingEmployee, campus: e.target.value })}
+                    >
+                      {CAMPUSES.map((c) => (
+                        <option key={c} value={c}>{c}</option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field label="Employment Type" hint="Determines leave quota policy (Full-Time: 2 days, Intern: 1 day)" required>
+                    <select
+                      value={editingEmployee.employmentType || 'full_time'}
+                      onChange={(e) => {
+                        const et = e.target.value
+                        setEditingEmployee({
+                          ...editingEmployee,
+                          employmentType: et,
+                          role: et === 'intern' && editingEmployee.role === 'employee' ? 'intern' : editingEmployee.role,
+                        })
+                      }}
+                    >
+                      {EMPLOYMENT_TYPES.map((t) => (
+                        <option key={t.id} value={t.id}>{t.label}</option>
                       ))}
                     </select>
                   </Field>

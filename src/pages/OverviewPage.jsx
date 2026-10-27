@@ -27,7 +27,7 @@ import { findRoute } from '../app/routes'
 import { hrStore } from '../services/hrStore'
 import { Button, PageHeader, StatusBadge } from '../components/ui'
 import { getTimeOfDayGreeting } from '../utils/greeting'
-import { todayKey } from '../services/connectedStore'
+import { todayKey, currentPayrollMonth } from '../services/connectedStore'
 
 const metricIcons = {
   activeHeadcount: Users,
@@ -313,6 +313,137 @@ export function OverviewPage() {
 
   const isAdmin = user?.role === 'admin'
 
+  // Dynamic live Daily HR Priorities
+  const currentMonth = currentPayrollMonth()
+  const pendingDocReviews = (storeState.employees || []).filter((e) => {
+    if (e.onboardingStatus === 'verified') return false
+    if (e.onboardingStatus === 'submitted' || e.onboardingStatus === 'in_review') return true
+    if (e.onboardingDocs && typeof e.onboardingDocs === 'object') {
+      return Object.values(e.onboardingDocs).some(
+        (d) => d && typeof d === 'object' && (d.fileName || d.url) && d.status !== 'verified' && d.status !== 'rejected'
+      )
+    }
+    return false
+  })
+  const onboardingEmployees = (storeState.employees || []).filter(
+    (e) => e.status === 'onboarding' || e.status === 'invited'
+  )
+  const monthPayrollRecords = (storeState.payroll || []).filter(
+    (p) => (p.month || p.payPeriod || '').toLowerCase() === currentMonth.toLowerCase()
+  )
+  const urgentTasks = (storeState.tasks || []).filter(
+    (t) => t.status !== 'completed' && (t.priority === 'Urgent' || t.priority === 'High')
+  )
+
+  const dailyPriorities = []
+
+  // 1. Onboarding / Document Verification
+  if (pendingDocReviews.length > 0) {
+    const first = pendingDocReviews[0]
+    dailyPriorities.push({
+      id: 'p-docs',
+      icon: Users,
+      tone: 'coral',
+      title: `${pendingDocReviews.length} Document Verification${pendingDocReviews.length > 1 ? 's' : ''}`,
+      detail: `${first.name} (${first.department || 'Staff'}) submitted onboarding documents requiring HR review.`,
+      actionLabel: 'Review',
+      href: '#/hr/people',
+    })
+  } else if (onboardingEmployees.length > 0) {
+    const first = onboardingEmployees[0]
+    dailyPriorities.push({
+      id: 'p-onboarding',
+      icon: Users,
+      tone: 'teal',
+      title: 'Active Onboarding Candidates',
+      detail: `${onboardingEmployees.length} personnel in pipeline. Next: ${first.name} (${first.department || 'Staff'}).`,
+      actionLabel: 'Track',
+      href: '#/hr/people',
+    })
+  } else {
+    dailyPriorities.push({
+      id: 'p-team',
+      icon: Users,
+      tone: 'teal',
+      title: 'Workforce Onboarding',
+      detail: `All ${activeEmployees} team members active with verified compliance records.`,
+      actionLabel: 'Directory',
+      href: '#/hr/people',
+    })
+  }
+
+  // 2. Leave Approvals
+  if (pendingLeaves > 0) {
+    const firstLeave = storeState.leaves.find((l) => l.status === 'pending_hr' || l.status === 'pending_manager')
+    const applicant = firstLeave?.employeeName || 'Staff member'
+    dailyPriorities.push({
+      id: 'p-leaves',
+      icon: CalendarDays,
+      tone: 'coral',
+      title: `${pendingLeaves} Pending Leave Request${pendingLeaves > 1 ? 's' : ''}`,
+      detail: `${applicant} requested ${firstLeave?.leaveType ? (firstLeave.leaveType.toUpperCase() + ' leave') : 'leave'} awaiting approval.`,
+      actionLabel: 'Approve',
+      href: '#/hr/leave',
+    })
+  } else {
+    dailyPriorities.push({
+      id: 'p-leaves-clear',
+      icon: CalendarDays,
+      tone: 'teal',
+      title: 'Leave Approvals Current',
+      detail: `${onLeaveToday} staff on approved leave today. No leave approvals pending.`,
+      actionLabel: 'Calendar',
+      href: '#/hr/leave',
+    })
+  }
+
+  // 3. Current Payroll Calculation & Disbursement
+  if (monthPayrollRecords.length > 0) {
+    dailyPriorities.push({
+      id: 'p-payroll',
+      icon: WalletCards,
+      tone: 'teal',
+      title: `${currentMonth} Payroll Generated`,
+      detail: `${monthPayrollRecords.length} payslip(s) calculated with tax, PF, and net disbursements.`,
+      actionLabel: 'View Run',
+      href: '#/hr/payroll',
+    })
+  } else {
+    dailyPriorities.push({
+      id: 'p-payroll-pending',
+      icon: WalletCards,
+      tone: 'blue',
+      title: `${currentMonth} Payroll Cycle`,
+      detail: `Monthly salary calculation, PF, and statutory tax deductions ready to generate.`,
+      actionLabel: 'Generate',
+      href: '#/hr/payroll',
+    })
+  }
+
+  // 4. Urgent Tasks / Late Attendance Exceptions
+  if (urgentTasks.length > 0) {
+    const firstTask = urgentTasks[0]
+    dailyPriorities.push({
+      id: 'p-task',
+      icon: Zap,
+      tone: 'coral',
+      title: `Urgent Task: ${firstTask.title}`,
+      detail: `Assigned to ${firstTask.assigneeName || 'HR'} due ${firstTask.dueDate || 'today'} (${firstTask.category || 'Operations'}).`,
+      actionLabel: 'Open',
+      href: '#/hr/tasks',
+    })
+  } else if (lateAttendance > 0) {
+    dailyPriorities.push({
+      id: 'p-late',
+      icon: Clock3,
+      tone: 'gold',
+      title: `${lateAttendance} Shift Exceptions Today`,
+      detail: `Employees marked late outside the grace threshold. Review check-in alerts.`,
+      actionLabel: 'Attendance',
+      href: '#/hr/attendance',
+    })
+  }
+
   return (
     <>
       <PageHeader
@@ -410,44 +541,23 @@ export function OverviewPage() {
             <StatusBadge tone="neutral">Today</StatusBadge>
           </div>
           <div className="focus-list">
-            <div className="focus-row">
-              <div className="focus-icon teal">
-                <Users size={14} />
-              </div>
-              <div>
-                <strong>Employee Onboarding</strong>
-                <span>David Kim (DevOps) completed 2 of 4 onboarding milestones.</span>
-              </div>
-              <button type="button" onClick={() => (window.location.hash = '#/hr/people')}>
-                Review
-              </button>
-            </div>
-
-            <div className="focus-row">
-              <div className="focus-icon coral">
-                <CalendarDays size={14} />
-              </div>
-              <div>
-                <strong>Pending Leave Reviews</strong>
-                <span>{pendingLeaves} employee leave requests awaiting final HR approval.</span>
-              </div>
-              <button type="button" onClick={() => (window.location.hash = '#/hr/leave')}>
-                Approve
-              </button>
-            </div>
-
-            <div className="focus-row">
-              <div className="focus-icon blue">
-                <WalletCards size={14} />
-              </div>
-              <div>
-                <strong>September Payroll Calculation</strong>
-                <span>Monthly salary breakup, PF & tax calculations generated.</span>
-              </div>
-              <button type="button" onClick={() => (window.location.hash = '#/hr/payroll')}>
-                Generate
-              </button>
-            </div>
+            {dailyPriorities.slice(0, 4).map((item) => {
+              const IconComp = item.icon
+              return (
+                <div key={item.id} className="focus-row">
+                  <div className={`focus-icon ${item.tone}`}>
+                    <IconComp size={14} />
+                  </div>
+                  <div>
+                    <strong>{item.title}</strong>
+                    <span>{item.detail}</span>
+                  </div>
+                  <button type="button" onClick={() => (window.location.hash = item.href)}>
+                    {item.actionLabel}
+                  </button>
+                </div>
+              )
+            })}
           </div>
         </div>
 

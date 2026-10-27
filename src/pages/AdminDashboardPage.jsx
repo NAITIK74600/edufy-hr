@@ -59,6 +59,7 @@ import { apiClient } from '../services/apiClient'
 import { formatINR } from '../utils/currency'
 import { generateNextEmployeeCode, generateAutoPassword, formatCredentialsShareText, copyTextToClipboard } from '../utils/credentialsHelper'
 import { getRoleBadgeLabel } from '../utils/greeting'
+import { HolidayCalendarShowcase } from '../components/HolidayCalendarShowcase'
 
 function AdminModalPortal({ children }) {
   if (typeof document === 'undefined') return null
@@ -5174,58 +5175,8 @@ function AdminSettingsModule() {
         </div>
       </section>
 
-      {/* HOLIDAY CALENDAR EDITOR */}
-      <section className="panel">
-        <div className="panel-heading">
-          <div>
-            <p className="section-kicker">Schedule</p>
-            <h2>Holiday Calendar (2026)</h2>
-          </div>
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '10px', marginTop: '14px', marginBottom: '16px' }}>
-          {holidays.map((h, i) => (
-            <div key={h.id || h._id || h.name || i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', background: '#faf9f5', borderRadius: '6px', border: '1px solid var(--line)', fontSize: '11px' }}>
-              <div>
-                <strong>{h.name || h.title}</strong>
-                <div style={{ fontSize: '10px', color: 'var(--teal)', marginTop: '2px' }}>{h.date}</div>
-              </div>
-              <button
-                type="button"
-                className="icon-button"
-                onClick={() => handleDeleteHoliday(h)}
-                title="Delete holiday"
-                style={{ color: '#cb3a31' }}
-              >
-                <Trash2 size={12} />
-              </button>
-            </div>
-          ))}
-        </div>
-
-        <form onSubmit={handleAddHoliday} style={{ display: 'flex', gap: '8px', maxWidth: '500px' }}>
-          <input
-            type="text"
-            className="text-input"
-            placeholder="Holiday Name (e.g. Diwali)"
-            value={holidayTitle}
-            onChange={(e) => setHolidayTitle(e.target.value)}
-            style={{ flex: 1, padding: '6px 10px', fontSize: '12px' }}
-            required
-          />
-          <input
-            type="date"
-            className="text-input"
-            value={holidayDate}
-            onChange={(e) => setHolidayDate(e.target.value)}
-            style={{ width: '150px', padding: '6px 8px', fontSize: '12px' }}
-            required
-          />
-          <Button type="submit">
-            <Plus size={13} /> Add Holiday
-          </Button>
-        </form>
-      </section>
+      {/* HOLIDAY CALENDAR SHOWCASE & EDITOR */}
+      <HolidayCalendarShowcase canManage={true} user={user} />
     </div>
   )
 }

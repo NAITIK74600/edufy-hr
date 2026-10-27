@@ -92,7 +92,7 @@ A role represents an authorization level for system operations:
 
 ### 4.2 Attendance & Geofencing
 - **Punch In/Out**: Enforces real-time timestamp recording, shift validation, and late-arrival thresholds.
-- **Geofence & IP**: Punch routes validate client IP using server-derived IP headers, office Wi-Fi SSIDs, and GPS coordinates against location radii.
+- **Geofence & IP**: Punch routes validate client IP using server-derived IP headers, office Wi-Fi SSIDs, and GPS coordinates against location radiius.
 - **Presence Heartbeat**: Periodic `/presence` ping tracks on-campus connectivity and triggers automated punch-out upon sustained disconnection.
 - **Corrections**: Manual attendance edits require `ATTENDANCE_WRITE` permission and log change events in the audit trail.
 

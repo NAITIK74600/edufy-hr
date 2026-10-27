@@ -1135,9 +1135,25 @@ export function createMemoryEmployeeRepository() {
           `${e.name} ${e.email} ${e.employeeId} ${e.department} ${e.designation}`.toLowerCase().includes(q)
         )
       }
-      for (const field of ['department', 'designation', 'status', 'managerId']) {
+      for (const field of ['department', 'designation', 'status', 'managerId', 'campus', 'role']) {
         if (filters[field]) {
           filtered = filtered.filter((e) => e[field] === filters[field])
+        }
+      }
+      if (filters.employmentType) {
+        const type = String(filters.employmentType).toLowerCase()
+        if (type === 'intern') {
+          filtered = filtered.filter((e) =>
+            String(e.employmentType || '').toLowerCase() === 'intern' ||
+            String(e.role || '').toLowerCase().includes('intern') ||
+            String(e.designation || '').toLowerCase().includes('intern')
+          )
+        } else if (type === 'full_time') {
+          filtered = filtered.filter((e) =>
+            String(e.employmentType || '').toLowerCase() !== 'intern' &&
+            !String(e.role || '').toLowerCase().includes('intern') &&
+            !String(e.designation || '').toLowerCase().includes('intern')
+          )
         }
       }
       const safePage = Math.max(1, Number(page) || 1)
@@ -1161,6 +1177,7 @@ export function createMemoryEmployeeRepository() {
       const managerRoles = [
         'admin', 'hr', 'manager', 'director', 'team_lead', 'team_leader',
         'vertical_head', 'managing_director', 'co_founder', 'revenue_growth_manager',
+        'senior_manager', 'general_manager', 'assistant_general_manager', 'head_of_sales', 'head_of_marketing',
       ]
       return (
         records.find(

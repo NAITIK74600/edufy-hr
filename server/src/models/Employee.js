@@ -40,6 +40,7 @@ const employeeSchema = new mongoose.Schema({
   department: { type: String, trim: true, maxlength: 100 },
   designation: { type: String, trim: true, maxlength: 120 },
   location: { type: String, trim: true, maxlength: 120 },
+  campus: { type: String, trim: true, maxlength: 120, default: 'Ignite Campus' },
   phone: { type: String, trim: true, maxlength: 40 },
   salary: { type: Number, min: 0, default: 0 },
   salaryStructure: {

@@ -6,9 +6,19 @@ export const DEFAULT_LOCATIONS = [
     name: 'IGNITE CAMPUS',
     lat: 12.9101,
     lng: 77.6517,
-    radiusMeters: 30,
+    radiusMeters: 100,
     city: 'Bengaluru',
     address: 'Ignite Campus, Bengaluru, Karnataka',
+    allowedIPs: ['127.0.0.1', '::1', '::ffff:127.0.0.1', '10.0.0.0/8', '192.168.1.0/24'],
+  },
+  {
+    id: 'loc-velocity',
+    name: 'VELOCITY HUB',
+    lat: 12.9279,
+    lng: 77.6833,
+    radiusMeters: 100,
+    city: 'Bengaluru',
+    address: 'Velocity Hub, Outer Ring Road, Bengaluru, Karnataka',
     allowedIPs: ['127.0.0.1', '::1', '::ffff:127.0.0.1', '10.0.0.0/8', '192.168.1.0/24'],
   },
   {
@@ -221,6 +231,7 @@ export function createAttendanceService({ repository, companySettings = {} }) {
   let wifiNetworks = companySettings.wifiNetworks || []
   let officeNetworkIPs = companySettings.officeNetworkIPs || []
   let attendanceRules = { ...DEFAULT_ATTENDANCE_RULES, ...(companySettings.attendanceRules || {}) }
+  let holidayCalendarImages = companySettings.holidayCalendarImages || []
   let leavePolicies = companySettings.leavePolicies || {
     casualQuota: 12,
     sickQuota: 10,
@@ -277,13 +288,12 @@ export function createAttendanceService({ repository, companySettings = {} }) {
     const maxAllowedRadius = Number(attendanceRules.maxGeofenceRadiusMeters) || Number(nearestLocation?.radiusMeters) || 50
     const hasGps = hasValidCoords && minDistance !== Infinity
     const numAccuracy = typeof accuracy === 'number' && Number.isFinite(accuracy) ? accuracy : null
-    const accurateGps = numAccuracy !== null ? (numAccuracy >= 0 && numAccuracy <= Math.max(maxAllowedRadius, 250)) : true
+    const accurateGps = numAccuracy !== null ? (numAccuracy >= 0 && numAccuracy <= 250) : true
+    const gpsConfidenceTolerance = Math.min(Math.max(0, (numAccuracy || 0) * 0.35), 35)
     const isGpsVerified = Boolean(
       hasGps &&
       accurateGps &&
-      (maxAllowedRadius <= 50
-        ? (minDistance + (numAccuracy || 0)) <= maxAllowedRadius
-        : minDistance <= maxAllowedRadius)
+      (minDistance <= maxAllowedRadius || (minDistance - gpsConfidenceTolerance) <= maxAllowedRadius)
     )
 
     // Network verification: Standard browser APIs cannot reliably access router SSID or BSSID.
@@ -399,6 +409,7 @@ export function createAttendanceService({ repository, companySettings = {} }) {
         wifiNetworks: wifiNetworks.map((n) => ({ ssid: n.ssid, bssid: n.bssid, securityType: n.securityType, branchName: n.branchName })),
         attendanceRules,
         leavePolicies,
+        holidayCalendarImages,
       }
     },
 
@@ -409,6 +420,7 @@ export function createAttendanceService({ repository, companySettings = {} }) {
       if (newConfig.wifiNetworks !== undefined) wifiNetworks = newConfig.wifiNetworks
       if (newConfig.attendanceRules !== undefined) attendanceRules = { ...attendanceRules, ...newConfig.attendanceRules }
       if (newConfig.leavePolicies !== undefined) leavePolicies = { ...leavePolicies, ...newConfig.leavePolicies }
+      if (newConfig.holidayCalendarImages !== undefined) holidayCalendarImages = newConfig.holidayCalendarImages
       return this.getConfig()
     },
 

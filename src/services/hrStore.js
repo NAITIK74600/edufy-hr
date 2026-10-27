@@ -405,6 +405,249 @@ export const INITIAL_ROLES = [
       'settings.hr.read',
     ],
   },
+  {
+    id: 'general_manager',
+    name: 'General Manager',
+    description: 'Senior executive overseeing cross-functional business operations, departmental budgets, strategic milestones, and organizational leadership.',
+    badge: 'Leadership',
+    isSystem: true,
+    permissions: [
+      'dashboard.read',
+      'hr.dashboard.read',
+      'employees.read',
+      'attendance.read',
+      'attendance.team.read',
+      'leave.self.read',
+      'leave.self.write',
+      'leave.team.read',
+      'leave.team.approve',
+      'payroll.self.read',
+      'performance.read',
+      'reports.read',
+      'tasks.read',
+      'training.read',
+      'documents.read',
+      'helpdesk.read',
+      'announcements.read',
+      'holidays.read',
+      'departments.read',
+      'settings.hr.read',
+    ],
+  },
+  {
+    id: 'assistant_general_manager',
+    name: 'Assistant General Manager',
+    description: 'Senior operational leader assisting the General Manager in executing organizational initiatives, department oversight, and resource planning.',
+    badge: 'Management',
+    isSystem: true,
+    permissions: [
+      'dashboard.read',
+      'employees.read',
+      'attendance.read',
+      'attendance.team.read',
+      'leave.self.read',
+      'leave.self.write',
+      'leave.team.read',
+      'leave.team.approve',
+      'payroll.self.read',
+      'performance.read',
+      'reports.read',
+      'tasks.read',
+      'training.read',
+      'documents.read',
+      'helpdesk.read',
+      'announcements.read',
+      'holidays.read',
+      'departments.read',
+    ],
+  },
+  {
+    id: 'senior_manager',
+    name: 'Senior Manager',
+    description: 'Senior departmental leader directing multiple squad leads, cross-team programs, performance appraisals, and strategic initiatives.',
+    badge: 'Management',
+    isSystem: true,
+    permissions: [
+      'dashboard.read',
+      'employees.read',
+      'attendance.read',
+      'attendance.team.read',
+      'leave.self.read',
+      'leave.self.write',
+      'leave.team.read',
+      'leave.team.approve',
+      'payroll.self.read',
+      'performance.read',
+      'reports.read',
+      'tasks.read',
+      'training.read',
+      'documents.read',
+      'helpdesk.read',
+      'announcements.read',
+      'holidays.read',
+      'departments.read',
+    ],
+  },
+  {
+    id: 'head_of_sales',
+    name: 'Head of Sales',
+    description: 'Commercial leadership directing enterprise sales targets, client expansion channels, revenue pipeline velocity, and sales team execution.',
+    badge: 'Sales & Growth',
+    isSystem: true,
+    permissions: [
+      'dashboard.read',
+      'employees.read',
+      'attendance.read',
+      'attendance.team.read',
+      'leave.self.read',
+      'leave.self.write',
+      'leave.team.read',
+      'leave.team.approve',
+      'payroll.self.read',
+      'performance.read',
+      'reports.read',
+      'tasks.read',
+      'training.read',
+      'documents.read',
+      'helpdesk.read',
+      'announcements.read',
+      'holidays.read',
+      'departments.read',
+    ],
+  },
+  {
+    id: 'head_of_marketing',
+    name: 'Head of Marketing',
+    description: 'Marketing leadership steering brand narrative, performance campaigns, multi-channel growth, PR, and demand generation strategy.',
+    badge: 'Marketing',
+    isSystem: true,
+    permissions: [
+      'dashboard.read',
+      'employees.read',
+      'attendance.read',
+      'attendance.team.read',
+      'leave.self.read',
+      'leave.self.write',
+      'leave.team.read',
+      'leave.team.approve',
+      'payroll.self.read',
+      'performance.read',
+      'reports.read',
+      'tasks.read',
+      'training.read',
+      'documents.read',
+      'helpdesk.read',
+      'announcements.read',
+      'holidays.read',
+      'departments.read',
+    ],
+  },
+  {
+    id: 'digital_marketing_executive',
+    name: 'Digital Marketing Executive',
+    description: 'Digital marketing specialist managing search engine optimization, paid advertising campaigns, content marketing, and conversion funnels.',
+    badge: 'Marketing',
+    isSystem: true,
+    permissions: [
+      'dashboard.read',
+      'leave.self.read',
+      'leave.self.write',
+      'attendance.read',
+      'attendance.write',
+      'payroll.self.read',
+      'tasks.read',
+      'training.read',
+      'documents.read',
+      'helpdesk.read',
+      'announcements.read',
+      'holidays.read',
+    ],
+  },
+  {
+    id: 'digital_marketing_intern',
+    name: 'Digital Marketing Intern',
+    description: 'Digital marketing trainee assisting with creative asset preparation, social media scheduling, ad copy research, and analytics reporting.',
+    badge: 'Intern',
+    isSystem: true,
+    permissions: [
+      'dashboard.read',
+      'leave.self.read',
+      'leave.self.write',
+      'attendance.read',
+      'attendance.write',
+      'payroll.self.read',
+      'tasks.read',
+      'training.read',
+      'documents.read',
+      'helpdesk.read',
+      'announcements.read',
+      'holidays.read',
+    ],
+  },
+  {
+    id: 'hr_intern',
+    name: 'HR Intern',
+    description: 'People operations trainee assisting with candidate sourcing, employee onboarding documentation, attendance tracking, and culture initiatives.',
+    badge: 'Intern',
+    isSystem: true,
+    permissions: [
+      'dashboard.read',
+      'employees.read',
+      'leave.self.read',
+      'leave.self.write',
+      'attendance.read',
+      'attendance.write',
+      'payroll.self.read',
+      'tasks.read',
+      'training.read',
+      'documents.read',
+      'helpdesk.read',
+      'announcements.read',
+      'holidays.read',
+    ],
+  },
+  {
+    id: 'saas_intern',
+    name: 'SaaS Intern',
+    description: 'SaaS product and operations trainee assisting with cloud platform user flows, customer telemetry, feature testing, and client onboarding support.',
+    badge: 'Intern',
+    isSystem: true,
+    permissions: [
+      'dashboard.read',
+      'leave.self.read',
+      'leave.self.write',
+      'attendance.read',
+      'attendance.write',
+      'payroll.self.read',
+      'tasks.read',
+      'training.read',
+      'documents.read',
+      'helpdesk.read',
+      'announcements.read',
+      'holidays.read',
+    ],
+  },
+  {
+    id: 'intern',
+    name: 'Intern',
+    description: 'Trainee or intern undergoing organizational learning, with standard employee self-service and intern leave entitlement (1 paid day per month).',
+    badge: 'Intern',
+    isSystem: true,
+    permissions: [
+      'dashboard.read',
+      'leave.self.read',
+      'leave.self.write',
+      'attendance.read',
+      'attendance.write',
+      'payroll.self.read',
+      'tasks.read',
+      'training.read',
+      'documents.read',
+      'helpdesk.read',
+      'announcements.read',
+      'holidays.read',
+    ],
+  },
 ];
 
 export const INITIAL_DEPARTMENTS = [
@@ -782,6 +1025,121 @@ export const STANDARD_ROLE_CONFIG = {
     defaultManagerId: null,
     defaultManagerName: 'Head of Business Operations',
   },
+  general_manager: {
+    label: 'General Manager',
+    defaultDepartment: 'Leadership',
+    defaultDesignation: 'General Manager',
+    designations: [
+      'General Manager',
+      'Executive General Manager',
+      'Operations General Manager',
+    ],
+    defaultManagerId: null,
+    defaultManagerName: 'Managing Director',
+  },
+  assistant_general_manager: {
+    label: 'Assistant General Manager',
+    defaultDepartment: 'Leadership',
+    defaultDesignation: 'Assistant General Manager',
+    designations: [
+      'Assistant General Manager',
+      'AGM - Operations',
+      'AGM - Business Growth',
+    ],
+    defaultManagerId: null,
+    defaultManagerName: 'General Manager',
+  },
+  senior_manager: {
+    label: 'Senior Manager',
+    defaultDepartment: 'Operations',
+    defaultDesignation: 'Senior Manager',
+    designations: [
+      'Senior Manager',
+      'Senior Operations Manager',
+      'Senior Project Manager',
+      'Senior Department Manager',
+    ],
+    defaultManagerId: null,
+    defaultManagerName: 'General Manager',
+  },
+  head_of_sales: {
+    label: 'Head of Sales',
+    defaultDepartment: 'Sales',
+    defaultDesignation: 'Head of Sales',
+    designations: [
+      'Head of Sales',
+      'Vice President of Sales',
+      'Director of Sales',
+      'Sales Lead',
+    ],
+    defaultManagerId: null,
+    defaultManagerName: 'Managing Director',
+  },
+  head_of_marketing: {
+    label: 'Head of Marketing',
+    defaultDepartment: 'Marketing',
+    defaultDesignation: 'Head of Marketing',
+    designations: [
+      'Head of Marketing',
+      'Vice President of Marketing',
+      'Director of Marketing & Brand',
+      'Chief Marketing Officer',
+    ],
+    defaultManagerId: null,
+    defaultManagerName: 'Managing Director',
+  },
+  digital_marketing_executive: {
+    label: 'Digital Marketing Executive',
+    defaultDepartment: 'Marketing',
+    defaultDesignation: 'Digital Marketing Executive',
+    designations: [
+      'Digital Marketing Executive',
+      'Senior Digital Marketing Executive',
+      'SEO & Performance Marketing Executive',
+      'Social Media & Growth Executive',
+    ],
+    defaultManagerId: null,
+    defaultManagerName: 'Head of Marketing',
+  },
+  digital_marketing_intern: {
+    label: 'Digital Marketing Intern',
+    defaultDepartment: 'Marketing',
+    defaultDesignation: 'Digital Marketing Intern',
+    designations: [
+      'Digital Marketing Intern',
+      'Social Media Marketing Intern',
+      'Content & SEO Intern',
+      'Growth Marketing Intern',
+    ],
+    defaultManagerId: null,
+    defaultManagerName: 'Digital Marketing Executive',
+  },
+  hr_intern: {
+    label: 'HR Intern',
+    defaultDepartment: 'Human Resources (HR)',
+    defaultDesignation: 'HR Intern',
+    designations: [
+      'HR Intern',
+      'Talent Acquisition Intern',
+      'People Operations Intern',
+      'HR Operations Intern',
+    ],
+    defaultManagerId: null,
+    defaultManagerName: 'HR Executive',
+  },
+  saas_intern: {
+    label: 'SaaS Intern',
+    defaultDepartment: 'Technology',
+    defaultDesignation: 'SaaS Intern',
+    designations: [
+      'SaaS Intern',
+      'SaaS Product Operations Intern',
+      'Cloud Platform Intern',
+      'SaaS Customer Onboarding Intern',
+    ],
+    defaultManagerId: null,
+    defaultManagerName: 'Software Development Engineer',
+  },
   employee: {
     label: 'Associate / Specialist',
     defaultDepartment: 'Operations',
@@ -790,10 +1148,31 @@ export const STANDARD_ROLE_CONFIG = {
     defaultManagerId: null,
     defaultManagerName: 'Team Leader',
   },
+  intern: {
+    label: 'Intern / Trainee',
+    defaultDepartment: 'Operations',
+    defaultDesignation: 'Intern',
+    designations: [
+      'Intern',
+      'Graduate Trainee',
+      'Summer Intern',
+      'Operations Intern',
+      'HR Intern',
+      'Digital Marketing Intern',
+      'SaaS Intern',
+      'SDE Intern',
+      'Business Development Intern',
+    ],
+    defaultManagerId: null,
+    defaultManagerName: 'Team Leader',
+  },
 };
 
 export const DEPARTMENT_DESIGNATIONS = {
   'leadership': [
+    'General Manager',
+    'Assistant General Manager',
+    'Senior Manager',
     'Executive Director',
     'Vice President',
     'Chief Operating Officer',
@@ -808,8 +1187,11 @@ export const DEPARTMENT_DESIGNATIONS = {
     'Talent Acquisition Lead',
     'HR Generalist',
     'HR Manager',
+    'HR Intern',
   ],
   'sales': [
+    'Head of Sales',
+    'Senior Manager - Sales',
     'Sales Executive',
     'Senior Sales Executive',
     'Account Executive',
@@ -818,6 +1200,9 @@ export const DEPARTMENT_DESIGNATIONS = {
     'Business Development Executive',
   ],
   'marketing': [
+    'Head of Marketing',
+    'Digital Marketing Executive',
+    'Digital Marketing Intern',
     'Marketing Executive',
     'Digital Marketing Specialist',
     'Performance Marketer',
@@ -833,6 +1218,7 @@ export const DEPARTMENT_DESIGNATIONS = {
     'Strategy & Operations Associate',
   ],
   'operations': [
+    'Senior Manager',
     'Operations Executive',
     'Senior Operations Executive',
     'Operations Specialist',
@@ -856,6 +1242,7 @@ export const DEPARTMENT_DESIGNATIONS = {
     'Tech Lead',
     'DevOps Engineer',
     'QA Specialist',
+    'SaaS Intern',
   ],
   'managing director': [
     'Managing Director',
@@ -1949,7 +2336,9 @@ const INITIAL_COMPANY_SETTINGS = {
   companyName: 'Edufyi Inc.',
   hqAddress: '100 Technology Plaza, Suite 400, San Francisco, CA 94105',
   locations: [
-    { id: 'loc-1', name: 'HQ - San Francisco', city: 'San Francisco', lat: 37.789172, lng: -122.401449, radiusMeters: 200, isDefault: true },
+    { id: 'loc-ignite', name: 'Ignite Campus', city: 'Bengaluru', lat: 12.9101, lng: 77.6517, radiusMeters: 100, isDefault: true },
+    { id: 'loc-velocity', name: 'Velocity Hub', city: 'Bengaluru', lat: 12.9279, lng: 77.6833, radiusMeters: 100, isDefault: false },
+    { id: 'loc-1', name: 'HQ - San Francisco', city: 'San Francisco', lat: 37.789172, lng: -122.401449, radiusMeters: 200, isDefault: false },
     { id: 'loc-2', name: 'Tech Hub - Austin', city: 'Austin', lat: 30.267153, lng: -97.743061, radiusMeters: 200, isDefault: false },
     { id: 'loc-3', name: 'Global Center - London', city: 'London', lat: 51.507351, lng: -0.127758, radiusMeters: 200, isDefault: false },
   ],
@@ -1997,6 +2386,7 @@ const INITIAL_COMPANY_SETTINGS = {
     aiPolicyGrounding: true,
     lastBackupDate: '2026-09-29 23:45 UTC',
   },
+  holidayCalendarImages: [],
 }
 
 const INITIAL_ATTENDANCE = [
@@ -2751,6 +3141,13 @@ function loadStore() {
   }
 
   const fallbackNotifs = getPersistedNotifications()
+  let cachedCalendarImages = []
+  if (typeof window !== 'undefined' && window.localStorage) {
+    try {
+      const rawCal = window.localStorage.getItem('edufyi_holiday_calendar_images_v1')
+      if (rawCal) cachedCalendarImages = JSON.parse(rawCal)
+    } catch (_) {}
+  }
 
   // In browser, initialize clean zero-mock state so UI cleanly awaits MongoDB Atlas data without any glitch or flash
   if (typeof window !== 'undefined') {
@@ -2759,7 +3156,8 @@ function loadStore() {
       users: [],
       employees: [],
       teams: INITIAL_TEAMS,
-      companySettings: INITIAL_COMPANY_SETTINGS,
+      companySettings: { ...INITIAL_COMPANY_SETTINGS, holidayCalendarImages: cachedCalendarImages },
+      holidayCalendarImages: cachedCalendarImages,
       attendance: [],
       leaves: [],
       tasks: [],
@@ -3532,6 +3930,59 @@ const localStore = {
     notifyListeners()
   },
 
+  // Holiday Calendar Picture Showcase Management
+  getHolidayCalendarImages() {
+    return storeState.companySettings?.holidayCalendarImages || storeState.holidayCalendarImages || []
+  },
+  uploadHolidayCalendarImages(images, actor = 'Admin') {
+    const list = Array.isArray(images) ? images : [images]
+    const prepared = list.filter(Boolean).map((img, i) => ({
+      id: img.id || `cal-img-${Date.now()}-${i}-${Math.random().toString(36).slice(2, 7)}`,
+      url: img.url || img.dataUrl || img.src || '',
+      title: img.title || img.name || `Holiday Calendar Page ${i + 1}`,
+      uploadedAt: img.uploadedAt || new Date().toISOString().split('T')[0],
+      uploadedBy: img.uploadedBy || actor || 'Admin',
+    }))
+    const current = storeState.companySettings?.holidayCalendarImages || storeState.holidayCalendarImages || []
+    const updated = [...current, ...prepared]
+    storeState.holidayCalendarImages = updated
+    storeState.companySettings = {
+      ...(storeState.companySettings || {}),
+      holidayCalendarImages: updated,
+    }
+    storeState = { ...storeState }
+    if (typeof window !== 'undefined' && window.localStorage) {
+      try {
+        window.localStorage.setItem('edufyi_holiday_calendar_images_v1', JSON.stringify(updated))
+      } catch (err) {
+        console.warn('Could not cache holiday calendar images', err)
+      }
+    }
+    this.addAuditLog(actor, 'HOLIDAY_CALENDAR_IMAGE_UPLOAD', `Uploaded ${prepared.length} holiday calendar image(s)`)
+    notifyListeners()
+    return updated
+  },
+  deleteHolidayCalendarImage(imageId, actor = 'Admin') {
+    const current = storeState.companySettings?.holidayCalendarImages || storeState.holidayCalendarImages || []
+    const updated = current.filter((img) => img.id !== imageId && img._id !== imageId)
+    storeState.holidayCalendarImages = updated
+    storeState.companySettings = {
+      ...(storeState.companySettings || {}),
+      holidayCalendarImages: updated,
+    }
+    storeState = { ...storeState }
+    if (typeof window !== 'undefined' && window.localStorage) {
+      try {
+        window.localStorage.setItem('edufyi_holiday_calendar_images_v1', JSON.stringify(updated))
+      } catch (err) {
+        console.warn('Could not update holiday calendar images cache', err)
+      }
+    }
+    this.addAuditLog(actor, 'HOLIDAY_CALENDAR_IMAGE_DELETE', `Removed holiday calendar image ${imageId}`)
+    notifyListeners()
+    return updated
+  },
+
   // Company Documents Management
   addDocument(docData) {
     const newDoc = {
@@ -3564,7 +4015,9 @@ const localStore = {
       id: `loc-${Date.now()}`,
       name: branch.name,
       city: branch.city,
-      radiusMeters: branch.radiusMeters || 250,
+      lat: branch.lat !== undefined && branch.lat !== null && branch.lat !== '' ? Number(branch.lat) : 0,
+      lng: branch.lng !== undefined && branch.lng !== null && branch.lng !== '' ? Number(branch.lng) : 0,
+      radiusMeters: Number(branch.radiusMeters) || 100,
       isDefault: false,
     }
     storeState.companySettings.locations = [...(storeState.companySettings.locations || []), newLoc]
@@ -3734,6 +4187,8 @@ const localStore = {
       phone: empData.phone || '+91 98765 43210',
       department: empData.department || 'Engineering',
       designation: empData.designation || 'Specialist',
+      campus: empData.campus || 'Ignite Campus',
+      location: empData.location || empData.campus || 'Ignite Campus',
       role: empData.role || 'employee',
       status: empData.status || 'active',
       joiningDate: empData.joiningDate || new Date().toISOString().split('T')[0],
@@ -4357,7 +4812,7 @@ const localStore = {
 
     const maxAllowedRadius = Number(settings?.attendanceRules?.maxGeofenceRadiusMeters) || Number(nearestLocation?.radiusMeters) || 50
     const hasGps = minDistance !== Infinity
-    const isGpsVerified = hasGps && minDistance <= maxAllowedRadius
+    const isGpsVerified = hasGps && (minDistance <= maxAllowedRadius || (minDistance - 30) <= maxAllowedRadius)
 
     const isWifiVerified = Boolean(isNetworkVerified || isBssidVerified)
     const isWifiTrusted = Boolean(isNetworkVerified || isBssidVerified)

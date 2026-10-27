@@ -17,5 +17,12 @@ const settingsSchema = new mongoose.Schema({
     requireHrApproval: { type: Boolean, default: true },
     approvalWorkflow: { type: String, default: 'manager_hr' },
   },
-}, { timestamps: true, strict: true })
+  holidayCalendarImages: [{
+    id: String,
+    url: String,
+    title: String,
+    uploadedAt: String,
+    uploadedBy: String,
+  }],
+}, { timestamps: true, strict: false })
 export const AttendanceSettings = mongoose.models.AttendanceSettings ?? mongoose.model('AttendanceSettings', settingsSchema)

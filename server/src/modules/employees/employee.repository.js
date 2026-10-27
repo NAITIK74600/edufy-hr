@@ -27,12 +27,28 @@ function buildFilter(filters = {}) {
     const search = new RegExp(escaped, 'i')
     query.$or = [{ name: search }, { email: search }, { employeeId: search }]
   }
-  for (const field of ['department', 'designation', 'status', 'managerId']) {
+  for (const field of ['department', 'designation', 'status', 'managerId', 'campus', 'role', 'employmentType']) {
     if (typeof filters[field] === 'string' && filters[field].trim()) {
       if (field === 'managerId') {
         const trimmed = filters[field].trim()
         if (mongoose.isValidObjectId(trimmed)) {
           query[field] = trimmed
+        }
+      } else if (field === 'employmentType') {
+        const type = filters[field].trim().toLowerCase()
+        if (type === 'intern') {
+          query.$or = [
+            { employmentType: 'intern' },
+            { role: 'intern' },
+            { role: { $regex: /intern/i } },
+            { designation: { $regex: /intern/i } },
+          ]
+        } else if (type === 'full_time') {
+          query.employmentType = { $ne: 'intern' }
+          query.role = { $not: /intern/i }
+          query.designation = { $not: /intern/i }
+        } else {
+          query[field] = filters[field].trim()
         }
       } else {
         query[field] = filters[field].trim()
@@ -95,6 +111,7 @@ export function createMongoEmployeeRepository() {
       const managerRoles = [
         'admin', 'hr', 'manager', 'director', 'team_lead', 'team_leader',
         'vertical_head', 'managing_director', 'co_founder', 'revenue_growth_manager',
+        'senior_manager', 'general_manager', 'assistant_general_manager', 'head_of_sales', 'head_of_marketing',
       ]
       const query = mongoose.isValidObjectId(id)
         ? { _id: id }
