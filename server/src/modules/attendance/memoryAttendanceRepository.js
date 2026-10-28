@@ -136,6 +136,29 @@ export function createMemoryAttendanceRepository(seedRecords = []) {
         return true
       })
     },
+    async updateFields(id, fields = {}) {
+      const cleanId = String(id || '').trim()
+      const rec = records.find((r) =>
+        (cleanId && (r.id === cleanId || String(r._id) === cleanId)) ||
+        (fields.employeeId && fields.date && r.employeeId?.toUpperCase() === String(fields.employeeId).toUpperCase() && r.date === fields.date)
+      )
+      if (!rec) return null
+      Object.assign(rec, fields, { updatedAt: new Date() })
+      if (fields.status === 'present') {
+        rec.isLate = false
+        rec.isHalfDay = false
+        rec.lateCount = 0
+        rec.isEarlyLogout = false
+        rec.isLop = false
+        if (typeof rec.totalHours === 'string' && rec.totalHours.includes('Late')) {
+          rec.totalHours = rec.checkOut ? '8.0 hrs' : 'Active (Live)'
+        }
+        if (typeof rec.notes === 'string' && rec.notes.includes('Late')) {
+          rec.notes = 'On-time verification (General Shift)'
+        }
+      }
+      return { ...rec }
+    },
     async save(record) {
       const existingIdx = records.findIndex(
         (r) => (record.id && r.id === record.id) || (r.employeeId?.toUpperCase() === record.employeeId?.toUpperCase() && r.date === record.date)

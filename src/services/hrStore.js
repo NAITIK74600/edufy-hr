@@ -4997,13 +4997,23 @@ const localStore = {
     const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })
 
     // Check shift start time for late calculation
-    const isLate = (() => {
+    const resolvedShift = (() => {
       const rules = storeState.companySettings?.attendanceRules || {}
-      const gracePeriod = Number(rules.gracePeriodMinutes ?? 15)
-      const currentMins = now.getHours() * 60 + now.getMinutes()
-      if (shiftCode === 'morning') return currentMins > 8 * 60 + 15
-      if (shiftCode === 'evening') return currentMins > 13 * 60 + 15
-      if (shiftCode === 'night') return currentMins > 22 * 60 + 15
+      let start = null
+      let end = null
+      if (shift && typeof shift === 'string') {
+        const m = shift.match(/\((.+?)\s*[-–—]\s*(.+?)\)/)
+        if (m) {
+          start = m[1].trim()
+          end = m[2].trim()
+        }
+      }
+      const isGeneral = !shiftCode || shiftCode === 'general' || shiftCode === 'default' || !shift || shift.startsWith('General')
+      const ruleStart = rules.workStartTime
+      const ruleEnd = rules.workEndTime
+      const hasConfigured = Boolean(ruleStart && ruleEnd && (ruleStart !== '09:30' || ruleEnd !== '18:30'))
+      let s = (isGeneral && hasConfigured) ? ruleStart : (start || ruleStart || '09:30')
+      let e = (isGeneral && hasConfigured) ? ruleEnd : (end || ruleEnd || '18:30')
 
       const parseMins = (t) => {
         if (!t) return null
@@ -5018,36 +5028,29 @@ const localStore = {
         return h * 60 + min
       }
 
-      const isGeneral = !shiftCode || shiftCode === 'general' || !shift || shift.startsWith('General')
-      let startMins = parseMins(isGeneral ? rules.workStartTime : null)
-      let endMins = parseMins(isGeneral ? rules.workEndTime : null)
-
-      if (startMins === null || endMins === null) {
-        let extractedStart = null
-        let extractedEnd = null
-        if (shift && typeof shift === 'string') {
-          const timeMatch = shift.match(/\((.+?)\s*[-–—]\s*(.+?)\)/)
-          if (timeMatch) {
-            extractedStart = timeMatch[1].trim()
-            extractedEnd = timeMatch[2].trim()
-          }
-        }
-        if (startMins === null) startMins = parseMins(extractedStart || rules.workStartTime) ?? 570
-        if (endMins === null) endMins = parseMins(extractedEnd || rules.workEndTime) ?? 1110
-      }
-
-      const hasStartMeridiem = /AM|PM/i.test(String(rules.workStartTime || ''))
-      const hasEndMeridiem = /AM|PM/i.test(String(rules.workEndTime || ''))
-
-      if (!hasEndMeridiem && endMins < 720 && endMins <= startMins && (endMins + 720) <= 1440) {
+      let startMins = parseMins(s) ?? 570
+      let endMins = parseMins(e) ?? 1110
+      const hasEndMeridiem = /AM|PM/i.test(String(e))
+      if (!hasEndMeridiem && endMins < 720 && (endMins <= startMins || endMins <= 660)) {
         endMins += 720
       }
-
+      const hasStartMeridiem = /AM|PM/i.test(String(s))
       if (!hasStartMeridiem && startMins < 720 && endMins >= 720 && (endMins - startMins) > 600 && (startMins + 720) < (endMins + 120)) {
         startMins += 720
       }
+      return { startMins, endMins, isOvernight: endMins < startMins }
+    })()
 
-      return currentMins > (startMins + gracePeriod)
+    const isLate = (() => {
+      const rules = storeState.companySettings?.attendanceRules || {}
+      const gracePeriod = Number(rules.gracePeriodMinutes ?? 15)
+      const currentMins = now.getHours() * 60 + now.getMinutes()
+      let effectivePunchMins = currentMins
+      if (resolvedShift.isOvernight && currentMins <= (resolvedShift.endMins + 120)) {
+        effectivePunchMins = currentMins + 1440
+      }
+      const diff = effectivePunchMins - resolvedShift.startMins
+      return diff > gracePeriod
     })()
 
     // Policy: 2 late logins per month are accepted (status = 'late').
@@ -5485,25 +5488,58 @@ const localStore = {
     }
 
     const shiftDisplay = `General (${f12(startTime, false)} – ${f12(endTime, true)})`
-    const shiftStartMins = parseMins(startTime) ?? 570
-    const shiftEndMins = parseMins(endTime) ?? 1110
-
     let count = 0
     storeState.attendance = (storeState.attendance || []).map((rec) => {
       if (rec.date !== today || !rec.checkIn) return rec
       const inMins = parseMins(rec.checkIn)
       if (inMins === null) return rec
 
-      const isGeneral = !rec.shiftCode || rec.shiftCode === 'general' || !rec.shift || rec.shift.startsWith('General')
-      let recStartMins = shiftStartMins
-      if (!isGeneral && rec.shift) {
-        const m = rec.shift.match(/\((.+?)\s*[-–—]/)
-        if (m) recStartMins = parseMins(m[1].trim()) ?? shiftStartMins
+      let extractedStart = null
+      let extractedEnd = null
+      if (rec.shift && typeof rec.shift === 'string') {
+        const m = rec.shift.match(/\((.+?)\s*[-–—]\s*(.+?)\)/)
+        if (m) {
+          extractedStart = m[1].trim()
+          extractedEnd = m[2].trim()
+        }
       }
 
-      const isLate = inMins > (recStartMins + grace)
+      const isGeneral = !rec.shiftCode || rec.shiftCode === 'general' || !rec.shift || rec.shift.startsWith('General')
+      const hasConfiguredRules = Boolean(rules.workStartTime && rules.workEndTime && (rules.workStartTime !== '09:30' || rules.workEndTime !== '18:30'))
+
+      let recStart = (isGeneral && hasConfiguredRules) ? startTime : (extractedStart || startTime)
+      let recEnd = (isGeneral && hasConfiguredRules) ? endTime : (extractedEnd || endTime)
+
+      let recStartMins = parseMins(recStart) ?? 570
+      let recEndMins = parseMins(recEnd) ?? 1110
+      const hasEndMeridiem = /AM|PM/i.test(String(recEnd))
+      if (!hasEndMeridiem && recEndMins < 720 && (recEndMins <= recStartMins || recEndMins <= 660)) {
+        recEndMins += 720
+      }
+      const hasStartMeridiem = /AM|PM/i.test(String(recStart))
+      if (!hasStartMeridiem && recStartMins < 720 && recEndMins >= 720 && (recEndMins - recStartMins) > 600 && (recStartMins + 720) < (recEndMins + 120)) {
+        recStartMins += 720
+      }
+
+      const isOvernight = recEndMins < recStartMins
+      let effectivePunchMins = inMins
+      if (isOvernight && inMins <= (recEndMins + 120)) {
+        effectivePunchMins = inMins + 1440
+      }
+      const diff = effectivePunchMins - recStartMins
+      const isLate = diff > grace
+
       const outMins = rec.checkOut ? parseMins(rec.checkOut) : null
-      const isEarly = outMins !== null && (outMins < shiftEndMins) && (outMins >= shiftEndMins - 60)
+      let isEarly = false
+      if (outMins !== null) {
+        let effectiveOutMins = outMins
+        let effectiveEndMins = recEndMins
+        if (isOvernight) {
+          if (outMins <= (recEndMins + 120)) effectiveOutMins = outMins + 1440
+          effectiveEndMins = recEndMins + 1440
+        }
+        isEarly = effectiveOutMins < effectiveEndMins && effectiveOutMins >= (effectiveEndMins - 60)
+      }
       const dayOfMonth = parseInt((today || '').split('-')[2] || '1', 10)
       const isMonthEndLop = isEarly && dayOfMonth >= 25
 
@@ -5516,9 +5552,12 @@ const localStore = {
       let targetIsEarlyLogout = isEarly
       let targetIsLop = isMonthEndLop
 
+      const earlyWindowStartMins = (recEndMins - 60 + 1440) % 1440
+      const earlyWindowStr = `${f12(earlyWindowStartMins)} – ${f12(recEnd, true)}`
+
       if (isLate) {
         targetStatus = rec.lateCount > 2 ? 'half-day' : 'late'
-        targetNotes = rec.lateCount > 2 ? 'Late Login (Exceeded 2 accepted late logins — marked as Half Day)' : `Late Login (${f12(startTime)})`
+        targetNotes = rec.lateCount > 2 ? 'Late Login (Exceeded 2 accepted late logins — marked as Half Day)' : `Late Login (${f12(recStart)})`
         targetTotalHours = rec.checkOut ? rec.totalHours : (rec.lateCount > 2 ? 'Active (Half-Day · Late)' : 'Active (Late)')
       } else {
         targetIsLate = false
@@ -5526,10 +5565,10 @@ const localStore = {
         targetIsHalfDay = false
         if (isMonthEndLop) {
           targetStatus = 'lop'
-          targetNotes = `Early Logout (${f12(shiftEndMins - 60)} – ${f12(endTime)}) marked as LOP per month-end policy`
+          targetNotes = `Early Logout (${earlyWindowStr}) marked as LOP per month-end policy`
         } else if (isEarly) {
           targetStatus = 'early-logout'
-          targetNotes = `Early Logout (${f12(shiftEndMins - 60)} – ${f12(endTime)})`
+          targetNotes = `Early Logout (${earlyWindowStr})`
         } else {
           targetStatus = (['late', 'half-day', 'lop', 'early-logout'].includes(rec.status) || !rec.status) ? 'present' : rec.status
           targetNotes = 'On-time verification (General Shift)'
@@ -5537,7 +5576,7 @@ const localStore = {
         if (!rec.checkOut) {
           targetTotalHours = 'Active (Live)'
         } else if (typeof rec.totalHours === 'string' && rec.totalHours.includes('Late')) {
-          targetTotalHours = '8.0 hrs'
+          targetTotalHours = rec.totalHours.replace(/·?\s*Late\s*·?/i, '').trim() || 'Active (Live)'
         }
       }
 
@@ -5550,7 +5589,7 @@ const localStore = {
         isHalfDay: targetIsHalfDay,
         isEarlyLogout: targetIsEarlyLogout,
         isLop: targetIsLop,
-        shift: isGeneral ? shiftDisplay : rec.shift,
+        shift: (isGeneral && hasConfiguredRules) ? shiftDisplay : (rec.shift || shiftDisplay),
         shiftCode: isGeneral ? 'general' : rec.shiftCode,
         notes: targetNotes,
         totalHours: targetTotalHours,

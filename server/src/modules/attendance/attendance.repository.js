@@ -220,12 +220,29 @@ export function createMongoAttendanceRepository() {
           safeFields.notes = 'On-time verification (General Shift)'
         }
       }
-      const query = /^[0-9a-fA-F]{24}$/.test(cleanId) ? { _id: cleanId } : { id: cleanId }
-      const doc = await AttendanceRecord.findOneAndUpdate(
-        query,
-        { $set: safeFields },
-        { new: true, returnDocument: 'after' }
-      ).lean()
+      const isObjectId = /^[0-9a-fA-F]{24}$/.test(cleanId)
+      let doc = null
+      if (isObjectId) {
+        doc = await AttendanceRecord.findByIdAndUpdate(
+          cleanId,
+          { $set: safeFields },
+          { new: true, returnDocument: 'after' }
+        ).lean()
+      }
+      if (!doc && fields.employeeId && fields.date) {
+        doc = await AttendanceRecord.findOneAndUpdate(
+          { employeeId: String(fields.employeeId).toUpperCase().trim(), date: String(fields.date).trim() },
+          { $set: safeFields },
+          { new: true, returnDocument: 'after' }
+        ).lean()
+      }
+      if (!doc && cleanId) {
+        doc = await AttendanceRecord.findOneAndUpdate(
+          { id: cleanId },
+          { $set: safeFields },
+          { new: true, returnDocument: 'after' }
+        ).lean()
+      }
       return doc ? { id: String(doc._id), ...doc } : null
     },
     async delete(id, options = {}) {

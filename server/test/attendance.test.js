@@ -614,6 +614,116 @@ test('Recalculate attendance cleanses false late login and syncs active shift di
   assert.equal(sandhiya.totalHours, 'Active (Live)')
 })
 
+test('12-scenario regression suite: day, evening, overnight shifts, exact boundaries, grace limits, and recalculation', async () => {
+  const { resolveShift, evaluateShiftLateness, createAttendanceService, parseTimeToMinutes } = await import('../src/modules/attendance/attendance.service.js')
+
+  // Scenario 1: 09:00 AM shift, login at 09:00 AM (on-time, lateMinutes = 0, isLate = false)
+  const sc1 = evaluateShiftLateness({ punchTime: 540, shiftStartMins: 540, shiftEndMins: 1080, gracePeriodMinutes: 15 })
+  assert.equal(sc1.isLate, false)
+  assert.equal(sc1.lateMinutes, 0)
+  assert.equal(sc1.diff, 0)
+
+  // Scenario 2: 09:00 AM shift, login at 09:01 AM with 0m grace (late by 1 min)
+  const sc2 = evaluateShiftLateness({ punchTime: 541, shiftStartMins: 540, shiftEndMins: 1080, gracePeriodMinutes: 0 })
+  assert.equal(sc2.isLate, true)
+  assert.equal(sc2.lateMinutes, 1)
+
+  // Scenario 3: 09:00 AM shift, login at 09:15 AM with 15m grace (on-time boundary)
+  const sc3 = evaluateShiftLateness({ punchTime: 555, shiftStartMins: 540, shiftEndMins: 1080, gracePeriodMinutes: 15 })
+  assert.equal(sc3.isLate, false)
+  assert.equal(sc3.lateMinutes, 15)
+
+  // Scenario 4: 09:00 AM shift, login at 09:16 AM with 15m grace (late by 16 mins)
+  const sc4 = evaluateShiftLateness({ punchTime: 556, shiftStartMins: 540, shiftEndMins: 1080, gracePeriodMinutes: 15 })
+  assert.equal(sc4.isLate, true)
+  assert.equal(sc4.lateMinutes, 16)
+
+  // Scenario 5: 09:00 PM shift, login at 07:50 PM (on-time, early arrival by 70 mins)
+  const sc5 = evaluateShiftLateness({ punchTime: parseTimeToMinutes('07:50 PM'), shiftStartMins: 1260, shiftEndMins: 1380, gracePeriodMinutes: 15 })
+  assert.equal(sc5.isLate, false)
+  assert.equal(sc5.lateMinutes, 0)
+  assert.equal(sc5.diff, -70)
+
+  // Scenario 6: 09:00 PM shift, login at 09:00 PM (exact shift start, on-time)
+  const sc6 = evaluateShiftLateness({ punchTime: parseTimeToMinutes('09:00 PM'), shiftStartMins: 1260, shiftEndMins: 1380, gracePeriodMinutes: 15 })
+  assert.equal(sc6.isLate, false)
+  assert.equal(sc6.lateMinutes, 0)
+  assert.equal(sc6.diff, 0)
+
+  // Scenario 7: 09:00 PM shift, login at 09:15 PM with 15m grace (on-time boundary)
+  const sc7 = evaluateShiftLateness({ punchTime: parseTimeToMinutes('09:15 PM'), shiftStartMins: 1260, shiftEndMins: 1380, gracePeriodMinutes: 15 })
+  assert.equal(sc7.isLate, false)
+  assert.equal(sc7.lateMinutes, 15)
+
+  // Scenario 8: 09:00 PM shift, login at 09:16 PM with 15m grace (late by 16 mins)
+  const sc8 = evaluateShiftLateness({ punchTime: parseTimeToMinutes('09:16 PM'), shiftStartMins: 1260, shiftEndMins: 1380, gracePeriodMinutes: 15 })
+  assert.equal(sc8.isLate, true)
+  assert.equal(sc8.lateMinutes, 16)
+
+  // Scenario 9: 10:00 PM – 06:00 AM overnight shift, login at 10:00 PM (on-time, exact start)
+  const sc9 = evaluateShiftLateness({ punchTime: 1320, shiftStartMins: 1320, shiftEndMins: 360, gracePeriodMinutes: 15, isOvernight: true })
+  assert.equal(sc9.isLate, false)
+  assert.equal(sc9.lateMinutes, 0)
+
+  // Scenario 10: 10:00 PM – 06:00 AM overnight shift, login at 12:05 AM (late by 125 mins)
+  const sc10 = evaluateShiftLateness({ punchTime: 5, shiftStartMins: 1320, shiftEndMins: 360, gracePeriodMinutes: 15, isOvernight: true })
+  assert.equal(sc10.isLate, true)
+  assert.equal(sc10.lateMinutes, 125)
+
+  // Scenario 11: 10:00 PM – 06:00 AM overnight shift, login at 09:45 PM (on-time, early arrival by 15 mins)
+  const sc11 = evaluateShiftLateness({ punchTime: 1305, shiftStartMins: 1320, shiftEndMins: 360, gracePeriodMinutes: 15, isOvernight: true })
+  assert.equal(sc11.isLate, false)
+  assert.equal(sc11.lateMinutes, 0)
+  assert.equal(sc11.diff, -15)
+
+  // Scenario 12: Shift resolution handles both General custom rules and explicit shift timing strings
+  const resFromRules = resolveShift({ attendanceRules: { workStartTime: '21:00', workEndTime: '23:00' } })
+  assert.equal(resFromRules.startMins, 1260)
+  assert.equal(resFromRules.endMins, 1380)
+  assert.equal(resFromRules.display, 'General (09:00 PM – 11:00 PM)')
+
+  const resFromShiftStr = resolveShift({ shift: 'General (09:00 PM – 11:00 PM)', attendanceRules: { workStartTime: '09:30', workEndTime: '18:30' } })
+  assert.equal(resFromShiftStr.startMins, 1260)
+  assert.equal(resFromShiftStr.endMins, 1380)
+
+  // Scenario 13: Recalculate attendance updates records from late to on-time for 09:00 PM shift
+  const testRecords = [
+    {
+      id: 'att-user-1',
+      employeeId: 'ETS113828',
+      employeeName: 'Naitik Raj',
+      date: '2026-10-28',
+      checkIn: '09:00 PM',
+      checkOut: null,
+      status: 'late',
+      isLate: true,
+      lateCount: 1,
+      shift: 'General (09:00 PM – 11:00 PM)',
+      totalHours: 'Active (Late)',
+      notes: 'Late Login #1/2 (General Shift)',
+    },
+  ]
+  const mockRepository = {
+    list: async () => testRecords,
+    updateFields: async (id, fields) => {
+      const idx = testRecords.findIndex((r) => r.id === id)
+      if (idx >= 0) {
+        testRecords[idx] = { ...testRecords[idx], ...fields }
+        return testRecords[idx]
+      }
+      return null
+    },
+  }
+  const svc = createAttendanceService({ repository: mockRepository })
+  const recalcRes = await svc.recalculateAttendance('2026-10-28', { workStartTime: '21:00', workEndTime: '23:00', gracePeriodMinutes: 15 })
+  assert.equal(recalcRes.updatedCount, 1)
+  assert.equal(testRecords[0].status, 'present')
+  assert.equal(testRecords[0].isLate, false)
+  assert.equal(testRecords[0].lateCount, 0)
+  assert.equal(testRecords[0].totalHours, 'Active (Live)')
+  assert.equal(testRecords[0].notes, 'On-time verification (General Shift)')
+})
+
 
 
 
