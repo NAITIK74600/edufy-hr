@@ -153,8 +153,14 @@ export function createMemoryAttendanceRepository(seedRecords = []) {
       records.unshift(newRecord)
       return newRecord
     },
-    async delete(id) {
-      const idx = records.findIndex((r) => r.id === id || String(r._id) === String(id))
+    async delete(id, options = {}) {
+      const cleanId = String(id || '').trim()
+      const idx = records.findIndex((r) => {
+        if (cleanId && (r.id === cleanId || String(r._id) === cleanId)) return true
+        if (options?.employeeId && options?.date && r.employeeId?.toUpperCase() === String(options.employeeId).toUpperCase() && r.date === options.date) return true
+        if (cleanId && r.employeeId?.toUpperCase() === cleanId.toUpperCase()) return true
+        return false
+      })
       if (idx >= 0) {
         records.splice(idx, 1)
         return true

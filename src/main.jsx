@@ -311,7 +311,7 @@ function App() {
       ? <LeaveManagementPage mode="hr" />
       : route.path === '/admin/attendance'
       ? <WorkspaceModulePage route={{ ...route, path: '/hr/attendance' }} />
-      : route.path === '/admin/hierarchy' || route.path === '/hr/hierarchy' || route.path === '/employee/hierarchy'
+      : route.path === '/admin/hierarchy' || route.path === '/hr/hierarchy' || route.path === '/employee/hierarchy' || route.path === '/employee/organization'
       ? <OrgHierarchyPage />
       : route.workspace
       ? <WorkspaceModulePage route={route} />

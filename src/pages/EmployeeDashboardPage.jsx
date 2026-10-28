@@ -95,6 +95,25 @@ function formatTimerSeconds(totalSecs) {
   return `${String(h).padStart(2, '0')}h ${String(m).padStart(2, '0')}m ${String(s).padStart(2, '0')}s`
 }
 
+function getShiftLabel(rules) {
+  const st = rules?.workStartTime
+  const et = rules?.workEndTime
+  if (st && et) {
+    const f12 = (t) => {
+      if (!t) return ''
+      const parts = String(t).split(':')
+      let h = parseInt(parts[0], 10)
+      const m = parts[1] || '00'
+      if (isNaN(h)) return t
+      const ampm = h >= 12 ? 'PM' : 'AM'
+      h = h % 12 || 12
+      return `${String(h).padStart(2, '0')}:${m} ${ampm}`
+    }
+    return `General (${f12(st)} – ${f12(et)})`
+  }
+  return 'General (09:30 AM – 06:30 PM)'
+}
+
 function GPSAttendanceStation({ user, todayRecord, onPunch, onStartBreak, onEndBreak, currentTime }) {
   const [storeState, setStoreState] = useState(() => hrStore.getState())
 
@@ -664,7 +683,7 @@ function GPSAttendanceStation({ user, todayRecord, onPunch, onStartBreak, onEndB
           wifiSSID: isOnOfficeNetwork ? primaryWifiSSID : 'External Network',
           bssid: null,
           publicIp,
-          shift: 'General (09:30 AM – 06:30 PM)',
+          shift: getShiftLabel(settings?.attendanceRules),
           shiftCode: 'general',
           latitude: currentCoords?.latitude ?? null,
           longitude: currentCoords?.longitude ?? null,
@@ -1221,7 +1240,7 @@ function ESSOverview({ user }) {
     const bssid = opts.bssid || null
     const publicIp = opts.publicIp || null
     const gps = opts.gpsData
-    const shift = 'General (09:30 AM – 06:30 PM)'
+    const shift = getShiftLabel(storeState.companySettings?.attendanceRules)
     const shiftCode = 'general'
     if (!isCheckedIn && !isCompleted) {
       const rec = await hrStore.checkIn({
@@ -1703,7 +1722,7 @@ function ESSAttendanceView({ user }) {
     const bssid = opts.bssid || null
     const publicIp = opts.publicIp || null
     const gps = opts.gpsData
-    const shift = opts.shift || 'General (09:30 AM – 06:30 PM)'
+    const shift = opts.shift || getShiftLabel(storeState.companySettings?.attendanceRules)
     const shiftCode = opts.shiftCode || 'general'
     if (!isCheckedIn && !isCompleted) {
       const rec = await hrStore.checkIn({
@@ -1759,7 +1778,7 @@ function ESSAttendanceView({ user }) {
 
   const monthlyLogs = storeState.attendance.filter((record) => record.employeeId === empId && record.date.startsWith(todayKey().slice(0, 7))).map((record) => ({
     date: record.date, day: new Date(`${record.date}T12:00:00`).toLocaleDateString('en-US', { weekday: 'long' }),
-    shift: record.shift || 'General (09:30 AM – 06:30 PM)', in: record.checkIn || '-', out: record.checkOut || '-',
+    shift: record.shift || getShiftLabel(storeState.companySettings?.attendanceRules), in: record.checkIn || '-', out: record.checkOut || '-',
     hours: record.totalHours || '-', wifi: record.ipVerified ? 'Server-verified network' : record.wifiSSID || '-',
     breaks: record.totalBreakMinutes ? `${record.totalBreakMinutes}m` : (record.breaks?.length ? `${record.breaks.length} breaks` : '–'),
     isOnBreak: record.isOnBreak,

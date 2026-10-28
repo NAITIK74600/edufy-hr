@@ -839,7 +839,20 @@ export function HRLayout({ route, children }) {
                       </div>
                       <div className="profile-detail-row">
                         <span>Assigned Shift</span>
-                        <strong>General (09:30 AM - 06:30 PM)</strong>
+                        <strong>{(() => {
+                          const r = storeState?.companySettings?.attendanceRules
+                          if (r?.workStartTime && r?.workEndTime) {
+                            const f12 = (t) => {
+                              const [h, m] = String(t).split(':').map(Number)
+                              if (isNaN(h)) return t
+                              const ampm = h >= 12 ? 'PM' : 'AM'
+                              const h12 = h % 12 || 12
+                              return `${String(h12).padStart(2, '0')}:${String(m || 0).padStart(2, '0')} ${ampm}`
+                            }
+                            return `General (${f12(r.workStartTime)} – ${f12(r.workEndTime)})`
+                          }
+                          return 'General (09:30 AM – 06:30 PM)'
+                        })()}</strong>
                       </div>
 
                       <div className="profile-role-notice">

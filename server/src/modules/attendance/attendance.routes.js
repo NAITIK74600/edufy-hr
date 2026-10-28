@@ -37,7 +37,6 @@ export function createAttendanceRouter({ auth, service, useDatabase = false, per
   })
   router.patch('/config', auth.authenticate, auth.requirePermission(PERMISSIONS.ATTENDANCE_WRITE), async (request, response, next) => {
     try {
-      ensureConnected()
       const allowed = ['officeNetworkIPs', 'locations', 'allowedWifiSSIDs', 'wifiNetworks', 'attendanceRules', 'leavePolicies', 'holidayCalendarImages']
       const values = Object.fromEntries(allowed.filter((key) => request.body?.[key] !== undefined).map((key) => [key, request.body[key]]))
       if (values.officeNetworkIPs) {
@@ -84,32 +83,44 @@ export function createAttendanceRouter({ auth, service, useDatabase = false, per
           throw Object.assign(new Error('Max geofence radius must be between 1 and 1000 meters.'), { statusCode: 400, code: 'VALIDATION_ERROR' })
         }
       }
-      const saved = await AttendanceSettings.findOneAndUpdate({ key: 'office' }, { $set: values }, { upsert: true, returnDocument: 'after', runValidators: true }).lean()
-      service.updateConfig(saved)
-      if (values.leavePolicies) {
-        const lp = values.leavePolicies
-        const defaultApproval = lp.approvalWorkflow || (lp.requireManagerApproval && lp.requireHrApproval ? 'manager_hr' : lp.requireManagerApproval ? 'manager' : 'hr')
-        if (lp.casualQuota !== undefined) {
-          await LeavePolicy.findOneAndUpdate(
-            { leaveType: 'casual' },
-            { $set: { label: 'Casual Leave', configured: true, annualAllowance: Number(lp.casualQuota), approvalStage: defaultApproval } },
-            { upsert: true, returnDocument: 'after' }
-          )
+      if (useDatabase) {
+        ensureConnected()
+        if (values.attendanceRules) {
+          const existingDoc = await AttendanceSettings.findOne({ key: 'office' }).lean()
+          values.attendanceRules = {
+            ...(existingDoc?.attendanceRules || {}),
+            ...values.attendanceRules,
+          }
         }
-        if (lp.sickQuota !== undefined) {
-          await LeavePolicy.findOneAndUpdate(
-            { leaveType: 'sick' },
-            { $set: { label: 'Sick Leave', configured: true, annualAllowance: Number(lp.sickQuota), approvalStage: defaultApproval } },
-            { upsert: true, returnDocument: 'after' }
-          )
+        const saved = await AttendanceSettings.findOneAndUpdate({ key: 'office' }, { $set: values }, { upsert: true, returnDocument: 'after' }).lean()
+        service.updateConfig(saved)
+        if (values.leavePolicies) {
+          const lp = values.leavePolicies
+          const defaultApproval = lp.approvalWorkflow || (lp.requireManagerApproval && lp.requireHrApproval ? 'manager_hr' : lp.requireManagerApproval ? 'manager' : 'hr')
+          if (lp.casualQuota !== undefined) {
+            await LeavePolicy.findOneAndUpdate(
+              { leaveType: 'casual' },
+              { $set: { leaveType: 'casual', label: 'Casual Leave', configured: true, annualAllowance: Number(lp.casualQuota), approvalStage: defaultApproval } },
+              { upsert: true, returnDocument: 'after' }
+            )
+          }
+          if (lp.sickQuota !== undefined) {
+            await LeavePolicy.findOneAndUpdate(
+              { leaveType: 'sick' },
+              { $set: { leaveType: 'sick', label: 'Sick Leave', configured: true, annualAllowance: Number(lp.sickQuota), approvalStage: defaultApproval } },
+              { upsert: true, returnDocument: 'after' }
+            )
+          }
+          if (lp.earnedQuota !== undefined) {
+            await LeavePolicy.findOneAndUpdate(
+              { leaveType: 'earned' },
+              { $set: { leaveType: 'earned', label: 'Earned / Privilege Leave', configured: true, annualAllowance: Number(lp.earnedQuota), approvalStage: defaultApproval, carryForward: true } },
+              { upsert: true, returnDocument: 'after' }
+            )
+          }
         }
-        if (lp.earnedQuota !== undefined) {
-          await LeavePolicy.findOneAndUpdate(
-            { leaveType: 'earned' },
-            { $set: { label: 'Earned / Privilege Leave', configured: true, annualAllowance: Number(lp.earnedQuota), approvalStage: defaultApproval, carryForward: true } },
-            { upsert: true, returnDocument: 'after' }
-          )
-        }
+      } else {
+        service.updateConfig(values)
       }
       response.json({ success: true, data: service.getConfig() })
     } catch (error) { next(error) }
@@ -394,7 +405,10 @@ export function createAttendanceRouter({ auth, service, useDatabase = false, per
     auth.requirePermission(PERMISSIONS.ATTENDANCE_WRITE),
     async (request, response, next) => {
       try {
-        const success = await service.deleteRecord(request.params.id)
+        const success = await service.deleteRecord(request.params.id, {
+          employeeId: request.query?.employeeId,
+          date: request.query?.date,
+        })
         return response.json({ success })
       } catch (error) {
         return next(error)

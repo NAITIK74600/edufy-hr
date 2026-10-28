@@ -2235,7 +2235,7 @@ export function OrgHierarchyPage() {
               cursor: isPanning ? 'grabbing' : 'grab',
               padding: '60px 40px',
               display: 'flex',
-              justifyContent: 'center',
+              justifyContent: 'safe center',
               backgroundImage:
                 'radial-gradient(var(--border) 1px, transparent 1px), radial-gradient(var(--border) 1px, transparent 1px)',
               backgroundSize: '24px 24px',
@@ -2251,6 +2251,10 @@ export function OrgHierarchyPage() {
                 flexDirection: 'column',
                 alignItems: 'center',
                 gap: '40px',
+                minWidth: 'max-content',
+                width: 'fit-content',
+                margin: '0 auto',
+                padding: '0 120px',
               }}
             >
               {roots.map((rootNode) => (

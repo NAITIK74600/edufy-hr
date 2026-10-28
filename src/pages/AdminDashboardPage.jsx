@@ -621,8 +621,22 @@ export function AdminUsersModule() {
 
       {storeState.dataErrors?.users && <p role="alert">Could not load accounts: {storeState.dataErrors.users}</p>}
       {notice && (
-        <div style={{ padding: '10px 14px', background: '#eaf4f1', color: 'var(--teal)', border: '1px solid #c7ded7', borderRadius: '8px', fontSize: '12px', fontWeight: 600 }}>
-          <CheckCircle2 size={13} style={{ display: 'inline', marginRight: '6px' }} />
+        <div
+          style={{
+            padding: '10px 14px',
+            background: notice.startsWith('✕') ? '#fee2e2' : '#eaf4f1',
+            color: notice.startsWith('✕') ? '#b91c1c' : 'var(--teal)',
+            border: notice.startsWith('✕') ? '1px solid #fca5a5' : '1px solid #c7ded7',
+            borderRadius: '8px',
+            fontSize: '12px',
+            fontWeight: 600,
+          }}
+        >
+          {notice.startsWith('✕') ? (
+            <AlertCircle size={13} style={{ display: 'inline', marginRight: '6px' }} />
+          ) : (
+            <CheckCircle2 size={13} style={{ display: 'inline', marginRight: '6px' }} />
+          )}
           {notice}
         </div>
       )}
@@ -4626,29 +4640,34 @@ function AdminSettingsModule({ user: propUser }) {
     )
   }
 
-  const handleSavePolicies = storeAction(async (e) => {
+  const handleSavePolicies = async (e) => {
     e.preventDefault()
-    await hrStore.updateCompanySettings({
-      attendanceRules: {
-        workStartTime: startTime,
-        workEndTime: endTime,
-        gracePeriodMinutes: Number(graceMins),
-        requireOfficeNetworkAndGps: Boolean(wifiReq),
-        maxGeofenceRadiusMeters: Number(geofenceRadius) || 50,
-      },
-      leavePolicies: {
-        casualQuota: Number(casualQuota),
-        sickQuota: Number(sickQuota),
-        earnedQuota: Number(earnedQuota),
-        maxCarryForwardDays: Number(maxCarry),
-        approvalWorkflow,
-        requireManagerApproval: approvalWorkflow === 'manager' || approvalWorkflow === 'manager_hr',
-        requireHrApproval: approvalWorkflow === 'hr' || approvalWorkflow === 'manager_hr',
-      },
-    })
-    setNotice('✓ Successfully saved attendance rules and annual leave policies to the database!')
-    setTimeout(() => setNotice(''), 4500)
-  })
+    try {
+      await hrStore.updateCompanySettings({
+        attendanceRules: {
+          workStartTime: startTime,
+          workEndTime: endTime,
+          gracePeriodMinutes: Number(graceMins),
+          requireOfficeNetworkAndGps: Boolean(wifiReq),
+          maxGeofenceRadiusMeters: Number(geofenceRadius) || 50,
+        },
+        leavePolicies: {
+          casualQuota: Number(casualQuota),
+          sickQuota: Number(sickQuota),
+          earnedQuota: Number(earnedQuota),
+          maxCarryForwardDays: Number(maxCarry),
+          approvalWorkflow,
+          requireManagerApproval: approvalWorkflow === 'manager' || approvalWorkflow === 'manager_hr',
+          requireHrApproval: approvalWorkflow === 'hr' || approvalWorkflow === 'manager_hr',
+        },
+      })
+      setNotice('✓ Successfully saved attendance rules and annual leave policies to the database!')
+      setTimeout(() => setNotice(''), 4500)
+    } catch (err) {
+      setNotice(`✕ Failed to save settings: ${err.message || 'Please check your connection and try again.'}`)
+      setTimeout(() => setNotice(''), 6000)
+    }
+  }
 
   const handleAddHoliday = workspaceAction(hrStore, async (e) => {
     e.preventDefault()
@@ -4669,8 +4688,22 @@ function AdminSettingsModule({ user: propUser }) {
       />
 
       {notice && (
-        <div style={{ padding: '10px 14px', background: '#eaf4f1', color: 'var(--teal)', border: '1px solid #c7ded7', borderRadius: '8px', fontSize: '12px', fontWeight: 600 }}>
-          <CheckCircle2 size={13} style={{ display: 'inline', marginRight: '6px' }} />
+        <div
+          style={{
+            padding: '10px 14px',
+            background: notice.startsWith('✕') ? '#fee2e2' : '#eaf4f1',
+            color: notice.startsWith('✕') ? '#b91c1c' : 'var(--teal)',
+            border: notice.startsWith('✕') ? '1px solid #fca5a5' : '1px solid #c7ded7',
+            borderRadius: '8px',
+            fontSize: '12px',
+            fontWeight: 600,
+          }}
+        >
+          {notice.startsWith('✕') ? (
+            <AlertCircle size={13} style={{ display: 'inline', marginRight: '6px' }} />
+          ) : (
+            <CheckCircle2 size={13} style={{ display: 'inline', marginRight: '6px' }} />
+          )}
           {notice}
         </div>
       )}

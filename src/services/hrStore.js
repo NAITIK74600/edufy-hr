@@ -4911,10 +4911,15 @@ const localStore = {
 
     // Check shift start time for late calculation
     const isLate = (() => {
-      if (shiftCode === 'morning') return now.getHours() > 8 || (now.getHours() === 8 && now.getMinutes() > 15)
-      if (shiftCode === 'evening') return now.getHours() > 13 || (now.getHours() === 13 && now.getMinutes() > 15)
-      if (shiftCode === 'night') return now.getHours() > 22 || (now.getHours() === 22 && now.getMinutes() > 15)
-      return now.getHours() > 9 || (now.getHours() === 9 && now.getMinutes() > 45)
+      const rules = storeState.companySettings?.attendanceRules || {}
+      const gracePeriod = Number(rules.gracePeriodMinutes ?? 15)
+      if (shiftCode === 'morning') return now.getHours() * 60 + now.getMinutes() > 8 * 60 + 15
+      if (shiftCode === 'evening') return now.getHours() * 60 + now.getMinutes() > 13 * 60 + 15
+      if (shiftCode === 'night') return now.getHours() * 60 + now.getMinutes() > 22 * 60 + 15
+      const startTimeStr = rules.workStartTime || '09:30'
+      const [sh, sm] = startTimeStr.split(':').map(Number)
+      const startMins = (!isNaN(sh) ? sh * 60 : 570) + (!isNaN(sm) ? sm : 30)
+      return now.getHours() * 60 + now.getMinutes() > startMins + gracePeriod
     })()
 
     // Policy: 2 late logins per month are accepted (status = 'late').
@@ -5257,9 +5262,18 @@ const localStore = {
     notifyListeners()
     return updated
   },
-  deleteAttendance(id) {
-    const existing = storeState.attendance.find((a) => a.id === id)
-    storeState.attendance = storeState.attendance.filter((a) => a.id !== id)
+  async deleteAttendance(id, extra = {}) {
+    const cleanId = String(id || '').trim()
+    const existing = (storeState.attendance || []).find((a) => {
+      if (cleanId && (a.id === cleanId || a._id === cleanId || String(a.id) === cleanId || String(a._id) === cleanId)) return true
+      if (extra?.employeeId && extra?.date && a.employeeId?.toUpperCase() === String(extra.employeeId).toUpperCase() && a.date === extra.date) return true
+      return false
+    })
+    storeState.attendance = (storeState.attendance || []).filter((a) => {
+      if (cleanId && (a.id === cleanId || a._id === cleanId || String(a.id) === cleanId || String(a._id) === cleanId)) return false
+      if (extra?.employeeId && extra?.date && a.employeeId?.toUpperCase() === String(extra.employeeId).toUpperCase() && a.date === extra.date) return false
+      return true
+    })
     if (existing) {
       this.addAuditLog('HR', 'ATTENDANCE_DELETE', `Removed attendance entry for ${existing.employeeName} on ${existing.date}`)
     }

@@ -1268,7 +1268,23 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
             accuracy: gpsData?.accuracy ?? null,
             distanceMeters: gpsData?.distanceMeters ?? null,
             locationName: gpsData?.locationName ?? null,
-            shift: shift || 'General (09:30 AM – 06:30 PM)',
+            shift: shift || (() => {
+              const attRules = state().companySettings?.attendanceRules || {}
+              if (attRules.workStartTime && attRules.workEndTime) {
+                const f12 = (t) => {
+                  if (!t) return ''
+                  const parts = String(t).split(':')
+                  let h = parseInt(parts[0], 10)
+                  const m = parts[1] || '00'
+                  if (isNaN(h)) return t
+                  const ampm = h >= 12 ? 'PM' : 'AM'
+                  h = h % 12 || 12
+                  return `${String(h).padStart(2, '0')}:${m} ${ampm}`
+                }
+                return `General (${f12(attRules.workStartTime)} – ${f12(attRules.workEndTime)})`
+              }
+              return 'General (09:30 AM – 06:30 PM)'
+            })(),
             shiftCode: shiftCode || 'general',
           }
         }
@@ -1312,6 +1328,45 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
         const res = await apiClient.post('/attendance/check-out', payload)
         if (rawLocal.checkOut) rawLocal.checkOut(...args)
         return res.data
+      })
+    },
+    deleteAttendance(id, extra = {}) {
+      const cleanId = String(id || '').trim()
+      if (!cleanId && !extra?.employeeId) return false
+      if (!user && rawLocal.deleteAttendance) return rawLocal.deleteAttendance(cleanId, extra)
+      return mutate(async () => {
+        try {
+          const q = new URLSearchParams()
+          if (extra.employeeId) q.set('employeeId', extra.employeeId)
+          if (extra.date) q.set('date', extra.date)
+          const qs = q.toString() ? `?${q.toString()}` : ''
+          await apiClient.delete(`/attendance/records/${encodeURIComponent(cleanId || 'by-filter')}${qs}`)
+        } catch (err) {
+          console.warn('Backend delete attendance failed or record not in db:', err?.message || err)
+        }
+        if (rawLocal.deleteAttendance) rawLocal.deleteAttendance(cleanId, extra)
+        state().attendance = (state().attendance || []).filter(
+          (a) => a.id !== cleanId && a._id !== cleanId && String(a.id) !== cleanId && String(a._id) !== cleanId &&
+            !(extra.employeeId && extra.date && a.employeeId?.toUpperCase() === String(extra.employeeId).toUpperCase() && a.date === extra.date)
+        )
+        return true
+      })
+    },
+    markAttendance(record) {
+      if (!user && rawLocal.markAttendance) return rawLocal.markAttendance(record)
+      return mutate(async () => {
+        let res = null
+        try {
+          if (record.id || record._id) {
+            res = await apiClient.patch(`/attendance/records/${encodeURIComponent(record.id || record._id)}`, record)
+          } else {
+            res = await apiClient.post('/attendance/records', record)
+          }
+        } catch (err) {
+          console.warn('Backend mark attendance failed:', err?.message || err)
+        }
+        if (rawLocal.markAttendance) rawLocal.markAttendance(record)
+        return res?.data?.data || record
       })
     },
     applyLeave(data, applicantUser = null) {

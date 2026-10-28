@@ -449,6 +449,68 @@ test('Early logout rule: 6:30 PM to 7:30 PM checkout before 25th marks as early-
   assert.equal(summary.lop, 1)
 })
 
+test('HR or Admin can permanently delete attendance record via DELETE /records/:id and query params', async () => {
+  const hrToken = await login('hr@example.test', 'hr-password')
+
+  // Create an attendance record
+  const createRes = await request('/attendance/records', {
+    method: 'POST',
+    headers: { authorization: `Bearer ${hrToken}` },
+    body: JSON.stringify({
+      employeeId: 'ETS21206',
+      employeeName: 'Chandana Somaih',
+      date: '2026-10-27',
+      checkIn: '09:30 AM',
+      status: 'present',
+    }),
+  })
+  assert.equal(createRes.response.status, 201)
+  const recordId = createRes.body.data.id
+
+  // Verify record exists
+  const listBefore = await request('/attendance?search=ETS21206', {
+    headers: { authorization: `Bearer ${hrToken}` },
+  })
+  assert.equal(listBefore.body.data.some((r) => r.id === recordId || (r.employeeId === 'ETS21206' && r.date === '2026-10-27')), true)
+
+  // Delete record by ID and query params
+  const deleteRes = await request(`/attendance/records/${recordId}?employeeId=ETS21206&date=2026-10-27`, {
+    method: 'DELETE',
+    headers: { authorization: `Bearer ${hrToken}` },
+  })
+  assert.equal(deleteRes.response.status, 200)
+  assert.equal(deleteRes.body.success, true)
+
+  // Verify record is permanently removed
+  const listAfter = await request('/attendance?search=ETS21206', {
+    headers: { authorization: `Bearer ${hrToken}` },
+  })
+  assert.equal(listAfter.body.data.some((r) => r.id === recordId || (r.employeeId === 'ETS21206' && r.date === '2026-10-27')), false)
+})
+
+test('Admin can update attendance rules via PATCH /config and shift times apply dynamically', async () => {
+  const adminToken = await login('admin@example.test', 'admin-password')
+
+  // Update attendance rules via PATCH /config
+  const patchRes = await request('/attendance/config', {
+    method: 'PATCH',
+    headers: { authorization: `Bearer ${adminToken}` },
+    body: JSON.stringify({
+      attendanceRules: {
+        workStartTime: '10:00',
+        workEndTime: '19:00',
+        gracePeriodMinutes: 20,
+        maxGeofenceRadiusMeters: 60,
+      },
+    }),
+  })
+  assert.equal(patchRes.response.status, 200)
+  assert.equal(patchRes.body.data.attendanceRules.workStartTime, '10:00')
+  assert.equal(patchRes.body.data.attendanceRules.workEndTime, '19:00')
+  assert.equal(patchRes.body.data.attendanceRules.gracePeriodMinutes, 20)
+  assert.equal(patchRes.body.data.attendanceRules.maxGeofenceRadiusMeters, 60)
+})
+
 
 
 

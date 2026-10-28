@@ -186,9 +186,27 @@ export function createMongoAttendanceRepository() {
       ).lean()
       return { id: String(doc._id), ...doc }
     },
-    async delete(id) {
-      const res = await AttendanceRecord.findByIdAndDelete(id)
-      return Boolean(res)
+    async delete(id, options = {}) {
+      const cleanId = String(id || '').trim()
+      let doc = null
+      if (cleanId && /^[0-9a-fA-F]{24}$/.test(cleanId)) {
+        doc = await AttendanceRecord.findByIdAndDelete(cleanId)
+      }
+      if (!doc && options?.employeeId && options?.date) {
+        doc = await AttendanceRecord.findOneAndDelete({
+          employeeId: String(options.employeeId).toUpperCase().trim(),
+          date: String(options.date).trim(),
+        })
+      }
+      if (!doc && cleanId) {
+        doc = await AttendanceRecord.findOneAndDelete({
+          $or: [
+            { id: cleanId },
+            { employeeId: cleanId.toUpperCase() },
+          ],
+        })
+      }
+      return Boolean(doc)
     },
     async getSummary(date) {
       const docs = await AttendanceRecord.find({ date }).lean()

@@ -208,9 +208,13 @@ function AttendanceModule() {
 
   const handleDeleteAttendance = storeAction(async () => {
     if (!attendanceToDelete) return
-    await hrStore.deleteAttendance(attendanceToDelete.id)
+    const idToDelete = attendanceToDelete._id || attendanceToDelete.id
+    await hrStore.deleteAttendance(idToDelete, {
+      employeeId: attendanceToDelete.employeeId,
+      date: attendanceToDelete.date,
+    })
     setAttendanceToDelete(null)
-    showFeedback('Attendance record deleted.')
+    showFeedback('Attendance record permanently deleted from database.')
   })
 
   const handleSetLateOccurrence = storeAction(async (record, occurrence) => {
@@ -374,7 +378,13 @@ function AttendanceModule() {
         <div className="panel module-kpi">
           <span>Late arrivals</span>
           <strong style={{ color: 'var(--gold)' }}>{lateCount} Staff</strong>
-          <small>Checked in after 09:30 AM</small>
+          <small>Checked in after {(() => {
+            const st = storeState.companySettings?.attendanceRules?.workStartTime
+            if (!st) return '09:30 AM'
+            const [h, m] = st.split(':').map(Number)
+            const ampm = h >= 12 ? 'PM' : 'AM'
+            return `${String(h % 12 || 12).padStart(2, '0')}:${String(m || 0).padStart(2, '0')} ${ampm}`
+          })()}</small>
         </div>
         <div className="panel module-kpi">
           <span>Approved leaves / Out</span>
@@ -4794,8 +4804,21 @@ function SettingsModule() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginTop: '16px' }}>
           <div style={{ background: '#f8f7f2', padding: '14px', borderRadius: '8px', fontSize: '11px' }}>
             <span style={{ color: 'var(--muted)', fontSize: '9px', textTransform: 'uppercase' }}>Work Shift Hours</span>
-            <h4 style={{ margin: '4px 0' }}>09:30 AM - 06:30 PM</h4>
-            <small style={{ color: 'var(--teal)' }}>Grace period: 15 minutes</small>
+            <h4 style={{ margin: '4px 0' }}>{(() => {
+              const r = storeState.companySettings?.attendanceRules
+              if (r?.workStartTime && r?.workEndTime) {
+                const f12 = (t) => {
+                  const [h, m] = String(t).split(':').map(Number)
+                  if (isNaN(h)) return t
+                  const ampm = h >= 12 ? 'PM' : 'AM'
+                  const h12 = h % 12 || 12
+                  return `${String(h12).padStart(2, '0')}:${String(m || 0).padStart(2, '0')} ${ampm}`
+                }
+                return `${f12(r.workStartTime)} - ${f12(r.workEndTime)}`
+              }
+              return '09:30 AM - 06:30 PM'
+            })()}</h4>
+            <small style={{ color: 'var(--teal)' }}>Grace period: {storeState.companySettings?.attendanceRules?.gracePeriodMinutes ?? 15} minutes</small>
           </div>
           <div style={{ background: '#f8f7f2', padding: '14px', borderRadius: '8px', fontSize: '11px' }}>
             <span style={{ color: 'var(--muted)', fontSize: '9px', textTransform: 'uppercase' }}>Annual Leave Quota</span>

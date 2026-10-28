@@ -146,6 +146,17 @@ function formatCurrentTime() {
   return new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })
 }
 
+function formatTime12(time24) {
+  if (!time24) return ''
+  const parts = String(time24).split(':')
+  let hours = parseInt(parts[0], 10)
+  const mins = parts[1] || '00'
+  if (isNaN(hours)) return time24
+  const ampm = hours >= 12 ? 'PM' : 'AM'
+  hours = hours % 12 || 12
+  return `${String(hours).padStart(2, '0')}:${mins} ${ampm}`
+}
+
 function getTodayString() {
   const d = new Date()
   const year = d.getFullYear()
@@ -483,11 +494,16 @@ export function createAttendanceService({ repository, companySettings = {} }) {
       const checkInTime = formatCurrentTime()
 
       const matchedShift = SHIFT_DEFINITIONS.find((s) => s.code === shiftCode || s.name === shift || s.display === shift) || SHIFT_DEFINITIONS[0]
+      const isGeneral = !shiftCode || shiftCode === 'general' || shiftCode === 'default' || matchedShift.code === 'general'
+      const shiftStartTime = isGeneral && attendanceRules.workStartTime ? attendanceRules.workStartTime : (matchedShift.startTime || '09:30')
+      const shiftEndTime = isGeneral && attendanceRules.workEndTime ? attendanceRules.workEndTime : (matchedShift.endTime || '18:30')
       const chosenShiftCode = matchedShift.code
-      const chosenShiftDisplay = matchedShift.display
+      const chosenShiftDisplay = isGeneral && attendanceRules.workStartTime && attendanceRules.workEndTime
+        ? `General (${formatTime12(attendanceRules.workStartTime)} – ${formatTime12(attendanceRules.workEndTime)})`
+        : matchedShift.display
 
-      const workStartMins = parseTimeToMinutes(matchedShift.startTime || attendanceRules.workStartTime || '09:30') ?? 570
-      const gracePeriod = attendanceRules.gracePeriodMinutes ?? 15
+      const workStartMins = parseTimeToMinutes(shiftStartTime) ?? 570
+      const gracePeriod = Number(attendanceRules.gracePeriodMinutes ?? 15)
       const currentMins = now.getHours() * 60 + now.getMinutes()
       const isLate = currentMins > workStartMins + gracePeriod
 
@@ -875,8 +891,8 @@ export function createAttendanceService({ repository, companySettings = {} }) {
       return repository.save(record)
     },
 
-    async deleteRecord(id) {
-      return repository.delete(id)
+    async deleteRecord(id, options = {}) {
+      return repository.delete(id, options)
     },
   }
 }
