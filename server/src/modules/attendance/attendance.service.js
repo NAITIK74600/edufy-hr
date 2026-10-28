@@ -286,16 +286,19 @@ export async function evaluateShiftLateness(checkInTime, employeeId = null, work
   if (!resolvedShift && service && service.getConfig) {
     const rules = service.getConfig().attendanceRules || {};
     if (rules.workStartTime && rules.workEndTime) {
+      const startMins = parseTimeToMinutes(rules.workStartTime);
+      const endMins = parseTimeToMinutes(rules.workEndTime);
+      const graceMins = Number(rules.gracePeriodMinutes) || 0;
       resolvedShift = {
         shiftId: 'CUSTOM',
         name: `Custom Shift (${rules.workStartTime} – ${rules.workEndTime})`,
         startTime: rules.workStartTime,
         endTime: rules.workEndTime,
-        startMinutes: parseTimeToMinutes(rules.workStartTime),
-        endMinutes: parseTimeToMinutes(rules.workEndTime),
-        isOvernight: false,
-        gracePeriodMinutes: rules.gracePeriodMinutes ?? 0,
-        graceCutoffMinutes: (parseTimeToMinutes(rules.workStartTime) ?? 0) + (rules.gracePeriodMinutes ?? 0),
+        startMinutes: startMins,
+        endMinutes: endMins,
+        isOvernight: endMins !== null && startMins !== null && endMins < startMins,
+        gracePeriodMinutes: graceMins,
+        graceCutoffMinutes: (startMins ?? 0) + graceMins,
         halfDayCutoffMinutes: null,
         earlyLogoutWindow: { startMinutes: null, endMinutes: null, startTime: null, endTime: null },
         requiredCampusHours: 0,

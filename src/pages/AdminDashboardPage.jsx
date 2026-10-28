@@ -4539,6 +4539,13 @@ function AdminSettingsModule({ user: propUser }) {
   const [approvalWorkflow, setApprovalWorkflow] = useState(initialLeave.approvalWorkflow || 'manager_hr')
   const [recalculating, setRecalculating] = useState(false)
 
+  // Shift Management State
+  const initialShift = storeState.companySettings?.attendanceRules || {}
+  const [shiftStartTime, setShiftStartTime] = useState(initialShift.workStartTime || '')
+  const [shiftEndTime, setShiftEndTime] = useState(initialShift.workEndTime || '')
+  const [shiftGracePeriod, setShiftGracePeriod] = useState(initialShift.gracePeriodMinutes ?? 15)
+  const [shiftSaving, setShiftSaving] = useState(false)
+
   // Keep form fields synchronized whenever companySettings loads or updates from backend
   useEffect(() => {
     const lp = storeState.companySettings?.leavePolicies
@@ -4548,6 +4555,13 @@ function AdminSettingsModule({ user: propUser }) {
       if (lp.earnedQuota !== undefined) setEarnedQuota(lp.earnedQuota)
       if (lp.maxCarryForwardDays !== undefined) setMaxCarry(lp.maxCarryForwardDays)
       if (lp.approvalWorkflow) setApprovalWorkflow(lp.approvalWorkflow)
+    }
+    // Sync shift fields
+    const ar = storeState.companySettings?.attendanceRules
+    if (ar) {
+      if (ar.workStartTime) setShiftStartTime(ar.workStartTime)
+      if (ar.workEndTime) setShiftEndTime(ar.workEndTime)
+      if (ar.gracePeriodMinutes !== undefined) setShiftGracePeriod(ar.gracePeriodMinutes)
     }
   }, [storeState.companySettings])
 
@@ -4748,6 +4762,33 @@ function AdminSettingsModule({ user: propUser }) {
     }
   }
 
+  const handleSaveShiftSettings = async (e) => {
+    e.preventDefault()
+    if (!shiftStartTime || !shiftEndTime) {
+      setNotice('✕ Please set both Work Start Time and Work End Time.')
+      setTimeout(() => setNotice(''), 5000)
+      return
+    }
+    setShiftSaving(true)
+    try {
+      await hrStore.updateCompanySettings({
+        attendanceRules: {
+          workStartTime: shiftStartTime,
+          workEndTime: shiftEndTime,
+          gracePeriodMinutes: Number(shiftGracePeriod) || 0,
+        },
+      })
+      await hrStore.recalculateTodayAttendance()
+      setNotice(`✓ Shift timings saved! Work hours: ${shiftStartTime} – ${shiftEndTime}, Grace: ${shiftGracePeriod} min. Today's attendance recalculated.`)
+      setTimeout(() => setNotice(''), 6000)
+    } catch (err) {
+      setNotice(`✕ Failed to save shift settings: ${err.message || 'Please try again.'}`)
+      setTimeout(() => setNotice(''), 6000)
+    } finally {
+      setShiftSaving(false)
+    }
+  }
+
   const handleAddHoliday = workspaceAction(hrStore, async (e) => {
     e.preventDefault()
     if (!holidayTitle.trim() || !holidayDate) return
@@ -4904,6 +4945,92 @@ function AdminSettingsModule({ user: propUser }) {
             </button>
             <Button type="submit">
               <Check size={13} /> Save Organization Policies
+            </Button>
+          </div>
+        </form>
+      </section>
+
+      {/* SHIFT MANAGEMENT — Work Timings & Grace Period */}
+      <section className="panel" style={{ borderLeft: '4px solid #6366f1' }}>
+        <div className="panel-heading">
+          <div>
+            <p className="section-kicker">Attendance Policy</p>
+            <h2>Shift Timing & Grace Period</h2>
+          </div>
+          <span className="role-badge" style={{ fontSize: '10px', background: shiftStartTime && shiftEndTime ? '#dcfce7' : '#fef3c7', color: shiftStartTime && shiftEndTime ? '#166534' : '#92400e' }}>
+            {shiftStartTime && shiftEndTime ? '✓ Configured' : '⚠ Not Set'}
+          </span>
+        </div>
+        <p style={{ fontSize: '12px', color: 'var(--muted)', margin: '8px 0 16px' }}>
+          Configure the default work shift timings for all employees. Attendance will be marked as <strong>Late</strong> if an employee punches in after the Work Start Time + Grace Period. These settings apply to all employees who do not have a specific shift assignment.
+        </p>
+
+        <form onSubmit={handleSaveShiftSettings}>
+          <div style={{ maxWidth: '720px', marginBottom: '16px' }}>
+            <div style={{ background: '#f5f3ff', border: '1px solid #e0e7ff', borderRadius: '8px', padding: '16px' }}>
+              <strong style={{ fontSize: '13.5px', display: 'block', marginBottom: '12px' }}>Default Shift Configuration</strong>
+              <div style={{ display: 'grid', gap: '12px', gridTemplateColumns: '1fr 1fr' }}>
+                <div>
+                  <label style={{ fontSize: '11px', display: 'block', color: 'var(--muted)', marginBottom: '3px' }}>Work Start Time</label>
+                  <input
+                    type="time"
+                    className="text-input"
+                    value={shiftStartTime}
+                    onChange={(e) => setShiftStartTime(e.target.value)}
+                    style={{ width: '100%', padding: '8px 10px', fontSize: '13px' }}
+                    required
+                  />
+                  <span style={{ fontSize: '10px', color: 'var(--muted)', marginTop: '2px', display: 'block' }}>
+                    {shiftStartTime ? `Set to ${shiftStartTime}` : 'e.g. 09:00 for 9:00 AM'}
+                  </span>
+                </div>
+                <div>
+                  <label style={{ fontSize: '11px', display: 'block', color: 'var(--muted)', marginBottom: '3px' }}>Work End Time</label>
+                  <input
+                    type="time"
+                    className="text-input"
+                    value={shiftEndTime}
+                    onChange={(e) => setShiftEndTime(e.target.value)}
+                    style={{ width: '100%', padding: '8px 10px', fontSize: '13px' }}
+                    required
+                  />
+                  <span style={{ fontSize: '10px', color: 'var(--muted)', marginTop: '2px', display: 'block' }}>
+                    {shiftEndTime ? `Set to ${shiftEndTime}` : 'e.g. 18:00 for 6:00 PM'}
+                  </span>
+                </div>
+              </div>
+              <div style={{ marginTop: '12px' }}>
+                <label style={{ fontSize: '11px', display: 'block', color: 'var(--muted)', marginBottom: '3px' }}>Grace Period (minutes)</label>
+                <input
+                  type="number"
+                  min="0"
+                  max="120"
+                  className="text-input"
+                  value={shiftGracePeriod}
+                  onChange={(e) => setShiftGracePeriod(e.target.value)}
+                  style={{ width: '120px', padding: '8px 10px', fontSize: '13px' }}
+                />
+                <span style={{ fontSize: '10px', color: 'var(--muted)', marginTop: '2px', display: 'block' }}>
+                  Employees arriving within {shiftGracePeriod || 0} minute(s) after start time will NOT be marked late.
+                </span>
+              </div>
+              {shiftStartTime && shiftEndTime && (
+                <div style={{ marginTop: '14px', padding: '10px 12px', background: '#ede9fe', borderRadius: '6px', fontSize: '12px', color: '#4c1d95' }}>
+                  <strong>Preview:</strong> Shift {shiftStartTime} – {shiftEndTime} | Late after {shiftStartTime ? (() => {
+                    const [h, m] = shiftStartTime.split(':').map(Number);
+                    const total = h * 60 + m + (Number(shiftGracePeriod) || 0);
+                    const newH = Math.floor(total / 60) % 24;
+                    const newM = total % 60;
+                    return `${String(newH).padStart(2, '0')}:${String(newM).padStart(2, '0')}`;
+                  })() : '--:--'} ({shiftGracePeriod || 0} min grace)
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', alignItems: 'center' }}>
+            <Button type="submit" disabled={shiftSaving}>
+              <Check size={13} /> {shiftSaving ? 'Saving Shift...' : 'Save Shift Settings'}
             </Button>
           </div>
         </form>
