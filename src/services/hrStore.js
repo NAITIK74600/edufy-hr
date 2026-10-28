@@ -2437,7 +2437,7 @@ const INITIAL_ATTENDANCE = [
   { id: 'att-1', employeeId: 'ETS21206', employeeName: 'Chandana Somaih', date: '2026-09-30', checkIn: '09:22 AM', checkOut: null, status: 'present', wifiSSID: 'Edufyi-Office-5G', wifiVerified: true, latitude: 12.9716, longitude: 77.5946, distanceMeters: 24, gpsVerified: true, locationName: 'Bengaluru - Main Campus', totalHours: 'Active (Live)' },
   { id: 'att-2', employeeId: 'EDU-MGR-002', employeeName: 'Sarah Chen', date: '2026-09-30', checkIn: '09:14 AM', checkOut: null, status: 'present', wifiSSID: 'Edufyi-Office-5G', wifiVerified: true, latitude: 37.7891, longitude: -122.4014, distanceMeters: 14, gpsVerified: true, locationName: 'HQ - San Francisco', totalHours: 'Active (Live)' },
   { id: 'att-3', employeeId: 'EDU-HR-001', employeeName: 'HR', date: '2026-09-30', checkIn: '09:05 AM', checkOut: null, status: 'present', wifiSSID: 'Edufyi-Office-5G', wifiVerified: true, latitude: 37.7893, longitude: -122.4016, distanceMeters: 35, gpsVerified: true, locationName: 'HQ - San Francisco', totalHours: 'Active (Live)' },
-  { id: 'att-4', employeeId: 'EDU-EMP-205', employeeName: 'Marcus Vance', date: '2026-09-30', checkIn: '09:52 AM', checkOut: null, status: 'late', wifiSSID: 'Edufyi-Corp-Secure', wifiVerified: true, latitude: 37.7889, longitude: -122.4012, distanceMeters: 52, gpsVerified: true, locationName: 'HQ - San Francisco', totalHours: 'Active (Late)' },
+  { id: 'att-4', employeeId: 'EDU-EMP-205', employeeName: 'Marcus Vance', date: '2026-09-30', checkIn: '09:52 AM', checkOut: null, status: 'present', wifiSSID: 'Edufyi-Corp-Secure', wifiVerified: true, latitude: 37.7889, longitude: -122.4012, distanceMeters: 52, gpsVerified: true, locationName: 'HQ - San Francisco', totalHours: 'Active (Live)' },
   { id: 'att-5', employeeId: 'EDU-EMP-309', employeeName: 'Priya Sharma', date: '2026-09-30', checkIn: '09:10 AM', checkOut: null, status: 'present', wifiSSID: 'Home-Fiber-WiFi', wifiVerified: false, latitude: 37.7649, longitude: -122.4662, distanceMeters: 6200, gpsVerified: false, locationName: 'Remote (Outside Geofence)', totalHours: 'Active (Remote)' },
   { id: 'att-6', employeeId: 'EDU-EMP-410', employeeName: 'David Kim', date: '2026-09-30', checkIn: null, checkOut: null, status: 'on-leave', wifiSSID: null, wifiVerified: false, distanceMeters: null, gpsVerified: false, locationName: null, totalHours: '0.0 hrs' },
   { id: 'att-7', employeeId: 'EDU-EMP-512', employeeName: 'Elena Rostova', date: '2026-09-30', checkIn: '09:30 AM', checkOut: null, status: 'present', wifiSSID: 'Edufyi-Office-5G', wifiVerified: true, latitude: 37.7891, longitude: -122.4015, distanceMeters: 22, gpsVerified: true, locationName: 'HQ - San Francisco', totalHours: 'Active (Live)' },
@@ -3190,7 +3190,7 @@ function loadStore() {
     try {
       const rawCal = window.localStorage.getItem('edufyi_holiday_calendar_images_v1')
       if (rawCal) cachedCalendarImages = JSON.parse(rawCal)
-    } catch (_) {}
+    } catch (_) { }
   }
 
   // In browser, initialize clean zero-mock state so UI cleanly awaits MongoDB Atlas data without any glitch or flash
@@ -3297,7 +3297,7 @@ export function is25thMonthLop(requestOrData) {
   const startDateStr = requestOrData.startDate
   const endDateStr = requestOrData.endDate || startDateStr
   if (!startDateStr) return false
-  
+
   const start = new Date(startDateStr)
   const end = new Date(endDateStr)
   if (isNaN(start.getTime())) return false
@@ -3657,7 +3657,7 @@ const localStore = {
     const id = data.id || `team-${name.toLowerCase().replace(/[^a-z0-9]/g, '_')}`
     const mgr = (storeState.employees || []).find((e) => e.id === data.managerId || e._id === data.managerId)
     const tl = (storeState.employees || []).find((e) => e.id === data.teamLeadId || e._id === data.teamLeadId)
-    
+
     const newTeam = {
       id,
       name,
@@ -3984,7 +3984,7 @@ const localStore = {
   },
   deleteHoliday(identifier) {
     if (identifier === undefined || identifier === null || identifier === '') return
-    storeState.holidays = (storeState.holidays || []).filter((h) => 
+    storeState.holidays = (storeState.holidays || []).filter((h) =>
       h.id !== identifier && h._id !== identifier && h.name !== identifier && h.title !== identifier
     )
     storeState = { ...storeState, holidays: [...storeState.holidays] }
@@ -4089,7 +4089,7 @@ const localStore = {
   },
   removeBranchLocation(id) {
     if (!id) return
-    storeState.companySettings.locations = (storeState.companySettings.locations || []).filter((l) => 
+    storeState.companySettings.locations = (storeState.companySettings.locations || []).filter((l) =>
       l.id !== id && l._id !== id && l.name !== id
     )
     storeState.companySettings = {
@@ -5033,45 +5033,12 @@ const localStore = {
       return { startMins, endMins, isOvernight: endMins < startMins }
     })()
 
-    const isLate = (() => {
-      const rules = storeState.companySettings?.attendanceRules || {}
-      const gracePeriod = Number(rules.gracePeriodMinutes ?? 15)
-      const currentMins = now.getHours() * 60 + now.getMinutes()
-      let effectivePunchMins = currentMins
-      if (resolvedShift.isOvernight && currentMins <= (resolvedShift.endMins + 120)) {
-        effectivePunchMins = currentMins + 1440
-      }
-      const diff = effectivePunchMins - resolvedShift.startMins
-      return diff > gracePeriod
-    })()
-
-    // Policy: 2 late logins per month are accepted (status = 'late').
-    // 3rd late login onwards is marked as 'half-day'.
-    const monthPrefix = (date || '').substring(0, 7) || now.toISOString().substring(0, 7)
-    const priorLateCount = (storeState.attendance || []).filter((a) => {
-      if (a.employeeId !== employeeId) return false
-      if (a.date === date) return false
-      const m = (a.date || '').substring(0, 7)
-      if (m !== monthPrefix) return false
-      return Boolean(a.isLate || a.status === 'late' || (a.status === 'half-day' && a.lateCount > 0))
-    }).length
-
+    // Late login logic disabled - all punch-ins are marked present and on-time
+    const isLate = false
     let initialStatus = 'present'
     let isHalfDay = false
     let currentLateOccurrence = 0
-    let noteText = ''
-
-    if (isLate) {
-      currentLateOccurrence = priorLateCount + 1
-      if (currentLateOccurrence <= 2) {
-        initialStatus = 'late'
-        noteText = `Late Login #${currentLateOccurrence}/2`
-      } else {
-        initialStatus = 'half-day'
-        isHalfDay = true
-        noteText = `Late Login #${currentLateOccurrence} (Exceeded 2 accepted late logins — marked as Half Day)`
-      }
-    }
+    let noteText = `Verified Attendance (${resolvedShift.name || 'General Shift'})`
 
     const existingIndex = storeState.attendance.findIndex((a) => a.employeeId === employeeId && a.date === date)
     const newRecord = {
@@ -5539,29 +5506,29 @@ const localStore = {
       const earlyWindowStartMins = (recEndMins - 60 + 1440) % 1440
       const earlyWindowStr = `${f12(earlyWindowStartMins)} – ${f12(recEnd, true)}`
 
-      if (isLate) {
-        targetStatus = rec.lateCount > 2 ? 'half-day' : 'late'
-        targetNotes = rec.lateCount > 2 ? 'Late Login (Exceeded 2 accepted late logins — marked as Half Day)' : `Late Login (${f12(recStart)})`
-        targetTotalHours = rec.checkOut ? rec.totalHours : (rec.lateCount > 2 ? 'Active (Half-Day · Late)' : 'Active (Late)')
+      // Late login logic disabled - all records treated as on-time
+      targetIsLate = false
+      targetLateCount = 0
+      targetIsHalfDay = false
+
+      if (isMonthEndLop) {
+        targetStatus = 'lop'
+        targetNotes = `Early Logout (${earlyWindowStr}) marked as LOP per month-end policy`
+      } else if (isEarly) {
+        targetStatus = 'early-logout'
+        targetNotes = `Early Logout (${earlyWindowStr})`
+      } else if (['late', 'half-day', 'lop', 'early-logout'].includes(rec.status) || !rec.status) {
+        targetStatus = 'present'
+        targetNotes = `Verified Attendance (${isGeneral ? 'General Shift' : (rec.shift || 'Shift')})`
       } else {
-        targetIsLate = false
-        targetLateCount = 0
-        targetIsHalfDay = false
-        if (isMonthEndLop) {
-          targetStatus = 'lop'
-          targetNotes = `Early Logout (${earlyWindowStr}) marked as LOP per month-end policy`
-        } else if (isEarly) {
-          targetStatus = 'early-logout'
-          targetNotes = `Early Logout (${earlyWindowStr})`
-        } else {
-          targetStatus = (['late', 'half-day', 'lop', 'early-logout'].includes(rec.status) || !rec.status) ? 'present' : rec.status
-          targetNotes = 'On-time verification (General Shift)'
-        }
-        if (!rec.checkOut) {
-          targetTotalHours = 'Active (Live)'
-        } else if (typeof rec.totalHours === 'string' && rec.totalHours.includes('Late')) {
-          targetTotalHours = rec.totalHours.replace(/·?\s*Late\s*·?/i, '').trim() || 'Active (Live)'
-        }
+        targetStatus = rec.status
+        targetNotes = (typeof rec.notes === 'string' && rec.notes.includes('Late')) ? `Verified Attendance (${isGeneral ? 'General Shift' : (rec.shift || 'Shift')})` : (rec.notes || '')
+      }
+
+      if (!rec.checkOut) {
+        targetTotalHours = 'Active (Live)'
+      } else if (typeof rec.totalHours === 'string' && rec.totalHours.includes('Late')) {
+        targetTotalHours = rec.totalHours.replace(/·?\s*Late\s*·?/i, '').trim() || 'Active (Live)'
       }
 
       count++
@@ -5593,7 +5560,7 @@ const localStore = {
   },
   applyLeave(requestData, applicantUser = null) {
     const employees = storeState.employees || []
-    
+
     // Resolve applicant
     const empId = requestData.employeeId || applicantUser?.employeeId || applicantUser?.id
     const applicantEmp = employees.find(
@@ -5917,12 +5884,12 @@ const localStore = {
       storeState.leaves = storeState.leaves.map((l) =>
         l.id === leaveId
           ? {
-              ...l,
-              status: 'approved',
-              adminComment: comment,
-              adminDecisionAt: timestamp,
-              adminApprovedBy: approverName,
-            }
+            ...l,
+            status: 'approved',
+            adminComment: comment,
+            adminDecisionAt: timestamp,
+            adminApprovedBy: approverName,
+          }
           : l
       )
 
@@ -5952,14 +5919,14 @@ const localStore = {
         storeState.leaves = storeState.leaves.map((l) =>
           l.id === leaveId
             ? {
-                ...l,
-                status: 'pending_hr',
-                currentApproverRole: 'hr',
-                tlComment: comment,
-                tlDecisionAt: timestamp,
-                tlName: approverName,
-                tlApprovedBy: approverName,
-              }
+              ...l,
+              status: 'pending_hr',
+              currentApproverRole: 'hr',
+              tlComment: comment,
+              tlDecisionAt: timestamp,
+              tlName: approverName,
+              tlApprovedBy: approverName,
+            }
             : l
         )
 
@@ -5976,13 +5943,13 @@ const localStore = {
         storeState.leaves = storeState.leaves.map((l) =>
           l.id === leaveId
             ? {
-                ...l,
-                status: 'approved',
-                tlComment: comment,
-                tlDecisionAt: timestamp,
-                tlName: approverName,
-                tlApprovedBy: approverName,
-              }
+              ...l,
+              status: 'approved',
+              tlComment: comment,
+              tlDecisionAt: timestamp,
+              tlName: approverName,
+              tlApprovedBy: approverName,
+            }
             : l
         )
 
@@ -6032,14 +5999,14 @@ const localStore = {
         storeState.leaves = storeState.leaves.map((l) =>
           l.id === leaveId
             ? {
-                ...l,
-                status: 'pending_hr',
-                currentApproverRole: 'hr',
-                managerComment: comment,
-                managerDecisionAt: timestamp,
-                managerName: approverName,
-                managerApprovedBy: approverName,
-              }
+              ...l,
+              status: 'pending_hr',
+              currentApproverRole: 'hr',
+              managerComment: comment,
+              managerDecisionAt: timestamp,
+              managerName: approverName,
+              managerApprovedBy: approverName,
+            }
             : l
         )
 
@@ -6069,13 +6036,13 @@ const localStore = {
         storeState.leaves = storeState.leaves.map((l) =>
           l.id === leaveId
             ? {
-                ...l,
-                status: 'approved',
-                managerComment: comment,
-                managerDecisionAt: timestamp,
-                managerName: approverName,
-                managerApprovedBy: approverName,
-              }
+              ...l,
+              status: 'approved',
+              managerComment: comment,
+              managerDecisionAt: timestamp,
+              managerName: approverName,
+              managerApprovedBy: approverName,
+            }
             : l
         )
 
@@ -6173,14 +6140,14 @@ const localStore = {
       storeState.leaves = storeState.leaves.map((l) =>
         l.id === leaveId
           ? {
-              ...l,
-              status: 'approved',
-              directorComment: comment,
-              directorDecisionAt: timestamp,
-              directorName: approverName,
-              directorApprovedBy: approverName,
-              hrNotified: true,
-            }
+            ...l,
+            status: 'approved',
+            directorComment: comment,
+            directorDecisionAt: timestamp,
+            directorName: approverName,
+            directorApprovedBy: approverName,
+            hrNotified: true,
+          }
           : l
       )
 
@@ -6212,13 +6179,13 @@ const localStore = {
         storeState.leaves = storeState.leaves.map((l) =>
           l.id === leaveId
             ? {
-                ...l,
-                status: 'pending_admin',
-                currentApproverRole: 'admin',
-                hrComment: comment,
-                hrDecisionAt: timestamp,
-                hrApprovedBy: approverName,
-              }
+              ...l,
+              status: 'pending_admin',
+              currentApproverRole: 'admin',
+              hrComment: comment,
+              hrDecisionAt: timestamp,
+              hrApprovedBy: approverName,
+            }
             : l
         )
 
@@ -6246,12 +6213,12 @@ const localStore = {
         storeState.leaves = storeState.leaves.map((l) =>
           l.id === leaveId
             ? {
-                ...l,
-                status: 'approved',
-                hrComment: comment,
-                hrDecisionAt: timestamp,
-                hrApprovedBy: approverName,
-              }
+              ...l,
+              status: 'approved',
+              hrComment: comment,
+              hrDecisionAt: timestamp,
+              hrApprovedBy: approverName,
+            }
             : l
         )
 
@@ -6816,7 +6783,7 @@ const localStore = {
     }
     try {
       playNotificationSound(notif.type === 'announcement' ? 'announcement' : 'notification')
-    } catch {}
+    } catch { }
     notifyListeners()
   },
   markNotificationRead(id) {
@@ -7276,8 +7243,8 @@ const localStore = {
         (p) =>
           (p.month === month) &&
           (String(p.employeeId).toUpperCase() === String(emp.employeeId || '').toUpperCase() ||
-           String(p.employeeId) === String(emp.id) ||
-           String(p.employeeRef) === String(emp._id || emp.id))
+            String(p.employeeId) === String(emp.id) ||
+            String(p.employeeRef) === String(emp._id || emp.id))
       )
 
       if (existingIndex >= 0) {

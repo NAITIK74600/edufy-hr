@@ -710,31 +710,12 @@ export function createAttendanceService({ repository, companySettings = {} }) {
         gracePeriodMinutes: gracePeriod,
         isOvernight: resolved.isOvernight,
       })
-      const isLate = lateness.isLate
-
+      // Late login logic disabled - all punch-ins are marked present and on-time
+      const isLate = false
       let lateCount = 0
       let isHalfDayFromLate = false
       let punchInStatus = 'present'
       let lateNote = `On-time verification (${resolved.name})`
-
-      if (isLate) {
-        const monthPrefix = workDate.slice(0, 7)
-        const allEmpRecords = await repository.list({ employeeId: employeeId.toUpperCase() })
-        const priorLateRecords = (allEmpRecords || []).filter((r) =>
-          r.date && r.date.startsWith(monthPrefix) && r.date !== workDate && (
-            r.isLate || r.status === 'late' || (r.status === 'half-day' && r.lateCount > 0) || (r.notes && r.notes.toLowerCase().includes('late'))
-          )
-        )
-        lateCount = priorLateRecords.length + 1
-        if (lateCount <= 2) {
-          punchInStatus = 'late'
-          lateNote = `Late Login #${lateCount}/2 (${resolved.name})`
-        } else {
-          isHalfDayFromLate = true
-          punchInStatus = 'half-day'
-          lateNote = `Late Login #${lateCount} (Exceeded 2 accepted late logins — marked as Half Day)`
-        }
-      }
 
       const record = {
         id: existing?.id,
@@ -766,7 +747,7 @@ export function createAttendanceService({ repository, companySettings = {} }) {
         gpsVerified: verification.isGpsVerified,
         locationName: verification.nearestLocation,
         verificationMethod: verification.method,
-        totalHours: isHalfDayFromLate ? 'Active (Half-Day · Late)' : (isLate ? 'Active (Late)' : 'Active (Live)'),
+        totalHours: 'Active (Live)',
         notes: lateNote,
       }
 
@@ -1184,29 +1165,29 @@ export function createAttendanceService({ repository, companySettings = {} }) {
         const earlyWindowStartMins = (resolved.endMins - 60 + 1440) % 1440
         const earlyWindowStr = `${formatTime12(earlyWindowStartMins)} – ${formatTime12(resolved.endTime)}`
 
-        if (isLate) {
-          targetStatus = rec.lateCount > 2 ? 'half-day' : 'late'
-          targetNotes = rec.lateCount > 2 ? 'Late Login (Exceeded 2 accepted late logins — marked as Half Day)' : `Late Login (${formatTime12(resolved.startTime)})`
-          targetTotalHours = rec.checkOut ? rec.totalHours : (rec.lateCount > 2 ? 'Active (Half-Day · Late)' : 'Active (Late)')
+        // Late login logic disabled - all records treated as on-time
+        targetIsLate = false
+        targetLateCount = 0
+        targetIsHalfDay = false
+
+        if (isMonthEndLop) {
+          targetStatus = 'lop'
+          targetNotes = `Early Logout (${earlyWindowStr}) marked as LOP per month-end policy`
+        } else if (isEarly) {
+          targetStatus = 'early-logout'
+          targetNotes = `Early Logout (${earlyWindowStr})`
+        } else if (['late', 'half-day', 'lop', 'early-logout'].includes(rec.status) || !rec.status) {
+          targetStatus = 'present'
+          targetNotes = `On-time verification (${resolved.name})`
         } else {
-          targetIsLate = false
-          targetLateCount = 0
-          targetIsHalfDay = false
-          if (isMonthEndLop) {
-            targetStatus = 'lop'
-            targetNotes = `Early Logout (${earlyWindowStr}) marked as LOP per month-end policy`
-          } else if (isEarly) {
-            targetStatus = 'early-logout'
-            targetNotes = `Early Logout (${earlyWindowStr})`
-          } else {
-            targetStatus = (['late', 'half-day', 'lop', 'early-logout'].includes(rec.status) || !rec.status) ? 'present' : rec.status
-            targetNotes = `On-time verification (${resolved.name})`
-          }
-          if (!rec.checkOut) {
-            targetTotalHours = 'Active (Live)'
-          } else if (typeof rec.totalHours === 'string' && rec.totalHours.includes('Late')) {
-            targetTotalHours = rec.totalHours.replace(/·?\s*Late\s*·?/i, '').trim() || 'Active (Live)'
-          }
+          targetStatus = rec.status
+          targetNotes = (typeof rec.notes === 'string' && rec.notes.includes('Late')) ? `On-time verification (${resolved.name})` : (rec.notes || '')
+        }
+
+        if (!rec.checkOut) {
+          targetTotalHours = 'Active (Live)'
+        } else if (typeof rec.totalHours === 'string' && rec.totalHours.includes('Late')) {
+          targetTotalHours = rec.totalHours.replace(/·?\s*Late\s*·?/i, '').trim() || 'Active (Live)'
         }
 
         const needsUpdate =

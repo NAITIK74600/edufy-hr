@@ -507,7 +507,6 @@ function AttendanceModule() {
               >
                 <option value="all">All statuses</option>
                 <option value="present">Present (On-Time)</option>
-                <option value="late">Late Login (Grace 1 or 2)</option>
                 <option value="early-logout">Early Logout (6:30–7:30 PM)</option>
                 <option value="lop">Loss of Pay (LOP)</option>
                 <option value="half-day">Half Day</option>
@@ -527,13 +526,7 @@ function AttendanceModule() {
             </div>
           </div>
 
-          {/* Monthly Attendance Policy Notice */}
-          <div style={{ background: '#fdfbf7', border: '1px solid #fae8cc', borderRadius: '8px', padding: '10px 14px', marginTop: '12px', fontSize: '11px', color: '#92400e', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <AlertCircle size={15} style={{ color: '#d97706', flexShrink: 0 }} />
-            <span>
-              <strong>Monthly Attendance Policy:</strong> Up to 2 late logins and 2 early logouts are accepted per month without penalty. The <strong>3rd occurrence</strong> (and onwards) is marked as a <strong>Half Day</strong>. <em>(From the 25th onwards, early logouts are marked as Loss of Pay / LOP).</em>
-            </span>
-          </div>
+
 
           {/* Mobile Attendance Cards for HR */}
           <div className="attendance-cards-mobile" style={{ display: 'none', gap: '10px', marginTop: '14px' }}>
@@ -562,90 +555,22 @@ function AttendanceModule() {
                         <span style={{ fontSize: '11px', color: 'var(--muted)', marginLeft: '6px' }}>({r.employeeId})</span>
                       </div>
                       <div style={{ textAlign: 'right' }}>
-                      {r.status === 'late' ? (
-                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
-                          <StatusBadge tone="warning">Late Login</StatusBadge>
-                          <div
-                            style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '2px',
-                              background: '#fef3c7',
-                              padding: '2px 4px',
-                              borderRadius: '6px',
-                              border: '1px solid #fde68a',
-                            }}
-                            title={`Grace arrival option ${getLateOccurrence(r)} of 2`}
-                          >
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleSetLateOccurrence(r, 1);
-                              }}
-                              title="Grace Arrival Option 1 of 2"
-                              style={{
-                                width: '18px',
-                                height: '18px',
-                                borderRadius: '4px',
-                                border: getLateOccurrence(r) === 1 ? '1px solid #b45309' : '1px solid transparent',
-                                background: getLateOccurrence(r) === 1 ? '#d97706' : 'transparent',
-                                color: getLateOccurrence(r) === 1 ? '#ffffff' : '#92400e',
-                                fontSize: '10.5px',
-                                fontWeight: 700,
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                cursor: 'pointer',
-                                padding: 0,
-                                lineHeight: 1,
-                              }}
-                            >
-                              1
-                            </button>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleSetLateOccurrence(r, 2);
-                              }}
-                              title="Grace Arrival Option 2 of 2"
-                              style={{
-                                width: '18px',
-                                height: '18px',
-                                borderRadius: '4px',
-                                border: getLateOccurrence(r) === 2 ? '1px solid #b45309' : '1px solid transparent',
-                                background: getLateOccurrence(r) === 2 ? '#d97706' : 'transparent',
-                                color: getLateOccurrence(r) === 2 ? '#ffffff' : '#92400e',
-                                fontSize: '10.5px',
-                                fontWeight: 700,
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                cursor: 'pointer',
-                                padding: 0,
-                                lineHeight: 1,
-                              }}
-                            >
-                              2
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
                         <StatusBadge
                           tone={
-                            r.status === 'present'
+                            r.status === 'present' || r.status === 'late'
                               ? 'info'
                               : r.status === 'early-logout'
                               ? 'warning'
                               : r.status === 'lop'
                               ? 'danger'
+                              : r.status === 'half-day'
+                              ? 'warning'
                               : r.status === 'on-leave'
                               ? 'neutral'
                               : 'warning'
                           }
                         >
-                          {r.status === 'present'
+                          {r.status === 'present' || r.status === 'late'
                             ? 'Present'
                             : r.status === 'early-logout'
                             ? 'Early Logout'
@@ -657,7 +582,6 @@ function AttendanceModule() {
                             ? 'On Leave'
                             : 'Absent'}
                         </StatusBadge>
-                      )}
                     </div>
                     {formatAttendanceNotes(r.notes) && (
                       <div style={{ fontSize: '10px', color: '#b45309', marginTop: '2px', lineHeight: 1.2 }}>
@@ -872,106 +796,33 @@ function AttendanceModule() {
 
                     return (
                       <div style={{ minWidth: '150px', maxWidth: '280px' }}>
-                        {isLate ? (
-                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                            <StatusBadge tone="warning">Late Login</StatusBadge>
-                            <div
-                              style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '3px',
-                                background: '#fef3c7',
-                                padding: '2px 4px',
-                                borderRadius: '6px',
-                                border: '1px solid #fde68a',
-                              }}
-                              title={`Grace arrival option ${lateOccurrence} of 2 accepted (click 1 or 2 to switch)`}
-                            >
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleSetLateOccurrence(r, 1);
-                                }}
-                                title="Grace Arrival Option 1 of 2 (click to set)"
-                                style={{
-                                  width: '18px',
-                                  height: '18px',
-                                  borderRadius: '4px',
-                                  border: lateOccurrence === 1 ? '1px solid #b45309' : '1px solid transparent',
-                                  background: lateOccurrence === 1 ? '#d97706' : 'transparent',
-                                  color: lateOccurrence === 1 ? '#ffffff' : '#92400e',
-                                  fontSize: '10.5px',
-                                  fontWeight: 700,
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  cursor: 'pointer',
-                                  padding: 0,
-                                  lineHeight: 1,
-                                  transition: 'all 0.15s ease',
-                                }}
-                              >
-                                1
-                              </button>
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleSetLateOccurrence(r, 2);
-                                }}
-                                title="Grace Arrival Option 2 of 2 (click to set)"
-                                style={{
-                                  width: '18px',
-                                  height: '18px',
-                                  borderRadius: '4px',
-                                  border: lateOccurrence === 2 ? '1px solid #b45309' : '1px solid transparent',
-                                  background: lateOccurrence === 2 ? '#d97706' : 'transparent',
-                                  color: lateOccurrence === 2 ? '#ffffff' : '#92400e',
-                                  fontSize: '10.5px',
-                                  fontWeight: 700,
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  cursor: 'pointer',
-                                  padding: 0,
-                                  lineHeight: 1,
-                                  transition: 'all 0.15s ease',
-                                }}
-                              >
-                                2
-                              </button>
-                            </div>
-                          </div>
-                        ) : (
-                          <StatusBadge
-                            tone={
-                              r.status === 'present'
-                                ? 'info'
-                                : r.status === 'early-logout'
-                                ? 'warning'
-                                : r.status === 'lop'
-                                ? 'danger'
-                                : r.status === 'half-day'
-                                ? 'warning'
-                                : r.status === 'on-leave'
-                                ? 'neutral'
-                                : 'warning'
-                            }
-                          >
-                            {r.status === 'present'
-                              ? 'Present'
+                        <StatusBadge
+                          tone={
+                            r.status === 'present' || r.status === 'late'
+                              ? 'info'
                               : r.status === 'early-logout'
-                              ? 'Early Logout'
+                              ? 'warning'
                               : r.status === 'lop'
-                              ? 'Loss of Pay (LOP)'
+                              ? 'danger'
                               : r.status === 'half-day'
-                              ? 'Half Day'
+                              ? 'warning'
                               : r.status === 'on-leave'
-                              ? 'On Leave'
-                              : 'Absent'}
-                          </StatusBadge>
-                        )}
+                              ? 'neutral'
+                              : 'warning'
+                          }
+                        >
+                          {r.status === 'present' || r.status === 'late'
+                            ? 'Present'
+                            : r.status === 'early-logout'
+                            ? 'Early Logout'
+                            : r.status === 'lop'
+                            ? 'Loss of Pay (LOP)'
+                            : r.status === 'half-day'
+                            ? 'Half Day'
+                            : r.status === 'on-leave'
+                            ? 'On Leave'
+                            : 'Absent'}
+                        </StatusBadge>
                         {cleanedNotes && (
                           <div style={{
                             fontSize: '10px',
@@ -1503,31 +1354,19 @@ function AttendanceModule() {
                       onChange={(e) => {
                         const nextStatus = e.target.value;
                         let updates = { ...editingAttendance, status: nextStatus };
-                        if (nextStatus === 'present') {
+                        if (nextStatus === 'present' || nextStatus === 'late') {
                           updates.isLate = false;
                           updates.lateCount = 0;
                           updates.isHalfDay = false;
                           updates.isEarlyLogout = false;
                           updates.isLop = false;
-                          updates.notes = 'On-time verification (General Shift)';
+                          updates.notes = 'Verified Attendance (General Shift)';
                           if (typeof updates.totalHours === 'string' && updates.totalHours.includes('Late')) {
                             updates.totalHours = updates.checkOut ? '8.0 hrs' : 'Active (Live)';
                           }
-                        } else if (nextStatus === 'late') {
-                          const occ = getLateOccurrence(editingAttendance);
-                          const shift = formatShiftDisplay(editingAttendance.shift, editingAttendance.shiftCode, storeState.companySettings?.attendanceRules);
-                          updates.isLate = true;
-                          updates.lateCount = occ;
-                          updates.notes = `Late Login #${occ}/2 (${shift})`;
-                          if (typeof updates.totalHours === 'string' && updates.totalHours.startsWith('Active')) {
-                            updates.totalHours = 'Active (Late)';
-                          }
                         } else if (nextStatus === 'half-day') {
                           updates.isHalfDay = true;
-                          updates.isLate = true;
-                          if (typeof updates.totalHours === 'string' && updates.totalHours.startsWith('Active')) {
-                            updates.totalHours = 'Active (Half-Day · Late)';
-                          }
+                          updates.isLate = false;
                         } else if (nextStatus === 'early-logout') {
                           updates.isEarlyLogout = true;
                         } else if (nextStatus === 'lop') {
@@ -1537,7 +1376,6 @@ function AttendanceModule() {
                       }}
                     >
                       <option value="present">Present (On-Time)</option>
-                      <option value="late">Late Login (Grace 1 or 2)</option>
                       <option value="early-logout">Early Logout (6:30–7:30 PM)</option>
                       <option value="lop">Loss of Pay (LOP)</option>
                       <option value="half-day">Half Day</option>
@@ -1547,99 +1385,14 @@ function AttendanceModule() {
                   </Field>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                  <Field label="Late Arrival Evaluation">
-                    <select
-                      value={editingAttendance.status === 'late' || editingAttendance.isLate ? 'late' : 'on-time'}
-                      onChange={(e) => {
-                        const isLateSelected = e.target.value === 'late';
-                        const shift = formatShiftDisplay(editingAttendance.shift, editingAttendance.shiftCode, storeState.companySettings?.attendanceRules);
-                        setEditingAttendance({
-                          ...editingAttendance,
-                          isLate: isLateSelected,
-                          status: isLateSelected ? 'late' : (editingAttendance.status === 'late' ? 'present' : editingAttendance.status),
-                          lateCount: isLateSelected ? (editingAttendance.lateCount || 1) : 0,
-                          totalHours: !isLateSelected && typeof editingAttendance.totalHours === 'string' && editingAttendance.totalHours.includes('Late')
-                            ? (editingAttendance.checkOut ? '8.0 hrs' : 'Active (Live)')
-                            : (isLateSelected && typeof editingAttendance.totalHours === 'string' && editingAttendance.totalHours.startsWith('Active') ? 'Active (Late)' : editingAttendance.totalHours),
-                          notes: !isLateSelected
-                            ? 'On-time verification (General Shift)'
-                            : `Late Login #${editingAttendance.lateCount || 1}/2 (${shift})`,
-                        });
-                      }}
-                    >
-                      <option value="on-time">✓ On-Time Arrival (No Penalty)</option>
-                      <option value="late">⚠ Late Arrival (Count towards policy)</option>
-                    </select>
-                  </Field>
-                  <Field label="Shift Display">
-                    <input
-                      type="text"
-                      value={formatShiftDisplay(editingAttendance.shift, editingAttendance.shiftCode, storeState.companySettings?.attendanceRules)}
-                      disabled
-                      style={{ background: 'var(--surface-sunken)', color: 'var(--ink)' }}
-                    />
-                  </Field>
-                </div>
-
-                {editingAttendance.status === 'late' && (
-                  <div style={{ padding: '10px 12px', background: '#fef3c7', borderRadius: '8px', border: '1px solid #fde68a', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
-                    <div>
-                      <span style={{ fontSize: '11.5px', fontWeight: 700, color: '#92400e', display: 'block' }}>
-                        Late Login Grace Option:
-                      </span>
-                      <small style={{ fontSize: '10px', color: '#b45309' }}>Accepted grace arrival 1 or 2</small>
-                    </div>
-                    <div style={{ display: 'inline-flex', gap: '6px' }}>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const shift = formatShiftDisplay(editingAttendance.shift, editingAttendance.shiftCode, storeState.companySettings?.attendanceRules);
-                          setEditingAttendance({
-                            ...editingAttendance,
-                            lateCount: 1,
-                            notes: `Late Login #1/2 (${shift})`,
-                          });
-                        }}
-                        style={{
-                          padding: '4px 12px',
-                          borderRadius: '6px',
-                          border: getLateOccurrence(editingAttendance) === 1 ? '1px solid #b45309' : '1px solid #cbd5e1',
-                          background: getLateOccurrence(editingAttendance) === 1 ? '#d97706' : '#ffffff',
-                          color: getLateOccurrence(editingAttendance) === 1 ? '#ffffff' : '#475569',
-                          fontWeight: 700,
-                          fontSize: '11px',
-                          cursor: 'pointer',
-                        }}
-                      >
-                        Option 1
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const shift = formatShiftDisplay(editingAttendance.shift, editingAttendance.shiftCode, storeState.companySettings?.attendanceRules);
-                          setEditingAttendance({
-                            ...editingAttendance,
-                            lateCount: 2,
-                            notes: `Late Login #2/2 (${shift})`,
-                          });
-                        }}
-                        style={{
-                          padding: '4px 12px',
-                          borderRadius: '6px',
-                          border: getLateOccurrence(editingAttendance) === 2 ? '1px solid #b45309' : '1px solid #cbd5e1',
-                          background: getLateOccurrence(editingAttendance) === 2 ? '#d97706' : '#ffffff',
-                          color: getLateOccurrence(editingAttendance) === 2 ? '#ffffff' : '#475569',
-                          fontWeight: 700,
-                          fontSize: '11px',
-                          cursor: 'pointer',
-                        }}
-                      >
-                        Option 2
-                      </button>
-                    </div>
-                  </div>
-                )}
+                <Field label="Shift Display">
+                  <input
+                    type="text"
+                    value={formatShiftDisplay(editingAttendance.shift, editingAttendance.shiftCode, storeState.companySettings?.attendanceRules)}
+                    disabled
+                    style={{ background: 'var(--surface-sunken)', color: 'var(--ink)' }}
+                  />
+                </Field>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                   <Field label="Check-In Time">

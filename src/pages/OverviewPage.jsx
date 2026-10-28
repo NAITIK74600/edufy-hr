@@ -295,7 +295,7 @@ export function OverviewPage() {
   const punchedOutCount = todayAttendance.filter((a) => Boolean(a.checkIn) && Boolean(a.checkOut)).length
   const checkedInEmpIds = new Set(todayAttendance.filter((a) => Boolean(a.checkIn)).map((a) => String(a.employeeId || '').toUpperCase()))
   const notPunchedInCount = Math.max(0, activeEmployees - checkedInEmpIds.size)
-  const lateAttendance = todayAttendance.filter((a) => a.status === 'late' || a.isLate).length
+  const lateAttendance = 0
   const onLeaveToday = new Set(storeState.leaves.filter((leave) => leave.status === 'approved' && leave.startDate <= todayKey() && leave.endDate >= todayKey()).map((leave) => leave.employeeId)).size
   const openTickets = (storeState.tickets || []).filter((t) => (t.status || 'open') !== 'resolved' && t.status !== 'closed').length
   const pendingExpenses = (storeState.expenses || []).filter((e) => (e.status || 'submitted') === 'submitted' || e.status === 'pending').length
