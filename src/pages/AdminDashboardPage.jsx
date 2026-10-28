@@ -4412,7 +4412,9 @@ export function AdminDepartmentsModule() {
 // ==============================================================
 // 4. COMPANY SETTINGS MODULE
 // ==============================================================
-function AdminSettingsModule() {
+function AdminSettingsModule({ user: propUser }) {
+  const auth = useAuth()
+  const user = propUser || auth?.user
   const [storeState, setStoreState] = useState(() => hrStore.getState())
   const [newSSID, setNewSSID] = useState('')
   const [newBSSID, setNewBSSID] = useState('')
@@ -5611,12 +5613,14 @@ function AdminSystemModule() {
 // MASTER ADMIN ROUTER
 // ==============================================================
 export function AdminDashboardPage({ route }) {
+  const auth = useAuth()
+  const user = auth?.user
   const p = route?.path || '/admin'
 
   if (p === '/admin/users') return <AdminUsersModule />
   if (p === '/admin/roles') return <AdminRolesModule />
   if (p === '/admin/departments') return <AdminDepartmentsModule />
-  if (p === '/admin/settings') return <AdminSettingsModule />
+  if (p === '/admin/settings') return <AdminSettingsModule user={user} />
   if (p === '/admin/reports') return <AdminReportsModule />
   if (p === '/admin/system' || p === '/admin/logs') return <AdminSystemModule />
 
