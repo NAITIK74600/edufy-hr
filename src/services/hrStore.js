@@ -4937,7 +4937,7 @@ const localStore = {
       currentLateOccurrence = priorLateCount + 1
       if (currentLateOccurrence <= 2) {
         initialStatus = 'late'
-        noteText = `Late Login #${currentLateOccurrence} (Grace period: ${currentLateOccurrence}/2 accepted)`
+        noteText = `Late Login #${currentLateOccurrence}/2`
       } else {
         initialStatus = 'half-day'
         isHalfDay = true

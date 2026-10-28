@@ -78,6 +78,7 @@ import { PayslipPreviewModal } from '../components/payroll/PayslipPreviewModal'
 import { doesPayrollMatchUser, unmaskBankAccount, findEmployeeForUser } from '../utils/payrollMatcher'
 import { OnboardingDossierView } from '../components/OnboardingDossierView'
 import { CompanyPoliciesView } from '../components/CompanyPoliciesView'
+import { getLateOccurrence, formatAttendanceNotes } from '../utils/attendanceUtils'
 import { HolidayCalendarShowcase } from '../components/HolidayCalendarShowcase'
 import { CompanyDocumentsView } from '../components/CompanyDocumentsView'
 
@@ -1903,12 +1904,62 @@ function ESSAttendanceView({ user }) {
                   <strong style={{ fontSize: '13px' }}>{row.date}</strong>
                   <span style={{ fontSize: '11px', color: 'var(--muted)', marginLeft: '6px' }}>({row.day})</span>
                 </div>
-                <StatusBadge
-                  tone={
-                    row.status === 'present'
-                      ? 'success'
-                      : row.status === 'late'
-                        ? 'warning'
+                {row.status === 'late' ? (
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                    <StatusBadge tone="warning">Late Login</StatusBadge>
+                    <span
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '2px',
+                        background: '#fef3c7',
+                        padding: '2px 4px',
+                        borderRadius: '6px',
+                        border: '1px solid #fde68a',
+                      }}
+                      title={`Grace arrival option ${getLateOccurrence(row)} of 2`}
+                    >
+                      <span
+                        style={{
+                          width: '18px',
+                          height: '18px',
+                          borderRadius: '4px',
+                          background: getLateOccurrence(row) === 1 ? '#d97706' : 'transparent',
+                          color: getLateOccurrence(row) === 1 ? '#ffffff' : '#92400e',
+                          fontSize: '10.5px',
+                          fontWeight: 700,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          lineHeight: 1,
+                        }}
+                      >
+                        1
+                      </span>
+                      <span
+                        style={{
+                          width: '18px',
+                          height: '18px',
+                          borderRadius: '4px',
+                          background: getLateOccurrence(row) === 2 ? '#d97706' : 'transparent',
+                          color: getLateOccurrence(row) === 2 ? '#ffffff' : '#92400e',
+                          fontSize: '10.5px',
+                          fontWeight: 700,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          lineHeight: 1,
+                        }}
+                      >
+                        2
+                      </span>
+                    </span>
+                  </div>
+                ) : (
+                  <StatusBadge
+                    tone={
+                      row.status === 'present'
+                        ? 'success'
                         : row.status === 'early-logout'
                           ? 'warning'
                           : row.status === 'lop'
@@ -1918,12 +1969,10 @@ function ESSAttendanceView({ user }) {
                               : row.status === 'short-hours'
                                 ? 'danger'
                                 : 'neutral'
-                  }
-                >
-                  {row.status === 'present'
-                    ? 'Present (Full Day)'
-                    : row.status === 'late'
-                      ? 'Late In (Full Day)'
+                    }
+                  >
+                    {row.status === 'present'
+                      ? 'Present (Full Day)'
                       : row.status === 'early-logout'
                         ? 'Early Logout'
                         : row.status === 'lop'
@@ -1935,10 +1984,11 @@ function ESSAttendanceView({ user }) {
                               : row.status === 'on-leave'
                                 ? 'On Leave'
                                 : 'Absent'}
-                </StatusBadge>
-                {row.notes && (
+                  </StatusBadge>
+                )}
+                {formatAttendanceNotes(row.notes) && (
                   <div style={{ fontSize: '10px', color: '#b45309', marginTop: '3px', lineHeight: 1.2 }}>
-                    {row.notes}
+                    {formatAttendanceNotes(row.notes)}
                   </div>
                 )}
               </div>
@@ -2015,43 +2065,101 @@ function ESSAttendanceView({ user }) {
                       )}
                     </td>
                     <td>
-                      <StatusBadge
-                        tone={
-                          row.status === 'present'
-                            ? 'success'
-                            : row.status === 'late'
-                              ? 'warning'
-                              : row.status === 'early-logout'
-                                ? 'warning'
-                                : row.status === 'lop'
-                                  ? 'danger'
-                                  : (row.status === 'half-day' || row.status === 'half_day')
-                                    ? 'info'
-                                    : row.status === 'short-hours'
-                                      ? 'danger'
-                                      : 'neutral'
-                        }
-                      >
-                        {row.status === 'present'
-                          ? 'Present (Full Day)'
-                          : row.status === 'late'
-                            ? 'Late In (Full Day)'
-                            : row.status === 'early-logout'
-                              ? 'Early Logout'
-                              : row.status === 'lop'
-                                ? 'Loss of Pay (LOP)'
-                                : (row.status === 'half-day' || row.status === 'half_day')
-                                  ? 'Half Day (4h+)'
-                                  : row.status === 'short-hours'
-                                    ? 'Short Hours (<4h)'
-                                    : row.status === 'on-leave'
-                                      ? 'On Leave'
-                                      : 'Absent'}
-                      </StatusBadge>
-                      {row.notes && (
-                        <div style={{ fontSize: '10px', color: '#b45309', marginTop: '3px', maxWidth: '180px', lineHeight: 1.2 }}>
-                          {row.notes}
+                      {row.status === 'late' ? (
+                        <div>
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                            <StatusBadge tone="warning">Late Login</StatusBadge>
+                            <span
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '2px',
+                                background: '#fef3c7',
+                                padding: '2px 4px',
+                                borderRadius: '6px',
+                                border: '1px solid #fde68a',
+                              }}
+                              title={`Grace arrival option ${getLateOccurrence(row)} of 2`}
+                            >
+                              <span
+                                style={{
+                                  width: '18px',
+                                  height: '18px',
+                                  borderRadius: '4px',
+                                  background: getLateOccurrence(row) === 1 ? '#d97706' : 'transparent',
+                                  color: getLateOccurrence(row) === 1 ? '#ffffff' : '#92400e',
+                                  fontSize: '10.5px',
+                                  fontWeight: 700,
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  lineHeight: 1,
+                                }}
+                              >
+                                1
+                              </span>
+                              <span
+                                style={{
+                                  width: '18px',
+                                  height: '18px',
+                                  borderRadius: '4px',
+                                  background: getLateOccurrence(row) === 2 ? '#d97706' : 'transparent',
+                                  color: getLateOccurrence(row) === 2 ? '#ffffff' : '#92400e',
+                                  fontSize: '10.5px',
+                                  fontWeight: 700,
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  lineHeight: 1,
+                                }}
+                              >
+                                2
+                              </span>
+                            </span>
+                          </div>
+                          {formatAttendanceNotes(row.notes) && (
+                            <div style={{ fontSize: '10px', color: '#b45309', marginTop: '3px', maxWidth: '180px', lineHeight: 1.2 }}>
+                              {formatAttendanceNotes(row.notes)}
+                            </div>
+                          )}
                         </div>
+                      ) : (
+                        <>
+                          <StatusBadge
+                            tone={
+                              row.status === 'present'
+                                ? 'success'
+                                : row.status === 'early-logout'
+                                  ? 'warning'
+                                  : row.status === 'lop'
+                                    ? 'danger'
+                                    : (row.status === 'half-day' || row.status === 'half_day')
+                                      ? 'info'
+                                      : row.status === 'short-hours'
+                                        ? 'danger'
+                                        : 'neutral'
+                            }
+                          >
+                            {row.status === 'present'
+                              ? 'Present (Full Day)'
+                              : row.status === 'early-logout'
+                                ? 'Early Logout'
+                                : row.status === 'lop'
+                                  ? 'Loss of Pay (LOP)'
+                                  : (row.status === 'half-day' || row.status === 'half_day')
+                                    ? 'Half Day (4h+)'
+                                    : row.status === 'short-hours'
+                                      ? 'Short Hours (<4h)'
+                                      : row.status === 'on-leave'
+                                        ? 'On Leave'
+                                        : 'Absent'}
+                          </StatusBadge>
+                          {row.notes && (
+                            <div style={{ fontSize: '10px', color: '#b45309', marginTop: '3px', maxWidth: '180px', lineHeight: 1.2 }}>
+                              {row.notes}
+                            </div>
+                          )}
+                        </>
                       )}
                     </td>
                   </tr>

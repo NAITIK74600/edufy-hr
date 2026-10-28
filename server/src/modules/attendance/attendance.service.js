@@ -507,7 +507,7 @@ export function createAttendanceService({ repository, companySettings = {} }) {
         lateCount = priorLateRecords.length + 1
         if (lateCount <= 2) {
           punchInStatus = 'late'
-          lateNote = `Late Login #${lateCount} of 2 accepted grace arrivals (${matchedShift.name})`
+          lateNote = `Late Login #${lateCount}/2 (${matchedShift.name})`
         } else {
           isHalfDayFromLate = true
           punchInStatus = 'half-day'
