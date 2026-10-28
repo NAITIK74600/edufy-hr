@@ -94,6 +94,9 @@ export function createAttendanceRouter({ auth, service, useDatabase = false, per
         }
         const saved = await AttendanceSettings.findOneAndUpdate({ key: 'office' }, { $set: values }, { upsert: true, returnDocument: 'after' }).lean()
         service.updateConfig(saved)
+        if (values.attendanceRules) {
+          await service.recalculateTodayAttendanceForRules(values.attendanceRules).catch(() => {})
+        }
         if (values.leavePolicies) {
           const lp = values.leavePolicies
           const defaultApproval = lp.approvalWorkflow || (lp.requireManagerApproval && lp.requireHrApproval ? 'manager_hr' : lp.requireManagerApproval ? 'manager' : 'hr')

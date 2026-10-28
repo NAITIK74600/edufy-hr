@@ -257,8 +257,22 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
         }
       })
       const finalRoles = Array.from(roleMap.values())
+      const finalCompanySettings = {
+        ...(rawLocal.getState?.()?.companySettings || state().companySettings || {}),
+        ...(data.config || {}),
+        attendanceRules: {
+          ...((rawLocal.getState?.()?.companySettings || state().companySettings)?.attendanceRules || {}),
+          ...(data.config?.attendanceRules || {}),
+        },
+        leavePolicies: {
+          ...((rawLocal.getState?.()?.companySettings || state().companySettings)?.leavePolicies || {}),
+          ...(data.config?.leavePolicies || {}),
+        },
+        ...(data.payrollSettings || {}),
+      }
       if (rawLocal.getState) {
         rawLocal.getState().roles = finalRoles
+        rawLocal.getState().companySettings = finalCompanySettings
       }
 
       const isCleared = typeof window !== 'undefined' && window.localStorage.getItem('edufyi_notifications_cleared_v2') === 'true'
@@ -296,7 +310,7 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
           }
         }), leaveBalances: data.balances, dataErrors,
         dataError: Object.entries(dataErrors).filter(([key, msg]) => !(key === 'payroll' && msg.includes('does not have payroll access'))).map(([key, message]) => `${key}: ${message}`).join(' · '), dataReady: true,
-        companySettings: { ...state().companySettings, ...data.config, ...(data.payrollSettings || {}) },
+        companySettings: finalCompanySettings,
       })
       notify()
     })()
@@ -437,7 +451,22 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
       if (rawLocal.updateCompanySettings) {
         rawLocal.updateCompanySettings(updates)
       }
-      state().companySettings = { ...(state().companySettings || {}), ...updates }
+      const updatedSettings = {
+        ...(state().companySettings || {}),
+        ...updates,
+        attendanceRules: {
+          ...(state().companySettings?.attendanceRules || {}),
+          ...(updates.attendanceRules || {}),
+        },
+        leavePolicies: {
+          ...(state().companySettings?.leavePolicies || {}),
+          ...(updates.leavePolicies || {}),
+        },
+      }
+      state().companySettings = updatedSettings
+      if (rawLocal.getState) {
+        rawLocal.getState().companySettings = updatedSettings
+      }
       notify()
       if (!user) {
         return state().companySettings
@@ -459,6 +488,15 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
         if (hasAttendance) {
           const attendancePayload = Object.fromEntries(attendanceKeys.filter((k) => updates[k] !== undefined).map((k) => [k, updates[k]]))
           lastResult = await apiClient.patch('/attendance/config', attendancePayload)
+          try {
+            const management = ['admin', 'hr'].includes(user?.role)
+            const freshAtt = await apiClient.get(management ? '/attendance' : '/attendance/self')
+            if (freshAtt?.data) {
+              state().attendance = freshAtt.data
+              if (rawLocal.getState) rawLocal.getState().attendance = freshAtt.data
+              notify()
+            }
+          } catch {}
         }
         if (hasPayroll || (!hasAttendance && !hasPayroll)) {
           const payrollPayload = Object.fromEntries(payrollKeys.filter((k) => updates[k] !== undefined).map((k) => [k, updates[k]]))
@@ -1326,7 +1364,29 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
           }
         }
         const res = await apiClient.post('/attendance/check-in', payload)
-        if (rawLocal.checkIn) rawLocal.checkIn(...args)
+        if (res?.data) {
+          const rec = res.data
+          const syncList = (list) => {
+            const arr = [...(list || [])]
+            const idx = arr.findIndex((a) =>
+              (rec.id && (a.id === rec.id || a._id === rec.id)) ||
+              (rec._id && (a.id === rec._id || a._id === rec._id)) ||
+              (a.employeeId?.toUpperCase() === rec.employeeId?.toUpperCase() && a.date === rec.date)
+            )
+            if (idx >= 0) {
+              arr[idx] = { ...arr[idx], ...rec }
+              return arr
+            }
+            return [rec, ...arr]
+          }
+          state().attendance = syncList(state().attendance)
+          if (rawLocal.getState) {
+            rawLocal.getState().attendance = syncList(rawLocal.getState().attendance)
+          }
+          notify()
+        } else if (rawLocal.checkIn) {
+          rawLocal.checkIn(...args)
+        }
         return res.data
       })
     },
@@ -1334,7 +1394,29 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
       if (!user && rawLocal.startBreak) return rawLocal.startBreak(type, date)
       return mutate(async () => {
         const res = await apiClient.post('/attendance/break/start', { type, date, employeeId: employeeId || user?.employeeId || user?.id })
-        if (rawLocal.startBreak) rawLocal.startBreak(type, date)
+        if (res?.data) {
+          const rec = res.data
+          const syncList = (list) => {
+            const arr = [...(list || [])]
+            const idx = arr.findIndex((a) =>
+              (rec.id && (a.id === rec.id || a._id === rec.id)) ||
+              (rec._id && (a.id === rec._id || a._id === rec._id)) ||
+              (a.employeeId?.toUpperCase() === rec.employeeId?.toUpperCase() && a.date === rec.date)
+            )
+            if (idx >= 0) {
+              arr[idx] = { ...arr[idx], ...rec }
+              return arr
+            }
+            return [rec, ...arr]
+          }
+          state().attendance = syncList(state().attendance)
+          if (rawLocal.getState) {
+            rawLocal.getState().attendance = syncList(rawLocal.getState().attendance)
+          }
+          notify()
+        } else if (rawLocal.startBreak) {
+          rawLocal.startBreak(type, date)
+        }
         return res.data
       })
     },
@@ -1342,7 +1424,29 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
       if (!user && rawLocal.endBreak) return rawLocal.endBreak(date)
       return mutate(async () => {
         const res = await apiClient.post('/attendance/break/end', { date, employeeId: employeeId || user?.employeeId || user?.id })
-        if (rawLocal.endBreak) rawLocal.endBreak(date)
+        if (res?.data) {
+          const rec = res.data
+          const syncList = (list) => {
+            const arr = [...(list || [])]
+            const idx = arr.findIndex((a) =>
+              (rec.id && (a.id === rec.id || a._id === rec.id)) ||
+              (rec._id && (a.id === rec._id || a._id === rec._id)) ||
+              (a.employeeId?.toUpperCase() === rec.employeeId?.toUpperCase() && a.date === rec.date)
+            )
+            if (idx >= 0) {
+              arr[idx] = { ...arr[idx], ...rec }
+              return arr
+            }
+            return [rec, ...arr]
+          }
+          state().attendance = syncList(state().attendance)
+          if (rawLocal.getState) {
+            rawLocal.getState().attendance = syncList(rawLocal.getState().attendance)
+          }
+          notify()
+        } else if (rawLocal.endBreak) {
+          rawLocal.endBreak(date)
+        }
         return res.data
       })
     },
@@ -1363,7 +1467,29 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
           }
         }
         const res = await apiClient.post('/attendance/check-out', payload)
-        if (rawLocal.checkOut) rawLocal.checkOut(...args)
+        if (res?.data) {
+          const rec = res.data
+          const syncList = (list) => {
+            const arr = [...(list || [])]
+            const idx = arr.findIndex((a) =>
+              (rec.id && (a.id === rec.id || a._id === rec.id)) ||
+              (rec._id && (a.id === rec._id || a._id === rec._id)) ||
+              (a.employeeId?.toUpperCase() === rec.employeeId?.toUpperCase() && a.date === rec.date)
+            )
+            if (idx >= 0) {
+              arr[idx] = { ...arr[idx], ...rec }
+              return arr
+            }
+            return [rec, ...arr]
+          }
+          state().attendance = syncList(state().attendance)
+          if (rawLocal.getState) {
+            rawLocal.getState().attendance = syncList(rawLocal.getState().attendance)
+          }
+          notify()
+        } else if (rawLocal.checkOut) {
+          rawLocal.checkOut(...args)
+        }
         return res.data
       })
     },
@@ -1386,6 +1512,13 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
           (a) => a.id !== cleanId && a._id !== cleanId && String(a.id) !== cleanId && String(a._id) !== cleanId &&
             !(extra.employeeId && extra.date && a.employeeId?.toUpperCase() === String(extra.employeeId).toUpperCase() && a.date === extra.date)
         )
+        if (rawLocal.getState) {
+          rawLocal.getState().attendance = (rawLocal.getState().attendance || []).filter(
+            (a) => a.id !== cleanId && a._id !== cleanId && String(a.id) !== cleanId && String(a._id) !== cleanId &&
+              !(extra.employeeId && extra.date && a.employeeId?.toUpperCase() === String(extra.employeeId).toUpperCase() && a.date === extra.date)
+          )
+        }
+        notify()
         return true
       })
     },

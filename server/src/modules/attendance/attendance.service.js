@@ -131,7 +131,8 @@ export function calculateDistanceMeters(lat1, lon1, lat2, lon2) {
 
 function parseTimeToMinutes(timeStr) {
   if (!timeStr) return null
-  const match = timeStr.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i)
+  const clean = String(timeStr).trim().replace(/[\u202F\u00A0]/g, ' ')
+  const match = clean.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/i)
   if (!match) return null
   let hours = parseInt(match[1], 10)
   const minutes = parseInt(match[2], 10)
@@ -142,8 +143,8 @@ function parseTimeToMinutes(timeStr) {
   return hours * 60 + minutes
 }
 
-function formatCurrentTime() {
-  return new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })
+function formatCurrentTime(d = new Date()) {
+  return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' })
 }
 
 function formatTime12(time24) {
@@ -158,11 +159,22 @@ function formatTime12(time24) {
 }
 
 function getTodayString() {
-  const d = new Date()
-  const year = d.getFullYear()
-  const month = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
+  const formatter = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' })
+  return formatter.format(new Date())
+}
+
+function getCurrentMinutes(d = new Date()) {
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Kolkata',
+    hour: 'numeric',
+    minute: 'numeric',
+    hour12: false,
+  })
+  const parts = formatter.formatToParts(d)
+  let hour = parseInt(parts.find((p) => p.type === 'hour')?.value ?? '0', 10)
+  if (hour === 24) hour = 0
+  const minute = parseInt(parts.find((p) => p.type === 'minute')?.value ?? '0', 10)
+  return hour * 60 + minute
 }
 
 function isPrivateIpv4(ip) {
@@ -504,7 +516,7 @@ export function createAttendanceService({ repository, companySettings = {} }) {
 
       const workStartMins = parseTimeToMinutes(shiftStartTime) ?? 570
       const gracePeriod = Number(attendanceRules.gracePeriodMinutes ?? 15)
-      const currentMins = now.getHours() * 60 + now.getMinutes()
+      const currentMins = getCurrentMinutes(now)
       const isLate = currentMins > workStartMins + gracePeriod
 
       let lateCount = 0
@@ -889,6 +901,39 @@ export function createAttendanceService({ repository, companySettings = {} }) {
       }
 
       return repository.save(record)
+    },
+
+    async recalculateTodayAttendanceForRules(newRules = {}) {
+      const today = getTodayString()
+      const records = await repository.list({ date: today })
+      if (!records || !records.length) return
+      const effectiveRules = { ...attendanceRules, ...newRules }
+      const startTime = effectiveRules.workStartTime || '09:30'
+      const startMins = parseTimeToMinutes(startTime) ?? 570
+      const grace = Number(effectiveRules.gracePeriodMinutes ?? 15)
+
+      for (const rec of records) {
+        if (!rec.checkIn) continue
+        const inMins = parseTimeToMinutes(rec.checkIn)
+        if (inMins === null) continue
+        const isLate = inMins > startMins + grace
+        const needsUpdate = rec.isLate !== isLate || (isLate && !rec.notes?.includes(startTime))
+        if (needsUpdate) {
+          const updated = {
+            ...rec,
+            isLate,
+            status: isLate
+              ? (rec.lateCount > 2 ? 'half-day' : 'late')
+              : (['late', 'half-day'].includes(rec.status) ? 'present' : rec.status),
+            notes: isLate
+              ? `Late Login (${formatTime12(startTime)})`
+              : 'On-time verification (General Shift)',
+          }
+          if (repository.save) {
+            await repository.save(updated).catch(() => {})
+          }
+        }
+      }
     },
 
     async deleteRecord(id, options = {}) {

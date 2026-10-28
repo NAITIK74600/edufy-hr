@@ -178,7 +178,9 @@ export function createMongoAttendanceRepository() {
       data.userId = employee._id
       data.employeeName = employee.displayName || employee.name
       const resolvedCode = (employee.employeeId || empCode).toUpperCase()
-      const filter = id || _id ? { _id: id || _id } : { employeeId: resolvedCode, date: data.date }
+      const targetId = id || _id
+      const isValidObjectId = targetId && /^[0-9a-fA-F]{24}$/.test(String(targetId))
+      const filter = isValidObjectId ? { _id: targetId } : { employeeId: resolvedCode, date: data.date }
       const doc = await AttendanceRecord.findOneAndUpdate(
         filter,
         { ...data, employeeId: resolvedCode },

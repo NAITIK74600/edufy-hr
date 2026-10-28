@@ -4974,8 +4974,16 @@ const localStore = {
       if (shiftCode === 'evening') return now.getHours() * 60 + now.getMinutes() > 13 * 60 + 15
       if (shiftCode === 'night') return now.getHours() * 60 + now.getMinutes() > 22 * 60 + 15
       const startTimeStr = rules.workStartTime || '09:30'
-      const [sh, sm] = startTimeStr.split(':').map(Number)
-      const startMins = (!isNaN(sh) ? sh * 60 : 570) + (!isNaN(sm) ? sm : 30)
+      const clean = String(startTimeStr).trim().replace(/[\u202F\u00A0]/g, ' ')
+      const match = clean.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/i)
+      let sh = 9, sm = 30
+      if (match) {
+        sh = parseInt(match[1], 10)
+        sm = parseInt(match[2], 10)
+        if (match[3]?.toUpperCase() === 'PM' && sh < 12) sh += 12
+        if (match[3]?.toUpperCase() === 'AM' && sh === 12) sh = 0
+      }
+      const startMins = sh * 60 + sm
       return now.getHours() * 60 + now.getMinutes() > startMins + gracePeriod
     })()
 

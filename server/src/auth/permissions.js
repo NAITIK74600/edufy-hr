@@ -183,19 +183,31 @@ export const ROLE_DEFAULT_PERMISSIONS = Object.freeze({
 
 export function getUserPermissions(user) {
   if (user?.role === 'admin') return ['*']
+  let perms = []
   if (Array.isArray(user?.permissions) && user.permissions.length > 0) {
-    return user.permissions
+    perms = user.permissions
+  } else {
+    const rawRole = String(user?.role || '')
+    const cleanRole = rawRole.toLowerCase().replace(/[^a-z0-9]/g, '_')
+    const rolePerms = ROLE_DEFAULT_PERMISSIONS[rawRole] || ROLE_DEFAULT_PERMISSIONS[cleanRole]
+    if (rolePerms && rolePerms.length > 0) {
+      perms = rolePerms
+    } else {
+      const r = rawRole.toLowerCase()
+      if (r.includes('admin')) return ['*']
+      if (r.includes('hr')) return HR_DEFAULT_PERMISSIONS
+      if (r.includes('director') || r.includes('head') || r.includes('founder')) return LEADERSHIP_PERMISSIONS
+      if (r.includes('manager') || r.includes('lead')) return MANAGER_PERMISSIONS
+      perms = ESS_PERMISSIONS
+    }
   }
-  const rolePerms = ROLE_DEFAULT_PERMISSIONS[user?.role]
-  if (rolePerms && rolePerms.length > 0) {
-    return rolePerms
-  }
+
+  // Any non-admin, non-hr account (including custom roles) must have full ESS self-service permissions
   const r = String(user?.role || '').toLowerCase()
-  if (r.includes('admin')) return ['*']
-  if (r.includes('hr')) return HR_DEFAULT_PERMISSIONS
-  if (r.includes('director') || r.includes('head') || r.includes('founder')) return LEADERSHIP_PERMISSIONS
-  if (r.includes('manager') || r.includes('lead')) return MANAGER_PERMISSIONS
-  return ESS_PERMISSIONS
+  if (!r.includes('admin') && !r.includes('hr')) {
+    perms = [...new Set([...ESS_PERMISSIONS, ...perms])]
+  }
+  return perms
 }
 
 export function hasPermission(user, permission) {
