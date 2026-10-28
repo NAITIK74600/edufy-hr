@@ -3,10 +3,13 @@ import mongoose from 'mongoose'
 import { PERMISSIONS, hasPermission } from '../../auth/permissions.js'
 import { Employee } from '../../models/Employee.js'
 import { AttendanceSettings } from '../../models/AttendanceSettings.js'
+import { Shift } from '../../models/Shift.js'
+import { ShiftAssignment } from '../../models/ShiftAssignment.js'
+import { AuditLog } from '../../models/AuditLog.js'
+import { STANDARD_SHIFT_DEF, normalizeShiftConfig } from './policyEngine.js'
 import { LeavePolicy } from '../../models/LeavePolicy.js'
 import { ensureConnected } from '../leave/leave.repository.js'
 import { isIP } from 'node:net'
-import { formatTime24, formatTime12 } from './attendance.service.js'
 
 function getClientIp(req) {
   let ip = (req.ip || req.socket?.remoteAddress || '').trim()
@@ -79,16 +82,6 @@ export function createAttendanceRouter({ auth, service, useDatabase = false, per
           }
         }
       }
-      if (values.attendanceRules) {
-        const rawEnd = values.attendanceRules.workEndTime
-        const rawStart = values.attendanceRules.workStartTime
-        if (rawEnd) {
-          values.attendanceRules.workEndTime = formatTime24(rawEnd)
-        }
-        if (rawStart) {
-          values.attendanceRules.workStartTime = formatTime24(rawStart)
-        }
-      }
       if (values.attendanceRules?.maxGeofenceRadiusMeters !== undefined) {
         const r = Number(values.attendanceRules.maxGeofenceRadiusMeters)
         if (!Number.isFinite(r) || r < 1 || r > 1000) {
@@ -112,9 +105,6 @@ export function createAttendanceRouter({ auth, service, useDatabase = false, per
         ).lean()
         await AttendanceSettings.deleteMany({ key: { $ne: 'office' } }).catch(() => {})
         service.updateConfig(saved || values)
-        if (values.attendanceRules) {
-          await service.recalculateTodayAttendanceForRules(values.attendanceRules).catch(() => {})
-        }
         if (values.leavePolicies) {
           const lp = values.leavePolicies
           const defaultApproval = lp.approvalWorkflow || (lp.requireManagerApproval && lp.requireHrApproval ? 'manager_hr' : lp.requireManagerApproval ? 'manager' : 'hr')
@@ -142,9 +132,6 @@ export function createAttendanceRouter({ auth, service, useDatabase = false, per
         }
       } else {
         service.updateConfig(values)
-        if (values.attendanceRules) {
-          await service.recalculateTodayAttendanceForRules(values.attendanceRules).catch(() => {})
-        }
       }
       response.json({ success: true, data: service.getConfig() })
     } catch (error) { next(error) }
@@ -447,6 +434,119 @@ export function createAttendanceRouter({ auth, service, useDatabase = false, per
       }
     }
   )
+
+
+  // 12. List configured shifts
+  router.get('/shifts', auth.authenticate, async (request, response, next) => {
+    try {
+      let shifts = []
+      if (useDatabase) {
+        shifts = await Shift.find({ isActive: true }).lean().catch(() => [])
+      }
+      if (!shifts || shifts.length === 0) {
+        shifts = [STANDARD_SHIFT_DEF]
+      }
+      return response.json({ success: true, data: shifts })
+    } catch (error) { next(error) }
+  })
+
+  // 13. Create or update shift definition
+  router.post('/shifts', auth.authenticate, auth.requirePermission(PERMISSIONS.ATTENDANCE_WRITE), async (request, response, next) => {
+    try {
+      const { shiftId, name, startTime, endTime, isDefault } = request.body || {}
+      if (!shiftId || !name || !startTime || !endTime) {
+        throw Object.assign(new Error('shiftId, name, startTime, and endTime are required.'), { statusCode: 400 })
+      }
+      const normalized = normalizeShiftConfig(request.body)
+      let doc = null
+      if (useDatabase) {
+        if (isDefault) {
+          await Shift.updateMany({ isDefault: true }, { $set: { isDefault: false } })
+        }
+        doc = await Shift.findOneAndUpdate(
+          { shiftId: shiftId.toUpperCase() },
+          { $set: { ...normalized, shiftId: shiftId.toUpperCase(), isDefault: Boolean(isDefault) } },
+          { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true }
+        ).lean()
+      } else {
+        doc = normalized
+      }
+      return response.status(201).json({ success: true, data: doc })
+    } catch (error) { next(error) }
+  })
+
+  // 14. Assign shift to employee with effective dates & audit trail
+  router.post('/shifts/assign', auth.authenticate, auth.requirePermission(PERMISSIONS.ATTENDANCE_WRITE), async (request, response, next) => {
+    try {
+      const { employeeId, shiftId, effectiveFrom, effectiveTo, reason } = request.body || {}
+      if (!employeeId || !shiftId || !effectiveFrom) {
+        throw Object.assign(new Error('employeeId, shiftId, and effectiveFrom (YYYY-MM-DD) are required.'), { statusCode: 400 })
+      }
+      const cleanEmpId = String(employeeId).trim().toUpperCase()
+      const cleanShiftId = String(shiftId).trim().toUpperCase()
+      const cleanFrom = String(effectiveFrom).trim()
+      const cleanTo = effectiveTo ? String(effectiveTo).trim() : null
+
+      let assignment = null
+      if (useDatabase) {
+        assignment = await ShiftAssignment.findOneAndUpdate(
+          { employeeId: cleanEmpId, effectiveFrom: cleanFrom },
+          {
+            $set: {
+              shiftId: cleanShiftId,
+              effectiveTo: cleanTo,
+              assignedBy: request.auth.user.id || 'ADMIN',
+              assignedAt: new Date(),
+              reason: reason || 'Assigned via shift management',
+            },
+            $push: {
+              history: {
+                shiftId: cleanShiftId,
+                effectiveFrom: cleanFrom,
+                effectiveTo: cleanTo,
+                assignedBy: request.auth.user.id || 'ADMIN',
+                assignedAt: new Date(),
+                reason: reason || 'Assigned via shift management',
+              },
+            },
+          },
+          { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true }
+        ).lean()
+
+        try {
+          if (assignment?._id) {
+            await AuditLog.create({
+              actorId: request.auth.user.id || 'ADMIN',
+              actorRole: request.auth.user.role || 'admin',
+              action: 'SHIFT_ASSIGNMENT_CHANGED',
+              entityType: 'ShiftAssignment',
+              entityId: assignment._id,
+              changedFields: ['shiftId', 'effectiveFrom', 'effectiveTo'],
+              reason: reason || 'Shift assignment updated',
+            })
+          }
+        } catch {}
+      } else {
+        assignment = { employeeId: cleanEmpId, shiftId: cleanShiftId, effectiveFrom: cleanFrom, effectiveTo: cleanTo }
+      }
+      return response.status(200).json({ success: true, data: assignment })
+    } catch (error) { next(error) }
+  })
+
+  // 15. HR / Admin Decision on post-25th Double LOP
+  router.post('/double-lop/:id/decision', auth.authenticate, auth.requirePermission(PERMISSIONS.ATTENDANCE_WRITE), async (request, response, next) => {
+    try {
+      const { approved, reason } = request.body || {}
+      if (approved === undefined) throw Object.assign(new Error('approved boolean is required.'), { statusCode: 400 })
+      const result = await service.approveDoubleLop({
+        recordId: request.params.id,
+        approved: Boolean(approved),
+        actor: request.auth.user,
+        reason,
+      })
+      return response.json({ success: true, data: result })
+    } catch (error) { next(error) }
+  })
 
   return router
 }

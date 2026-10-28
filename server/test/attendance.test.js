@@ -413,7 +413,7 @@ test('Wildcard notation 192.168.1.* and IPv6 /64 prefixes match all devices on o
   assert.equal(service.verifyLocation(0, 0, null, '2405:201:9999:1111:c18b:9912:a245:1101', null, 5).isIpVerified, false)
 })
 
-test('Early logout rule: 6:30 PM to 7:30 PM checkout before 25th marks as early-logout, and from 25th marks as lop', async () => {
+test('Repository faithfully persists explicit status records (e.g. historical early-logout or lop) and summarizes them', async () => {
   const repository = createMemoryAttendanceRepository([])
   const service = createAttendanceService({ repository })
 
@@ -488,208 +488,85 @@ test('HR or Admin can permanently delete attendance record via DELETE /records/:
   assert.equal(listAfter.body.data.some((r) => r.id === recordId || (r.employeeId === 'ETS21206' && r.date === '2026-10-27')), false)
 })
 
-test('Admin can update attendance rules via PATCH /config and shift times apply dynamically', async () => {
+test('Admin can update attendance security configuration via PATCH /config', async () => {
   const adminToken = await login('admin@example.test', 'admin-password')
 
-  // Update attendance rules via PATCH /config
+  // Update attendance geofence rules via PATCH /config
   const patchRes = await request('/attendance/config', {
     method: 'PATCH',
     headers: { authorization: `Bearer ${adminToken}` },
     body: JSON.stringify({
       attendanceRules: {
-        workStartTime: '10:00',
-        workEndTime: '19:00',
-        gracePeriodMinutes: 20,
         maxGeofenceRadiusMeters: 60,
       },
     }),
   })
   assert.equal(patchRes.response.status, 200)
-  assert.equal(patchRes.body.data.attendanceRules.workStartTime, '10:00')
-  assert.equal(patchRes.body.data.attendanceRules.workEndTime, '19:00')
-  assert.equal(patchRes.body.data.attendanceRules.gracePeriodMinutes, 20)
   assert.equal(patchRes.body.data.attendanceRules.maxGeofenceRadiusMeters, 60)
 })
 
-test('Evening shift normalization correctly recognizes PM shifts and prevents false late logins', async () => {
-  const { getNormalizedShiftMinutes, formatTime12, formatTime24, parseTimeToMinutes } = await import('../src/modules/attendance/attendance.service.js')
+test('Neutral check-in records factual timestamp and presence verification without automatic late classification', async () => {
+  const token = await login('employee@example.test', 'employee-password')
 
-  // Normalization when shift times are entered without AM/PM or in PM
-  assert.equal(getNormalizedShiftMinutes('18:36', '20:00', '06:23 PM'), 1116)
-  assert.equal(getNormalizedShiftMinutes('06:36', '08:00', '06:23 PM'), 1116)
-  assert.equal(getNormalizedShiftMinutes('06:36', '20:00', '06:23 PM'), 1116)
-
-  // Check-in at 06:23 PM (1103 mins) for 06:36 PM shift (1116 mins) must NOT be late
-  const checkInMins = parseTimeToMinutes('06:23 PM')
-  const shiftStartMins = getNormalizedShiftMinutes('06:36', '08:00', checkInMins)
-  const isLate = checkInMins > shiftStartMins + 15
-  assert.equal(isLate, false)
-
-  // Shift formatting produces correct 12-hour and 24-hour displays
-  assert.equal(formatTime24('08:00', '06:36', true), '20:00')
-  assert.equal(formatTime24('06:36', '20:00', false), '18:36')
-  assert.equal(formatTime12('18:36', '20:00', false), '06:36 PM')
-  assert.equal(formatTime12('20:00', '18:36', true), '08:00 PM')
-})
-
-test('Recalculate attendance cleanses false late login and syncs active shift display', async () => {
-  const { createAttendanceService, parseTimeToMinutes, getNormalizedShiftMinutes } = await import('../src/modules/attendance/attendance.service.js')
-
-  // Mock repository with in-memory records
-  const records = [
-    {
-      id: 'att-test-1',
-      employeeId: 'ETS113828',
-      employeeName: 'Naitik Raj',
-      date: '2026-10-28',
-      checkIn: '07:50 PM',
-      checkOut: null,
-      status: 'late',
-      isLate: true,
-      lateCount: 1,
-      shift: 'General (09:30 AM – 06:30 PM)',
-      shiftCode: 'general',
-      totalHours: 'Active (Late)',
-      notes: 'Late Login (09:30 AM)',
-    },
-    {
-      id: 'att-test-2',
-      employeeId: 'ETS112991',
-      employeeName: 'Sandhiya P',
-      date: '2026-10-28',
-      checkIn: '06:53 PM',
-      checkOut: null,
-      status: 'late',
-      isLate: true,
-      lateCount: 1,
-      shift: 'General (09:30 AM – 06:30 PM)',
-      shiftCode: 'general',
-      totalHours: 'Active (Late)',
-      notes: 'Late Login (09:30 AM)',
-    },
-  ]
-
-  const mockRepo = {
-    list: async ({ date }) => records.filter((r) => r.date === date),
-    updateFields: async (id, fields) => {
-      const idx = records.findIndex((r) => r.id === id)
-      if (idx >= 0) {
-        records[idx] = { ...records[idx], ...fields }
-        return records[idx]
-      }
-      return null
-    },
-  }
-
-  const service = createAttendanceService({ repository: mockRepo })
-  service.updateConfig({
-    attendanceRules: {
-      workStartTime: '20:00',
-      workEndTime: '23:00',
-      gracePeriodMinutes: 15,
-    },
+  const res = await request('/attendance/check-in', {
+    method: 'POST',
+    headers: { authorization: `Bearer ${token}` },
+    body: JSON.stringify({
+      latitude: 37.789172,
+      longitude: -122.401449,
+      wifiSSID: 'Edufyi-Office-5G',
+      bssid: '9C:3D:CF:11:A2:01',
+      accuracy: 5,
+    }),
   })
 
-  // Check-In 07:50 PM for 20:00 (08:00 PM) shift with 15m grace:
-  const inMins = parseTimeToMinutes('07:50 PM') // 1190
-  const shiftMins = getNormalizedShiftMinutes('20:00', '23:00', inMins) // 1200
-  assert.equal(inMins <= shiftMins + 15, true) // Must be ON-TIME
-
-  // Run recalculate
-  const result = await service.recalculateAttendance('2026-10-28')
-  assert.equal(result.updatedCount, 2)
-
-  // Verify records updated
-  const naitik = records.find((r) => r.employeeId === 'ETS113828')
-  assert.equal(naitik.isLate, false)
-  assert.equal(naitik.status, 'present')
-  assert.equal(naitik.lateCount, 0)
-  assert.equal(naitik.totalHours, 'Active (Live)')
-  assert.equal(naitik.shift, 'General (08:00 PM – 11:00 PM)')
-  assert.equal(naitik.notes, 'On-time verification (General Shift)')
-
-  const sandhiya = records.find((r) => r.employeeId === 'ETS112991')
-  assert.equal(sandhiya.isLate, false)
-  assert.equal(sandhiya.status, 'present')
-  assert.equal(sandhiya.totalHours, 'Active (Live)')
+  assert.equal(res.response.status, 200)
+  assert.equal(res.body.data.status, 'present')
+  assert.equal(res.body.data.isLate, false)
+  assert.equal(res.body.data.lateCount, 0)
+  assert.ok(res.body.data.checkIn)
+  assert.equal(res.body.data.gpsVerified, true)
+  assert.equal(res.body.data.wifiVerified, true)
 })
 
-test('12-scenario regression suite: day, evening, overnight shifts, exact boundaries, grace limits, and recalculation', async () => {
-  const { resolveShift, evaluateShiftLateness, createAttendanceService, parseTimeToMinutes } = await import('../src/modules/attendance/attendance.service.js')
+test('Neutral check-out records actual duration and completed status without early logout penalties', async () => {
+  const token = await login('employee@example.test', 'employee-password')
 
-  // Scenario 1: 09:00 AM shift, login at 09:00 AM (on-time, lateMinutes = 0, isLate = false)
-  const sc1 = evaluateShiftLateness({ punchTime: 540, shiftStartMins: 540, shiftEndMins: 1080, gracePeriodMinutes: 15 })
-  assert.equal(sc1.isLate, false)
-  assert.equal(sc1.lateMinutes, 0)
-  assert.equal(sc1.diff, 0)
+  // Check in first
+  const inRes = await request('/attendance/check-in', {
+    method: 'POST',
+    headers: { authorization: `Bearer ${token}` },
+    body: JSON.stringify({
+      latitude: 37.789172,
+      longitude: -122.401449,
+      wifiSSID: 'Edufyi-Office-5G',
+      bssid: '9C:3D:CF:11:A2:01',
+    }),
+  })
+  assert.equal(inRes.response.status, 200)
 
-  // Scenario 2: 09:00 AM shift, login at 09:01 AM with 0m grace (late by 1 min)
-  const sc2 = evaluateShiftLateness({ punchTime: 541, shiftStartMins: 540, shiftEndMins: 1080, gracePeriodMinutes: 0 })
-  assert.equal(sc2.isLate, true)
-  assert.equal(sc2.lateMinutes, 1)
+  // Check out
+  const res = await request('/attendance/check-out', {
+    method: 'POST',
+    headers: { authorization: `Bearer ${token}` },
+    body: JSON.stringify({}),
+  })
 
-  // Scenario 3: 09:00 AM shift, login at 09:15 AM with 15m grace (on-time boundary)
-  const sc3 = evaluateShiftLateness({ punchTime: 555, shiftStartMins: 540, shiftEndMins: 1080, gracePeriodMinutes: 15 })
-  assert.equal(sc3.isLate, false)
-  assert.equal(sc3.lateMinutes, 15)
+  assert.equal(res.response.status, 200)
+  assert.equal(res.body.data.isEarlyLogout, false)
+  assert.equal(res.body.data.isLop, false)
+  assert.equal(res.body.data.status, 'present')
+  assert.ok(res.body.data.checkOut)
+  assert.ok(res.body.data.totalHours.includes('Completed'))
+})
 
-  // Scenario 4: 09:00 AM shift, login at 09:16 AM with 15m grace (late by 16 mins)
-  const sc4 = evaluateShiftLateness({ punchTime: 556, shiftStartMins: 540, shiftEndMins: 1080, gracePeriodMinutes: 15 })
-  assert.equal(sc4.isLate, true)
-  assert.equal(sc4.lateMinutes, 16)
+test('Recalculate attendance safely preserves historical records without rewriting labels', async () => {
+  const { createAttendanceService } = await import('../src/modules/attendance/attendance.service.js')
 
-  // Scenario 5: 09:00 PM shift, login at 07:50 PM (on-time, early arrival by 70 mins)
-  const sc5 = evaluateShiftLateness({ punchTime: parseTimeToMinutes('07:50 PM'), shiftStartMins: 1260, shiftEndMins: 1380, gracePeriodMinutes: 15 })
-  assert.equal(sc5.isLate, false)
-  assert.equal(sc5.lateMinutes, 0)
-  assert.equal(sc5.diff, -70)
-
-  // Scenario 6: 09:00 PM shift, login at 09:00 PM (exact shift start, on-time)
-  const sc6 = evaluateShiftLateness({ punchTime: parseTimeToMinutes('09:00 PM'), shiftStartMins: 1260, shiftEndMins: 1380, gracePeriodMinutes: 15 })
-  assert.equal(sc6.isLate, false)
-  assert.equal(sc6.lateMinutes, 0)
-  assert.equal(sc6.diff, 0)
-
-  // Scenario 7: 09:00 PM shift, login at 09:15 PM with 15m grace (on-time boundary)
-  const sc7 = evaluateShiftLateness({ punchTime: parseTimeToMinutes('09:15 PM'), shiftStartMins: 1260, shiftEndMins: 1380, gracePeriodMinutes: 15 })
-  assert.equal(sc7.isLate, false)
-  assert.equal(sc7.lateMinutes, 15)
-
-  // Scenario 8: 09:00 PM shift, login at 09:16 PM with 15m grace (late by 16 mins)
-  const sc8 = evaluateShiftLateness({ punchTime: parseTimeToMinutes('09:16 PM'), shiftStartMins: 1260, shiftEndMins: 1380, gracePeriodMinutes: 15 })
-  assert.equal(sc8.isLate, true)
-  assert.equal(sc8.lateMinutes, 16)
-
-  // Scenario 9: 10:00 PM – 06:00 AM overnight shift, login at 10:00 PM (on-time, exact start)
-  const sc9 = evaluateShiftLateness({ punchTime: 1320, shiftStartMins: 1320, shiftEndMins: 360, gracePeriodMinutes: 15, isOvernight: true })
-  assert.equal(sc9.isLate, false)
-  assert.equal(sc9.lateMinutes, 0)
-
-  // Scenario 10: 10:00 PM – 06:00 AM overnight shift, login at 12:05 AM (late by 125 mins)
-  const sc10 = evaluateShiftLateness({ punchTime: 5, shiftStartMins: 1320, shiftEndMins: 360, gracePeriodMinutes: 15, isOvernight: true })
-  assert.equal(sc10.isLate, true)
-  assert.equal(sc10.lateMinutes, 125)
-
-  // Scenario 11: 10:00 PM – 06:00 AM overnight shift, login at 09:45 PM (on-time, early arrival by 15 mins)
-  const sc11 = evaluateShiftLateness({ punchTime: 1305, shiftStartMins: 1320, shiftEndMins: 360, gracePeriodMinutes: 15, isOvernight: true })
-  assert.equal(sc11.isLate, false)
-  assert.equal(sc11.lateMinutes, 0)
-  assert.equal(sc11.diff, -15)
-
-  // Scenario 12: Shift resolution handles both General custom rules and explicit shift timing strings
-  const resFromRules = resolveShift({ attendanceRules: { workStartTime: '21:00', workEndTime: '23:00' } })
-  assert.equal(resFromRules.startMins, 1260)
-  assert.equal(resFromRules.endMins, 1380)
-  assert.equal(resFromRules.display, 'General (09:00 PM – 11:00 PM)')
-
-  const resFromShiftStr = resolveShift({ shift: 'General (09:00 PM – 11:00 PM)', attendanceRules: { workStartTime: '09:30', workEndTime: '18:30' } })
-  assert.equal(resFromShiftStr.startMins, 1260)
-  assert.equal(resFromShiftStr.endMins, 1380)
-
-  // Scenario 13: Recalculate attendance updates records from late to on-time for 09:00 PM shift
-  const testRecords = [
+  // Historical records preserved exactly as recorded
+  const historicalRecords = [
     {
-      id: 'att-user-1',
+      id: 'att-hist-1',
       employeeId: 'ETS113828',
       employeeName: 'Naitik Raj',
       date: '2026-10-28',
@@ -703,25 +580,45 @@ test('12-scenario regression suite: day, evening, overnight shifts, exact bounda
       notes: 'Late Login #1/2 (General Shift)',
     },
   ]
-  const mockRepository = {
-    list: async () => testRecords,
-    updateFields: async (id, fields) => {
-      const idx = testRecords.findIndex((r) => r.id === id)
-      if (idx >= 0) {
-        testRecords[idx] = { ...testRecords[idx], ...fields }
-        return testRecords[idx]
-      }
+
+  let updateCalled = false
+  const mockRepo = {
+    list: async () => historicalRecords,
+    updateFields: async () => {
+      updateCalled = true
+      return null
+    },
+    save: async () => {
+      updateCalled = true
       return null
     },
   }
-  const svc = createAttendanceService({ repository: mockRepository })
-  const recalcRes = await svc.recalculateAttendance('2026-10-28', { workStartTime: '21:00', workEndTime: '23:00', gracePeriodMinutes: 15 })
-  assert.equal(recalcRes.updatedCount, 1)
-  assert.equal(testRecords[0].status, 'present')
-  assert.equal(testRecords[0].isLate, false)
-  assert.equal(testRecords[0].lateCount, 0)
-  assert.equal(testRecords[0].totalHours, 'Active (Live)')
-  assert.equal(testRecords[0].notes, 'On-time verification (General Shift)')
+
+  const svc = createAttendanceService({ repository: mockRepo })
+  const result = await svc.recalculateAttendance('2026-10-28')
+
+  // In neutral baseline: No records rewritten, 0 updates executed
+  assert.equal(result.updatedCount, 0)
+  assert.equal(updateCalled, false, 'Historical records must NOT be rewritten or modified')
+  assert.equal(historicalRecords[0].status, 'late', 'Historical status must be preserved intact')
+  assert.equal(historicalRecords[0].notes, 'Late Login #1/2 (General Shift)')
+  assert.ok(result.message.includes('inactive pending replacement policy'))
+})
+
+test('Policy-dependent shift and lateness functions safely return neutral state pending replacement policy', async () => {
+  const { resolveShift, evaluateShiftLateness } = await import('../src/modules/attendance/attendance.service.js')
+
+  // Lateness evaluation is neutral
+  const lateness = evaluateShiftLateness({ punchTime: 1260, shiftStartMins: 1260 })
+  assert.equal(lateness.isLate, false)
+  assert.equal(lateness.lateMinutes, 0)
+  assert.equal(lateness.policyPending, true)
+
+  // Shift resolution returns neutral representation without inventing default morning hours
+  const shift = resolveShift('Evening (06:00 PM – 10:00 PM)')
+  assert.equal(shift.display, 'Evening (06:00 PM – 10:00 PM)')
+  assert.equal(shift.isOvernight, false)
+  assert.equal(shift.startTime, null)
 })
 
 

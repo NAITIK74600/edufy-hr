@@ -183,20 +183,6 @@ export function createMongoAttendanceRepository() {
       const isValidObjectId = targetId && /^[0-9a-fA-F]{24}$/.test(String(targetId))
       const filter = isValidObjectId ? { _id: targetId } : { employeeId: resolvedCode, date: data.date }
 
-      if (data.status === 'present') {
-        data.isLate = false
-        data.isHalfDay = false
-        data.lateCount = 0
-        data.isEarlyLogout = false
-        data.isLop = false
-        if (typeof data.totalHours === 'string' && data.totalHours.includes('Late')) {
-          data.totalHours = data.checkOut ? '8.0 hrs' : 'Active (Live)'
-        }
-        if (typeof data.notes === 'string' && data.notes.includes('Late')) {
-          data.notes = 'On-time verification (General Shift)'
-        }
-      }
-
       const doc = await AttendanceRecord.findOneAndUpdate(
         filter,
         { $set: { ...data, employeeId: resolvedCode } },
@@ -207,19 +193,6 @@ export function createMongoAttendanceRepository() {
     async updateFields(id, fields) {
       const cleanId = String(id || '').trim()
       const { id: _i, _id: _mi, department, createdAt, updatedAt, __v, ...safeFields } = fields
-      if (safeFields.status === 'present') {
-        safeFields.isLate = false
-        safeFields.isHalfDay = false
-        safeFields.lateCount = 0
-        safeFields.isEarlyLogout = false
-        safeFields.isLop = false
-        if (typeof safeFields.totalHours === 'string' && safeFields.totalHours.includes('Late')) {
-          safeFields.totalHours = safeFields.checkOut ? '8.0 hrs' : 'Active (Live)'
-        }
-        if (typeof safeFields.notes === 'string' && safeFields.notes.includes('Late')) {
-          safeFields.notes = 'On-time verification (General Shift)'
-        }
-      }
       const isObjectId = /^[0-9a-fA-F]{24}$/.test(cleanId)
       let doc = null
       if (isObjectId) {

@@ -51,7 +51,7 @@ import {
   Calculator,
 } from 'lucide-react'
 import { Button, ConfirmationDialog, DataTable, EmptyState, Field, PageHeader, StatusBadge } from '../components/ui'
-import { getLateOccurrence, formatAttendanceNotes } from '../utils/attendanceUtils'
+import { formatAttendanceNotes } from '../utils/attendanceUtils'
 import { hrStore, storeAction } from '../services/hrStore'
 import { workspaceAction } from '../services/workspaceStore'
 import { PerformanceWorkspace, WorkspaceReports, WorkspaceNotifications } from '../components/WorkspaceRecords'
@@ -64,32 +64,8 @@ import { useAuth } from '../auth/AuthContext'
 import { formatINR, formatINRRaw, amountInWordsINR } from '../utils/currency'
 const workspaceHandler = (handler) => workspaceAction(hrStore, handler)
 
-function formatShiftDisplay(shiftStr, shiftCode, attendanceRules) {
-  const isGeneral = !shiftCode || shiftCode === 'general' || !shiftStr || String(shiftStr).startsWith('General')
-  const f12 = (t) => {
-    if (!t) return ''
-    const clean = String(t).trim().replace(/[\u202F\u00A0]/g, ' ')
-    const m = clean.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/i)
-    if (!m) return t
-    let h = parseInt(m[1], 10)
-    const min = m[2]
-    const meridiem = m[3]?.toUpperCase()
-    if (meridiem === 'PM' && h < 12) h += 12
-    if (meridiem === 'AM' && h === 12) h = 0
-    const ampm = h >= 12 ? 'PM' : 'AM'
-    h = h % 12 || 12
-    return `${String(h).padStart(2, '0')}:${min} ${ampm}`
-  }
-
-  // If the record itself has an explicit non-default shift timing, preserve it
-  if (shiftStr && typeof shiftStr === 'string' && shiftStr.includes('(') && !shiftStr.includes('09:30 AM')) {
-    return shiftStr
-  }
-
-  if (isGeneral && attendanceRules?.workStartTime && attendanceRules?.workEndTime) {
-    return `General (${f12(attendanceRules.workStartTime)} – ${f12(attendanceRules.workEndTime)})`
-  }
-  return shiftStr || 'General Shift'
+function formatShiftDisplay(shiftStr) {
+  return shiftStr || '—'
 }
 
 // ==========================================
@@ -333,13 +309,12 @@ function AttendanceModule() {
           onClick={async () => {
             try {
               const res = await hrStore.recalculateTodayAttendance()
-              const count = res?.updatedCount ?? res?.count ?? 0
-              showFeedback(`⚡ Recalculated today's presence roster! Verified ${count} records against active shift rules.`)
+              showFeedback(res?.message || 'Attendance roster preserved in neutral mode pending replacement policy.')
             } catch (err) {
-              showFeedback(`✕ Failed to recalculate attendance: ${err.message}`)
+              showFeedback(`✕ Failed to check attendance: ${err.message}`)
             }
           }}
-          title="Re-evaluate all attendance records for today against active company shift rules"
+          title="Verify attendance records status"
         >
           <span>⚡</span> Recalculate Roster
         </Button>
@@ -4601,39 +4576,9 @@ function SettingsModule() {
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginTop: '16px' }}>
           <div style={{ background: '#f8f7f2', padding: '14px', borderRadius: '8px', fontSize: '11px' }}>
-            <span style={{ color: 'var(--muted)', fontSize: '9px', textTransform: 'uppercase' }}>Work Shift Hours</span>
-            <h4 style={{ margin: '4px 0' }}>{(() => {
-              const r = storeState.companySettings?.attendanceRules
-              if (r?.workStartTime && r?.workEndTime) {
-                const f12 = (t, ref = null, isEnd = false) => {
-                  if (!t) return ''
-                  const clean = String(t).trim().replace(/[\u202F\u00A0]/g, ' ')
-                  const m = clean.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/i)
-                  if (!m) return t
-                  let h = parseInt(m[1], 10)
-                  const min = m[2]
-                  const meridiem = m[3]?.toUpperCase()
-                  if (meridiem === 'PM' && h < 12) h += 12
-                  if (meridiem === 'AM' && h === 12) h = 0
-                  if (!meridiem && isEnd && h >= 1 && h <= 11) h += 12
-                  else if (!meridiem && !isEnd && ref) {
-                    const endClean = String(ref).trim().replace(/[\u202F\u00A0]/g, ' ')
-                    const endMatch = endClean.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/i)
-                    if (endMatch) {
-                      let eh = parseInt(endMatch[1], 10)
-                      if (endMatch[3]?.toUpperCase() === 'PM' && eh < 12) eh += 12
-                      if (eh >= 13 && h < 12 && (eh - h) > 8 && (h + 12) < eh + 2) h += 12
-                    }
-                  }
-                  const ampm = h >= 12 ? 'PM' : 'AM'
-                  h = h % 12 || 12
-                  return `${String(h).padStart(2, '0')}:${min} ${ampm}`
-                }
-                return `${f12(r.workStartTime, r.workEndTime, false)} - ${f12(r.workEndTime, r.workStartTime, true)}`
-              }
-              return '09:30 AM - 06:30 PM'
-            })()}</h4>
-            <small style={{ color: 'var(--teal)' }}>Grace period: {storeState.companySettings?.attendanceRules?.gracePeriodMinutes ?? 15} minutes</small>
+            <span style={{ color: 'var(--muted)', fontSize: '9px', textTransform: 'uppercase' }}>Attendance Policy</span>
+            <h4 style={{ margin: '4px 0' }}>Policy Update Pending</h4>
+            <small style={{ color: 'var(--teal)' }}>Shift & punch rules pending replacement policy configuration</small>
           </div>
           <div style={{ background: '#f8f7f2', padding: '14px', borderRadius: '8px', fontSize: '11px' }}>
             <span style={{ color: 'var(--muted)', fontSize: '9px', textTransform: 'uppercase' }}>Annual Leave Quota</span>

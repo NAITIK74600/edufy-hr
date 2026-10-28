@@ -150,12 +150,6 @@ export function createMemoryAttendanceRepository(seedRecords = []) {
         rec.lateCount = 0
         rec.isEarlyLogout = false
         rec.isLop = false
-        if (typeof rec.totalHours === 'string' && rec.totalHours.includes('Late')) {
-          rec.totalHours = rec.checkOut ? '8.0 hrs' : 'Active (Live)'
-        }
-        if (typeof rec.notes === 'string' && rec.notes.includes('Late')) {
-          rec.notes = 'On-time verification (General Shift)'
-        }
       }
       return { ...rec }
     },

@@ -179,12 +179,10 @@ You have taken ${approvedCount} approved day(s) this year. You can apply for lea
 
     if (q.includes('wifi') || q.includes('wi-fi') || q.includes('attendance') || q.includes('check in') || q.includes('punch')) {
       const ssids = state.companySettings?.allowedWifiSSIDs?.join(', ') || 'Edufyi-HQ-Secure'
-      const rules = state.companySettings?.attendanceRules || { workStartTime: '09:30', workEndTime: '18:30', gracePeriodMinutes: 15 }
-      return `Edufyi Smart Attendance Rules:
-• Standard office timings: ${rules.workStartTime} AM to ${rules.workEndTime} PM.
-• Grace period: ${rules.gracePeriodMinutes} minutes (arrival before 09:45 AM is marked Present).
+      return `Edufyi Smart Attendance System:
+• Attendance policy & shift timings are currently being updated.
 • Verified Office Wi-Fi SSIDs: ${ssids}.
-• Connecting to these networks automatically verifies your physical presence!
+• Connecting to verified corporate networks and verifying office geofence confirms physical presence.
 • For remote days, you can check-in using the "Remote Check-In" mode.`
     }
 

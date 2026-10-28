@@ -2401,9 +2401,6 @@ const INITIAL_COMPANY_SETTINGS = {
     { id: 'wn-3', ssid: 'Edufyi-Guest-HighSpeed', bssid: '9C:3D:CF:33:C6:03', securityType: 'WPA2-Personal', branchName: 'Global Center - London', allowedIPs: ['127.0.0.1', '::1', '192.168.10.0/24'], status: 'active', addedAt: '2026-09-30', addedBy: 'Admin' },
   ],
   attendanceRules: {
-    workStartTime: '09:30',
-    workEndTime: '18:30',
-    gracePeriodMinutes: 15,
     halfDayHours: 4.5,
     fullDayHours: 8.0,
     geofenceStrict: false,
@@ -4939,28 +4936,6 @@ const localStore = {
   },
   checkIn(...args) {
     let employeeId, employeeName, customWifi, date, gpsData, bssid, publicIp, shift, shiftCode
-    const buildDefaultShift = () => {
-      const rules = storeState.companySettings?.attendanceRules || {}
-      if (rules.workStartTime && rules.workEndTime) {
-        const f12 = (t, ref = null, isEnd = false) => {
-          if (!t) return ''
-          const clean = String(t).trim().replace(/[\u202F\u00A0]/g, ' ')
-          const m = clean.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/i)
-          if (!m) return t
-          let h = parseInt(m[1], 10)
-          const min = m[2]
-          const meridiem = m[3]?.toUpperCase()
-          if (meridiem === 'PM' && h < 12) h += 12
-          if (meridiem === 'AM' && h === 12) h = 0
-          if (!meridiem && isEnd && h >= 1 && h <= 11) h += 12
-          const ampm = h >= 12 ? 'PM' : 'AM'
-          h = h % 12 || 12
-          return `${String(h).padStart(2, '0')}:${min} ${ampm}`
-        }
-        return `General (${f12(rules.workStartTime, rules.workEndTime, false)} – ${f12(rules.workEndTime, rules.workStartTime, true)})`
-      }
-      return 'General (09:30 AM – 06:30 PM)'
-    }
 
     if (typeof args[0] === 'object' && args[0] !== null) {
       const p = args[0]
@@ -4977,10 +4952,10 @@ const localStore = {
       }
       bssid = p.bssid || null
       publicIp = p.publicIp || null
-      shift = p.shift || buildDefaultShift()
-      shiftCode = p.shiftCode || 'general'
+      shift = p.shift || null
+      shiftCode = p.shiftCode || null
     } else {
-      [employeeId, employeeName, customWifi = 'Edufyi-Office-5G', date = '2026-09-30', gpsData = null, bssid = null, publicIp = null, shift = buildDefaultShift(), shiftCode = 'general'] = args
+      [employeeId, employeeName, customWifi = 'Edufyi-Office-5G', date = '2026-09-30', gpsData = null, bssid = null, publicIp = null, shift = null, shiftCode = null] = args
     }
 
     const verification = this.verifyAttendanceLocation(gpsData?.latitude, gpsData?.longitude, customWifi, bssid, publicIp)
@@ -4996,49 +4971,9 @@ const localStore = {
     const now = new Date()
     const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })
 
-    // Check shift start time for late calculation
-    const resolvedShift = (() => {
-      const rules = storeState.companySettings?.attendanceRules || {}
-      let start = null
-      let end = null
-      if (shift && typeof shift === 'string') {
-        const m = shift.match(/\((.+?)\s*[-–—]\s*(.+?)\)/)
-        if (m) {
-          start = m[1].trim()
-          end = m[2].trim()
-        }
-      }
-      const isGeneral = !shiftCode || shiftCode === 'general' || shiftCode === 'default' || !shift || shift.startsWith('General')
-      const ruleStart = rules.workStartTime
-      const ruleEnd = rules.workEndTime
-      const hasConfigured = Boolean(ruleStart && ruleEnd && (ruleStart !== '09:30' || ruleEnd !== '18:30'))
-      let s = (isGeneral && hasConfigured) ? ruleStart : (start || ruleStart || '09:30')
-      let e = (isGeneral && hasConfigured) ? ruleEnd : (end || ruleEnd || '18:30')
-
-      const parseMins = (t) => {
-        if (!t) return null
-        const clean = String(t).trim().replace(/[\u202F\u00A0]/g, ' ')
-        const match = clean.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/i)
-        if (!match) return null
-        let h = parseInt(match[1], 10)
-        const min = parseInt(match[2], 10)
-        const meridiem = match[3]?.toUpperCase()
-        if (meridiem === 'PM' && h < 12) h += 12
-        if (meridiem === 'AM' && h === 12) h = 0
-        return h * 60 + min
-      }
-
-      let startMins = parseMins(s) ?? 570
-      let endMins = parseMins(e) ?? 1110
-      return { startMins, endMins, isOvernight: endMins < startMins }
-    })()
-
-    // Late login logic disabled - all punch-ins are marked present and on-time
-    const isLate = false
-    let initialStatus = 'present'
-    let isHalfDay = false
-    let currentLateOccurrence = 0
-    let noteText = `Verified Attendance (${resolvedShift.name || 'General Shift'})`
+    // Neutral baseline check-in: factual timestamp and verification status
+    const initialStatus = 'present'
+    const noteText = shift ? `Verified Attendance (${shift})` : 'Verified Attendance'
 
     const existingIndex = storeState.attendance.findIndex((a) => a.employeeId === employeeId && a.date === date)
     const newRecord = {
@@ -5050,9 +4985,9 @@ const localStore = {
       checkInAt: now.toISOString(),
       checkOut: null,
       status: initialStatus,
-      isLate: Boolean(isLate),
-      isHalfDay,
-      lateCount: currentLateOccurrence,
+      isLate: false,
+      isHalfDay: false,
+      lateCount: 0,
       notes: noteText,
       wifiSSID: customWifi,
       bssid: verification.bssid || null,
@@ -5065,8 +5000,8 @@ const localStore = {
       gpsVerified: isGpsVerified,
       locationName: nearestLoc || (isGpsVerified ? (verification.nearestLocation || 'Office') : 'Remote Location'),
       verificationMethod: verification.method,
-      shift: shift || buildDefaultShift(),
-      shiftCode: shiftCode || 'general',
+      shift: shift || null,
+      shiftCode: shiftCode || null,
       isOnBreak: false,
       currentBreak: null,
       breaks: [],
@@ -5194,70 +5129,8 @@ const localStore = {
           }
         }
 
-        // Early Logout & Month-End LOP Policy:
-        // Early logout applies when checking out before scheduled shift end (up to 60m before).
-        // 1) From the 25th of the month onwards, early logouts are marked as Loss of Pay (LOP).
-        // 2) Up to 2 early logouts per month are accepted (status = 'early-logout').
-        //    From the 3rd early logout onwards, it is marked as 'half-day'.
-        const checkoutTotalMins = now.getHours() * 60 + now.getMinutes()
-        let shiftEndTimeStr = storeState.companySettings?.attendanceRules?.workEndTime || '18:30'
-        if (att.shift && typeof att.shift === 'string') {
-          const m = att.shift.match(/\((?:.+?)\s*[-–—]\s*(.+?)\)/)
-          if (m) shiftEndTimeStr = m[1].trim()
-        }
-        const shiftEndMins = (() => {
-          const clean = String(shiftEndTimeStr).trim().replace(/[\u202F\u00A0]/g, ' ')
-          const match = clean.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/i)
-          if (!match) return 1110
-          let h = parseInt(match[1], 10)
-          const min = parseInt(match[2], 10)
-          const meridiem = match[3]?.toUpperCase()
-          if (meridiem === 'PM' && h < 12) h += 12
-          if (meridiem === 'AM' && h === 12) h = 0
-          return h * 60 + min
-        })()
-        const isEarlyLogoutWindow = checkoutTotalMins < shiftEndMins && checkoutTotalMins >= (shiftEndMins - 60)
-        const dateParts = (date || '').split('-')
-        const dayOfMonth = dateParts.length === 3 ? parseInt(dateParts[2], 10) : now.getDate()
-        const isMonthEnd = Number.isFinite(dayOfMonth) && dayOfMonth >= 25
-
-        let isEarlyLogout = false
-        let isLop = false
-        let isHalfDay = att.isHalfDay || (newStatus === 'half-day')
-        let earlyLogoutCount = att.earlyLogoutCount || 0
-        let noteText = att.notes || ''
-
-        if (isEarlyLogoutWindow && att.status !== 'on-leave') {
-          isEarlyLogout = true
-          if (isMonthEnd) {
-            isLop = true
-            newStatus = 'lop'
-            noteText = noteText ? `${noteText} · Month-end early logout (LOP applied)` : 'Month-end early logout (LOP applied)'
-          } else {
-            const monthPrefix = (date || '').substring(0, 7) || now.toISOString().substring(0, 7)
-            const priorEarlyCount = (storeState.attendance || []).filter((a) => {
-              if (a.employeeId !== employeeId) return false
-              if (a.date === date) return false
-              const m = (a.date || '').substring(0, 7)
-              if (m !== monthPrefix) return false
-              return Boolean(a.isEarlyLogout || a.status === 'early-logout' || (a.status === 'half-day' && a.earlyLogoutCount > 0))
-            }).length
-            earlyLogoutCount = priorEarlyCount + 1
-            if (earlyLogoutCount <= 2) {
-              if (newStatus !== 'half-day') {
-                newStatus = 'early-logout'
-              }
-              const earlyNote = `Early Logout #${earlyLogoutCount} (Grace period: ${earlyLogoutCount}/2 accepted)`
-              noteText = noteText ? `${noteText} · ${earlyNote}` : earlyNote
-            } else {
-              newStatus = 'half-day'
-              isHalfDay = true
-              const earlyNote = `Early Logout #${earlyLogoutCount} (Exceeded 2 accepted early logouts — marked as Half Day)`
-              noteText = noteText ? `${noteText} · ${earlyNote}` : earlyNote
-            }
-          }
-        }
-
+        // Neutral baseline check-out: records actual checkout timestamp & duration.
+        // Early logout penalties, month-end LOP, and grace rules are removed pending replacement policy.
         return {
           ...att,
           checkOut: timeStr,
@@ -5268,11 +5141,11 @@ const localStore = {
           totalBreakMinutes: totalBreak,
           offCampusMinutes: offCampusDurationMinutes,
           status: newStatus,
-          isEarlyLogout,
-          isLop,
-          isHalfDay,
-          earlyLogoutCount,
-          notes: noteText,
+          isEarlyLogout: false,
+          isLop: false,
+          isHalfDay: newStatus === 'half-day' || Boolean(att.isHalfDay),
+          earlyLogoutCount: att.earlyLogoutCount || 0,
+          notes: att.notes || '',
           totalHours: `${hours}h ${mins}m (Completed)${breakStr}${offCampusStr}`,
         }
       }
@@ -5348,12 +5221,8 @@ const localStore = {
         isLate: isNowPresent ? false : (record.isLate !== undefined ? record.isLate : (finalStatus === 'late')),
         lateCount: isNowPresent ? 0 : (record.lateCount ?? existing.lateCount ?? 0),
         earlyLogoutCount: record.earlyLogoutCount ?? existing.earlyLogoutCount ?? 0,
-        totalHours: isNowPresent && ((record.totalHours && record.totalHours.includes('Late')) || (existing.totalHours && existing.totalHours.includes('Late')))
-          ? (record.checkOut || existing.checkOut ? '8.0 hrs' : 'Active (Live)')
-          : (record.totalHours || existing.totalHours || 'Active (Live)'),
-        notes: isNowPresent && ((record.notes && record.notes.includes('Late')) || (existing.notes && existing.notes.includes('Late')))
-          ? 'On-time verification (General Shift)'
-          : (record.notes ?? existing.notes ?? ''),
+        totalHours: record.totalHours || existing.totalHours || 'Active (Live)',
+        notes: record.notes ?? existing.notes ?? '',
         date,
         wifiVerified: isVerified,
         gpsVerified: record.gpsVerified !== undefined ? record.gpsVerified : verification.isGpsVerified,
@@ -5384,12 +5253,8 @@ const localStore = {
         distanceMeters: record.distanceMeters !== undefined ? record.distanceMeters : (verification.distanceMeters ?? (isVerified ? 25 : null)),
         gpsVerified: record.gpsVerified !== undefined ? record.gpsVerified : (verification.isGpsVerified || (isVerified && verification.distanceMeters === null)),
         locationName: record.locationName || verification.nearestLocation,
-        totalHours: isNowPresent && record.totalHours && record.totalHours.includes('Late')
-          ? (record.checkOut ? '8.0 hrs' : 'Active (Live)')
-          : (record.totalHours || (record.checkOut ? '8.5 hrs' : 'Active (Live)')),
-        notes: isNowPresent && record.notes && record.notes.includes('Late')
-          ? 'On-time verification (General Shift)'
-          : (record.notes || ''),
+        totalHours: record.totalHours || (record.checkOut ? '8.0 hrs' : 'Active (Live)'),
+        notes: record.notes || '',
       }
       storeState.attendance = [updated, ...storeState.attendance]
     }
@@ -5418,137 +5283,13 @@ const localStore = {
 
   recalculateTodayAttendance(targetDate = null) {
     const today = targetDate || new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
-    const rules = storeState.companySettings?.attendanceRules || {}
-    const startTime = rules.workStartTime || '09:30'
-    const endTime = rules.workEndTime || '18:30'
-    const grace = Number(rules.gracePeriodMinutes ?? 15)
-
-    const parseMins = (t) => {
-      if (!t) return null
-      const clean = String(t).trim().replace(/[\u202F\u00A0]/g, ' ')
-      const match = clean.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/i)
-      if (!match) return null
-      let h = parseInt(match[1], 10)
-      const min = parseInt(match[2], 10)
-      const meridiem = match[3]?.toUpperCase()
-      if (meridiem === 'PM' && h < 12) h += 12
-      if (meridiem === 'AM' && h === 12) h = 0
-      return h * 60 + min
+    // Neutral baseline: do not overwrite historical records. Return safe neutral notice.
+    return {
+      updatedCount: 0,
+      date: today,
+      records: storeState.attendance?.filter((r) => r.date === today) || [],
+      message: 'Attendance policy recalculation is currently inactive pending replacement policy configuration. Historical attendance records remain unchanged.',
     }
-
-    const f12 = (t, isEnd = false) => {
-      let mins = parseMins(t)
-      if (mins === null) return t
-      let h = Math.floor(mins / 60)
-      const m = mins % 60
-      const ampm = h >= 12 ? 'PM' : 'AM'
-      h = h % 12 || 12
-      return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')} ${ampm}`
-    }
-
-    const shiftDisplay = `General (${f12(startTime, false)} – ${f12(endTime, true)})`
-    let count = 0
-    storeState.attendance = (storeState.attendance || []).map((rec) => {
-      if (rec.date !== today || !rec.checkIn) return rec
-      const inMins = parseMins(rec.checkIn)
-      if (inMins === null) return rec
-
-      let extractedStart = null
-      let extractedEnd = null
-      if (rec.shift && typeof rec.shift === 'string') {
-        const m = rec.shift.match(/\((.+?)\s*[-–—]\s*(.+?)\)/)
-        if (m) {
-          extractedStart = m[1].trim()
-          extractedEnd = m[2].trim()
-        }
-      }
-
-      const isGeneral = !rec.shiftCode || rec.shiftCode === 'general' || !rec.shift || rec.shift.startsWith('General')
-      const hasConfiguredRules = Boolean(rules.workStartTime && rules.workEndTime && (rules.workStartTime !== '09:30' || rules.workEndTime !== '18:30'))
-
-      let recStart = (isGeneral && hasConfiguredRules) ? startTime : (extractedStart || startTime)
-      let recEnd = (isGeneral && hasConfiguredRules) ? endTime : (extractedEnd || endTime)
-
-      let recStartMins = parseMins(recStart) ?? 570
-      let recEndMins = parseMins(recEnd) ?? 1110
-
-      const isOvernight = recEndMins < recStartMins
-      let effectivePunchMins = inMins
-      if (isOvernight && inMins <= (recEndMins + 120)) {
-        effectivePunchMins = inMins + 1440
-      }
-      const diff = effectivePunchMins - recStartMins
-      const isLate = diff > grace
-
-      const outMins = rec.checkOut ? parseMins(rec.checkOut) : null
-      let isEarly = false
-      if (outMins !== null) {
-        let effectiveOutMins = outMins
-        let effectiveEndMins = recEndMins
-        if (isOvernight) {
-          if (outMins <= (recEndMins + 120)) effectiveOutMins = outMins + 1440
-          effectiveEndMins = recEndMins + 1440
-        }
-        isEarly = effectiveOutMins < effectiveEndMins && effectiveOutMins >= (effectiveEndMins - 60)
-      }
-      const dayOfMonth = parseInt((today || '').split('-')[2] || '1', 10)
-      const isMonthEndLop = isEarly && dayOfMonth >= 25
-
-      let targetStatus
-      let targetNotes = rec.notes || ''
-      let targetTotalHours = rec.totalHours
-      let targetIsLate = isLate
-      let targetLateCount = isLate ? (rec.lateCount || 1) : 0
-      let targetIsHalfDay = isLate ? (rec.lateCount > 2) : false
-      let targetIsEarlyLogout = isEarly
-      let targetIsLop = isMonthEndLop
-
-      const earlyWindowStartMins = (recEndMins - 60 + 1440) % 1440
-      const earlyWindowStr = `${f12(earlyWindowStartMins)} – ${f12(recEnd, true)}`
-
-      // Late login logic disabled - all records treated as on-time
-      targetIsLate = false
-      targetLateCount = 0
-      targetIsHalfDay = false
-
-      if (isMonthEndLop) {
-        targetStatus = 'lop'
-        targetNotes = `Early Logout (${earlyWindowStr}) marked as LOP per month-end policy`
-      } else if (isEarly) {
-        targetStatus = 'early-logout'
-        targetNotes = `Early Logout (${earlyWindowStr})`
-      } else if (['late', 'half-day', 'lop', 'early-logout'].includes(rec.status) || !rec.status) {
-        targetStatus = 'present'
-        targetNotes = `Verified Attendance (${isGeneral ? 'General Shift' : (rec.shift || 'Shift')})`
-      } else {
-        targetStatus = rec.status
-        targetNotes = (typeof rec.notes === 'string' && rec.notes.includes('Late')) ? `Verified Attendance (${isGeneral ? 'General Shift' : (rec.shift || 'Shift')})` : (rec.notes || '')
-      }
-
-      if (!rec.checkOut) {
-        targetTotalHours = 'Active (Live)'
-      } else if (typeof rec.totalHours === 'string' && rec.totalHours.includes('Late')) {
-        targetTotalHours = rec.totalHours.replace(/·?\s*Late\s*·?/i, '').trim() || 'Active (Live)'
-      }
-
-      count++
-      return {
-        ...rec,
-        status: targetStatus,
-        isLate: targetIsLate,
-        lateCount: targetLateCount,
-        isHalfDay: targetIsHalfDay,
-        isEarlyLogout: targetIsEarlyLogout,
-        isLop: targetIsLop,
-        shift: (isGeneral && hasConfiguredRules) ? shiftDisplay : (rec.shift || shiftDisplay),
-        shiftCode: isGeneral ? 'general' : rec.shiftCode,
-        notes: targetNotes,
-        totalHours: targetTotalHours,
-      }
-    })
-
-    notifyListeners()
-    return { updatedCount: count, date: today }
   },
 
   // Leaves Workflow

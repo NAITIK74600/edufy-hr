@@ -1,3 +1,13 @@
+import {
+  STANDARD_SHIFT_DEF,
+  formatMinutesToTime,
+  normalizeShiftConfig,
+  resolveEmployeeShift,
+  evaluatePunchIn,
+  evaluateCheckOut,
+  evaluateRepeatedOccurrences,
+  evaluatePost25thDoubleLop,
+} from './policyEngine.js'
 import { BlockList, isIP } from 'node:net'
 
 export const DEFAULT_LOCATIONS = [
@@ -91,17 +101,9 @@ const DEFAULT_WIFI_NETWORKS = [
   { ssid: 'Airtel_Naitik5G', bssid: 'A4:2B:8C:44:D8:05', securityType: 'WPA2-Personal', branchName: 'HQ - San Francisco', allowedIPs: ['127.0.0.1', '::1'] },
 ]
 
-export const SHIFT_DEFINITIONS = [
-  { code: 'general', name: 'General Shift', startTime: '09:30', endTime: '18:30', display: 'General (09:30 AM – 06:30 PM)' },
-  { code: 'morning', name: 'Morning Shift', startTime: '08:00', endTime: '16:30', display: 'Morning (08:00 AM – 04:30 PM)' },
-  { code: 'evening', name: 'Evening Shift', startTime: '13:00', endTime: '22:00', display: 'Evening (01:00 PM – 10:00 PM)' },
-  { code: 'night', name: 'Night Shift', startTime: '22:00', endTime: '06:00', display: 'Night (10:00 PM – 06:00 AM)' },
-]
-
+// Policy-free baseline: Default attendance rules retain security parameters (geofence & network)
+// Obsolete work start/end times and grace periods are removed pending new policy.
 const DEFAULT_ATTENDANCE_RULES = {
-  workStartTime: '09:30',
-  workEndTime: '18:30',
-  gracePeriodMinutes: 15,
   maxGeofenceRadiusMeters: 30,
   strictGeofenceRequired: false,
   requireOfficeNetworkAndGps: true,
@@ -209,27 +211,15 @@ export function formatTime24(timeStr, referenceTime = null, isEndTime = false) {
   return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`
 }
 
-export function getNormalizedShiftMinutes(startTimeStr, endTimeStr = null, checkInTimeStr = null) {
-  let startMins = parseTimeToMinutes(startTimeStr) ?? 570
-  let endMins = endTimeStr ? (parseTimeToMinutes(endTimeStr) ?? 1110) : 1110
-
-  const hasStartMeridiem = /AM|PM/i.test(String(startTimeStr))
-
-  if (!hasStartMeridiem && startMins < 720) {
-    if (checkInTimeStr !== null && checkInTimeStr !== undefined) {
-      const checkMins = typeof checkInTimeStr === 'number' ? checkInTimeStr : parseTimeToMinutes(checkInTimeStr)
-      if (checkMins !== null && checkMins >= 720 && (startMins + 720) <= 1440 && Math.abs(checkMins - (startMins + 720)) < Math.abs(checkMins - startMins)) {
-        startMins += 720
-      }
-    } else if (endMins >= 720 && (endMins - (startMins + 720)) >= 0 && (endMins - (startMins + 720)) <= 360) {
-      startMins += 720
-    }
-  }
-
-  return startMins
+/**
+ * @deprecated Legacy shift and lateness resolution functions.
+ * In the neutral policy baseline, automatic late classification and shift fallbacks are disabled.
+ */
+export function getNormalizedShiftMinutes(startTimeStr) {
+  return parseTimeToMinutes(startTimeStr) ?? null
 }
 
-export function extractShiftTimes(shiftStr, fallbackStart = '09:30', fallbackEnd = '18:30') {
+export function extractShiftTimes(shiftStr) {
   let startTime = null
   let endTime = null
   if (shiftStr && typeof shiftStr === 'string') {
@@ -240,102 +230,115 @@ export function extractShiftTimes(shiftStr, fallbackStart = '09:30', fallbackEnd
     }
   }
   return {
-    startTime: startTime || fallbackStart,
-    endTime: endTime || fallbackEnd,
+    startTime,
+    endTime,
     hasExplicitTimes: Boolean(startTime && endTime),
   }
 }
 
-export function resolveShift(options = {}, maybeShiftCode, maybeAttendanceRules, maybeDefaultShift) {
-  let shift, shiftCode, attendanceRules, defaultShift
-  if (typeof options === 'string' || maybeShiftCode !== undefined || maybeAttendanceRules !== undefined) {
-    shift = options
-    shiftCode = maybeShiftCode
-    attendanceRules = maybeAttendanceRules || {}
-    defaultShift = maybeDefaultShift || SHIFT_DEFINITIONS[0]
-  } else {
-    shift = options?.shift
-    shiftCode = options?.shiftCode
-    attendanceRules = options?.attendanceRules || {}
-    defaultShift = options?.defaultShift || SHIFT_DEFINITIONS[0]
-  }
-  const matchedDefinition = SHIFT_DEFINITIONS.find((s) => s.code === shiftCode || s.name === shift || s.display === shift)
-  const isGeneral = !shiftCode || shiftCode === 'general' || shiftCode === 'default' || (matchedDefinition && matchedDefinition.code === 'general')
+export function resolveShift(options = {}) {
+  const shiftStr = typeof options === 'string' ? options : options?.shift
+  const shiftCode = typeof options === 'string' ? null : options?.shiftCode
+  let startTime = null
+  let endTime = null
 
-  const extracted = extractShiftTimes(shift)
-  let startTime
-  let endTime
-  let display
-  let code = shiftCode || matchedDefinition?.code || 'general'
-
-  if (isGeneral) {
-    code = 'general'
-    const ruleStart = attendanceRules?.workStartTime
-    const ruleEnd = attendanceRules?.workEndTime
-    const hasConfiguredRules = Boolean(ruleStart && ruleEnd && (ruleStart !== '09:30' || ruleEnd !== '18:30'))
-
-    if (hasConfiguredRules) {
-      startTime = ruleStart
-      endTime = ruleEnd
-    } else if (extracted.hasExplicitTimes && !extracted.startTime.includes('09:30 AM')) {
-      startTime = extracted.startTime
-      endTime = extracted.endTime
-    } else {
-      startTime = ruleStart || '09:30'
-      endTime = ruleEnd || '18:30'
-    }
-    display = `General (${formatTime12(startTime)} – ${formatTime12(endTime)})`
-  } else {
-    startTime = extracted.startTime || matchedDefinition?.startTime || '09:30'
-    endTime = extracted.endTime || matchedDefinition?.endTime || '18:30'
-    display = shift || matchedDefinition?.display || `Shift (${formatTime12(startTime)} – ${formatTime12(endTime)})`
+  if (shiftStr && typeof shiftStr === 'string') {
+    const extracted = extractShiftTimes(shiftStr)
+    startTime = extracted.startTime
+    endTime = extracted.endTime
   }
 
-  const startMins = parseTimeToMinutes(startTime) ?? 570
-  const endMins = parseTimeToMinutes(endTime) ?? 1110
-
+  const rawConfig = {
+    shiftId: shiftCode || 'STANDARD',
+    name: shiftStr || STANDARD_SHIFT_DEF.name,
+    startTime: startTime || STANDARD_SHIFT_DEF.startTime,
+    endTime: endTime || STANDARD_SHIFT_DEF.endTime,
+  }
+  const norm = normalizeShiftConfig(rawConfig)
   return {
-    code,
-    name: matchedDefinition?.name || (code === 'general' ? 'General Shift' : 'Shift'),
-    display,
-    startTime: formatTime24(startTime),
-    endTime: formatTime24(endTime),
-    startMins,
-    endMins,
-    isOvernight: endMins < startMins,
+    code: norm.shiftId.toLowerCase(),
+    name: norm.name,
+    display: norm.name,
+    startTime: norm.startTime,
+    endTime: norm.endTime,
+    startMins: norm.startMinutes,
+    endMins: norm.endMinutes,
+    isOvernight: norm.isOvernight,
+    gracePeriodMinutes: norm.gracePeriodMinutes,
+    graceCutoffMinutes: norm.graceCutoffMinutes,
+    halfDayCutoffMinutes: norm.halfDayCutoffMinutes,
+    earlyLogoutWindow: norm.earlyLogoutWindow,
   }
 }
 
-export function evaluateShiftLateness({ punchTime, shiftStartMins, shiftEndMins = null, gracePeriodMinutes = 15, isOvernight = null } = {}) {
-  const punchMins = typeof punchTime === 'number' ? punchTime : parseTimeToMinutes(punchTime)
-  if (punchMins === null || shiftStartMins === null) {
-    return { isLate: false, lateMinutes: 0, diff: 0 }
-  }
-
-  const overnight = isOvernight !== null ? Boolean(isOvernight) : (shiftEndMins !== null && shiftEndMins < shiftStartMins)
-  const grace = Math.max(0, Number(gracePeriodMinutes) || 0)
-
-  let effectivePunchMins = punchMins
-  if (overnight) {
-    // In an overnight shift (e.g. 10:00 PM [1320] to 06:00 AM [360]), punch-ins between
-    // midnight (00:00 = 0 mins) and early morning cutoff belong to Day 2 of the shift
-    const cutoffMorning = (shiftEndMins ?? 360) + 120
-    if (punchMins <= cutoffMorning) {
-      effectivePunchMins = punchMins + 1440
+export async function evaluateShiftLateness(checkInTime, employeeId = null, workDate = null) {
+  // Resolve the employee's shift, falling back to admin-configured shift timings if present.
+  let resolvedShift = null;
+  if (employeeId && workDate) {
+    try {
+      const { shift } = await resolveEmployeeShift(employeeId, workDate);
+      resolvedShift = shift;
+    } catch {
+      // fallback to standard definition on error
     }
   }
-
-  const diff = effectivePunchMins - shiftStartMins
-  const lateMinutes = Math.max(0, diff)
-  const isLate = diff > grace
-
-  return {
-    isLate,
-    lateMinutes,
-    effectivePunchMins,
-    shiftStartMins,
-    diff,
+  // If admin has overridden shift timing via attendanceRules, apply those overrides.
+  if (!resolvedShift && service && service.getConfig) {
+    const rules = service.getConfig().attendanceRules || {};
+    if (rules.workStartTime && rules.workEndTime) {
+      resolvedShift = {
+        shiftId: 'CUSTOM',
+        name: `Custom Shift (${rules.workStartTime} – ${rules.workEndTime})`,
+        startTime: rules.workStartTime,
+        endTime: rules.workEndTime,
+        startMinutes: parseTimeToMinutes(rules.workStartTime),
+        endMinutes: parseTimeToMinutes(rules.workEndTime),
+        isOvernight: false,
+        gracePeriodMinutes: rules.gracePeriodMinutes ?? 0,
+        graceCutoffMinutes: (parseTimeToMinutes(rules.workStartTime) ?? 0) + (rules.gracePeriodMinutes ?? 0),
+        halfDayCutoffMinutes: null,
+        earlyLogoutWindow: { startMinutes: null, endMinutes: null, startTime: null, endTime: null },
+        requiredCampusHours: 0,
+        requiredCampusMinutes: 0,
+        timezone: 'Asia/Kolkata',
+      };
+    }
   }
+  const evalResult = evaluatePunchIn({
+    checkInTime,
+    shift: resolvedShift || STANDARD_SHIFT_DEF,
+  });
+  return {
+    isLate: evalResult.isLate,
+    isHalfDay: evalResult.isHalfDay,
+    lateMinutes: evalResult.lateMinutes,
+    status: evalResult.status,
+    occurrence: evalResult.occurrence,
+    notes: evalResult.notes,
+  };
+}
+  // Resolve the employee's shift if not explicitly provided.
+  let resolvedShift = null;
+  if (employeeId && workDate) {
+    try {
+      const { shift } = await resolveEmployeeShift(employeeId, workDate);
+      resolvedShift = shift;
+    } catch {
+      // fallback to standard definition on error
+    }
+  }
+  const evalResult = evaluatePunchIn({
+    checkInTime,
+    shift: resolvedShift || STANDARD_SHIFT_DEF,
+  });
+  return {
+    isLate: evalResult.isLate,
+    isHalfDay: evalResult.isHalfDay,
+    lateMinutes: evalResult.lateMinutes,
+    status: evalResult.status,
+    occurrence: evalResult.occurrence,
+    notes: evalResult.notes,
+  };
 }
 
 function getTodayString() {
@@ -695,27 +698,30 @@ export function createAttendanceService({ repository, companySettings = {} }) {
       const now = new Date()
       const checkInTime = formatCurrentTime()
 
-      const resolved = resolveShift({
-        shift,
-        shiftCode,
-        attendanceRules,
-      })
+      // Authoritative policy punch-in: resolves employee shift & evaluates late login / half-day
+      let resolvedShiftConfig = null
+      if (shift && typeof shift === 'object' && shift.startMinutes) {
+        resolvedShiftConfig = normalizeShiftConfig(shift)
+      } else if (shift && typeof shift === 'string') {
+        const extracted = extractShiftTimes(shift)
+        resolvedShiftConfig = normalizeShiftConfig({ shiftId: shiftCode, name: shift, ...extracted })
+      } else {
+        const resShift = await resolveEmployeeShift(employeeId, workDate)
+        resolvedShiftConfig = resShift.shift
+      }
 
-      const currentMins = getCurrentMinutes(now)
-      const gracePeriod = Number(attendanceRules.gracePeriodMinutes ?? 15)
-      const lateness = evaluateShiftLateness({
-        punchTime: currentMins,
-        shiftStartMins: resolved.startMins,
-        shiftEndMins: resolved.endMins,
-        gracePeriodMinutes: gracePeriod,
-        isOvernight: resolved.isOvernight,
-      })
-      // Late login logic disabled - all punch-ins are marked present and on-time
-      const isLate = false
-      let lateCount = 0
-      let isHalfDayFromLate = false
-      let punchInStatus = 'present'
-      let lateNote = `On-time verification (${resolved.name})`
+      const punchEval = evaluatePunchIn({ checkInTime, shift: resolvedShiftConfig })
+
+      // Calculate occurrence index for the month
+      let currentLateCount = 0
+      try {
+        const monthKey = workDate.slice(0, 7)
+        const priorMonthRecords = await repository.list({ employeeId: employeeId.toUpperCase(), month: monthKey })
+        const priorLates = (priorMonthRecords || []).filter(r => r.date !== workDate && (r.isLate || r.status === 'late')).length
+        currentLateCount = priorLates + (punchEval.isLate ? 1 : 0)
+      } catch {
+        currentLateCount = punchEval.isLate ? 1 : 0
+      }
 
       const record = {
         id: existing?.id,
@@ -725,12 +731,13 @@ export function createAttendanceService({ repository, companySettings = {} }) {
         checkIn: checkInTime,
         checkInAt: now,
         checkOut: null,
-        status: punchInStatus,
-        isLate,
-        isHalfDay: isHalfDayFromLate,
-        lateCount,
-        shift: resolved.display,
-        shiftCode: resolved.code,
+        status: punchEval.status,
+        isLate: punchEval.isLate,
+        isHalfDay: punchEval.isHalfDay,
+        lateCount: currentLateCount,
+        shift: resolvedShiftConfig.name,
+        shiftCode: resolvedShiftConfig.shiftId.toLowerCase(),
+        policyEvaluation: punchEval,
         isOnBreak: false,
         currentBreak: null,
         breaks: [],
@@ -748,7 +755,7 @@ export function createAttendanceService({ repository, companySettings = {} }) {
         locationName: verification.nearestLocation,
         verificationMethod: verification.method,
         totalHours: 'Active (Live)',
-        notes: lateNote,
+        notes: shift ? `Verified Attendance (${shift})` : 'Verified Attendance',
       }
 
       return repository.punchIn(record)
@@ -886,84 +893,63 @@ export function createAttendanceService({ repository, companySettings = {} }) {
         const offCampusPart = offCampusMinutes > 0 ? ` · ${offCampusMinutes}m Off-Campus` : ''
         const tag = autoPunchOut ? 'Auto Punch Out' : 'Completed'
         totalHoursStr = `${hours}h ${mins}m (${tag})${breakPart}${offCampusPart}`
-        if (existing.status !== 'on-leave') {
-          if (netWorkMinutes >= 480) {
-            newStatus = existing.status === 'half-day' ? 'half-day' : (existing.status === 'late' ? 'late' : 'present')
-          } else if (netWorkMinutes >= 240) {
-            newStatus = 'half-day'
-          } else {
-            newStatus = 'short-hours'
-          }
-        }
+        newStatus = existing.status || 'present'
       }
 
-      // Early Logout & Month-End LOP Policy:
-      // Early logout applies when an employee checks out before their scheduled shift end time (within 60m before shift end).
-      // Checking out at or after scheduled shift end time is normal completion, NOT early logout.
-      const resolved = resolveShift({
-        shift: existing.shift,
-        shiftCode: existing.shiftCode,
-        attendanceRules,
+      // Authoritative policy check-out: resolves early logout window & verified campus presence
+      let resolvedOutShift = null
+      if (existing.shift) {
+        const extracted = extractShiftTimes(existing.shift)
+        resolvedOutShift = normalizeShiftConfig({ shiftId: existing.shiftCode, name: existing.shift, ...extracted })
+      } else {
+        const resShift = await resolveEmployeeShift(employeeId, workDate)
+        resolvedOutShift = resShift.shift
+      }
+
+      const isVerified = Boolean(existing.wifiVerified || existing.gpsVerified || existing.ipVerified)
+      const verifiedDurationMinutes = isVerified
+        ? Math.max(0, elapsed - totalBreakMinutes - offCampusMinutes)
+        : 0
+
+      const checkoutEval = evaluateCheckOut({
+        checkOutTime,
+        checkInTime: existing.checkIn,
+        shift: resolvedOutShift,
+        elapsedMinutes: elapsed,
+        verifiedCampusMinutes: verifiedDurationMinutes,
       })
 
-      let isEarlyLogoutWindow = false
-      if (outMins !== null) {
-        let effectiveOutMins = outMins
-        let effectiveEndMins = resolved.endMins
-        if (resolved.isOvernight) {
-          if (outMins <= (resolved.endMins + 120)) {
-            effectiveOutMins = outMins + 1440
-          }
-          effectiveEndMins = resolved.endMins + 1440
-        }
-        isEarlyLogoutWindow = effectiveOutMins < effectiveEndMins && effectiveOutMins >= (effectiveEndMins - 60)
-      }
-
-      const dateParts = (workDate || '').split('-')
-      const dayOfMonth = dateParts.length === 3 ? parseInt(dateParts[2], 10) : now.getDate()
-      const isMonthEndLop = Number.isFinite(dayOfMonth) && dayOfMonth >= 25
-
-      let isEarlyLogout = false
-      let isLop = false
-      let isHalfDayFromEarly = false
-      let earlyLogoutCount = 0
-
-      if (isEarlyLogoutWindow && existing.status !== 'on-leave') {
-        isEarlyLogout = true
-        if (isMonthEndLop) {
-          isLop = true
-          newStatus = 'lop'
-        } else {
-          // Count prior early logouts in the same month
-          const monthPrefix = (workDate || '').slice(0, 7)
-          const allEmpRecords = await repository.list({ employeeId: employeeId.toUpperCase() })
-          const priorEarlyRecords = (allEmpRecords || []).filter((r) =>
-            r.date && r.date.startsWith(monthPrefix) && r.date !== workDate && (
-              r.isEarlyLogout || r.status === 'early-logout' || (r.status === 'half-day' && r.earlyLogoutCount > 0) || (r.notes && r.notes.toLowerCase().includes('early logout'))
-            )
-          )
-          earlyLogoutCount = priorEarlyRecords.length + 1
-          if (earlyLogoutCount <= 2) {
-            newStatus = existing.status === 'half-day' ? 'half-day' : 'early-logout'
-          } else {
-            isHalfDayFromEarly = true
-            newStatus = 'half-day'
-          }
+      // Count prior early logouts in the month
+      let currentEarlyCount = existing.earlyLogoutCount || 0
+      if (checkoutEval.isEarlyLogout) {
+        try {
+          const monthKey = workDate.slice(0, 7)
+          const priorMonthRecords = await repository.list({ employeeId: employeeId.toUpperCase(), month: monthKey })
+          const priorEarly = (priorMonthRecords || []).filter(r => r.date !== workDate && (r.isEarlyLogout || r.status === 'early-logout')).length
+          currentEarlyCount = priorEarly + 1
+        } catch {
+          currentEarlyCount = (existing.earlyLogoutCount || 0) + 1
         }
       }
 
-      const earlyWindowStartMins = (resolved.endMins - 60 + 1440) % 1440
-      const earlyWindowStr = `${formatTime12(earlyWindowStartMins)} – ${formatTime12(resolved.endTime)}`
-      const earlyLogoutReason = isLop
-        ? `Early Logout (${earlyWindowStr}) marked as LOP per month-end policy (from 25th)`
-        : (isHalfDayFromEarly
-          ? `Early Logout #${earlyLogoutCount} (Exceeded 2 accepted early logouts — marked as Half Day)`
-          : (isEarlyLogout ? `Early Logout #${earlyLogoutCount} of 2 accepted early departures (${earlyWindowStr})` : ''))
+      // Check post-25th Double LOP trigger condition
+      const doubleLopEval = evaluatePost25thDoubleLop({
+        dateStr: workDate,
+        isLop: existing.isLop || existing.status === 'lop',
+        isAbsent: existing.status === 'absent',
+      })
 
-      const defaultReason = autoPunchOut ? 'Auto Punch Out (GPS & WiFi disconnected for 2 hrs)' : earlyLogoutReason
+      let finalStatus = existing.status || 'present'
+      let finalHalfDay = Boolean(existing.isHalfDay)
+      if (checkoutEval.isCampusShortfall && verifiedDurationMinutes < (resolvedOutShift.requiredCampusMinutes || 240)) {
+        finalHalfDay = true
+        if (finalStatus === 'present') finalStatus = 'half-day'
+      }
+
+      const defaultReason = autoPunchOut ? 'Auto Punch Out (GPS & WiFi disconnected for 2 hrs)' : ''
       const reasonToSet = punchOutReason || defaultReason
 
-      const notesArr = [existing.notes, reasonToSet].filter(Boolean)
+      const notesArr = [existing.notes, reasonToSet, checkoutEval.notes].filter(Boolean)
       const combinedNotes = [...new Set(notesArr)].join(' | ')
 
       const updated = {
@@ -971,11 +957,13 @@ export function createAttendanceService({ repository, companySettings = {} }) {
         checkOut: checkOutTime,
         checkOutAt: now,
         totalHours: totalHoursStr,
-        status: newStatus,
-        isEarlyLogout,
-        isLop,
-        isHalfDay: newStatus === 'half-day' || Boolean(existing.isHalfDay),
-        earlyLogoutCount: earlyLogoutCount || existing.earlyLogoutCount || 0,
+        status: finalStatus,
+        isEarlyLogout: checkoutEval.isEarlyLogout,
+        earlyLogoutCount: currentEarlyCount,
+        isHalfDay: finalHalfDay,
+        verifiedCampusMinutes: verifiedDurationMinutes,
+        doubleLopStatus: doubleLopEval.applies ? (existing.doubleLopStatus === 'approved' ? 'approved' : 'pending_approval') : 'none',
+        isDoubleLop: existing.doubleLopStatus === 'approved',
         isOnBreak: false,
         currentBreak: null,
         breaks: breaksList,
@@ -1096,143 +1084,79 @@ export function createAttendanceService({ repository, companySettings = {} }) {
       return repository.save(record)
     },
 
-    async recalculateTodayAttendanceForRules(newRules = {}) {
-      return this.recalculateAttendance(getTodayString(), newRules)
+    async recalculateTodayAttendanceForRules() {
+      return {
+        updatedCount: 0,
+        message: 'Attendance policy recalculation is currently inactive pending replacement policy configuration.',
+      }
     },
 
-    async recalculateAttendance(date = getTodayString(), newRules = {}) {
+    async recalculateAttendance(date = getTodayString()) {
       const records = await repository.list({ date })
-      if (!records || !records.length) return { updatedCount: 0, date, records: [] }
-      const effectiveRules = { ...attendanceRules, ...newRules }
-      const grace = Number(effectiveRules.gracePeriodMinutes ?? 15)
-
       let updatedCount = 0
-      const updatedList = []
+      for (const rec of (records || [])) {
+        if (!rec.checkIn) continue
+        const resShift = await resolveEmployeeShift(rec.employeeId, rec.date || date)
+        const shiftConfig = resShift.shift
+        const punchEval = evaluatePunchIn({ checkInTime: rec.checkIn, shift: shiftConfig })
 
-      for (const rec of records) {
-        if (!rec.checkIn) {
-          updatedList.push(rec)
-          continue
-        }
-        const inMins = parseTimeToMinutes(rec.checkIn)
-        if (inMins === null) {
-          updatedList.push(rec)
-          continue
+        let checkoutEval = null
+        if (rec.checkOut) {
+          checkoutEval = evaluateCheckOut({
+            checkOutTime: rec.checkOut,
+            checkInTime: rec.checkIn,
+            shift: shiftConfig,
+            verifiedCampusMinutes: rec.verifiedCampusMinutes,
+          })
         }
 
-        const resolved = resolveShift({
-          shift: rec.shift,
-          shiftCode: rec.shiftCode,
-          attendanceRules: effectiveRules,
+        const doubleLopEval = evaluatePost25thDoubleLop({
+          dateStr: rec.date || date,
+          isLop: rec.isLop || rec.status === 'lop',
+          isAbsent: rec.status === 'absent',
         })
 
-        const lateness = evaluateShiftLateness({
-          punchTime: inMins,
-          shiftStartMins: resolved.startMins,
-          shiftEndMins: resolved.endMins,
-          gracePeriodMinutes: grace,
-          isOvernight: resolved.isOvernight,
-        })
-        const isLate = lateness.isLate
-
-        // Evaluate Early Logout
-        const outMins = rec.checkOut ? parseTimeToMinutes(rec.checkOut) : null
-        let isEarly = false
-        if (outMins !== null) {
-          let effectiveOutMins = outMins
-          let effectiveEndMins = resolved.endMins
-          if (resolved.isOvernight) {
-            if (outMins <= (resolved.endMins + 120)) {
-              effectiveOutMins = outMins + 1440
-            }
-            effectiveEndMins = resolved.endMins + 1440
-          }
-          isEarly = effectiveOutMins < effectiveEndMins && effectiveOutMins >= (effectiveEndMins - 60)
+        const updated = {
+          ...rec,
+          shift: shiftConfig.name,
+          shiftCode: shiftConfig.shiftId.toLowerCase(),
+          isLate: punchEval.isLate,
+          isHalfDay: punchEval.isHalfDay || (checkoutEval ? checkoutEval.isCampusShortfall : false),
+          status: punchEval.status === 'half-day' ? 'half-day' : (checkoutEval?.isCampusShortfall ? 'half-day' : (rec.status || punchEval.status)),
+          isEarlyLogout: checkoutEval ? checkoutEval.isEarlyLogout : false,
+          doubleLopStatus: doubleLopEval.applies ? (rec.doubleLopStatus === 'approved' ? 'approved' : 'pending_approval') : 'none',
+          isDoubleLop: rec.doubleLopStatus === 'approved',
+          policyEvaluation: { punch: punchEval, checkout: checkoutEval },
         }
-
-        const dayOfMonth = parseInt((date || '').split('-')[2] || '1', 10)
-        const isMonthEndLop = isEarly && dayOfMonth >= 25
-
-        let targetStatus
-        let targetNotes = rec.notes || ''
-        let targetTotalHours = rec.totalHours
-        let targetIsLate = isLate
-        let targetLateCount = isLate ? (rec.lateCount || 1) : 0
-        let targetIsHalfDay = isLate ? (rec.lateCount > 2) : false
-        let targetIsEarlyLogout = isEarly
-        let targetIsLop = isMonthEndLop
-
-        const earlyWindowStartMins = (resolved.endMins - 60 + 1440) % 1440
-        const earlyWindowStr = `${formatTime12(earlyWindowStartMins)} – ${formatTime12(resolved.endTime)}`
-
-        // Late login logic disabled - all records treated as on-time
-        targetIsLate = false
-        targetLateCount = 0
-        targetIsHalfDay = false
-
-        if (isMonthEndLop) {
-          targetStatus = 'lop'
-          targetNotes = `Early Logout (${earlyWindowStr}) marked as LOP per month-end policy`
-        } else if (isEarly) {
-          targetStatus = 'early-logout'
-          targetNotes = `Early Logout (${earlyWindowStr})`
-        } else if (['late', 'half-day', 'lop', 'early-logout'].includes(rec.status) || !rec.status) {
-          targetStatus = 'present'
-          targetNotes = `On-time verification (${resolved.name})`
-        } else {
-          targetStatus = rec.status
-          targetNotes = (typeof rec.notes === 'string' && rec.notes.includes('Late')) ? `On-time verification (${resolved.name})` : (rec.notes || '')
-        }
-
-        if (!rec.checkOut) {
-          targetTotalHours = 'Active (Live)'
-        } else if (typeof rec.totalHours === 'string' && rec.totalHours.includes('Late')) {
-          targetTotalHours = rec.totalHours.replace(/·?\s*Late\s*·?/i, '').trim() || 'Active (Live)'
-        }
-
-        const needsUpdate =
-          rec.status !== targetStatus ||
-          Boolean(rec.isLate) !== Boolean(targetIsLate) ||
-          Boolean(rec.isEarlyLogout) !== Boolean(targetIsEarlyLogout) ||
-          Boolean(rec.isLop) !== Boolean(targetIsLop) ||
-          rec.shift !== resolved.display ||
-          rec.totalHours !== targetTotalHours ||
-          (!isLate && typeof rec.notes === 'string' && rec.notes.includes('Late')) ||
-          (!isLate && typeof rec.totalHours === 'string' && rec.totalHours.includes('Late'))
-
-        if (needsUpdate) {
-          const updates = {
-            status: targetStatus,
-            isLate: targetIsLate,
-            lateCount: targetLateCount,
-            isHalfDay: targetIsHalfDay,
-            isEarlyLogout: targetIsEarlyLogout,
-            isLop: targetIsLop,
-            shift: resolved.display,
-            shiftCode: resolved.code,
-            notes: targetNotes,
-            totalHours: targetTotalHours,
-            employeeId: rec.employeeId,
-            date: rec.date || date,
-          }
-          let saved = null
-          if (repository.updateFields) {
-            saved = await repository.updateFields(rec.id || rec._id, updates).catch((err) => {
-              console.error('[Attendance] recalculate updateFields error:', err?.message || err)
-            })
-          }
-          if (!saved && repository.save) {
-            saved = await repository.save({ ...rec, ...updates }).catch((err) => {
-              console.error('[Attendance] recalculate save error:', err?.message || err)
-            })
-          }
-          updatedCount++
-          updatedList.push(saved || { ...rec, ...updates })
-        } else {
-          updatedList.push(rec)
-        }
+        await repository.save(updated)
+        updatedCount++
       }
-      return { updatedCount, date, records: updatedList }
+
+      return {
+        updatedCount,
+        date,
+        records: await repository.list({ date }),
+        message: `Attendance recalculated for ${updatedCount} record(s) on ${date} under authoritative policy.`,
+      }
+    },
+
+    async approveDoubleLop({ recordId, approved, actor, reason }) {
+      const record = await repository.findById(recordId)
+      if (!record) {
+        const err = new Error('Attendance record not found.')
+        err.statusCode = 404
+        throw err
+      }
+      const newStatus = approved ? 'approved' : 'rejected'
+      const updated = {
+        ...record,
+        doubleLopStatus: newStatus,
+        isDoubleLop: Boolean(approved),
+        doubleLopApprovedBy: actor?.id || actor?.name || 'ADMIN',
+        doubleLopApprovedAt: new Date(),
+        doubleLopReason: reason || (approved ? 'Authorized post-25th Double LOP' : 'Rejected post-25th Double LOP'),
+      }
+      return repository.save(updated)
     },
 
     async deleteRecord(id, options = {}) {

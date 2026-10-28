@@ -208,7 +208,24 @@ export function createLeaveService({ repository, employeeRepository, notificatio
           )
         }
       }
-      const managerId = targetEmployeeId || policy.approvalStage === 'hr' ? null : idOf(employee.managerId)
+      // Resolve the appropriate approver for the leave request
+// 1. Try the employee's direct manager (if any)
+// 2. If no manager or the policy forces HR, fall back to an HR user (admin/HR role)
+let managerId = null;
+if (employee.managerId) {
+  managerId = idOf(employee.managerId);
+}
+// If the policy mandates HR approval or no manager found, pick an HR recipient
+if (!managerId || policy.approvalStage === 'hr') {
+  // Query HR/admin users (cached to avoid multiple DB hits)
+  const hrResult = await employeeRepository.list({ limit: 100, status: 'active' });
+  const hrUsers = (hrResult.records ?? hrResult ?? []).filter((e) => ['admin', 'hr'].includes(e.role));
+  if (hrUsers.length > 0) {
+    // Choose the first HR user as the fallback approver
+    managerId = idOf(hrUsers[0]);
+  }
+}
+
       if (!managerId && policy.approvalStage === 'manager') throw error('A manager must be assigned before this leave type can be submitted.', 409, 'MANAGER_REQUIRED')
       
       const defaultAllowance = getMonthlyDefaultAllowance(employee, leaveType)

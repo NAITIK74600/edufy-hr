@@ -78,7 +78,7 @@ import { PayslipPreviewModal } from '../components/payroll/PayslipPreviewModal'
 import { doesPayrollMatchUser, unmaskBankAccount, findEmployeeForUser } from '../utils/payrollMatcher'
 import { OnboardingDossierView } from '../components/OnboardingDossierView'
 import { CompanyPoliciesView } from '../components/CompanyPoliciesView'
-import { getLateOccurrence, formatAttendanceNotes } from '../utils/attendanceUtils'
+import { formatAttendanceNotes } from '../utils/attendanceUtils'
 import { HolidayCalendarShowcase } from '../components/HolidayCalendarShowcase'
 import { CompanyDocumentsView } from '../components/CompanyDocumentsView'
 
@@ -93,29 +93,6 @@ function formatTimerSeconds(totalSecs) {
   const m = Math.floor((totalSecs % 3600) / 60)
   const s = totalSecs % 60
   return `${String(h).padStart(2, '0')}h ${String(m).padStart(2, '0')}m ${String(s).padStart(2, '0')}s`
-}
-
-function getShiftLabel(rules) {
-  const st = rules?.workStartTime
-  const et = rules?.workEndTime
-  if (st && et) {
-    const f12 = (t) => {
-      if (!t) return ''
-      const clean = String(t).trim().replace(/[\u202F\u00A0]/g, ' ')
-      const m = clean.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/i)
-      if (!m) return t
-      let h = parseInt(m[1], 10)
-      const min = m[2]
-      const meridiem = m[3]?.toUpperCase()
-      if (meridiem === 'PM' && h < 12) h += 12
-      if (meridiem === 'AM' && h === 12) h = 0
-      const ampm = h >= 12 ? 'PM' : 'AM'
-      h = h % 12 || 12
-      return `${String(h).padStart(2, '0')}:${min} ${ampm}`
-    }
-    return `General (${f12(st)} – ${f12(et)})`
-  }
-  return 'General (09:30 AM – 06:30 PM)'
 }
 
 function GPSAttendanceStation({ user, todayRecord, onPunch, onStartBreak, onEndBreak, currentTime }) {
@@ -687,8 +664,8 @@ function GPSAttendanceStation({ user, todayRecord, onPunch, onStartBreak, onEndB
           wifiSSID: isOnOfficeNetwork ? primaryWifiSSID : 'External Network',
           bssid: null,
           publicIp,
-          shift: getShiftLabel(settings?.attendanceRules),
-          shiftCode: 'general',
+          shift: todayRecord?.shift || null,
+          shiftCode: todayRecord?.shiftCode || null,
           latitude: currentCoords?.latitude ?? null,
           longitude: currentCoords?.longitude ?? null,
           accuracy: currentCoords?.accuracy ?? null,
@@ -1244,8 +1221,8 @@ function ESSOverview({ user }) {
     const bssid = opts.bssid || null
     const publicIp = opts.publicIp || null
     const gps = opts.gpsData
-    const shift = getShiftLabel(storeState.companySettings?.attendanceRules)
-    const shiftCode = 'general'
+    const shift = todayAttendance?.shift || null
+    const shiftCode = todayAttendance?.shiftCode || null
     if (!isCheckedIn && !isCompleted) {
       const rec = await hrStore.checkIn({
         employeeId: empId,
@@ -1726,8 +1703,8 @@ function ESSAttendanceView({ user }) {
     const bssid = opts.bssid || null
     const publicIp = opts.publicIp || null
     const gps = opts.gpsData
-    const shift = opts.shift || getShiftLabel(storeState.companySettings?.attendanceRules)
-    const shiftCode = opts.shiftCode || 'general'
+    const shift = opts.shift || todayRecord?.shift || null
+    const shiftCode = opts.shiftCode || todayRecord?.shiftCode || null
     if (!isCheckedIn && !isCompleted) {
       const rec = await hrStore.checkIn({
         employeeId: empId,
@@ -1744,7 +1721,7 @@ function ESSAttendanceView({ user }) {
         shift,
         shiftCode,
       })
-      setPunchNotice(`Successfully punched in at ${rec?.checkIn || 'now'}! (${rec?.ipVerified ? 'Office network verified' : rec?.gpsVerified ? 'GPS Geofence verified' : 'Recorded'}, Shift: ${rec?.shift || shift})`)
+      setPunchNotice(`Successfully punched in at ${rec?.checkIn || 'now'}! (${rec?.ipVerified ? 'Office network verified' : rec?.gpsVerified ? 'GPS Geofence verified' : 'Recorded'}${rec?.shift ? `, Shift: ${rec.shift}` : ''})`)
     } else if (isCheckedIn) {
       const offCampusMinutes = Number(opts.offCampusDurationMinutes) || 0
       await hrStore.checkOut({
@@ -1782,7 +1759,7 @@ function ESSAttendanceView({ user }) {
 
   const monthlyLogs = storeState.attendance.filter((record) => record.employeeId === empId && record.date.startsWith(todayKey().slice(0, 7))).map((record) => ({
     date: record.date, day: new Date(`${record.date}T12:00:00`).toLocaleDateString('en-US', { weekday: 'long' }),
-    shift: record.shift || getShiftLabel(storeState.companySettings?.attendanceRules), in: record.checkIn || '-', out: record.checkOut || '-',
+    shift: record.shift || '—', in: record.checkIn || '-', out: record.checkOut || '-',
     hours: record.totalHours || '-', wifi: record.ipVerified ? 'Server-verified network' : record.wifiSSID || '-',
     breaks: record.totalBreakMinutes ? `${record.totalBreakMinutes}m` : (record.breaks?.length ? `${record.breaks.length} breaks` : '–'),
     isOnBreak: record.isOnBreak,
