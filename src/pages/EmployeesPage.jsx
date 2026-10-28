@@ -33,7 +33,7 @@ import { SalaryBreakdownFields } from '../components/common/SalaryBreakdownField
 import { normalizeSalaryStructure } from '../utils/salaryCalculator'
 import { useAuth } from '../auth/AuthContext'
 import { hasPermission } from '../auth/permissions'
-import { hrStore, storeAction, getRecommendedRoleConfig } from '../services/hrStore'
+import { hrStore, storeAction, getRecommendedRoleConfig, INITIAL_ROLES } from '../services/hrStore'
 import { generateNextEmployeeCode, generateAutoPassword, formatCredentialsShareText, copyTextToClipboard } from '../utils/credentialsHelper'
 import { formatINR } from '../utils/currency'
 import {
@@ -128,8 +128,24 @@ function EmployeeDirectory({ route } = {}) {
   const allEmployees = storeState.employees || []
 
   const allRoleOptions = useMemo(() => {
-    const list = storeState.roles?.length ? storeState.roles : (hrStore.getRoles ? hrStore.getRoles() : [])
-    return list.map((r) => ({ id: r.id || r.roleId, name: r.name || r.label || r.id }))
+    const hrRoles = hrStore.getRoles ? hrStore.getRoles() : []
+    const storeRoles = storeState.roles || []
+    const roleMap = new Map()
+    // 1. Initial standard roles
+    INITIAL_ROLES.forEach((r) => {
+      if (r?.id) roleMap.set(r.id, { id: r.id, name: r.name || r.label || r.id })
+    })
+    // 2. Roles from hrStore (which filters deleted roles and includes custom ones)
+    hrRoles.forEach((r) => {
+      const id = r.id || r.roleId
+      if (id) roleMap.set(id, { id, name: r.name || r.label || id })
+    })
+    // 3. Roles in current storeState
+    storeRoles.forEach((r) => {
+      const id = r.id || r.roleId
+      if (id) roleMap.set(id, { id, name: r.name || r.label || id })
+    })
+    return Array.from(roleMap.values())
   }, [storeState.roles])
 
   const defaultNewForm = {

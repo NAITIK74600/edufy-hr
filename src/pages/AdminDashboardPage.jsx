@@ -1896,15 +1896,16 @@ function AdminRolesModule() {
   }
 
   async function handleDeleteRole() {
-    if (activeRole.isSystem) {
+    const coreSystemRoles = ['admin', 'hr', 'hr_executive', 'manager', 'employee']
+    if (coreSystemRoles.includes(activeRole?.id)) {
       alert('Built-in system roles (Admin, HR, Manager, Employee) cannot be removed.')
       return
     }
-    if (window.confirm(`Are you sure you want to delete custom role '${activeRole.name}'?`)) {
+    if (window.confirm(`Are you sure you want to delete role '${activeRole.name}'?`)) {
       try {
         await hrStore.deleteRole(activeRole.id)
         setSelectedRoleId('hr')
-        setNotice(`Custom role '${activeRole.name}' deleted.`)
+        setNotice(`Role '${activeRole.name}' deleted.`)
         setTimeout(() => setNotice(''), 4000)
       } catch (err) {
         alert(err.message || 'Failed to delete role.')
@@ -2341,7 +2342,7 @@ function AdminRolesModule() {
               </>
             )}
 
-            {!activeRole?.isSystem && (
+            {!['admin', 'hr', 'hr_executive', 'manager', 'employee'].includes(activeRole?.id) && (
               <button
                 type="button"
                 className="ui-button secondary"

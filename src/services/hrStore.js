@@ -24,7 +24,7 @@ export const INITIAL_ROLES = [
     name: 'Operations Executive',
     description: 'Operations specialist responsible for daily process execution, cross-team coordination, workflow quality control, and compliance audits.',
     badge: 'Operations',
-    isSystem: true,
+    isSystem: false,
     permissions: [
       'dashboard.read',
       'leave.self.read',
@@ -45,7 +45,7 @@ export const INITIAL_ROLES = [
     name: 'Revenue Growth Manager',
     description: 'Commercial leader steering client acquisition channels, pipeline velocity, sales target execution, and revenue squad operations.',
     badge: 'Management',
-    isSystem: true,
+    isSystem: false,
     permissions: [
       'dashboard.read',
       'employees.read',
@@ -71,7 +71,7 @@ export const INITIAL_ROLES = [
     name: 'Vertical Head',
     description: 'Senior business leadership heading complete operational and revenue verticals, managing managers, team squads, and P&L targets.',
     badge: 'Vertical Head',
-    isSystem: true,
+    isSystem: false,
     permissions: [
       'dashboard.read',
       'employees.read',
@@ -124,7 +124,7 @@ export const INITIAL_ROLES = [
     name: 'Team Leader',
     description: 'Frontline squad leader supervising daily task execution, running morning standups, tracking progress, and approving direct reports leave.',
     badge: 'Team Lead',
-    isSystem: true,
+    isSystem: false,
     permissions: [
       'dashboard.read',
       'employees.read',
@@ -149,7 +149,7 @@ export const INITIAL_ROLES = [
     name: 'Business Development Executive',
     description: 'Sales professional responsible for corporate outreach, client pitches, proposal negotiation, and business expansion.',
     badge: 'Sales & Growth',
-    isSystem: true,
+    isSystem: false,
     permissions: [
       'dashboard.read',
       'leave.self.read',
@@ -170,7 +170,7 @@ export const INITIAL_ROLES = [
     name: 'Business Development Intern',
     description: 'Sales trainee supporting lead prospecting, market intelligence, outreach scheduling, and CRM contact enrichment.',
     badge: 'Intern',
-    isSystem: true,
+    isSystem: false,
     permissions: [
       'dashboard.read',
       'leave.self.read',
@@ -191,7 +191,7 @@ export const INITIAL_ROLES = [
     name: 'Marketing Executive',
     description: 'Marketing specialist driving campaign execution, social media presence, brand assets, and content marketing.',
     badge: 'Marketing',
-    isSystem: true,
+    isSystem: false,
     permissions: [
       'dashboard.read',
       'leave.self.read',
@@ -212,7 +212,7 @@ export const INITIAL_ROLES = [
     name: 'Marketing Intern',
     description: 'Marketing trainee assisting with content distribution, social media posts, campaign analytics, and creative marketing collateral.',
     badge: 'Intern',
-    isSystem: true,
+    isSystem: false,
     permissions: [
       'dashboard.read',
       'leave.self.read',
@@ -233,7 +233,7 @@ export const INITIAL_ROLES = [
     name: 'Managing Director',
     description: 'Chief executive leadership directing corporate strategy, vertical growth heads, organizational governance, and enterprise expansion.',
     badge: 'Leadership',
-    isSystem: true,
+    isSystem: false,
     permissions: [
       'dashboard.read',
       'hr.dashboard.read',
@@ -262,7 +262,7 @@ export const INITIAL_ROLES = [
     name: 'Co-Founder',
     description: 'Founding leadership driving company vision, long-term capital allocation, investor relations, and core corporate governance.',
     badge: 'Leadership',
-    isSystem: true,
+    isSystem: false,
     permissions: [
       'dashboard.read',
       'hr.dashboard.read',
@@ -291,7 +291,7 @@ export const INITIAL_ROLES = [
     name: 'SDE Intern',
     description: 'Software engineering trainee assisting with feature development, unit testing, bug investigation, and code reviews.',
     badge: 'Intern',
-    isSystem: true,
+    isSystem: false,
     permissions: [
       'dashboard.read',
       'leave.self.read',
@@ -312,7 +312,7 @@ export const INITIAL_ROLES = [
     name: 'SDE',
     description: 'Software Development Engineer building core applications, APIs, responsive frontend architectures, and reliable systems.',
     badge: 'Engineering',
-    isSystem: true,
+    isSystem: false,
     permissions: [
       'dashboard.read',
       'leave.self.read',
@@ -333,7 +333,7 @@ export const INITIAL_ROLES = [
     name: 'Post-Sales Intern',
     description: 'Customer success trainee assisting client queries, documentation collection, onboarding survey followups, and ticket routing.',
     badge: 'Intern',
-    isSystem: true,
+    isSystem: false,
     permissions: [
       'dashboard.read',
       'leave.self.read',
@@ -354,7 +354,7 @@ export const INITIAL_ROLES = [
     name: 'Post-Sales Executive',
     description: 'Client retention specialist managing post-purchase customer onboarding, service delivery verification, upsells, and relationship health.',
     badge: 'Post-Sales',
-    isSystem: true,
+    isSystem: false,
     permissions: [
       'dashboard.read',
       'leave.self.read',
@@ -410,7 +410,7 @@ export const INITIAL_ROLES = [
     name: 'General Manager',
     description: 'Senior executive overseeing cross-functional business operations, departmental budgets, strategic milestones, and organizational leadership.',
     badge: 'Leadership',
-    isSystem: true,
+    isSystem: false,
     permissions: [
       'dashboard.read',
       'hr.dashboard.read',
@@ -439,7 +439,7 @@ export const INITIAL_ROLES = [
     name: 'Assistant General Manager',
     description: 'Senior operational leader assisting the General Manager in executing organizational initiatives, department oversight, and resource planning.',
     badge: 'Management',
-    isSystem: true,
+    isSystem: false,
     permissions: [
       'dashboard.read',
       'employees.read',
@@ -466,7 +466,7 @@ export const INITIAL_ROLES = [
     name: 'Senior Manager',
     description: 'Senior departmental leader directing multiple squad leads, cross-team programs, performance appraisals, and strategic initiatives.',
     badge: 'Management',
-    isSystem: true,
+    isSystem: false,
     permissions: [
       'dashboard.read',
       'employees.read',
@@ -493,7 +493,7 @@ export const INITIAL_ROLES = [
     name: 'Head of Sales',
     description: 'Commercial leadership directing enterprise sales targets, client expansion channels, revenue pipeline velocity, and sales team execution.',
     badge: 'Sales & Growth',
-    isSystem: true,
+    isSystem: false,
     permissions: [
       'dashboard.read',
       'employees.read',
@@ -520,7 +520,7 @@ export const INITIAL_ROLES = [
     name: 'Head of Marketing',
     description: 'Marketing leadership steering brand narrative, performance campaigns, multi-channel growth, PR, and demand generation strategy.',
     badge: 'Marketing',
-    isSystem: true,
+    isSystem: false,
     permissions: [
       'dashboard.read',
       'employees.read',
@@ -547,7 +547,7 @@ export const INITIAL_ROLES = [
     name: 'Digital Marketing Executive',
     description: 'Digital marketing specialist managing search engine optimization, paid advertising campaigns, content marketing, and conversion funnels.',
     badge: 'Marketing',
-    isSystem: true,
+    isSystem: false,
     permissions: [
       'dashboard.read',
       'leave.self.read',
@@ -568,7 +568,7 @@ export const INITIAL_ROLES = [
     name: 'Digital Marketing Intern',
     description: 'Digital marketing trainee assisting with creative asset preparation, social media scheduling, ad copy research, and analytics reporting.',
     badge: 'Intern',
-    isSystem: true,
+    isSystem: false,
     permissions: [
       'dashboard.read',
       'leave.self.read',
@@ -589,7 +589,7 @@ export const INITIAL_ROLES = [
     name: 'HR Intern',
     description: 'People operations trainee assisting with candidate sourcing, employee onboarding documentation, attendance tracking, and culture initiatives.',
     badge: 'Intern',
-    isSystem: true,
+    isSystem: false,
     permissions: [
       'dashboard.read',
       'employees.read',
@@ -611,7 +611,7 @@ export const INITIAL_ROLES = [
     name: 'SaaS Intern',
     description: 'SaaS product and operations trainee assisting with cloud platform user flows, customer telemetry, feature testing, and client onboarding support.',
     badge: 'Intern',
-    isSystem: true,
+    isSystem: false,
     permissions: [
       'dashboard.read',
       'leave.self.read',
@@ -632,6 +632,27 @@ export const INITIAL_ROLES = [
     name: 'Intern',
     description: 'Trainee or intern undergoing organizational learning, with standard employee self-service and intern leave entitlement (1 paid day per month).',
     badge: 'Intern',
+    isSystem: false,
+    permissions: [
+      'dashboard.read',
+      'leave.self.read',
+      'leave.self.write',
+      'attendance.read',
+      'attendance.write',
+      'payroll.self.read',
+      'tasks.read',
+      'training.read',
+      'documents.read',
+      'helpdesk.read',
+      'announcements.read',
+      'holidays.read',
+    ],
+  },
+  {
+    id: 'employee',
+    name: 'Employee',
+    description: 'Standard enterprise employee account with self-service attendance, leave, tasks, salary slips, and company documents.',
+    badge: 'Employee',
     isSystem: true,
     permissions: [
       'dashboard.read',
@@ -1279,11 +1300,13 @@ export function getRecommendedRoleConfig(role, department = '') {
     }
   }
 
+  const matchedRole = (INITIAL_ROLES.find((r) => r.id === role) || (storeState?.roles || []).find((r) => (r.id || r.roleId) === role))
+  const roleLabel = matchedRole?.name || roleCfg.label || role || 'Employee'
   const roleDesignations = roleCfg.designations || []
-  const combinedSuggestions = Array.from(new Set([...deptDesignations, ...roleDesignations]))
-  const designation = deptSpecific?.defaultDesignation || (deptDesignations.length > 0 ? deptDesignations[0] : roleCfg.defaultDesignation) || 'Specialist'
+  const customDesignation = matchedRole?.name ? [matchedRole.name] : []
+  const combinedSuggestions = Array.from(new Set([...customDesignation, ...deptDesignations, ...roleDesignations]))
+  const designation = deptSpecific?.defaultDesignation || (matchedRole?.name || (deptDesignations.length > 0 ? deptDesignations[0] : roleCfg.defaultDesignation) || 'Specialist')
   const designations = combinedSuggestions.length > 0 ? combinedSuggestions : [designation]
-  const roleLabel = roleCfg.label || role || 'Employee'
   return {
     roleLabel,
     department: dept,
@@ -3415,11 +3438,14 @@ const localStore = {
 
   // Role & Access Control (RBAC) Management
   getRoles() {
+    const deletedIds = new Set(storeState.deletedRoleIds || [])
     const rawRoles = storeState.roles || []
-    const rolesMap = new Map(INITIAL_ROLES.map((r) => [r.id, { ...r }]))
+    const rolesMap = new Map(
+      INITIAL_ROLES.filter((r) => !deletedIds.has(r.id)).map((r) => [r.id, { ...r }])
+    )
     for (const r of rawRoles) {
       const id = r.roleId || r.id || r._id
-      if (id) {
+      if (id && !deletedIds.has(id)) {
         const existing = rolesMap.get(id)
         if (existing) {
           rolesMap.set(id, {
@@ -3445,7 +3471,7 @@ const localStore = {
     }
     if (storeState.customRolePermissions) {
       for (const [rid, perms] of Object.entries(storeState.customRolePermissions)) {
-        if (rolesMap.has(rid) && Array.isArray(perms)) {
+        if (rolesMap.has(rid) && Array.isArray(perms) && !deletedIds.has(rid)) {
           rolesMap.get(rid).permissions = perms
         }
       }
@@ -3544,6 +3570,9 @@ const localStore = {
       isSystem: false,
       permissions: roleData.permissions || ['dashboard.read'],
     }
+    if (storeState.deletedRoleIds) {
+      storeState.deletedRoleIds = storeState.deletedRoleIds.filter((delId) => delId !== id)
+    }
     if (!storeState.customRolePermissions) storeState.customRolePermissions = {}
     storeState.customRolePermissions[newRole.id] = newRole.permissions
     const currentCustom = storeState.roles || []
@@ -3553,15 +3582,20 @@ const localStore = {
     return newRole
   },
   deleteRole(roleId) {
-    const existing = this.getRoles().find((r) => r.id === roleId || r.roleId === roleId)
-    if (existing?.isSystem) {
-      throw new Error('System roles (admin, hr, manager, employee) cannot be deleted.')
+    const coreSystemRoles = ['admin', 'hr', 'hr_executive', 'manager', 'employee']
+    if (coreSystemRoles.includes(roleId)) {
+      throw new Error('Core system roles (Admin, HR, Manager, Employee) cannot be deleted.')
     }
-    storeState.roles = (storeState.roles || []).filter((r) => (r.id || r.roleId || r._id) !== roleId)
+    const cleanId = String(roleId || '').trim()
+    storeState.roles = (storeState.roles || []).filter((r) => (r.id || r.roleId || r._id) !== cleanId)
+    if (!storeState.deletedRoleIds) storeState.deletedRoleIds = []
+    if (!storeState.deletedRoleIds.includes(cleanId)) {
+      storeState.deletedRoleIds.push(cleanId)
+    }
     if (storeState.customRolePermissions) {
-      delete storeState.customRolePermissions[roleId]
+      delete storeState.customRolePermissions[cleanId]
     }
-    this.addAuditLog('Admin', 'ROLE_DELETE', `Deleted custom role '${roleId}'`)
+    this.addAuditLog('Admin', 'ROLE_DELETE', `Deleted role '${cleanId}'`)
     notifyListeners()
     return true
   },

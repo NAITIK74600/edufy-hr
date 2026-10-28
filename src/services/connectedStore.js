@@ -225,6 +225,42 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
       })
       const finalTeams = Array.from(teamMap.values())
 
+      const baseRoles = rawLocal.getRoles ? rawLocal.getRoles() : []
+      const currentRoles = (state().roles && state().roles.length > 0)
+        ? state().roles
+        : baseRoles
+      const serverRoles = Array.isArray(data.workspace?.roles) ? data.workspace.roles : []
+      const deletedRoleIds = new Set(rawLocal.getState?.()?.deletedRoleIds || state().deletedRoleIds || [])
+
+      const roleMap = new Map()
+      baseRoles.forEach((r) => {
+        if (!r) return
+        const key = (r.roleId || r.id || r.name || '').toLowerCase()
+        if (key && !deletedRoleIds.has(r.id) && !deletedRoleIds.has(r.roleId)) roleMap.set(key, { ...r })
+      })
+      currentRoles.forEach((r) => {
+        if (!r) return
+        const key = (r.roleId || r.id || r.name || '').toLowerCase()
+        if (key && !deletedRoleIds.has(r.id) && !deletedRoleIds.has(r.roleId) && !roleMap.has(key)) roleMap.set(key, { ...r })
+      })
+      serverRoles.forEach((s) => {
+        if (!s) return
+        const key = (s.roleId || s.id || s.name || '').toLowerCase()
+        if (key && !deletedRoleIds.has(s.id) && !deletedRoleIds.has(s.roleId)) {
+          const prev = roleMap.get(key) || {}
+          roleMap.set(key, {
+            ...prev,
+            ...s,
+            id: s.id || s.roleId || prev.id,
+            roleId: s.roleId || s.id || prev.roleId,
+          })
+        }
+      })
+      const finalRoles = Array.from(roleMap.values())
+      if (rawLocal.getState) {
+        rawLocal.getState().roles = finalRoles
+      }
+
       const isCleared = typeof window !== 'undefined' && window.localStorage.getItem('edufyi_notifications_cleared_v2') === 'true'
       const deletedRaw = typeof window !== 'undefined' ? window.localStorage.getItem('edufyi_deleted_notifications_v2') : null
       const deletedIds = new Set(deletedRaw ? JSON.parse(deletedRaw) : [])
@@ -241,6 +277,7 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
         notifications: serverNotifs,
         departments: finalDepts,
         teams: finalTeams,
+        roles: finalRoles,
         employees: finalEmployees,
         users: resolvedUsers, attendance: data.attendance,
         leaves: [...new Map([...data.leaves, ...data.teamLeaves].map((request) => [request.id ?? request._id, request])).values()].map((request) => normalizeLeave(request, employees)),

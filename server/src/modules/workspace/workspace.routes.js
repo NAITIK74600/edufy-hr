@@ -729,7 +729,11 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
       if (!management(req.auth.user) || !['announcements', 'courses', 'holidays', 'documents', 'requisitions', 'roles', 'departments', 'teams'].includes(resource)) throw fail('Deletion is not permitted.', 403)
       let deleteQuery
       if (resource === 'roles') {
-        deleteQuery = mongoose.isValidObjectId(recordId) ? { $or: [{ _id: recordId }, { roleId: recordId }] } : { roleId: recordId }
+        deleteQuery = mongoose.isValidObjectId(recordId)
+          ? { $or: [{ _id: recordId }, { roleId: recordId }, { id: recordId }] }
+          : { $or: [{ roleId: recordId }, { id: recordId }, { roleId: String(recordId).toLowerCase() }] }
+        await models.roles.deleteOne(deleteQuery)
+        return res.json({ success: true, data: { id: recordId } })
       } else if (resource === 'departments') {
         deleteQuery = mongoose.isValidObjectId(recordId) ? { $or: [{ _id: recordId }, { deptId: recordId }] } : { deptId: recordId }
         const deptToDelete = await models.departments.findOne(deleteQuery).lean()

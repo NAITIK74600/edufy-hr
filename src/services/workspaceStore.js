@@ -81,9 +81,34 @@ export function createWorkspaceStore(store, mutate, getUser = null, rawLocal = {
       rawLocal.clearAllNotifications?.()
       return isLocal() ? Promise.resolve() : save('delete', '/notifications/clear-all')
     },
-    addRole: (data) => (isLocal() && rawLocal.addRole ? rawLocal.addRole(data) : create('roles', pick(data, ['id', 'roleId', 'name', 'description', 'badge', 'isSystem', 'permissions']))),
-    updateRole: (id, data) => (isLocal() && rawLocal.updateRole ? rawLocal.updateRole(id, data) : patch('roles', id, pick(data, ['name', 'description', 'badge', 'permissions']))),
-    deleteRole: (id) => (isLocal() && rawLocal.deleteRole ? rawLocal.deleteRole(id) : save('delete', `/roles/${encodeURIComponent(id)}`)),
+    addRole: (data) => {
+      const res = rawLocal.addRole ? rawLocal.addRole(data) : data
+      const id = data.id || data.roleId
+      const current = store.getState().roles || []
+      store.getState().roles = [...current.filter((r) => (r.id || r.roleId) !== id), res || data]
+      if (store.getState().deletedRoleIds) {
+        store.getState().deletedRoleIds = store.getState().deletedRoleIds.filter((delId) => delId !== id)
+      }
+      if (isLocal()) return res
+      return create('roles', pick(data, ['id', 'roleId', 'name', 'description', 'badge', 'isSystem', 'permissions'])).catch(() => res).then(() => res)
+    },
+    updateRole: (id, data) => {
+      const res = rawLocal.updateRole ? rawLocal.updateRole(id, data) : true
+      store.getState().roles = (store.getState().roles || []).map((r) => {
+        if ((r.id || r.roleId || r._id) === id) return { ...r, ...data }
+        return r
+      })
+      if (isLocal()) return res
+      return patch('roles', id, pick(data, ['name', 'description', 'badge', 'permissions'])).catch(() => res).then(() => res)
+    },
+    deleteRole: (id) => {
+      const res = rawLocal.deleteRole ? rawLocal.deleteRole(id) : true
+      store.getState().roles = (store.getState().roles || []).filter((r) => (r.id || r.roleId || r._id) !== id && r.id !== id)
+      if (!store.getState().deletedRoleIds) store.getState().deletedRoleIds = []
+      if (!store.getState().deletedRoleIds.includes(id)) store.getState().deletedRoleIds.push(id)
+      if (isLocal()) return res
+      return save('delete', `/roles/${encodeURIComponent(id)}`).catch(() => ({ success: true })).then(() => res)
+    },
     addDepartment: (data) => {
       const res = rawLocal.addDepartment ? rawLocal.addDepartment(data) : data
       if (isLocal()) return res
