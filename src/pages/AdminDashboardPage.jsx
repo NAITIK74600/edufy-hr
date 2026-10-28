@@ -4529,7 +4529,7 @@ function AdminSettingsModule({ user: propUser }) {
   const [newIpLabel, setNewIpLabel] = useState('')
   const [manualIp, setManualIp] = useState('')
 
-  function parseTimeHelper(val) {
+  function parseTimeHelper(val, referenceEndVal = null) {
     if (!val) return { h24: '09:30', h12: '09:30 AM', isPM: false, period: 'Morning' }
     const clean = String(val).trim().replace(/[\u202F\u00A0]/g, ' ')
     const m = clean.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/i)
@@ -4539,6 +4539,21 @@ function AdminSettingsModule({ user: propUser }) {
     const meridiem = m[3]?.toUpperCase()
     if (meridiem === 'PM' && h < 12) h += 12
     if (meridiem === 'AM' && h === 12) h = 0
+
+    if (!meridiem && referenceEndVal && h < 12) {
+      const endClean = String(referenceEndVal).trim().replace(/[\u202F\u00A0]/g, ' ')
+      const endMatch = endClean.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/i)
+      if (endMatch) {
+        let eh = parseInt(endMatch[1], 10)
+        const em = endMatch[3]?.toUpperCase()
+        if (em === 'PM' && eh < 12) eh += 12
+        if (em === 'AM' && eh === 12) eh = 0
+        if (eh >= 14 && (eh - h) > 10 && (h + 12) <= (eh + 2)) {
+          h += 12
+        }
+      }
+    }
+
     const isPM = h >= 12
     const h12 = h % 12 || 12
     const h12Str = `${String(h12).padStart(2, '0')}:${min} ${isPM ? 'PM' : 'AM'}`
@@ -4546,8 +4561,8 @@ function AdminSettingsModule({ user: propUser }) {
     return { h24: h24Str, h12: h12Str, isPM, period: isPM ? 'Evening' : 'Morning' }
   }
 
-  function switchTimeAmPm(val) {
-    const parsed = parseTimeHelper(val)
+  function switchTimeAmPm(val, referenceEndVal = null) {
+    const parsed = parseTimeHelper(val, referenceEndVal)
     let [h, m] = parsed.h24.split(':').map(Number)
     if (parsed.isPM) {
       h = (h - 12) % 24
@@ -4753,7 +4768,7 @@ function AdminSettingsModule({ user: propUser }) {
   const handleSavePolicies = async (e) => {
     e.preventDefault()
     try {
-      const cleanStart = parseTimeHelper(startTime).h24
+      const cleanStart = parseTimeHelper(startTime, endTime).h24
       const cleanEnd = parseTimeHelper(endTime).h24
       await hrStore.updateCompanySettings({
         attendanceRules: {
@@ -4842,15 +4857,15 @@ function AdminSettingsModule({ user: propUser }) {
                 <div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
                     <label style={{ fontSize: '11px', color: 'var(--muted)', margin: 0, fontWeight: 600 }}>Shift Start Time</label>
-                    <span style={{ fontSize: '10.5px', fontWeight: 700, color: parseTimeHelper(startTime).isPM ? '#0284c7' : '#d97706', background: parseTimeHelper(startTime).isPM ? '#e0f2fe' : '#fef3c7', padding: '1px 6px', borderRadius: '4px' }}>
-                      {parseTimeHelper(startTime).h12} ({parseTimeHelper(startTime).period})
+                    <span style={{ fontSize: '10.5px', fontWeight: 700, color: parseTimeHelper(startTime, endTime).isPM ? '#0284c7' : '#d97706', background: parseTimeHelper(startTime, endTime).isPM ? '#e0f2fe' : '#fef3c7', padding: '1px 6px', borderRadius: '4px' }}>
+                      {parseTimeHelper(startTime, endTime).h12} ({parseTimeHelper(startTime, endTime).period})
                     </span>
                   </div>
                   <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
                     <input
                       type="time"
                       className="text-input"
-                      value={parseTimeHelper(startTime).h24}
+                      value={parseTimeHelper(startTime, endTime).h24}
                       onChange={(e) => setStartTime(e.target.value)}
                       style={{ flex: 1, padding: '5px 8px', fontSize: '12px' }}
                       required
@@ -4858,15 +4873,15 @@ function AdminSettingsModule({ user: propUser }) {
                     <button
                       type="button"
                       className="btn btn-secondary"
-                      onClick={() => setStartTime(switchTimeAmPm(startTime))}
+                      onClick={() => setStartTime(switchTimeAmPm(startTime, endTime))}
                       title="Click to flip between AM (Morning) and PM (Evening)"
                       style={{ padding: '4px 8px', fontSize: '11px', whiteSpace: 'nowrap', height: '32px', cursor: 'pointer' }}
                     >
-                      {parseTimeHelper(startTime).isPM ? '☀️ Set to AM' : '🌙 Set to PM'}
+                      {parseTimeHelper(startTime, endTime).isPM ? '☀️ Set to AM' : '🌙 Set to PM'}
                     </button>
                   </div>
                   <div style={{ fontSize: '10px', color: 'var(--muted)', marginTop: '3px' }}>
-                    Punch-in after <strong>{parseTimeHelper(startTime).h12}</strong> (+{graceMins}m grace) is marked as Late.
+                    Punch-in after <strong>{parseTimeHelper(startTime, endTime).h12}</strong> (+{graceMins}m grace) is marked as Late.
                   </div>
                 </div>
                 <div>

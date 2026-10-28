@@ -167,6 +167,18 @@ export function formatTime24(timeStr) {
   return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`
 }
 
+export function getNormalizedShiftMinutes(startTimeStr, endTimeStr) {
+  let startMins = parseTimeToMinutes(startTimeStr) ?? 570
+  const endMins = parseTimeToMinutes(endTimeStr) ?? 1110
+  if (endMins > startMins && (endMins - startMins) > 720 && startMins < 480) {
+    const pmCandidate = startMins + 720
+    if (pmCandidate < endMins || (endMins - pmCandidate) >= -120) {
+      startMins = pmCandidate
+    }
+  }
+  return startMins
+}
+
 function getTodayString() {
   const formatter = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' })
   return formatter.format(new Date())
@@ -523,7 +535,7 @@ export function createAttendanceService({ repository, companySettings = {} }) {
         ? `General (${formatTime12(attendanceRules.workStartTime)} – ${formatTime12(attendanceRules.workEndTime)})`
         : matchedShift.display
 
-      const workStartMins = parseTimeToMinutes(shiftStartTime) ?? 570
+      const workStartMins = getNormalizedShiftMinutes(shiftStartTime, shiftEndTime)
       const gracePeriod = Number(attendanceRules.gracePeriodMinutes ?? 15)
       const currentMins = getCurrentMinutes(now)
       const isLate = currentMins > workStartMins + gracePeriod
@@ -919,7 +931,7 @@ export function createAttendanceService({ repository, companySettings = {} }) {
       const effectiveRules = { ...attendanceRules, ...newRules }
       const startTime = effectiveRules.workStartTime || '09:30'
       const endTime = effectiveRules.workEndTime || '18:30'
-      const startMins = parseTimeToMinutes(startTime) ?? 570
+      const startMins = getNormalizedShiftMinutes(startTime, endTime)
       const grace = Number(effectiveRules.gracePeriodMinutes ?? 15)
       const shiftDisplay = `General (${formatTime12(startTime)} – ${formatTime12(endTime)})`
 
@@ -941,8 +953,7 @@ export function createAttendanceService({ repository, companySettings = {} }) {
               updatedTotalHours = 'Active (Live)'
             }
           }
-          const updated = {
-            ...rec,
+          const updates = {
             isLate,
             shift: isGeneral ? shiftDisplay : rec.shift,
             shiftCode: isGeneral ? 'general' : rec.shiftCode,
@@ -953,9 +964,17 @@ export function createAttendanceService({ repository, companySettings = {} }) {
               ? `Late Login (${formatTime12(startTime)})`
               : 'On-time verification (General Shift)',
             totalHours: updatedTotalHours,
+            lateCount: isLate ? (rec.lateCount || 1) : 0,
+            isHalfDay: isLate ? (rec.lateCount > 2) : false,
           }
-          if (repository.save) {
-            await repository.save(updated).catch(() => {})
+          if (repository.updateFields) {
+            await repository.updateFields(rec.id || rec._id, updates).catch((err) => {
+              console.error('[Attendance] recalculate updateFields error:', err?.message || err)
+            })
+          } else if (repository.save) {
+            await repository.save({ ...rec, ...updates }).catch((err) => {
+              console.error('[Attendance] recalculate save error:', err?.message || err)
+            })
           }
         }
       }

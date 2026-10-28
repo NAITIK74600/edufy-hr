@@ -5279,16 +5279,24 @@ const localStore = {
 
     let updated
     if (existingIndex >= 0) {
+      const isNowPresent = finalStatus === 'present'
+      const existing = storeState.attendance[existingIndex]
       updated = {
-        ...storeState.attendance[existingIndex],
+        ...existing,
         ...record,
-        status: finalStatus || storeState.attendance[existingIndex].status || 'present',
+        status: finalStatus || existing.status || 'present',
         isEarlyLogout,
         isLop,
-        isHalfDay: record.isHalfDay !== undefined ? record.isHalfDay : (finalStatus === 'half-day'),
-        isLate: record.isLate !== undefined ? record.isLate : (finalStatus === 'late'),
-        lateCount: record.lateCount ?? storeState.attendance[existingIndex].lateCount ?? 0,
-        earlyLogoutCount: record.earlyLogoutCount ?? storeState.attendance[existingIndex].earlyLogoutCount ?? 0,
+        isHalfDay: isNowPresent ? false : (record.isHalfDay !== undefined ? record.isHalfDay : (finalStatus === 'half-day')),
+        isLate: isNowPresent ? false : (record.isLate !== undefined ? record.isLate : (finalStatus === 'late')),
+        lateCount: isNowPresent ? 0 : (record.lateCount ?? existing.lateCount ?? 0),
+        earlyLogoutCount: record.earlyLogoutCount ?? existing.earlyLogoutCount ?? 0,
+        totalHours: isNowPresent && ((record.totalHours && record.totalHours.includes('Late')) || (existing.totalHours && existing.totalHours.includes('Late')))
+          ? (record.checkOut || existing.checkOut ? '8.0 hrs' : 'Active (Live)')
+          : (record.totalHours || existing.totalHours || 'Active (Live)'),
+        notes: isNowPresent && ((record.notes && record.notes.includes('Late')) || (existing.notes && existing.notes.includes('Late')))
+          ? 'On-time verification (General Shift)'
+          : (record.notes ?? existing.notes ?? ''),
         date,
         wifiVerified: isVerified,
         gpsVerified: record.gpsVerified !== undefined ? record.gpsVerified : verification.isGpsVerified,
@@ -5297,6 +5305,7 @@ const localStore = {
       }
       storeState.attendance[existingIndex] = updated
     } else {
+      const isNowPresent = finalStatus === 'present'
       updated = {
         id: `att-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
         employeeId: record.employeeId,
@@ -5307,9 +5316,9 @@ const localStore = {
         status: finalStatus || 'present',
         isEarlyLogout,
         isLop,
-        isHalfDay: record.isHalfDay !== undefined ? record.isHalfDay : (finalStatus === 'half-day'),
-        isLate: record.isLate !== undefined ? record.isLate : (finalStatus === 'late'),
-        lateCount: record.lateCount ?? 0,
+        isHalfDay: isNowPresent ? false : (record.isHalfDay !== undefined ? record.isHalfDay : (finalStatus === 'half-day')),
+        isLate: isNowPresent ? false : (record.isLate !== undefined ? record.isLate : (finalStatus === 'late')),
+        lateCount: isNowPresent ? 0 : (record.lateCount ?? 0),
         earlyLogoutCount: record.earlyLogoutCount ?? 0,
         wifiSSID: record.wifiSSID || storeState.companySettings?.allowedWifiSSIDs?.[0] || 'Edufyi',
         wifiVerified: isVerified,
@@ -5318,8 +5327,12 @@ const localStore = {
         distanceMeters: record.distanceMeters !== undefined ? record.distanceMeters : (verification.distanceMeters ?? (isVerified ? 25 : null)),
         gpsVerified: record.gpsVerified !== undefined ? record.gpsVerified : (verification.isGpsVerified || (isVerified && verification.distanceMeters === null)),
         locationName: record.locationName || verification.nearestLocation,
-        totalHours: record.totalHours || (record.checkOut ? '8.5 hrs' : 'Active (Live)'),
-        notes: record.notes || '',
+        totalHours: isNowPresent && record.totalHours && record.totalHours.includes('Late')
+          ? (record.checkOut ? '8.0 hrs' : 'Active (Live)')
+          : (record.totalHours || (record.checkOut ? '8.5 hrs' : 'Active (Live)')),
+        notes: isNowPresent && record.notes && record.notes.includes('Late')
+          ? 'On-time verification (General Shift)'
+          : (record.notes || ''),
       }
       storeState.attendance = [updated, ...storeState.attendance]
     }

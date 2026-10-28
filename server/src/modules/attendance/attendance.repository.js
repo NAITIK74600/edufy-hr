@@ -165,7 +165,7 @@ export function createMongoAttendanceRepository() {
       }))
     },
     async save(record) {
-      const { id, _id, ...data } = record
+      const { id, _id, department, createdAt, updatedAt, __v, ...data } = record
       const empCode = String(data.employeeId || '').trim()
       const isObjectId = /^[0-9a-fA-F]{24}$/.test(empCode)
       const employee = await Employee.findOne({
@@ -174,19 +174,59 @@ export function createMongoAttendanceRepository() {
           ...(isObjectId ? [{ _id: empCode }] : []),
         ],
       }).select('_id employeeId name displayName').lean()
-      if (!employee) throw Object.assign(new Error(`Attendance requires an existing employee record (ID: ${empCode || 'unknown'}).`), { statusCode: 400, code: 'EMPLOYEE_NOT_FOUND' })
-      data.userId = employee._id
-      data.employeeName = employee.displayName || employee.name
-      const resolvedCode = (employee.employeeId || empCode).toUpperCase()
+      if (employee) {
+        data.userId = employee._id
+        data.employeeName = employee.displayName || employee.name
+      }
+      const resolvedCode = (employee?.employeeId || empCode).toUpperCase()
       const targetId = id || _id
       const isValidObjectId = targetId && /^[0-9a-fA-F]{24}$/.test(String(targetId))
       const filter = isValidObjectId ? { _id: targetId } : { employeeId: resolvedCode, date: data.date }
+
+      if (data.status === 'present') {
+        data.isLate = false
+        data.isHalfDay = false
+        data.lateCount = 0
+        data.isEarlyLogout = false
+        data.isLop = false
+        if (typeof data.totalHours === 'string' && data.totalHours.includes('Late')) {
+          data.totalHours = data.checkOut ? '8.0 hrs' : 'Active (Live)'
+        }
+        if (typeof data.notes === 'string' && data.notes.includes('Late')) {
+          data.notes = 'On-time verification (General Shift)'
+        }
+      }
+
       const doc = await AttendanceRecord.findOneAndUpdate(
         filter,
-        { ...data, employeeId: resolvedCode },
-        { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true, runValidators: true }
+        { $set: { ...data, employeeId: resolvedCode } },
+        { upsert: true, new: true, returnDocument: 'after', setDefaultsOnInsert: true }
       ).lean()
       return { id: String(doc._id), ...doc }
+    },
+    async updateFields(id, fields) {
+      const cleanId = String(id || '').trim()
+      const { id: _i, _id: _mi, department, createdAt, updatedAt, __v, ...safeFields } = fields
+      if (safeFields.status === 'present') {
+        safeFields.isLate = false
+        safeFields.isHalfDay = false
+        safeFields.lateCount = 0
+        safeFields.isEarlyLogout = false
+        safeFields.isLop = false
+        if (typeof safeFields.totalHours === 'string' && safeFields.totalHours.includes('Late')) {
+          safeFields.totalHours = safeFields.checkOut ? '8.0 hrs' : 'Active (Live)'
+        }
+        if (typeof safeFields.notes === 'string' && safeFields.notes.includes('Late')) {
+          safeFields.notes = 'On-time verification (General Shift)'
+        }
+      }
+      const query = /^[0-9a-fA-F]{24}$/.test(cleanId) ? { _id: cleanId } : { id: cleanId }
+      const doc = await AttendanceRecord.findOneAndUpdate(
+        query,
+        { $set: safeFields },
+        { new: true, returnDocument: 'after' }
+      ).lean()
+      return doc ? { id: String(doc._id), ...doc } : null
     },
     async delete(id, options = {}) {
       const cleanId = String(id || '').trim()

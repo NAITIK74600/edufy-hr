@@ -223,7 +223,22 @@ function AttendanceModule() {
   const handleUpdateAttendance = storeAction(async (e) => {
     e.preventDefault()
     if (!editingAttendance) return
-    await hrStore.markAttendance(editingAttendance)
+    const isNowPresent = editingAttendance.status === 'present'
+    const payload = {
+      ...editingAttendance,
+      isLate: isNowPresent ? false : Boolean(editingAttendance.isLate ?? (editingAttendance.status === 'late')),
+      lateCount: isNowPresent ? 0 : (editingAttendance.lateCount || 0),
+      isHalfDay: isNowPresent ? false : Boolean(editingAttendance.isHalfDay ?? (editingAttendance.status === 'half-day')),
+      isEarlyLogout: isNowPresent ? false : Boolean(editingAttendance.isEarlyLogout ?? (editingAttendance.status === 'early-logout')),
+      isLop: isNowPresent ? false : Boolean(editingAttendance.isLop ?? (editingAttendance.status === 'lop')),
+      totalHours: isNowPresent && typeof editingAttendance.totalHours === 'string' && editingAttendance.totalHours.includes('Late')
+        ? (editingAttendance.checkOut ? '8.0 hrs' : 'Active (Live)')
+        : editingAttendance.totalHours,
+      notes: isNowPresent && typeof editingAttendance.notes === 'string' && editingAttendance.notes.includes('Late')
+        ? 'On-time verification (General Shift)'
+        : (editingAttendance.notes || ''),
+    }
+    await hrStore.markAttendance(payload)
     setEditingAttendance(null)
     showFeedback(`Updated attendance record for ${editingAttendance.employeeName}.`)
   })
@@ -1448,11 +1463,35 @@ function AttendanceModule() {
                       onChange={(e) => {
                         const nextStatus = e.target.value;
                         let updates = { ...editingAttendance, status: nextStatus };
-                        if (nextStatus === 'late') {
+                        if (nextStatus === 'present') {
+                          updates.isLate = false;
+                          updates.lateCount = 0;
+                          updates.isHalfDay = false;
+                          updates.isEarlyLogout = false;
+                          updates.isLop = false;
+                          updates.notes = 'On-time verification (General Shift)';
+                          if (typeof updates.totalHours === 'string' && updates.totalHours.includes('Late')) {
+                            updates.totalHours = updates.checkOut ? '8.0 hrs' : 'Active (Live)';
+                          }
+                        } else if (nextStatus === 'late') {
                           const occ = getLateOccurrence(editingAttendance);
                           const shift = formatShiftDisplay(editingAttendance.shift, editingAttendance.shiftCode, storeState.companySettings?.attendanceRules);
+                          updates.isLate = true;
                           updates.lateCount = occ;
                           updates.notes = `Late Login #${occ}/2 (${shift})`;
+                          if (typeof updates.totalHours === 'string' && updates.totalHours.startsWith('Active')) {
+                            updates.totalHours = 'Active (Late)';
+                          }
+                        } else if (nextStatus === 'half-day') {
+                          updates.isHalfDay = true;
+                          updates.isLate = true;
+                          if (typeof updates.totalHours === 'string' && updates.totalHours.startsWith('Active')) {
+                            updates.totalHours = 'Active (Half-Day · Late)';
+                          }
+                        } else if (nextStatus === 'early-logout') {
+                          updates.isEarlyLogout = true;
+                        } else if (nextStatus === 'lop') {
+                          updates.isLop = true;
                         }
                         setEditingAttendance(updates);
                       }}
@@ -1465,6 +1504,41 @@ function AttendanceModule() {
                       <option value="on-leave">On Leave</option>
                       <option value="absent">Absent</option>
                     </select>
+                  </Field>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <Field label="Late Arrival Evaluation">
+                    <select
+                      value={editingAttendance.status === 'late' || editingAttendance.isLate ? 'late' : 'on-time'}
+                      onChange={(e) => {
+                        const isLateSelected = e.target.value === 'late';
+                        const shift = formatShiftDisplay(editingAttendance.shift, editingAttendance.shiftCode, storeState.companySettings?.attendanceRules);
+                        setEditingAttendance({
+                          ...editingAttendance,
+                          isLate: isLateSelected,
+                          status: isLateSelected ? 'late' : (editingAttendance.status === 'late' ? 'present' : editingAttendance.status),
+                          lateCount: isLateSelected ? (editingAttendance.lateCount || 1) : 0,
+                          totalHours: !isLateSelected && typeof editingAttendance.totalHours === 'string' && editingAttendance.totalHours.includes('Late')
+                            ? (editingAttendance.checkOut ? '8.0 hrs' : 'Active (Live)')
+                            : (isLateSelected && typeof editingAttendance.totalHours === 'string' && editingAttendance.totalHours.startsWith('Active') ? 'Active (Late)' : editingAttendance.totalHours),
+                          notes: !isLateSelected
+                            ? 'On-time verification (General Shift)'
+                            : `Late Login #${editingAttendance.lateCount || 1}/2 (${shift})`,
+                        });
+                      }}
+                    >
+                      <option value="on-time">✓ On-Time Arrival (No Penalty)</option>
+                      <option value="late">⚠ Late Arrival (Count towards policy)</option>
+                    </select>
+                  </Field>
+                  <Field label="Shift Display">
+                    <input
+                      type="text"
+                      value={formatShiftDisplay(editingAttendance.shift, editingAttendance.shiftCode, storeState.companySettings?.attendanceRules)}
+                      disabled
+                      style={{ background: 'var(--surface-sunken)', color: 'var(--ink)' }}
+                    />
                   </Field>
                 </div>
 
