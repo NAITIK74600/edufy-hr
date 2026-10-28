@@ -147,10 +147,37 @@ export function formatCurrentTime(d = new Date()) {
   return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' })
 }
 
-export function formatTime12(timeStr) {
+export function formatTime12(timeStr, referenceTime = null, isEndTime = false) {
   if (!timeStr) return ''
-  const mins = parseTimeToMinutes(timeStr)
+  let mins = parseTimeToMinutes(timeStr)
   if (mins === null) return String(timeStr)
+
+  const hasAm = /AM/i.test(String(timeStr))
+  const hasPm = /PM/i.test(String(timeStr))
+
+  if (!hasAm && !hasPm && mins < 720) {
+    if (isEndTime && mins >= 60 && mins <= 660) {
+      mins += 720
+    } else if (!isEndTime && referenceTime) {
+      const refMins = parseTimeToMinutes(referenceTime)
+      if (refMins !== null && refMins >= 720 && refMins - mins > 600 && (mins + 720) < refMins + 120) {
+        mins += 720
+      }
+    }
+  }
+
+  if (referenceTime && !isEndTime) {
+    const refMins = parseTimeToMinutes(referenceTime)
+    if (refMins !== null && mins < 720 && mins <= refMins && (mins + 720) <= 1440 && (refMins - mins) > 600) {
+      mins += 720
+    }
+  } else if (referenceTime && isEndTime) {
+    const refMins = parseTimeToMinutes(referenceTime)
+    if (refMins !== null && mins < 720 && mins <= refMins && (mins + 720) <= 1440) {
+      mins += 720
+    }
+  }
+
   let hours = Math.floor(mins / 60)
   const minutes = mins % 60
   const ampm = hours >= 12 ? 'PM' : 'AM'
@@ -158,24 +185,70 @@ export function formatTime12(timeStr) {
   return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')} ${ampm}`
 }
 
-export function formatTime24(timeStr) {
-  if (!timeStr) return '09:30'
-  const mins = parseTimeToMinutes(timeStr)
+export function formatTime24(timeStr, referenceTime = null, isEndTime = false) {
+  if (!timeStr) return isEndTime ? '18:30' : '09:30'
+  let mins = parseTimeToMinutes(timeStr)
   if (mins === null) return String(timeStr)
+
+  const hasAm = /AM/i.test(String(timeStr))
+  const hasPm = /PM/i.test(String(timeStr))
+
+  if (!hasAm && !hasPm && mins < 720) {
+    if (isEndTime && mins >= 60 && mins <= 660) {
+      mins += 720
+    } else if (!isEndTime && referenceTime) {
+      const refMins = parseTimeToMinutes(referenceTime)
+      if (refMins !== null && refMins >= 720 && refMins - mins > 600 && (mins + 720) < refMins + 120) {
+        mins += 720
+      }
+    }
+  }
+
+  if (referenceTime && !isEndTime) {
+    const refMins = parseTimeToMinutes(referenceTime)
+    if (refMins !== null && mins < 720 && mins <= refMins && (mins + 720) <= 1440 && (refMins - mins) > 600) {
+      mins += 720
+    }
+  } else if (referenceTime && isEndTime) {
+    const refMins = parseTimeToMinutes(referenceTime)
+    if (refMins !== null && mins < 720 && mins <= refMins && (mins + 720) <= 1440) {
+      mins += 720
+    }
+  }
+
   const hours = Math.floor(mins / 60)
   const minutes = mins % 60
   return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`
 }
 
-export function getNormalizedShiftMinutes(startTimeStr, endTimeStr) {
+export function getNormalizedShiftMinutes(startTimeStr, endTimeStr, checkInTimeStr = null) {
   let startMins = parseTimeToMinutes(startTimeStr) ?? 570
-  const endMins = parseTimeToMinutes(endTimeStr) ?? 1110
-  if (endMins > startMins && (endMins - startMins) > 720 && startMins < 480) {
-    const pmCandidate = startMins + 720
-    if (pmCandidate < endMins || (endMins - pmCandidate) >= -120) {
-      startMins = pmCandidate
+  let endMins = parseTimeToMinutes(endTimeStr) ?? 1110
+
+  // 1. If endMins is before 12:00 PM and less than or equal to startMins, endMins is PM (+720)
+  if (endMins < 720 && endMins <= startMins && (endMins + 720) <= 1440) {
+    endMins += 720
+  }
+
+  // 2. If shift duration from startMins to endMins is unusually long (> 600 mins) and startMins < 600
+  if (startMins < 720 && endMins >= 720 && (endMins - startMins) > 600 && (startMins + 720) < (endMins + 120)) {
+    startMins += 720
+  }
+
+  // 3. If check-in time is provided, auto-align to nearest 12-hour period (AM vs PM)
+  if (checkInTimeStr !== null && checkInTimeStr !== undefined) {
+    const checkMins = typeof checkInTimeStr === 'number' ? checkInTimeStr : parseTimeToMinutes(checkInTimeStr)
+    if (checkMins !== null) {
+      const pmCandidate = startMins < 720 ? startMins + 720 : startMins
+      const amCandidate = startMins >= 720 ? startMins - 720 : startMins
+      if (Math.abs(checkMins - pmCandidate) < Math.abs(checkMins - amCandidate)) {
+        startMins = pmCandidate
+      } else {
+        startMins = amCandidate
+      }
     }
   }
+
   return startMins
 }
 
@@ -532,12 +605,12 @@ export function createAttendanceService({ repository, companySettings = {} }) {
       const shiftEndTime = isGeneral && attendanceRules.workEndTime ? attendanceRules.workEndTime : (matchedShift.endTime || '18:30')
       const chosenShiftCode = matchedShift.code
       const chosenShiftDisplay = isGeneral && attendanceRules.workStartTime && attendanceRules.workEndTime
-        ? `General (${formatTime12(attendanceRules.workStartTime)} – ${formatTime12(attendanceRules.workEndTime)})`
+        ? `General (${formatTime12(attendanceRules.workStartTime, attendanceRules.workEndTime, false)} – ${formatTime12(attendanceRules.workEndTime, attendanceRules.workStartTime, true)})`
         : matchedShift.display
 
-      const workStartMins = getNormalizedShiftMinutes(shiftStartTime, shiftEndTime)
-      const gracePeriod = Number(attendanceRules.gracePeriodMinutes ?? 15)
       const currentMins = getCurrentMinutes(now)
+      const workStartMins = getNormalizedShiftMinutes(shiftStartTime, shiftEndTime, currentMins)
+      const gracePeriod = Number(attendanceRules.gracePeriodMinutes ?? 15)
       const isLate = currentMins > workStartMins + gracePeriod
 
       let lateCount = 0
@@ -931,15 +1004,15 @@ export function createAttendanceService({ repository, companySettings = {} }) {
       const effectiveRules = { ...attendanceRules, ...newRules }
       const startTime = effectiveRules.workStartTime || '09:30'
       const endTime = effectiveRules.workEndTime || '18:30'
-      const startMins = getNormalizedShiftMinutes(startTime, endTime)
       const grace = Number(effectiveRules.gracePeriodMinutes ?? 15)
-      const shiftDisplay = `General (${formatTime12(startTime)} – ${formatTime12(endTime)})`
+      const shiftDisplay = `General (${formatTime12(startTime, endTime, false)} – ${formatTime12(endTime, startTime, true)})`
 
       for (const rec of records) {
         if (!rec.checkIn) continue
         const inMins = parseTimeToMinutes(rec.checkIn)
         if (inMins === null) continue
-        const isLate = inMins > startMins + grace
+        const recStartMins = getNormalizedShiftMinutes(startTime, endTime, inMins)
+        const isLate = inMins > recStartMins + grace
         const isGeneral = !rec.shiftCode || rec.shiftCode === 'general' || !rec.shift || rec.shift.startsWith('General')
         const needsShiftUpdate = isGeneral && rec.shift !== shiftDisplay
         const needsLateUpdate = rec.isLate !== isLate

@@ -4970,21 +4970,44 @@ const localStore = {
     const isLate = (() => {
       const rules = storeState.companySettings?.attendanceRules || {}
       const gracePeriod = Number(rules.gracePeriodMinutes ?? 15)
-      if (shiftCode === 'morning') return now.getHours() * 60 + now.getMinutes() > 8 * 60 + 15
-      if (shiftCode === 'evening') return now.getHours() * 60 + now.getMinutes() > 13 * 60 + 15
-      if (shiftCode === 'night') return now.getHours() * 60 + now.getMinutes() > 22 * 60 + 15
-      const startTimeStr = rules.workStartTime || '09:30'
-      const clean = String(startTimeStr).trim().replace(/[\u202F\u00A0]/g, ' ')
-      const match = clean.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/i)
-      let sh = 9, sm = 30
-      if (match) {
-        sh = parseInt(match[1], 10)
-        sm = parseInt(match[2], 10)
-        if (match[3]?.toUpperCase() === 'PM' && sh < 12) sh += 12
-        if (match[3]?.toUpperCase() === 'AM' && sh === 12) sh = 0
+      const currentMins = now.getHours() * 60 + now.getMinutes()
+      if (shiftCode === 'morning') return currentMins > 8 * 60 + 15
+      if (shiftCode === 'evening') return currentMins > 13 * 60 + 15
+      if (shiftCode === 'night') return currentMins > 22 * 60 + 15
+
+      const parseMins = (t) => {
+        if (!t) return null
+        const clean = String(t).trim().replace(/[\u202F\u00A0]/g, ' ')
+        const match = clean.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/i)
+        if (!match) return null
+        let h = parseInt(match[1], 10)
+        const min = parseInt(match[2], 10)
+        const meridiem = match[3]?.toUpperCase()
+        if (meridiem === 'PM' && h < 12) h += 12
+        if (meridiem === 'AM' && h === 12) h = 0
+        return h * 60 + min
       }
-      const startMins = sh * 60 + sm
-      return now.getHours() * 60 + now.getMinutes() > startMins + gracePeriod
+
+      let startMins = parseMins(rules.workStartTime) ?? 570
+      let endMins = parseMins(rules.workEndTime) ?? 1110
+
+      if (endMins < 720 && endMins <= startMins && (endMins + 720) <= 1440) {
+        endMins += 720
+      }
+
+      if (startMins < 720 && endMins >= 720 && (endMins - startMins) > 600 && (startMins + 720) < (endMins + 120)) {
+        startMins += 720
+      }
+
+      const pmCandidate = startMins < 720 ? startMins + 720 : startMins
+      const amCandidate = startMins >= 720 ? startMins - 720 : startMins
+      if (Math.abs(currentMins - pmCandidate) < Math.abs(currentMins - amCandidate)) {
+        startMins = pmCandidate
+      } else {
+        startMins = amCandidate
+      }
+
+      return currentMins > startMins + gracePeriod
     })()
 
     // Policy: 2 late logins per month are accepted (status = 'late').

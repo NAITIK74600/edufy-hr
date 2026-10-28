@@ -1549,7 +1549,26 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
           console.warn('Backend mark attendance failed:', err?.message || err)
         }
         if (rawLocal.markAttendance) rawLocal.markAttendance(record)
-        return res?.data?.data || record
+        const savedRec = res?.data?.data || res?.data || record
+        const syncList = (list) => {
+          const arr = [...(list || [])]
+          const targetId = savedRec.id || savedRec._id
+          const idx = arr.findIndex((a) =>
+            (targetId && (a.id === targetId || a._id === targetId)) ||
+            (a.employeeId?.toUpperCase() === savedRec.employeeId?.toUpperCase() && a.date === savedRec.date)
+          )
+          if (idx >= 0) {
+            arr[idx] = { ...arr[idx], ...savedRec }
+            return arr
+          }
+          return [savedRec, ...arr]
+        }
+        state().attendance = syncList(state().attendance)
+        if (rawLocal.getState) {
+          rawLocal.getState().attendance = syncList(rawLocal.getState().attendance)
+        }
+        notify()
+        return savedRec
       })
     },
     applyLeave(data, applicantUser = null) {

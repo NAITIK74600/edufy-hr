@@ -842,14 +842,30 @@ export function HRLayout({ route, children }) {
                         <strong>{(() => {
                           const r = storeState?.companySettings?.attendanceRules
                           if (r?.workStartTime && r?.workEndTime) {
-                            const f12 = (t) => {
-                              const [h, m] = String(t).split(':').map(Number)
-                              if (isNaN(h)) return t
+                            const f12 = (t, referenceTime = null, isEnd = false) => {
+                              const clean = String(t || '').trim().replace(/[\u202F\u00A0]/g, ' ')
+                              const m = clean.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/i)
+                              if (!m) return t
+                              let h = parseInt(m[1], 10)
+                              const min = m[2]
+                              const meridiem = m[3]?.toUpperCase()
+                              if (meridiem === 'PM' && h < 12) h += 12
+                              if (meridiem === 'AM' && h === 12) h = 0
+                              if (!meridiem && isEnd && h >= 1 && h <= 11) h += 12
+                              else if (!meridiem && !isEnd && referenceTime) {
+                                const refClean = String(referenceTime).trim().replace(/[\u202F\u00A0]/g, ' ')
+                                const refMatch = refClean.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/i)
+                                if (refMatch) {
+                                  let rh = parseInt(refMatch[1], 10)
+                                  if (refMatch[3]?.toUpperCase() === 'PM' && rh < 12) rh += 12
+                                  if (rh >= 13 && h < 12 && (rh - h) > 8 && (h + 12) < rh + 2) h += 12
+                                }
+                              }
                               const ampm = h >= 12 ? 'PM' : 'AM'
-                              const h12 = h % 12 || 12
-                              return `${String(h12).padStart(2, '0')}:${String(m || 0).padStart(2, '0')} ${ampm}`
+                              h = h % 12 || 12
+                              return `${String(h).padStart(2, '0')}:${min} ${ampm}`
                             }
-                            return `General (${f12(r.workStartTime)} – ${f12(r.workEndTime)})`
+                            return `General (${f12(r.workStartTime, r.workEndTime, false)} – ${f12(r.workEndTime, r.workStartTime, true)})`
                           }
                           return 'General (09:30 AM – 06:30 PM)'
                         })()}</strong>

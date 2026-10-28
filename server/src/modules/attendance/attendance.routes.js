@@ -79,11 +79,13 @@ export function createAttendanceRouter({ auth, service, useDatabase = false, per
         }
       }
       if (values.attendanceRules) {
-        if (values.attendanceRules.workStartTime) {
-          values.attendanceRules.workStartTime = formatTime24(values.attendanceRules.workStartTime)
+        const rawEnd = values.attendanceRules.workEndTime
+        const rawStart = values.attendanceRules.workStartTime
+        if (rawEnd) {
+          values.attendanceRules.workEndTime = formatTime24(rawEnd, rawStart, true)
         }
-        if (values.attendanceRules.workEndTime) {
-          values.attendanceRules.workEndTime = formatTime24(values.attendanceRules.workEndTime)
+        if (rawStart) {
+          values.attendanceRules.workStartTime = formatTime24(rawStart, values.attendanceRules.workEndTime || rawEnd, false)
         }
       }
       if (values.attendanceRules?.maxGeofenceRadiusMeters !== undefined) {

@@ -511,6 +511,28 @@ test('Admin can update attendance rules via PATCH /config and shift times apply 
   assert.equal(patchRes.body.data.attendanceRules.maxGeofenceRadiusMeters, 60)
 })
 
+test('Evening shift normalization correctly recognizes PM shifts and prevents false late logins', async () => {
+  const { getNormalizedShiftMinutes, formatTime12, formatTime24, parseTimeToMinutes } = await import('../src/modules/attendance/attendance.service.js')
+
+  // Normalization when shift times are entered without AM/PM or in PM
+  assert.equal(getNormalizedShiftMinutes('18:36', '20:00', '06:23 PM'), 1116)
+  assert.equal(getNormalizedShiftMinutes('06:36', '08:00', '06:23 PM'), 1116)
+  assert.equal(getNormalizedShiftMinutes('06:36', '20:00', '06:23 PM'), 1116)
+
+  // Check-in at 06:23 PM (1103 mins) for 06:36 PM shift (1116 mins) must NOT be late
+  const checkInMins = parseTimeToMinutes('06:23 PM')
+  const shiftStartMins = getNormalizedShiftMinutes('06:36', '08:00', checkInMins)
+  const isLate = checkInMins > shiftStartMins + 15
+  assert.equal(isLate, false)
+
+  // Shift formatting produces correct 12-hour and 24-hour displays
+  assert.equal(formatTime24('08:00', '06:36', true), '20:00')
+  assert.equal(formatTime24('06:36', '20:00', false), '18:36')
+  assert.equal(formatTime12('18:36', '20:00', false), '06:36 PM')
+  assert.equal(formatTime12('20:00', '18:36', true), '08:00 PM')
+})
+
+
 
 
 
