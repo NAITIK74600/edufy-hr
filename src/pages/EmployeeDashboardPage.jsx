@@ -4179,7 +4179,7 @@ function ESSHelpDeskView({ user }) {
   const myTickets = (storeState.tickets || []).filter((t) => {
     if (!user) return true
     if (['admin', 'hr'].includes(user.role)) return true
-    return (
+    const isOwner = (
       t.ownerId === user.id ||
       t.ownerId === user._id ||
       t.employeeId === user.employeeId ||
@@ -4187,6 +4187,11 @@ function ESSHelpDeskView({ user }) {
       t.employeeName === user.displayName ||
       t.employeeName === user.name
     )
+    const isAssigned = Boolean(
+      (t.assignedToId && (String(t.assignedToId) === String(user.id) || String(t.assignedToId) === String(user._id) || String(t.assignedToId) === String(user.employeeId))) ||
+      (t.assignedToEmail && user.email && t.assignedToEmail.toLowerCase() === user.email.toLowerCase())
+    )
+    return isOwner || isAssigned
   })
 
   const filteredTickets = myTickets.filter((t) => {
@@ -4392,7 +4397,19 @@ function ESSHelpDeskView({ user }) {
                       <td>
                         <span style={{ fontWeight: 600, color: 'var(--ink)' }}>{t.subject || t.title}</span>
                       </td>
-                      <td><span className="role-badge" style={{ fontSize: '9.5px' }}>{t.category || 'General'}</span></td>
+                      <td>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                          <span className="role-badge" style={{ fontSize: '9.5px' }}>{t.category || 'General'}</span>
+                          {Boolean(user && (
+                            (t.assignedToId && (String(t.assignedToId) === String(user.id) || String(t.assignedToId) === String(user._id) || String(t.assignedToId) === String(user.employeeId))) ||
+                            (t.assignedToEmail && user.email && t.assignedToEmail.toLowerCase() === user.email.toLowerCase())
+                          )) && (
+                            <span style={{ fontSize: '8.5px', background: '#dbeafe', color: '#1e40af', padding: '1px 5px', borderRadius: '4px', fontWeight: 700, width: 'fit-content' }}>
+                              Assigned Specialist
+                            </span>
+                          )}
+                        </div>
+                      </td>
                       <td>
                         <span
                           style={{
@@ -4477,6 +4494,61 @@ function ESSHelpDeskView({ user }) {
                   <strong style={{ color: 'var(--ink)' }}>{selectedTicket.createdAt ? new Date(selectedTicket.createdAt).toLocaleDateString() : 'Recent'}</strong>
                 </div>
               </div>
+
+              {/* Specialist Action Toolbar if Assigned or Admin/HR */}
+              {user && (
+                ['admin', 'hr'].includes(user.role) ||
+                (selectedTicket.assignedToId && (String(selectedTicket.assignedToId) === String(user.id) || String(selectedTicket.assignedToId) === String(user._id) || String(selectedTicket.assignedToId) === String(user.employeeId))) ||
+                (selectedTicket.assignedToEmail && user.email && selectedTicket.assignedToEmail.toLowerCase() === user.email.toLowerCase())
+              ) && (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#f0fdf4', border: '1px solid #bbf7d0', padding: '8px 12px', borderRadius: '8px', flexWrap: 'wrap', gap: '6px' }}>
+                  <span style={{ fontSize: '11px', color: '#166534', fontWeight: 600 }}>Specialist Resolution Controls:</span>
+                  <div style={{ display: 'flex', gap: '6px' }}>
+                    {selectedTicket.status !== 'in_progress' && selectedTicket.status !== 'resolved' && (
+                      <button
+                        type="button"
+                        className="ui-button secondary"
+                        onClick={async () => {
+                          await hrStore.updateTicketStatus(selectedTicket.id, 'in_progress')
+                          setNotice('Ticket marked as In Progress.')
+                          setTimeout(() => setNotice(''), 3000)
+                        }}
+                        style={{ padding: '3px 8px', fontSize: '11px' }}
+                      >
+                        Mark In Progress
+                      </button>
+                    )}
+                    {selectedTicket.status !== 'resolved' && (
+                      <button
+                        type="button"
+                        className="ui-button primary"
+                        onClick={async () => {
+                          await hrStore.updateTicketStatus(selectedTicket.id, 'resolved')
+                          setNotice('Ticket resolved and response email dispatched!')
+                          setTimeout(() => setNotice(''), 4000)
+                        }}
+                        style={{ padding: '3px 8px', fontSize: '11px', background: '#16a34a', borderColor: '#16a34a' }}
+                      >
+                        Resolve Ticket
+                      </button>
+                    )}
+                    {selectedTicket.status === 'resolved' && (
+                      <button
+                        type="button"
+                        className="ui-button secondary"
+                        onClick={async () => {
+                          await hrStore.updateTicketStatus(selectedTicket.id, 'open')
+                          setNotice('Ticket reopened.')
+                          setTimeout(() => setNotice(''), 3000)
+                        }}
+                        style={{ padding: '3px 8px', fontSize: '11px' }}
+                      >
+                        Reopen Ticket
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* Initial Problem Description */}
               {selectedTicket.description && (

@@ -2,6 +2,7 @@ import express from 'express'
 import mongoose from 'mongoose'
 import { workspaceModels as models } from '../../models/Workspace.js'
 import { Employee } from '../../models/Employee.js'
+import { AttendanceSettings } from '../../models/AttendanceSettings.js'
 import { Notification } from '../../models/Notification.js'
 import { hasPermission } from '../../auth/permissions.js'
 import { ensureConnected } from '../leave/leave.repository.js'
@@ -219,10 +220,45 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
           if (!mongoose.isValidObjectId(body.courseId) || !await models.courses.exists({ _id: body.courseId })) throw fail('Course not found.', 404)
           values = { ...values, courseId: body.courseId, progress: 0 }
           break
-        case 'tickets':
-          allowedBody(body, ['subject', 'description', 'category', 'priority'])
-          values = { ...values, employeeId: actor.employeeId, employeeName: actorName, subject: string(body, 'subject', true, 200), description: string(body, 'description'), category: string(body, 'category'), priority: choice(body, 'priority', ['Low', 'Medium', 'High', 'Urgent']), status: 'open' }
+        case 'tickets': {
+          allowedBody(body, ['subject', 'description', 'category', 'priority', 'assignedToId', 'assignedToName', 'assignedToEmail'])
+          const ticketCat = string(body, 'category') || 'IT Support'
+          const isIt = ticketCat.toLowerCase().includes('it')
+          let assignedId = body.assignedToId || ''
+          let assignedName = body.assignedToName || ''
+          let assignedEmail = body.assignedToEmail || ''
+
+          if (!assignedId) {
+            try {
+              const settingsDoc = (await AttendanceSettings.findOne({ key: 'office' }).lean()) || (await AttendanceSettings.findOne().sort({ updatedAt: -1 }).lean())
+              const hd = settingsDoc?.helpDeskSettings || {}
+              if (isIt) {
+                assignedId = hd.itSupportEmployeeId || ''
+                assignedName = hd.itSupportEmployeeName || ''
+                assignedEmail = hd.itSupportEmployeeEmail || hd.itSupportEmail || 'itsupport@edufyitech.in'
+              } else {
+                assignedId = hd.generalSupportEmployeeId || ''
+                assignedName = hd.generalSupportEmployeeName || ''
+                assignedEmail = hd.generalSupportEmployeeEmail || hd.generalSupportEmail || 'helpsupport@edufyitechsolution.in'
+              }
+            } catch {}
+          }
+
+          values = {
+            ...values,
+            employeeId: actor.employeeId,
+            employeeName: actorName,
+            subject: string(body, 'subject', true, 200),
+            description: string(body, 'description'),
+            category: ticketCat,
+            priority: choice(body, 'priority', ['Low', 'Medium', 'High', 'Urgent']),
+            status: 'open',
+            assignedToId: assignedId || null,
+            assignedToName: assignedName || null,
+            assignedToEmail: assignedEmail || null,
+          }
           break
+        }
         case 'expenses': {
           allowedBody(body, ['category', 'amount', 'merchant', 'date', 'comments', 'attachmentUrl', 'attachmentName', 'attachmentType', 'attachmentSize'])
           const amount = number(body, 'amount', 0.01, 100000000)
@@ -405,6 +441,20 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
           await models.notifications.insertMany(notifDocs)
         }
 
+        // Direct in-app notification to the dedicated assigned support employee
+        if (record.assignedToId) {
+          try {
+            await models.notifications.create({
+              ownerId: String(record.assignedToId),
+              recipientId: String(record.assignedToId),
+              title: `New Support Ticket Assigned [${values.priority || 'Medium'}]`,
+              message: `${actorName} opened support ticket #${String(record._id).slice(-6).toUpperCase()}: "${values.subject}" (${values.category || 'Support'}). Assigned to you for resolution.`,
+              type: 'ticket',
+              read: false,
+            })
+          } catch {}
+        }
+
         // Live SMTP Email Dispatch for Support Tickets
         try {
           const emp = await Employee.findById(id(actor)) || await Employee.findOne({ employeeId: values.employeeId })
@@ -412,7 +462,7 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
           const mailConfig = getMailConfig()
           const supportMail = isIt ? mailConfig.itEmail : mailConfig.helpdeskEmail
 
-          // 1. Confirmation email to assigned employee
+          // 1. Confirmation email to employee who raised the ticket
           if (emp?.email) {
             await sendSupportTicketEmail({
               type: 'created',
@@ -428,6 +478,15 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
               ticket: record,
               employee: emp,
               recipientEmail: supportMail,
+            })
+          }
+          // 3. Dispatch alert to the assigned specialist if their personal email is distinct from the support mailbox
+          if (record.assignedToEmail && record.assignedToEmail.toLowerCase() !== supportMail.toLowerCase()) {
+            await sendSupportTicketEmail({
+              type: 'created',
+              ticket: record,
+              employee: emp,
+              recipientEmail: record.assignedToEmail,
             })
           }
         } catch (emailErr) {
@@ -556,13 +615,20 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
             }
           }
         } else if (resource === 'tasks' || resource === 'tickets') {
-          allowedBody(req.body, resource === 'tickets' ? ['status', 'response'] : ['status'])
+          allowedBody(req.body, resource === 'tickets' ? ['status', 'response', 'assignedToId', 'assignedToName', 'assignedToEmail'] : ['status'])
           if (resource === 'tickets' && req.body.response !== undefined) {
             if (req.body.status !== undefined) throw fail('Send a reply or change status separately.')
             update = { $push: { responses: { sender: actor.name ?? actor.displayName, text: string(req.body, 'response'), time: new Date() } } }
           } else {
-            if (resource === 'tickets' && !management(actor)) throw fail('HR or administrator access is required to resolve tickets.', 403)
-            update = { $set: { status: choice(req.body, 'status', resource === 'tasks' ? ['todo', 'in_progress', 'completed'] : ['open', 'in_progress', 'resolved', 'closed']) } }
+            update = { $set: {} }
+            if (req.body.status !== undefined) {
+              update.$set.status = choice(req.body, 'status', resource === 'tasks' ? ['todo', 'in_progress', 'completed'] : ['open', 'in_progress', 'resolved', 'closed'])
+            }
+            if (resource === 'tickets') {
+              if (req.body.assignedToId !== undefined) update.$set.assignedToId = req.body.assignedToId ? string(req.body, 'assignedToId', false, 100) : null
+              if (req.body.assignedToName !== undefined) update.$set.assignedToName = req.body.assignedToName ? string(req.body, 'assignedToName', false, 100) : null
+              if (req.body.assignedToEmail !== undefined) update.$set.assignedToEmail = req.body.assignedToEmail ? string(req.body, 'assignedToEmail', false, 100) : null
+            }
           }
         } else if (resource === 'expenses') {
           if (!management(actor)) throw fail('HR or administrator access is required to review expenses.', 403)

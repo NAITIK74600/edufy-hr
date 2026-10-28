@@ -4548,11 +4548,16 @@ function AdminSettingsModule({ user: propUser }) {
 
   // Help Desk Configuration State
   const initialHelpDesk = storeState.companySettings?.helpDeskSettings || {}
-  const [supportEmail, setSupportEmail] = useState(initialHelpDesk.supportEmail || 'leaveupdate@edufytechsolution.in')
-  const [itSupportEmail, setItSupportEmail] = useState(initialHelpDesk.itSupportEmail || 'itsupport@edufytechsolution.in')
-  const [hrSupportEmail, setHrSupportEmail] = useState(initialHelpDesk.hrSupportEmail || 'leaveupdate@edufytechsolution.in')
-  const [payrollSupportEmail, setPayrollSupportEmail] = useState(initialHelpDesk.payrollSupportEmail || 'payroll@edufytechsolution.in')
-  const [facilitiesEmail, setFacilitiesEmail] = useState(initialHelpDesk.facilitiesEmail || 'facilities@edufytechsolution.in')
+  const [itSupportEmail, setItSupportEmail] = useState(initialHelpDesk.itSupportEmail || 'itsupport@edufyitech.in')
+  const [itSupportEmployeeId, setItSupportEmployeeId] = useState(initialHelpDesk.itSupportEmployeeId || '')
+  const [itSupportEmployeeName, setItSupportEmployeeName] = useState(initialHelpDesk.itSupportEmployeeName || '')
+  const [itSupportEmployeeEmail, setItSupportEmployeeEmail] = useState(initialHelpDesk.itSupportEmployeeEmail || '')
+
+  const [generalSupportEmail, setGeneralSupportEmail] = useState(initialHelpDesk.generalSupportEmail || initialHelpDesk.supportEmail || 'helpsupport@edufyitechsolution.in')
+  const [generalSupportEmployeeId, setGeneralSupportEmployeeId] = useState(initialHelpDesk.generalSupportEmployeeId || '')
+  const [generalSupportEmployeeName, setGeneralSupportEmployeeName] = useState(initialHelpDesk.generalSupportEmployeeName || '')
+  const [generalSupportEmployeeEmail, setGeneralSupportEmployeeEmail] = useState(initialHelpDesk.generalSupportEmployeeEmail || '')
+
   const [defaultPriority, setDefaultPriority] = useState(initialHelpDesk.defaultPriority || 'Medium')
   const [autoAssignToManager, setAutoAssignToManager] = useState(initialHelpDesk.autoAssignToManager ?? true)
   const [emailNotificationsEnabled, setEmailNotificationsEnabled] = useState(initialHelpDesk.emailNotificationsEnabled ?? true)
@@ -4578,11 +4583,17 @@ function AdminSettingsModule({ user: propUser }) {
     // Sync help desk fields
     const hd = storeState.companySettings?.helpDeskSettings
     if (hd) {
-      if (hd.supportEmail !== undefined) setSupportEmail(hd.supportEmail)
       if (hd.itSupportEmail !== undefined) setItSupportEmail(hd.itSupportEmail)
-      if (hd.hrSupportEmail !== undefined) setHrSupportEmail(hd.hrSupportEmail)
-      if (hd.payrollSupportEmail !== undefined) setPayrollSupportEmail(hd.payrollSupportEmail)
-      if (hd.facilitiesEmail !== undefined) setFacilitiesEmail(hd.facilitiesEmail)
+      if (hd.itSupportEmployeeId !== undefined) setItSupportEmployeeId(hd.itSupportEmployeeId)
+      if (hd.itSupportEmployeeName !== undefined) setItSupportEmployeeName(hd.itSupportEmployeeName)
+      if (hd.itSupportEmployeeEmail !== undefined) setItSupportEmployeeEmail(hd.itSupportEmployeeEmail)
+
+      if (hd.generalSupportEmail !== undefined) setGeneralSupportEmail(hd.generalSupportEmail)
+      else if (hd.supportEmail !== undefined) setGeneralSupportEmail(hd.supportEmail)
+      if (hd.generalSupportEmployeeId !== undefined) setGeneralSupportEmployeeId(hd.generalSupportEmployeeId)
+      if (hd.generalSupportEmployeeName !== undefined) setGeneralSupportEmployeeName(hd.generalSupportEmployeeName)
+      if (hd.generalSupportEmployeeEmail !== undefined) setGeneralSupportEmployeeEmail(hd.generalSupportEmployeeEmail)
+
       if (hd.defaultPriority !== undefined) setDefaultPriority(hd.defaultPriority)
       if (hd.autoAssignToManager !== undefined) setAutoAssignToManager(hd.autoAssignToManager)
       if (hd.emailNotificationsEnabled !== undefined) setEmailNotificationsEnabled(hd.emailNotificationsEnabled)
@@ -4819,17 +4830,21 @@ function AdminSettingsModule({ user: propUser }) {
     try {
       await hrStore.updateCompanySettings({
         helpDeskSettings: {
-          supportEmail: supportEmail.trim(),
           itSupportEmail: itSupportEmail.trim(),
-          hrSupportEmail: hrSupportEmail.trim(),
-          payrollSupportEmail: payrollSupportEmail.trim(),
-          facilitiesEmail: facilitiesEmail.trim(),
+          itSupportEmployeeId,
+          itSupportEmployeeName,
+          itSupportEmployeeEmail,
+          generalSupportEmail: generalSupportEmail.trim(),
+          generalSupportEmployeeId,
+          generalSupportEmployeeName,
+          generalSupportEmployeeEmail,
+          supportEmail: generalSupportEmail.trim(),
           defaultPriority,
           autoAssignToManager: Boolean(autoAssignToManager),
           emailNotificationsEnabled: Boolean(emailNotificationsEnabled),
         },
       })
-      setNotice(`✓ Help desk settings saved! Support routing & notification rules updated.`)
+      setNotice(`✓ Dedicated support team & email routing saved!`)
       setTimeout(() => setNotice(''), 5500)
     } catch (err) {
       setNotice(`✕ Failed to save help desk settings: ${err.message || 'Please try again.'}`)
@@ -5111,38 +5126,104 @@ function AdminSettingsModule({ user: propUser }) {
                 </a>
               </div>
 
-              <div style={{ display: 'grid', gap: '12px' }}>
-                <div>
-                  <label style={{ fontSize: '11px', display: 'block', color: 'var(--muted)', marginBottom: '3px', fontWeight: 600 }}>
-                    1. Dedicated IT Support SMTP Channel (IT & Hardware)
+              <div style={{ display: 'grid', gap: '16px' }}>
+                {/* 1. IT Support Dedicated Assignment */}
+                <div style={{ background: '#fff', border: '1px solid #bfdbfe', borderRadius: '8px', padding: '14px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                    <span style={{ background: '#0284c7', color: '#fff', fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '4px' }}>IT CHANNEL</span>
+                    <strong style={{ fontSize: '13px', color: '#0f172a' }}>Dedicated IT Support Assignment</strong>
+                  </div>
+                  
+                  <label style={{ fontSize: '11.5px', display: 'block', color: 'var(--muted)', marginBottom: '5px', fontWeight: 600 }}>
+                    Select Support Employee for IT Issues (All hardware & IT tickets route to this person):
                   </label>
-                  <input
-                    type="email"
-                    className="text-input"
-                    value={itSupportEmail}
-                    onChange={(e) => setItSupportEmail(e.target.value)}
-                    style={{ width: '100%', padding: '8px 10px', fontSize: '12.5px' }}
-                    required
-                  />
-                  <span style={{ fontSize: '10px', color: 'var(--muted)', marginTop: '2px', display: 'block' }}>
-                    All IT & hardware inquiries come to this address. Replies and resolutions to assigned employees are sent from <strong>itsupport@edufyitech.in</strong>.
+                  <select
+                    className="select-control"
+                    value={itSupportEmployeeId}
+                    onChange={(e) => {
+                      const selId = e.target.value
+                      setItSupportEmployeeId(selId)
+                      const emp = (storeState.employees || []).find((x) => String(x.id || x._id || x.employeeId) === selId)
+                      if (emp) {
+                        setItSupportEmployeeName(emp.name || emp.displayName || '')
+                        setItSupportEmployeeEmail(emp.email || '')
+                      } else {
+                        setItSupportEmployeeName('')
+                        setItSupportEmployeeEmail('')
+                      }
+                    }}
+                    style={{ width: '100%', padding: '8px 10px', fontSize: '12.5px', borderRadius: '6px', border: '1px solid #cbd5e1', marginBottom: '8px' }}
+                  >
+                    <option value="">-- Choose Dedicated IT Support Employee from Staff List --</option>
+                    {(storeState.employees || []).map((emp) => (
+                      <option key={emp.id || emp._id} value={String(emp.id || emp._id || emp.employeeId)}>
+                        {emp.name} ({emp.employeeId || 'STAFF'}) — {emp.designation || emp.department || 'General'}
+                      </option>
+                    ))}
+                  </select>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', fontSize: '11px', background: '#f8fafc', padding: '8px 12px', borderRadius: '6px' }}>
+                    <div>
+                      <span style={{ color: 'var(--muted)' }}>Assigned Employee:</span>{' '}
+                      <strong>{itSupportEmployeeName ? `${itSupportEmployeeName} (${itSupportEmployeeEmail || 'No email'})` : 'None selected'}</strong>
+                    </div>
+                    <div>
+                      <span style={{ color: 'var(--muted)' }}>Dispatch SMTP Address:</span>{' '}
+                      <strong style={{ color: '#0284c7' }}>{itSupportEmail || 'itsupport@edufyitech.in'}</strong>
+                    </div>
+                  </div>
+                  <span style={{ fontSize: '10.5px', color: 'var(--muted)', marginTop: '6px', display: 'block' }}>
+                    When an employee submits an IT inquiry, it arrives on <strong>itsupport@edufyitech.in</strong> and directly in this employee&apos;s portal queue. When resolved, an email response is sent from <strong>itsupport@edufyitech.in</strong> to the requester.
                   </span>
                 </div>
 
-                <div>
-                  <label style={{ fontSize: '11px', display: 'block', color: 'var(--muted)', marginBottom: '3px', fontWeight: 600 }}>
-                    2. Unified Help Support SMTP Gateway (HR, Payroll & Facilities)
+                {/* 2. General Support Assignment (HR, Payroll, Facilities) */}
+                <div style={{ background: '#fff', border: '1px solid #bbf7d0', borderRadius: '8px', padding: '14px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                    <span style={{ background: '#16a34a', color: '#fff', fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '4px' }}>GENERAL SUPPORT</span>
+                    <strong style={{ fontSize: '13px', color: '#0f172a' }}>HR, Payroll &amp; Facilities Assignment</strong>
+                  </div>
+
+                  <label style={{ fontSize: '11.5px', display: 'block', color: 'var(--muted)', marginBottom: '5px', fontWeight: 600 }}>
+                    Select Support Employee for HR, Payroll &amp; Facilities:
                   </label>
-                  <input
-                    type="email"
-                    className="text-input"
-                    value={supportEmail}
-                    onChange={(e) => setSupportEmail(e.target.value)}
-                    style={{ width: '100%', padding: '8px 10px', fontSize: '12.5px' }}
-                    required
-                  />
-                  <span style={{ fontSize: '10px', color: 'var(--muted)', marginTop: '2px', display: 'block' }}>
-                    Single unified SMTP medium (<strong>helpsupport@edufyitechsolution.in</strong>) delivering support requests & resolutions for HR Policies, Payroll, and Workplace Facilities to both assigned employees and support handlers.
+                  <select
+                    className="select-control"
+                    value={generalSupportEmployeeId}
+                    onChange={(e) => {
+                      const selId = e.target.value
+                      setGeneralSupportEmployeeId(selId)
+                      const emp = (storeState.employees || []).find((x) => String(x.id || x._id || x.employeeId) === selId)
+                      if (emp) {
+                        setGeneralSupportEmployeeName(emp.name || emp.displayName || '')
+                        setGeneralSupportEmployeeEmail(emp.email || '')
+                      } else {
+                        setGeneralSupportEmployeeName('')
+                        setGeneralSupportEmployeeEmail('')
+                      }
+                    }}
+                    style={{ width: '100%', padding: '8px 10px', fontSize: '12.5px', borderRadius: '6px', border: '1px solid #cbd5e1', marginBottom: '8px' }}
+                  >
+                    <option value="">-- Choose Dedicated General Support Employee from Staff List --</option>
+                    {(storeState.employees || []).map((emp) => (
+                      <option key={emp.id || emp._id} value={String(emp.id || emp._id || emp.employeeId)}>
+                        {emp.name} ({emp.employeeId || 'STAFF'}) — {emp.designation || emp.department || 'General'}
+                      </option>
+                    ))}
+                  </select>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', fontSize: '11px', background: '#f8fafc', padding: '8px 12px', borderRadius: '6px' }}>
+                    <div>
+                      <span style={{ color: 'var(--muted)' }}>Assigned Employee:</span>{' '}
+                      <strong>{generalSupportEmployeeName ? `${generalSupportEmployeeName} (${generalSupportEmployeeEmail || 'No email'})` : 'None selected'}</strong>
+                    </div>
+                    <div>
+                      <span style={{ color: 'var(--muted)' }}>Unified Gateway Address:</span>{' '}
+                      <strong style={{ color: '#16a34a' }}>{generalSupportEmail || 'helpsupport@edufyitechsolution.in'}</strong>
+                    </div>
+                  </div>
+                  <span style={{ fontSize: '10.5px', color: 'var(--muted)', marginTop: '6px', display: 'block' }}>
+                    All HR Policies, Payroll, and Facilities tickets are routed to this employee and dispatched via the unified <strong>helpsupport@edufyitechsolution.in</strong> gateway.
                   </span>
                 </div>
 
