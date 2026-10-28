@@ -15,10 +15,14 @@
 RewriteEngine On
 
 # 2. FIX 1: Canonical Single-Hop HTTPS & Domain Enforcement
-# If request is HTTP OR arrives via www, redirect in a single 301 hop directly to https://empoyee.edufyitechsolutions.com
-RewriteCond %{HTTPS} off [OR]
-RewriteCond %{HTTP_HOST} ^www\.(.+)$ [NC]
-RewriteRule ^ https://empoyee.edufyitechsolutions.com%{REQUEST_URI} [R=301,L]
+# If request arrives via old empoyee typo or www, redirect directly to https://employee.edufyitechsolutions.com
+RewriteCond %{HTTP_HOST} ^(www\.)?empoyee\.edufyitechsolutions\.com$ [NC,OR]
+RewriteCond %{HTTP_HOST} ^www\.employee\.edufyitechsolutions\.com$ [NC]
+RewriteRule ^ https://employee.edufyitechsolutions.com%{REQUEST_URI} [R=301,L]
+
+# Enforce HTTPS on current host
+RewriteCond %{HTTPS} off
+RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [R=301,L]
 
 # 3. Server-Sent Events (SSE) streaming preservation
 SetEnvIf Request_URI "^/api/v1/events" is_sse=1
@@ -83,8 +87,8 @@ SetEnvIf Request_URI "^/api/v1/events" is_sse=1
   AddOutputFilterByType DEFLATE image/svg+xml font/woff2 application/font-woff2
 </IfModule>
 
-# 6. Proxy all requests to local Node.js application (Port 30006)
+# 6. Proxy all requests to local Node.js application (Port 30005)
 <IfModule mod_proxy.c>
-  RewriteRule ^(.*)$ http://localhost:30006/$1 [P,L]
-  ProxyPassReverse / http://localhost:30006/
+  RewriteRule ^(.*)$ http://localhost:30005/$1 [P,L]
+  ProxyPassReverse / http://localhost:30005/
 </IfModule>

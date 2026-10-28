@@ -50,7 +50,7 @@ for (const envPath of envCandidatePaths) {
   }
 }
 
-const port = Number(process.env.PORT || 30006)
+const port = Number(process.env.PORT || 30005)
 logStartup(`Configured Port: ${port}`)
 
 if (!process.env.JWT_SECRET) {

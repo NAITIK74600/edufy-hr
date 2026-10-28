@@ -142,7 +142,7 @@ fs.writeFileSync(
 // ─── Step 7: Create production .env ──────────────────────
 console.log('🔐 Creating production .env...')
 const envContent = `NODE_ENV=production
-PORT=30006
+PORT=30005
 JWT_SECRET=edufyi-production-jwt-key-change-this-in-production
 MONGODB_URI=mongodb+srv://naitikraj74600_db_user:uRVGHVhBdwtmctuY@cluster0.r5jflcg.mongodb.net/hr_dashboard?retryWrites=true&w=majority
 ADMIN_EMAIL=admin@edufyitech.in
@@ -210,17 +210,17 @@ console.log(`
 ╠══════════════════════════════════════════════════════════╣
 ║                                                          ║
 ║  1. Upload ${ZIP_NAME} to your server           ║
-║  2. Extract to: /home/admin_edufytech/employee/          ║
+║  2. Extract to: /home/admin_edufytech/hr/                ║
 ║     Command:                                             ║
-║     cd /home/admin_edufytech/employee                    ║
+║     cd /home/admin_edufytech/hr                          ║
 ║     rm -rf *                                             ║
 ║     unzip ${ZIP_NAME}                           ║
 ║                                                          ║
 ║  3. Webuzo App Settings:                                 ║
-║     • Port: 30006                                        ║
+║     • Port: 30005                                        ║
 ║     • Start Command: node server.js                      ║
 ║     • Startup File: server.js                            ║
-║     • Application Path: /home/admin_edufytech/employee   ║
+║     • Application Path: /home/admin_edufytech/hr         ║
 ║     • Environment: Production                            ║
 ║                                                          ║
 ║  4. Stop & Start the app from Webuzo panel               ║
