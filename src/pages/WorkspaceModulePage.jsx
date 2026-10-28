@@ -260,19 +260,7 @@ function AttendanceModule() {
     showFeedback('Attendance record permanently deleted from database.')
   })
 
-  const handleSetLateOccurrence = storeAction(async (record, occurrence) => {
-    const shiftName = record.shift || 'General Shift'
-    const newNotes = `Late Login #${occurrence}/2 (${shiftName})`
-    await hrStore.markAttendance({
-      ...record,
-      status: 'late',
-      isLate: true,
-      isHalfDay: false,
-      lateCount: occurrence,
-      notes: newNotes,
-    })
-    showFeedback(`Updated ${record.employeeName || 'employee'} to Late Login #${occurrence} of 2.`)
-  })
+
 
   const handleAddWifi = storeAction(async (e) => {
     e.preventDefault()
@@ -434,34 +422,9 @@ function AttendanceModule() {
           <small>Verified via office Wi-Fi network</small>
         </div>
         <div className="panel module-kpi">
-          <span>Late arrivals</span>
-          <strong style={{ color: 'var(--gold)' }}>{lateCount} Staff</strong>
-          <small>Checked in after {(() => {
-            const rules = storeState.companySettings?.attendanceRules
-            const st = rules?.workStartTime
-            const et = rules?.workEndTime
-            if (!st) return '09:30 AM'
-            const clean = String(st).trim().replace(/[\u202F\u00A0]/g, ' ')
-            const m = clean.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/i)
-            if (!m) return st
-            let h = parseInt(m[1], 10)
-            const min = m[2]
-            const meridiem = m[3]?.toUpperCase()
-            if (meridiem === 'PM' && h < 12) h += 12
-            if (meridiem === 'AM' && h === 12) h = 0
-            if (!meridiem && et) {
-              const endClean = String(et).trim().replace(/[\u202F\u00A0]/g, ' ')
-              const endMatch = endClean.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/i)
-              if (endMatch) {
-                let eh = parseInt(endMatch[1], 10)
-                if (endMatch[3]?.toUpperCase() === 'PM' && eh < 12) eh += 12
-                if (eh >= 13 && h < 12 && (eh - h) > 8 && (h + 12) < eh + 2) h += 12
-              }
-            }
-            const ampm = h >= 12 ? 'PM' : 'AM'
-            h = h % 12 || 12
-            return `${String(h).padStart(2, '0')}:${min} ${ampm}`
-          })()}</small>
+          <span>Active check-ins</span>
+          <strong style={{ color: 'var(--teal)' }}>{dayRecords.filter((a) => Boolean(a.checkIn) && !a.checkOut).length} Staff</strong>
+          <small>Currently checked-in live</small>
         </div>
         <div className="panel module-kpi">
           <span>Approved leaves / Out</span>
@@ -790,8 +753,6 @@ function AttendanceModule() {
                   key: 'status',
                   label: 'Status',
                   render: (r) => {
-                    const isLate = r.status === 'late';
-                    const lateOccurrence = isLate ? getLateOccurrence(r) : 1;
                     const cleanedNotes = formatAttendanceNotes(r.notes);
 
                     return (
@@ -1205,17 +1166,10 @@ function AttendanceModule() {
                       value={markForm.status}
                       onChange={(e) => {
                         const nextStatus = e.target.value;
-                        let newLateCount = markForm.lateCount;
-                        let newNotes = markForm.notes;
-                        if (nextStatus === 'late') {
-                          newLateCount = markForm.lateCount || 1;
-                          newNotes = `Late Login #${newLateCount}/2 (General Shift)`;
-                        }
-                        setMarkForm({ ...markForm, status: nextStatus, lateCount: newLateCount, notes: newNotes });
+                        setMarkForm({ ...markForm, status: nextStatus, lateCount: 0, notes: 'Verified Attendance (General Shift)' });
                       }}
                     >
                       <option value="present">Present (On-Time)</option>
-                      <option value="late">Late Login (Grace 1 or 2)</option>
                       <option value="early-logout">Early Logout (6:30–7:30 PM)</option>
                       <option value="lop">Loss of Pay (LOP)</option>
                       <option value="half-day">Half Day</option>
@@ -1224,51 +1178,6 @@ function AttendanceModule() {
                     </select>
                   </Field>
                 </div>
-
-                {markForm.status === 'late' && (
-                  <div style={{ padding: '10px 12px', background: '#fef3c7', borderRadius: '8px', border: '1px solid #fde68a', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
-                    <div>
-                      <span style={{ fontSize: '11.5px', fontWeight: 700, color: '#92400e', display: 'block' }}>
-                        Late Login Grace Option:
-                      </span>
-                      <small style={{ fontSize: '10px', color: '#b45309' }}>Accepted grace arrival 1 or 2</small>
-                    </div>
-                    <div style={{ display: 'inline-flex', gap: '6px' }}>
-                      <button
-                        type="button"
-                        onClick={() => setMarkForm({ ...markForm, lateCount: 1, notes: 'Late Login #1/2 (General Shift)' })}
-                        style={{
-                          padding: '4px 12px',
-                          borderRadius: '6px',
-                          border: (markForm.lateCount || 1) === 1 ? '1px solid #b45309' : '1px solid #cbd5e1',
-                          background: (markForm.lateCount || 1) === 1 ? '#d97706' : '#ffffff',
-                          color: (markForm.lateCount || 1) === 1 ? '#ffffff' : '#475569',
-                          fontWeight: 700,
-                          fontSize: '11px',
-                          cursor: 'pointer',
-                        }}
-                      >
-                        Option 1
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setMarkForm({ ...markForm, lateCount: 2, notes: 'Late Login #2/2 (General Shift)' })}
-                        style={{
-                          padding: '4px 12px',
-                          borderRadius: '6px',
-                          border: (markForm.lateCount || 1) === 2 ? '1px solid #b45309' : '1px solid #cbd5e1',
-                          background: (markForm.lateCount || 1) === 2 ? '#d97706' : '#ffffff',
-                          color: (markForm.lateCount || 1) === 2 ? '#ffffff' : '#475569',
-                          fontWeight: 700,
-                          fontSize: '11px',
-                          cursor: 'pointer',
-                        }}
-                      >
-                        Option 2
-                      </button>
-                    </div>
-                  </div>
-                )}
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                   <Field label="Check-In Time">
