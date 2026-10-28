@@ -60,6 +60,7 @@ import { formatINR } from '../utils/currency'
 import { generateNextEmployeeCode, generateAutoPassword, formatCredentialsShareText, copyTextToClipboard } from '../utils/credentialsHelper'
 import { getRoleBadgeLabel } from '../utils/greeting'
 import { HolidayCalendarShowcase } from '../components/HolidayCalendarShowcase'
+import { todayKey } from '../services/connectedStore'
 
 function AdminModalPortal({ children }) {
   if (typeof document === 'undefined') return null
@@ -84,6 +85,14 @@ function AdminOverviewModule({ onNavigate }) {
   const roles = hrStore.getRoles()
   const departments = hrStore.getDepartments()
   const pendingAdminLeaves = (storeState.leaves || []).filter((l) => l.status === 'pending_admin')
+
+  const todayStr = todayKey()
+  const todayAttendance = (storeState.attendance || []).filter((a) => a.date === todayStr)
+  const activeEmployees = employees.filter((e) => e.status === 'active' || e.status === 'onboarding').length
+  const punchedInCount = todayAttendance.filter((a) => Boolean(a.checkIn) && !a.checkOut).length
+  const punchedOutCount = todayAttendance.filter((a) => Boolean(a.checkIn) && Boolean(a.checkOut)).length
+  const checkedInEmpIds = new Set(todayAttendance.filter((a) => Boolean(a.checkIn)).map((a) => String(a.employeeId || '').toUpperCase()))
+  const notPunchedInCount = Math.max(0, activeEmployees - checkedInEmpIds.size)
 
   return (
     <div style={{ display: 'grid', gap: '22px' }}>
@@ -150,6 +159,78 @@ function AdminOverviewModule({ onNavigate }) {
           </a>
         </div>
       )}
+
+      {/* OPERATIONAL HEALTH: WORKFORCE OVERVIEW & STABILITY */}
+      <section className="overview-hero" style={{ gridTemplateColumns: '1fr' }}>
+        <div className="hero-card main-hero">
+          <div className="hero-card-header">
+            <div>
+              <p className="section-kicker">Operational Health</p>
+              <h2>Workforce Overview & Stability</h2>
+            </div>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <StatusBadge tone="info">Live Sync</StatusBadge>
+              <a href="#/admin/attendance" className="ui-button" style={{ fontSize: '11px', padding: '5px 12px', textDecoration: 'none' }}>
+                View Timesheets <ArrowRight size={12} />
+              </a>
+            </div>
+          </div>
+
+          {/* REAL-TIME WORKFORCE ATTENDANCE TELEMETRY */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '14px', margin: '20px 0 16px' }}>
+            {/* Active Personnel */}
+            <div style={{ background: 'var(--surface-sunken)', border: '1px solid var(--border)', borderRadius: '10px', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: '10px', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700 }}>Active Personnel</span>
+                <Users size={16} style={{ color: 'var(--primary)' }} />
+              </div>
+              <strong style={{ font: '700 30px "Space Grotesk", sans-serif', color: 'var(--foreground)', lineHeight: 1.1 }}>{activeEmployees}</strong>
+              <small style={{ fontSize: '11px', color: 'var(--muted)' }}>Registered employees</small>
+            </div>
+
+            {/* Punched In */}
+            <div style={{ background: 'rgba(16, 185, 129, 0.08)', border: '1px solid rgba(16, 185, 129, 0.3)', borderRadius: '10px', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: '10px', color: '#047857', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700 }}>Punched In</span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '10px', color: '#059669', fontWeight: 700 }}>
+                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10b981', display: 'inline-block' }} /> Live
+                </span>
+              </div>
+              <strong style={{ font: '700 30px "Space Grotesk", sans-serif', color: '#047857', lineHeight: 1.1 }}>{punchedInCount}</strong>
+              <small style={{ fontSize: '11px', color: '#059669' }}>Working on-site now</small>
+            </div>
+
+            {/* Punched Out */}
+            <div style={{ background: 'rgba(2, 132, 199, 0.08)', border: '1px solid rgba(2, 132, 199, 0.3)', borderRadius: '10px', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: '10px', color: '#0284c7', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700 }}>Punched Out</span>
+                <CheckCircle2 size={16} style={{ color: '#0284c7' }} />
+              </div>
+              <strong style={{ font: '700 30px "Space Grotesk", sans-serif', color: '#0369a1', lineHeight: 1.1 }}>{punchedOutCount}</strong>
+              <small style={{ fontSize: '11px', color: '#0284c7' }}>Shift completed today</small>
+            </div>
+
+            {/* Not Checked In */}
+            <div style={{ background: 'var(--surface-sunken)', border: '1px solid var(--border)', borderRadius: '10px', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: '10px', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700 }}>Not Checked In</span>
+                <Clock size={16} style={{ color: 'var(--muted)' }} />
+              </div>
+              <strong style={{ font: '700 30px "Space Grotesk", sans-serif', color: 'var(--muted)', lineHeight: 1.1 }}>{notPunchedInCount}</strong>
+              <small style={{ fontSize: '11px', color: 'var(--muted)' }}>Pending punch or off</small>
+            </div>
+          </div>
+
+          <div className="hero-footnote" style={{ borderTop: '1px solid var(--border)', paddingTop: '12px', marginTop: '12px', display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+            <span>
+              <CheckCircle2 size={13} style={{ color: '#10b981', display: 'inline', marginRight: '4px' }} /> Real-time Office Wi-Fi & GPS Geofence Synchronized
+            </span>
+            <span>
+              <Activity size={13} style={{ color: '#0284c7', display: 'inline', marginRight: '4px' }} /> Attendance Rate Today: {activeEmployees > 0 ? Math.round(((punchedInCount + punchedOutCount) / activeEmployees) * 100) : 0}% ({punchedInCount + punchedOutCount} of {activeEmployees} checked in)
+            </span>
+          </div>
+        </div>
+      </section>
 
       {/* SYSTEM KPI METRICS */}
       <section className="metric-grid">

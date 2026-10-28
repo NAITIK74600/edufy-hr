@@ -289,13 +289,18 @@ export function OverviewPage() {
 
   const activeEmployees = storeState.employees.filter((e) => e.status === 'active' || e.status === 'onboarding').length
   const pendingLeaves = storeState.leaves.filter((l) => l.status === 'pending_hr' || l.status === 'pending_manager').length
-  const lateAttendance = storeState.attendance.filter((a) => a.date === todayKey() && a.status === 'late').length
+  const todayStr = todayKey()
+  const todayAttendance = (storeState.attendance || []).filter((a) => a.date === todayStr)
+  const punchedInCount = todayAttendance.filter((a) => Boolean(a.checkIn) && !a.checkOut).length
+  const punchedOutCount = todayAttendance.filter((a) => Boolean(a.checkIn) && Boolean(a.checkOut)).length
+  const checkedInEmpIds = new Set(todayAttendance.filter((a) => Boolean(a.checkIn)).map((a) => String(a.employeeId || '').toUpperCase()))
+  const notPunchedInCount = Math.max(0, activeEmployees - checkedInEmpIds.size)
+  const lateAttendance = todayAttendance.filter((a) => a.status === 'late' || a.isLate).length
   const onLeaveToday = new Set(storeState.leaves.filter((leave) => leave.status === 'approved' && leave.startDate <= todayKey() && leave.endDate >= todayKey()).map((leave) => leave.employeeId)).size
   const openTickets = (storeState.tickets || []).filter((t) => (t.status || 'open') !== 'resolved' && t.status !== 'closed').length
   const pendingExpenses = (storeState.expenses || []).filter((e) => (e.status || 'submitted') === 'submitted' || e.status === 'pending').length
   const upcomingHolidays = storeState.holidays.length
 
-  const todayStr = todayKey()
   const nextHoliday = (storeState.holidays || [])
     .filter((h) => h.date >= todayStr)
     .sort((a, b) => a.date.localeCompare(b.date))[0]
@@ -469,15 +474,51 @@ export function OverviewPage() {
             </div>
             <StatusBadge tone="info">Live Sync</StatusBadge>
           </div>
-          <div className="hero-main-metric">
-            <div>
-              <span>Active Personnel In System</span>
-              <strong>{activeEmployees}</strong>
+          {/* REAL-TIME WORKFORCE ATTENDANCE TELEMETRY */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '12px', margin: '20px 0 16px' }}>
+            {/* Active Personnel */}
+            <div style={{ background: 'var(--surface-sunken)', border: '1px solid var(--border)', borderRadius: '10px', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: '10px', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700 }}>Active Personnel</span>
+                <Users size={14} style={{ color: 'var(--primary)' }} />
+              </div>
+              <strong style={{ font: '700 28px "Space Grotesk", sans-serif', color: 'var(--foreground)', lineHeight: 1.1 }}>{activeEmployees}</strong>
+              <small style={{ fontSize: '11px', color: 'var(--muted)' }}>Registered staff</small>
             </div>
-            <div className="trend-chip">
-              <TrendingUp size={14} /> 100% System Operational
+
+            {/* Punched In */}
+            <div style={{ background: 'rgba(16, 185, 129, 0.08)', border: '1px solid rgba(16, 185, 129, 0.3)', borderRadius: '10px', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: '10px', color: '#047857', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700 }}>Punched In</span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '10px', color: '#059669', fontWeight: 700 }}>
+                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10b981', display: 'inline-block' }} /> Live
+                </span>
+              </div>
+              <strong style={{ font: '700 28px "Space Grotesk", sans-serif', color: '#047857', lineHeight: 1.1 }}>{punchedInCount}</strong>
+              <small style={{ fontSize: '11px', color: '#059669' }}>Working on-site now</small>
+            </div>
+
+            {/* Punched Out */}
+            <div style={{ background: 'rgba(2, 132, 199, 0.08)', border: '1px solid rgba(2, 132, 199, 0.3)', borderRadius: '10px', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: '10px', color: '#0284c7', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700 }}>Punched Out</span>
+                <CheckCircle2 size={14} style={{ color: '#0284c7' }} />
+              </div>
+              <strong style={{ font: '700 28px "Space Grotesk", sans-serif', color: '#0369a1', lineHeight: 1.1 }}>{punchedOutCount}</strong>
+              <small style={{ fontSize: '11px', color: '#0284c7' }}>Shift completed today</small>
+            </div>
+
+            {/* Not Checked In */}
+            <div style={{ background: 'var(--surface-sunken)', border: '1px solid var(--border)', borderRadius: '10px', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: '10px', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700 }}>Not Checked In</span>
+                <Clock3 size={14} style={{ color: 'var(--muted)' }} />
+              </div>
+              <strong style={{ font: '700 28px "Space Grotesk", sans-serif', color: 'var(--muted)', lineHeight: 1.1 }}>{notPunchedInCount}</strong>
+              <small style={{ fontSize: '11px', color: 'var(--muted)' }}>Pending punch or off</small>
             </div>
           </div>
+
           <div className="mini-bars" aria-label="Department health chart">
             {[78, 88, 92, 85, 90, 94, 96].map((height, index) => (
               <span key={index} style={{ height: `${height}%` }} />
@@ -488,7 +529,7 @@ export function OverviewPage() {
               <CheckCircle2 size={13} /> Wi-Fi Attendance Verification Active
             </span>
             <span>
-              <Sparkles size={13} /> Payroll Ready for Disbursement
+              <TrendingUp size={13} /> {punchedInCount + punchedOutCount} / {activeEmployees} Punched Today ({activeEmployees > 0 ? Math.round(((punchedInCount + punchedOutCount) / activeEmployees) * 100) : 0}%)
             </span>
           </div>
         </div>
