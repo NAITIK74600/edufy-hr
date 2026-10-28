@@ -83,10 +83,10 @@ export function createAttendanceRouter({ auth, service, useDatabase = false, per
         const rawEnd = values.attendanceRules.workEndTime
         const rawStart = values.attendanceRules.workStartTime
         if (rawEnd) {
-          values.attendanceRules.workEndTime = formatTime24(rawEnd, rawStart, true)
+          values.attendanceRules.workEndTime = formatTime24(rawEnd)
         }
         if (rawStart) {
-          values.attendanceRules.workStartTime = formatTime24(rawStart, values.attendanceRules.workEndTime || rawEnd, false)
+          values.attendanceRules.workStartTime = formatTime24(rawStart)
         }
       }
       if (values.attendanceRules?.maxGeofenceRadiusMeters !== undefined) {

@@ -148,20 +148,25 @@ export function formatCurrentTime(d = new Date()) {
 }
 
 export function formatTime12(timeStr, referenceTime = null, isEndTime = false) {
-  if (!timeStr) return ''
-  let mins = parseTimeToMinutes(timeStr)
+  if (!timeStr && timeStr !== 0) return ''
+  let mins = typeof timeStr === 'number' ? timeStr : parseTimeToMinutes(timeStr)
   if (mins === null) return String(timeStr)
 
   const hasAm = /AM/i.test(String(timeStr))
   const hasPm = /PM/i.test(String(timeStr))
 
-  // Only infer PM if meridiem was NOT explicitly specified
   if (!hasAm && !hasPm && mins < 720) {
-    if (isEndTime && mins >= 60 && mins <= 660) {
-      mins += 720
+    if (isEndTime && referenceTime) {
+      const refMins = parseTimeToMinutes(referenceTime)
+      if (refMins !== null) {
+        const effRef = refMins < 720 && !/AM/i.test(String(referenceTime)) ? refMins + 720 : refMins
+        if ((mins + 720) > effRef && (mins + 720) - effRef <= 360) {
+          mins += 720
+        }
+      }
     } else if (!isEndTime && referenceTime) {
       const refMins = parseTimeToMinutes(referenceTime)
-      if (refMins !== null && refMins >= 720 && refMins - mins > 600 && (mins + 720) < refMins + 120) {
+      if (refMins !== null && refMins >= 720 && (refMins - (mins + 720)) >= 0 && (refMins - (mins + 720)) <= 360) {
         mins += 720
       }
     }
@@ -175,20 +180,25 @@ export function formatTime12(timeStr, referenceTime = null, isEndTime = false) {
 }
 
 export function formatTime24(timeStr, referenceTime = null, isEndTime = false) {
-  if (!timeStr) return isEndTime ? '18:30' : '09:30'
-  let mins = parseTimeToMinutes(timeStr)
+  if (!timeStr && timeStr !== 0) return isEndTime ? '18:30' : '09:30'
+  let mins = typeof timeStr === 'number' ? timeStr : parseTimeToMinutes(timeStr)
   if (mins === null) return String(timeStr)
 
   const hasAm = /AM/i.test(String(timeStr))
   const hasPm = /PM/i.test(String(timeStr))
 
-  // Only infer PM if meridiem was NOT explicitly specified
   if (!hasAm && !hasPm && mins < 720) {
-    if (isEndTime && mins >= 60 && mins <= 660) {
-      mins += 720
+    if (isEndTime && referenceTime) {
+      const refMins = parseTimeToMinutes(referenceTime)
+      if (refMins !== null) {
+        const effRef = refMins < 720 && !/AM/i.test(String(referenceTime)) ? refMins + 720 : refMins
+        if ((mins + 720) > effRef && (mins + 720) - effRef <= 360) {
+          mins += 720
+        }
+      }
     } else if (!isEndTime && referenceTime) {
       const refMins = parseTimeToMinutes(referenceTime)
-      if (refMins !== null && refMins >= 720 && refMins - mins > 600 && (mins + 720) < refMins + 120) {
+      if (refMins !== null && refMins >= 720 && (refMins - (mins + 720)) >= 0 && (refMins - (mins + 720)) <= 360) {
         mins += 720
       }
     }
@@ -199,29 +209,20 @@ export function formatTime24(timeStr, referenceTime = null, isEndTime = false) {
   return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`
 }
 
-export function getNormalizedShiftMinutes(startTimeStr, endTimeStr, checkInTimeStr = null) {
+export function getNormalizedShiftMinutes(startTimeStr, endTimeStr = null, checkInTimeStr = null) {
   let startMins = parseTimeToMinutes(startTimeStr) ?? 570
-  let endMins = parseTimeToMinutes(endTimeStr) ?? 1110
+  let endMins = endTimeStr ? (parseTimeToMinutes(endTimeStr) ?? 1110) : 1110
 
   const hasStartMeridiem = /AM|PM/i.test(String(startTimeStr))
-  const hasEndMeridiem = /AM|PM/i.test(String(endTimeStr))
 
-  // If endMins is before 12:00 PM and less than startMins without explicit AM, endMins is PM (+720)
-  if (!hasEndMeridiem && endMins < 720 && (endMins <= startMins || endMins <= 660)) {
-    endMins += 720
-  }
-
-  // If startMins has no explicit AM/PM, and either endMins is evening (>=720) with reasonable shift length, or checkIn is PM
   if (!hasStartMeridiem && startMins < 720) {
-    if (endMins >= 720 && (endMins - startMins) > 600 && (startMins + 720) < (endMins + 120)) {
-      startMins += 720
-    } else if (endMins >= 720 && (startMins + 720) <= endMins) {
-      startMins += 720
-    } else if (checkInTimeStr !== null && checkInTimeStr !== undefined) {
+    if (checkInTimeStr !== null && checkInTimeStr !== undefined) {
       const checkMins = typeof checkInTimeStr === 'number' ? checkInTimeStr : parseTimeToMinutes(checkInTimeStr)
       if (checkMins !== null && checkMins >= 720 && (startMins + 720) <= 1440 && Math.abs(checkMins - (startMins + 720)) < Math.abs(checkMins - startMins)) {
         startMins += 720
       }
+    } else if (endMins >= 720 && (endMins - (startMins + 720)) >= 0 && (endMins - (startMins + 720)) <= 360) {
+      startMins += 720
     }
   }
 
@@ -245,7 +246,19 @@ export function extractShiftTimes(shiftStr, fallbackStart = '09:30', fallbackEnd
   }
 }
 
-export function resolveShift({ shift, shiftCode, attendanceRules = {}, defaultShift = SHIFT_DEFINITIONS[0] } = {}) {
+export function resolveShift(options = {}, maybeShiftCode, maybeAttendanceRules, maybeDefaultShift) {
+  let shift, shiftCode, attendanceRules, defaultShift
+  if (typeof options === 'string' || maybeShiftCode !== undefined || maybeAttendanceRules !== undefined) {
+    shift = options
+    shiftCode = maybeShiftCode
+    attendanceRules = maybeAttendanceRules || {}
+    defaultShift = maybeDefaultShift || SHIFT_DEFINITIONS[0]
+  } else {
+    shift = options?.shift
+    shiftCode = options?.shiftCode
+    attendanceRules = options?.attendanceRules || {}
+    defaultShift = options?.defaultShift || SHIFT_DEFINITIONS[0]
+  }
   const matchedDefinition = SHIFT_DEFINITIONS.find((s) => s.code === shiftCode || s.name === shift || s.display === shift)
   const isGeneral = !shiftCode || shiftCode === 'general' || shiftCode === 'default' || (matchedDefinition && matchedDefinition.code === 'general')
 
@@ -271,26 +284,22 @@ export function resolveShift({ shift, shiftCode, attendanceRules = {}, defaultSh
       startTime = ruleStart || '09:30'
       endTime = ruleEnd || '18:30'
     }
-    display = `General (${formatTime12(startTime, endTime, false)} – ${formatTime12(endTime, startTime, true)})`
+    display = `General (${formatTime12(startTime)} – ${formatTime12(endTime)})`
   } else {
     startTime = extracted.startTime || matchedDefinition?.startTime || '09:30'
     endTime = extracted.endTime || matchedDefinition?.endTime || '18:30'
     display = shift || matchedDefinition?.display || `Shift (${formatTime12(startTime)} – ${formatTime12(endTime)})`
   }
 
-  const startMins = getNormalizedShiftMinutes(startTime, endTime)
-  let endMins = parseTimeToMinutes(endTime) ?? 1110
-  const hasEndMeridiem = /AM|PM/i.test(String(endTime))
-  if (!hasEndMeridiem && endMins < 720 && (endMins <= startMins || endMins <= 660)) {
-    endMins += 720
-  }
+  const startMins = parseTimeToMinutes(startTime) ?? 570
+  const endMins = parseTimeToMinutes(endTime) ?? 1110
 
   return {
     code,
     name: matchedDefinition?.name || (code === 'general' ? 'General Shift' : 'Shift'),
     display,
-    startTime: formatTime24(startTime, endTime, false),
-    endTime: formatTime24(endTime, startTime, true),
+    startTime: formatTime24(startTime),
+    endTime: formatTime24(endTime),
     startMins,
     endMins,
     isOvernight: endMins < startMins,

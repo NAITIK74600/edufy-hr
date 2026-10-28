@@ -99,7 +99,7 @@ function getShiftLabel(rules) {
   const st = rules?.workStartTime
   const et = rules?.workEndTime
   if (st && et) {
-    const f12 = (t, referenceTime = null, isEnd = false) => {
+    const f12 = (t) => {
       if (!t) return ''
       const clean = String(t).trim().replace(/[\u202F\u00A0]/g, ' ')
       const m = clean.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/i)
@@ -109,27 +109,11 @@ function getShiftLabel(rules) {
       const meridiem = m[3]?.toUpperCase()
       if (meridiem === 'PM' && h < 12) h += 12
       if (meridiem === 'AM' && h === 12) h = 0
-
-      if (!meridiem && isEnd && h >= 1 && h <= 11) {
-        h += 12
-      } else if (!meridiem && !isEnd && referenceTime) {
-        const refClean = String(referenceTime).trim().replace(/[\u202F\u00A0]/g, ' ')
-        const refMatch = refClean.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/i)
-        if (refMatch) {
-          let rh = parseInt(refMatch[1], 10)
-          if (refMatch[3]?.toUpperCase() === 'PM' && rh < 12) rh += 12
-          if (refMatch[3]?.toUpperCase() === 'AM' && rh === 12) rh = 0
-          if (rh >= 13 && h < 12 && (rh - h) > 8 && (h + 12) < rh + 2) {
-            h += 12
-          }
-        }
-      }
-
       const ampm = h >= 12 ? 'PM' : 'AM'
       h = h % 12 || 12
       return `${String(h).padStart(2, '0')}:${min} ${ampm}`
     }
-    return `General (${f12(st, et, false)} – ${f12(et, st, true)})`
+    return `General (${f12(st)} – ${f12(et)})`
   }
   return 'General (09:30 AM – 06:30 PM)'
 }

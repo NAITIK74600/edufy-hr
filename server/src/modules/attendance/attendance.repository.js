@@ -10,7 +10,7 @@ async function punchIdentity(record) {
       { employeeId: { $regex: new RegExp(`^${empCode}$`, 'i') } },
       ...(isObjectId ? [{ _id: empCode }] : []),
     ],
-    status: 'active',
+    status: { $in: ['active', 'notice', 'onboarding'] },
   }).select('_id employeeId name displayName').lean()
   if (!employee) throw Object.assign(new Error(`Attendance requires an active employee record (ID: ${empCode || 'unknown'}).`), { statusCode: 403, code: 'EMPLOYEE_NOT_ACTIVE' })
   return { ...data, employeeId: (employee.employeeId || empCode).toUpperCase(), userId: employee._id, employeeName: employee.displayName || employee.name }

@@ -5030,14 +5030,6 @@ const localStore = {
 
       let startMins = parseMins(s) ?? 570
       let endMins = parseMins(e) ?? 1110
-      const hasEndMeridiem = /AM|PM/i.test(String(e))
-      if (!hasEndMeridiem && endMins < 720 && (endMins <= startMins || endMins <= 660)) {
-        endMins += 720
-      }
-      const hasStartMeridiem = /AM|PM/i.test(String(s))
-      if (!hasStartMeridiem && startMins < 720 && endMins >= 720 && (endMins - startMins) > 600 && (startMins + 720) < (endMins + 120)) {
-        startMins += 720
-      }
       return { startMins, endMins, isOvernight: endMins < startMins }
     })()
 
@@ -5512,14 +5504,6 @@ const localStore = {
 
       let recStartMins = parseMins(recStart) ?? 570
       let recEndMins = parseMins(recEnd) ?? 1110
-      const hasEndMeridiem = /AM|PM/i.test(String(recEnd))
-      if (!hasEndMeridiem && recEndMins < 720 && (recEndMins <= recStartMins || recEndMins <= 660)) {
-        recEndMins += 720
-      }
-      const hasStartMeridiem = /AM|PM/i.test(String(recStart))
-      if (!hasStartMeridiem && recStartMins < 720 && recEndMins >= 720 && (recEndMins - recStartMins) > 600 && (recStartMins + 720) < (recEndMins + 120)) {
-        recStartMins += 720
-      }
 
       const isOvernight = recEndMins < recStartMins
       let effectivePunchMins = inMins

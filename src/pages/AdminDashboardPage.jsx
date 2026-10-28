@@ -4898,16 +4898,16 @@ function AdminSettingsModule({ user: propUser }) {
 
         <form onSubmit={handleSavePolicies}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px', marginBottom: '16px' }}>
-            {/* LEFT: SHIFT & PUNCH RULES (COMPLETELY RECREATED) */}
+            {/* LEFT: SHIFT & PUNCH RULES (MATCHING NATIVE OPERATING POLICIES DESIGN) */}
             <div style={{ background: '#faf9f5', border: '1px solid var(--line)', borderRadius: '8px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
-                <strong style={{ fontSize: '13.5px', color: 'var(--text)' }}>Shift & Punch Rules</strong>
-                <span className="role-badge" style={{ fontSize: '10.5px', background: '#e0f2fe', color: '#0369a1', border: '1px solid #bae6fd' }}>
+                <strong style={{ fontSize: '14px', color: 'var(--text)' }}>Shift & Punch Rules</strong>
+                <span className="role-badge" style={{ fontSize: '11px', background: '#e0f2fe', color: '#0369a1', border: '1px solid #bae6fd', fontWeight: 700 }}>
                   General ({joinTime12(startHour, startMinute, startAmPm)} – {joinTime12(endHour, endMinute, endAmPm)})
                 </span>
               </div>
 
-              {/* Quick Shift Presets Bar */}
+              {/* Quick Shift Presets */}
               <div>
                 <label style={{ fontSize: '10.5px', fontWeight: 700, color: 'var(--muted)', display: 'block', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                   ⚡ Quick Shift Presets
@@ -4945,206 +4945,118 @@ function AdminSettingsModule({ user: propUser }) {
                   >
                     🌙 Night (08:00 PM – 11:00 PM)
                   </button>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => {
+                      const now = new Date()
+                      let h = now.getHours()
+                      let m = now.getMinutes()
+                      const ampm = h >= 12 ? 'PM' : 'AM'
+                      h = h % 12 || 12
+                      setStartHour(String(h).padStart(2, '0'))
+                      setStartMinute(String(m).padStart(2, '0'))
+                      setStartAmPm(ampm)
+                      let endH = (now.getHours() + 8) % 24
+                      const endAmpm = endH >= 12 ? 'PM' : 'AM'
+                      endH = endH % 12 || 12
+                      setEndHour(String(endH).padStart(2, '0'))
+                      setEndMinute(String(m).padStart(2, '0'))
+                      setEndAmPm(endAmpm)
+                    }}
+                    style={{ fontSize: '11px', padding: '4px 8px', borderRadius: '6px', cursor: 'pointer', background: '#e0f2fe', color: '#0369a1', border: '1px solid #bae6fd', fontWeight: 600 }}
+                    title="Set shift start to current time right now"
+                  >
+                    🕒 Current Time
+                  </button>
                 </div>
               </div>
 
-              {/* Shift Start Time Picker */}
-              <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '6px', padding: '10px 12px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                  <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--muted)', margin: 0 }}>Shift Start Time</label>
-                  <span style={{ fontSize: '11px', fontWeight: 700, color: startAmPm === 'PM' ? '#0369a1' : '#b45309' }}>
-                    {joinTime12(startHour, startMinute, startAmPm)} ({startAmPm === 'PM' ? 'Evening/Night' : 'Morning'})
-                  </span>
-                </div>
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flex: 1 }}>
-                    <select
-                      className="text-input"
-                      value={startHour}
-                      onChange={(e) => setStartHour(e.target.value)}
-                      style={{ flex: 1, padding: '6px 8px', fontSize: '12px', background: '#fff' }}
-                      title="Select Start Hour"
-                    >
-                      {['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12'].map((h) => (
-                        <option key={`sh-${h}`} value={h}>{h}</option>
-                      ))}
-                    </select>
-                    <span style={{ fontWeight: 700, color: 'var(--muted)' }}>:</span>
-                    <input
-                      type="text"
-                      className="text-input"
-                      value={startMinute}
-                      onChange={(e) => {
-                        const v = e.target.value.replace(/\D/g, '').slice(0, 2)
-                        setStartMinute(v)
-                      }}
-                      onBlur={() => {
-                        let m = parseInt(startMinute || '0', 10)
-                        if (isNaN(m) || m < 0) m = 0
-                        if (m > 59) m = 59
-                        setStartMinute(String(m).padStart(2, '0'))
-                      }}
-                      placeholder="00"
-                      maxLength={2}
-                      style={{ width: '48px', padding: '6px 8px', fontSize: '12px', textAlign: 'center', background: '#fff' }}
-                      title="Minute (00-59)"
-                    />
-                  </div>
-                  {/* AM / PM Segmented Buttons */}
-                  <div style={{ display: 'inline-flex', borderRadius: '6px', border: '1px solid #cbd5e1', overflow: 'hidden' }}>
-                    <button
-                      type="button"
-                      onClick={() => setStartAmPm('AM')}
-                      style={{
-                        padding: '6px 12px',
-                        fontSize: '11px',
-                        fontWeight: 700,
-                        border: 'none',
-                        cursor: 'pointer',
-                        background: startAmPm === 'AM' ? '#d97706' : '#f8fafc',
-                        color: startAmPm === 'AM' ? '#ffffff' : '#64748b',
-                        transition: 'all 0.15s ease',
-                      }}
-                    >
-                      AM
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setStartAmPm('PM')}
-                      style={{
-                        padding: '6px 12px',
-                        fontSize: '11px',
-                        fontWeight: 700,
-                        border: 'none',
-                        cursor: 'pointer',
-                        background: startAmPm === 'PM' ? 'var(--teal)' : '#f8fafc',
-                        color: startAmPm === 'PM' ? '#ffffff' : '#64748b',
-                        transition: 'all 0.15s ease',
-                      }}
-                    >
-                      PM
-                    </button>
-                  </div>
-                </div>
+              {/* Shift Start Time Picker (matching media_1793197267056_abdb63bf.png) */}
+              <div>
+                <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--muted)', display: 'block', marginBottom: '4px' }}>
+                  Shift Start Time
+                </label>
+                <input
+                  type="time"
+                  value={joinTime24(startHour, startMinute, startAmPm)}
+                  onChange={(e) => {
+                    const s = splitTime(e.target.value)
+                    setStartHour(s.hour)
+                    setStartMinute(s.minute)
+                    setStartAmPm(s.ampm)
+                  }}
+                  className="text-input"
+                  style={{ width: '100%', height: '38px', padding: '6px 12px', fontSize: '13px', borderRadius: '8px', border: '1px solid var(--line)', background: '#fff' }}
+                  required
+                />
               </div>
 
-              {/* Shift End Time Picker */}
-              <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '6px', padding: '10px 12px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                  <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--muted)', margin: 0 }}>Shift End Time</label>
-                  <span style={{ fontSize: '11px', fontWeight: 700, color: endAmPm === 'PM' ? '#0369a1' : '#b45309' }}>
-                    {joinTime12(endHour, endMinute, endAmPm)} ({endAmPm === 'PM' ? 'Evening/Night' : 'Morning'})
-                  </span>
-                </div>
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flex: 1 }}>
-                    <select
-                      className="text-input"
-                      value={endHour}
-                      onChange={(e) => setEndHour(e.target.value)}
-                      style={{ flex: 1, padding: '6px 8px', fontSize: '12px', background: '#fff' }}
-                      title="Select End Hour"
-                    >
-                      {['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12'].map((h) => (
-                        <option key={`eh-${h}`} value={h}>{h}</option>
-                      ))}
-                    </select>
-                    <span style={{ fontWeight: 700, color: 'var(--muted)' }}>:</span>
-                    <input
-                      type="text"
-                      className="text-input"
-                      value={endMinute}
-                      onChange={(e) => {
-                        const v = e.target.value.replace(/\D/g, '').slice(0, 2)
-                        setEndMinute(v)
-                      }}
-                      onBlur={() => {
-                        let m = parseInt(endMinute || '0', 10)
-                        if (isNaN(m) || m < 0) m = 0
-                        if (m > 59) m = 59
-                        setEndMinute(String(m).padStart(2, '0'))
-                      }}
-                      placeholder="00"
-                      maxLength={2}
-                      style={{ width: '48px', padding: '6px 8px', fontSize: '12px', textAlign: 'center', background: '#fff' }}
-                      title="Minute (00-59)"
-                    />
-                  </div>
-                  {/* AM / PM Segmented Buttons */}
-                  <div style={{ display: 'inline-flex', borderRadius: '6px', border: '1px solid #cbd5e1', overflow: 'hidden' }}>
-                    <button
-                      type="button"
-                      onClick={() => setEndAmPm('AM')}
-                      style={{
-                        padding: '6px 12px',
-                        fontSize: '11px',
-                        fontWeight: 700,
-                        border: 'none',
-                        cursor: 'pointer',
-                        background: endAmPm === 'AM' ? '#d97706' : '#f8fafc',
-                        color: endAmPm === 'AM' ? '#ffffff' : '#64748b',
-                        transition: 'all 0.15s ease',
-                      }}
-                    >
-                      AM
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setEndAmPm('PM')}
-                      style={{
-                        padding: '6px 12px',
-                        fontSize: '11px',
-                        fontWeight: 700,
-                        border: 'none',
-                        cursor: 'pointer',
-                        background: endAmPm === 'PM' ? 'var(--teal)' : '#f8fafc',
-                        color: endAmPm === 'PM' ? '#ffffff' : '#64748b',
-                        transition: 'all 0.15s ease',
-                      }}
-                    >
-                      PM
-                    </button>
-                  </div>
-                </div>
+              {/* Shift End Time Picker (matching media_1793197267056_abdb63bf.png) */}
+              <div>
+                <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--muted)', display: 'block', marginBottom: '4px' }}>
+                  Shift End Time
+                </label>
+                <input
+                  type="time"
+                  value={joinTime24(endHour, endMinute, endAmPm)}
+                  onChange={(e) => {
+                    const s = splitTime(e.target.value)
+                    setEndHour(s.hour)
+                    setEndMinute(s.minute)
+                    setEndAmPm(s.ampm)
+                  }}
+                  className="text-input"
+                  style={{ width: '100%', height: '38px', padding: '6px 12px', fontSize: '13px', borderRadius: '8px', border: '1px solid var(--line)', background: '#fff' }}
+                  required
+                />
               </div>
 
-              {/* Grace & Geofence Fields */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                <div>
-                  <label style={{ fontSize: '11px', display: 'block', color: 'var(--muted)', marginBottom: '3px', fontWeight: 600 }}>Grace (Minutes)</label>
-                  <input
-                    type="number"
-                    min="0"
-                    max="60"
-                    className="text-input"
-                    value={graceMins}
-                    onChange={(e) => setGraceMins(e.target.value)}
-                    style={{ width: '100%', padding: '5px 8px', fontSize: '12px' }}
-                    required
-                  />
-                </div>
-                <div>
-                  <label style={{ fontSize: '11px', display: 'block', color: 'var(--muted)', marginBottom: '3px', fontWeight: 600 }}>Geofence Radius (Meters)</label>
-                  <input
-                    type="number"
-                    min="5"
-                    max="1000"
-                    step="5"
-                    className="text-input"
-                    value={geofenceRadius}
-                    onChange={(e) => setGeofenceRadius(e.target.value)}
-                    style={{ width: '100%', padding: '5px 8px', fontSize: '12px' }}
-                    required
-                  />
-                </div>
+              {/* Grace Period (Minutes) */}
+              <div>
+                <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--muted)', display: 'block', marginBottom: '4px' }}>
+                  Grace Period (Minutes)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  max="120"
+                  value={graceMins}
+                  onChange={(e) => setGraceMins(e.target.value)}
+                  className="text-input"
+                  style={{ width: '100%', height: '38px', padding: '6px 12px', fontSize: '13px', borderRadius: '8px', border: '1px solid var(--line)', background: '#fff' }}
+                  required
+                />
               </div>
 
-              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11px', cursor: 'pointer' }}>
+              {/* Max GPS Geofence Radius (Meters) */}
+              <div>
+                <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--muted)', display: 'block', marginBottom: '4px' }}>
+                  Max GPS Geofence Radius (Meters, e.g. 50m)
+                </label>
+                <input
+                  type="number"
+                  min="5"
+                  max="1000"
+                  step="5"
+                  value={geofenceRadius}
+                  onChange={(e) => setGeofenceRadius(e.target.value)}
+                  className="text-input"
+                  style={{ width: '100%', height: '38px', padding: '6px 12px', fontSize: '13px', borderRadius: '8px', border: '1px solid var(--line)', background: '#fff' }}
+                  required
+                />
+                <small style={{ color: 'var(--muted)', fontSize: '11px', display: 'block', marginTop: '3px' }}>
+                  Permitted distance radius for attendance verification (Default: 50m).
+                </small>
+              </div>
+
+              {/* Checkbox */}
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11.5px', cursor: 'pointer', margin: '2px 0' }}>
                 <input
                   type="checkbox"
                   checked={wifiReq}
                   onChange={(e) => setWifiReq(e.target.checked)}
-                  style={{ accentColor: 'var(--teal)' }}
+                  style={{ accentColor: 'var(--teal)', width: '16px', height: '16px' }}
                 />
                 Require BOTH registered office network AND accurate GPS for punch-in
               </label>
@@ -5167,29 +5079,48 @@ function AdminSettingsModule({ user: propUser }) {
                 <div>• <strong>Late Arrivals:</strong> Marked as Late Login if checked in after the grace cutoff</div>
               </div>
 
-              {/* Direct Recalculate Button */}
-              <button
-                type="button"
-                className="btn btn-secondary"
-                disabled={recalculating}
-                onClick={handleRecalculateAttendance}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '6px',
-                  padding: '8px 12px',
-                  fontSize: '11.5px',
-                  fontWeight: 600,
-                  background: '#fef3c7',
-                  border: '1px solid #fde68a',
-                  color: '#92400e',
-                  borderRadius: '6px',
-                  cursor: recalculating ? 'wait' : 'pointer',
-                }}
-              >
-                <span>⚡</span> {recalculating ? "Recalculating Today's Records..." : "Recalculate Today's Attendance Now"}
-              </button>
+              {/* Direct Save Shift & Recalculate Button Bar on this Card */}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center', marginTop: '4px' }}>
+                <Button
+                  type="button"
+                  onClick={handleSavePolicies}
+                  style={{
+                    flex: 1,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px',
+                    padding: '9px 16px',
+                    fontSize: '12px',
+                    fontWeight: 700,
+                  }}
+                >
+                  <Check size={14} /> Save Shift & Punch Rules
+                </Button>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  disabled={recalculating}
+                  onClick={handleRecalculateAttendance}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px',
+                    padding: '9px 14px',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    background: '#fef3c7',
+                    border: '1px solid #fde68a',
+                    color: '#92400e',
+                    borderRadius: '8px',
+                    cursor: recalculating ? 'wait' : 'pointer',
+                  }}
+                  title="Recalculate all attendance records for today against these shift rules"
+                >
+                  <span>⚡</span> {recalculating ? 'Recalculating…' : 'Recalculate Roster'}
+                </button>
+              </div>
             </div>
 
             {/* RIGHT: ANNUAL LEAVE ALLOWANCES & APPROVAL RULES */}
