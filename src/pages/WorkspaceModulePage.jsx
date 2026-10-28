@@ -356,6 +356,21 @@ function AttendanceModule() {
         title="Attendance & Presence Control Center"
         description="Monitor daily workforce presence, live Wi-Fi SSID geofencing, check-in / check-out actions, and monthly working day summaries."
       >
+        <Button
+          variant="secondary"
+          onClick={async () => {
+            try {
+              const res = await hrStore.recalculateTodayAttendance()
+              const count = res?.updatedCount ?? res?.count ?? 0
+              showFeedback(`⚡ Recalculated today's presence roster! Verified ${count} records against active shift rules.`)
+            } catch (err) {
+              showFeedback(`✕ Failed to recalculate attendance: ${err.message}`)
+            }
+          }}
+          title="Re-evaluate all attendance records for today against active company shift rules"
+        >
+          <span>⚡</span> Recalculate Roster
+        </Button>
         <Button variant="secondary" onClick={handleExportCSV}>
           <Download size={15} /> Export CSV
         </Button>

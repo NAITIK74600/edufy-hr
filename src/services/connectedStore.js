@@ -1540,6 +1540,30 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
         return true
       })
     },
+    recalculateTodayAttendance(date = null) {
+      if (!user && rawLocal.recalculateTodayAttendance) return rawLocal.recalculateTodayAttendance(date)
+      return mutate(async () => {
+        let res = null
+        try {
+          res = await apiClient.post('/attendance/recalculate', { date })
+        } catch (err) {
+          console.warn('Backend recalculate attendance failed:', err?.message || err)
+        }
+        if (rawLocal.recalculateTodayAttendance) {
+          rawLocal.recalculateTodayAttendance(date)
+        }
+        try {
+          const management = ['admin', 'hr'].includes(user?.role)
+          const freshAtt = await apiClient.get(management ? '/attendance' : '/attendance/self')
+          if (freshAtt?.data) {
+            state().attendance = freshAtt.data
+            if (rawLocal.getState) rawLocal.getState().attendance = freshAtt.data
+            notify()
+          }
+        } catch {}
+        return res?.data?.data || res?.data || { success: true }
+      })
+    },
     markAttendance(record) {
       if (!user && rawLocal.markAttendance) return rawLocal.markAttendance(record)
       return mutate(async () => {

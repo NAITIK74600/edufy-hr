@@ -4529,79 +4529,90 @@ function AdminSettingsModule({ user: propUser }) {
   const [newIpLabel, setNewIpLabel] = useState('')
   const [manualIp, setManualIp] = useState('')
 
-  function parseTimeHelper(val, referenceEndVal = null, isEndTime = false) {
-    if (!val) {
-      if (isEndTime) return { h24: '18:30', h12: '06:30 PM', isPM: true, period: 'Evening' }
-      return { h24: '09:30', h12: '09:30 AM', isPM: false, period: 'Morning' }
-    }
+  function splitTime(val, defaultH = '09', defaultM = '30', defaultAmPm = 'AM') {
+    if (!val) return { hour: defaultH, minute: defaultM, ampm: defaultAmPm }
     const clean = String(val).trim().replace(/[\u202F\u00A0]/g, ' ')
     const m = clean.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/i)
-    if (!m) return { h24: val, h12: val, isPM: false, period: 'Morning' }
+    if (!m) return { hour: defaultH, minute: defaultM, ampm: defaultAmPm }
     let h = parseInt(m[1], 10)
-    const min = m[2]
+    const min = String(m[2]).padStart(2, '0')
     const meridiem = m[3]?.toUpperCase()
-    if (meridiem === 'PM' && h < 12) h += 12
-    if (meridiem === 'AM' && h === 12) h = 0
-
-    // Auto-detect PM for shift End Time if entered without meridiem between 1 and 11
-    if (!meridiem && isEndTime && h >= 1 && h <= 11) {
-      h += 12
+    let ampm = meridiem || (h >= 12 ? 'PM' : 'AM')
+    let h12 = h % 12 || 12
+    return {
+      hour: String(h12).padStart(2, '0'),
+      minute: min,
+      ampm: ampm === 'PM' ? 'PM' : 'AM',
     }
-
-    // Auto-detect PM for shift Start Time if End Time is in the evening
-    if (!meridiem && !isEndTime && referenceEndVal) {
-      const endClean = String(referenceEndVal).trim().replace(/[\u202F\u00A0]/g, ' ')
-      const endMatch = endClean.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/i)
-      if (endMatch) {
-        let eh = parseInt(endMatch[1], 10)
-        const em = endMatch[3]?.toUpperCase()
-        if (em === 'PM' && eh < 12) eh += 12
-        if (em === 'AM' && eh === 12) eh = 0
-        if (!em && eh >= 1 && eh <= 11) eh += 12
-        if (eh >= 13 && h < 12 && (eh - h) > 8 && (h + 12) < (eh + 2)) {
-          h += 12
-        }
-      }
-    }
-
-    const isPM = h >= 12
-    const h12 = h % 12 || 12
-    const h12Str = `${String(h12).padStart(2, '0')}:${min} ${isPM ? 'PM' : 'AM'}`
-    const h24Str = `${String(h).padStart(2, '0')}:${min}`
-    return { h24: h24Str, h12: h12Str, isPM, period: isPM ? 'Evening' : 'Morning' }
   }
 
-  function switchTimeAmPm(val, referenceEndVal = null, isEndTime = false) {
-    const parsed = parseTimeHelper(val, referenceEndVal, isEndTime)
-    let [h, m] = parsed.h24.split(':').map(Number)
-    if (parsed.isPM) {
-      h = (h - 12) % 24
-    } else {
-      h = (h + 12) % 24
-    }
-    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+  function joinTime24(hour, minute, ampm) {
+    let h = parseInt(hour, 10) || 12
+    const m = String(minute || '00').padStart(2, '0')
+    if (ampm === 'PM' && h < 12) h += 12
+    if (ampm === 'AM' && h === 12) h = 0
+    return `${String(h).padStart(2, '0')}:${m}`
+  }
+
+  function joinTime12(hour, minute, ampm) {
+    const h = String(parseInt(hour, 10) || 12).padStart(2, '0')
+    const m = String(minute || '00').padStart(2, '0')
+    return `${h}:${m} ${ampm}`
   }
 
   // Policy Form State
   const initialAtt = storeState.companySettings?.attendanceRules || {}
   const initialLeave = storeState.companySettings?.leavePolicies || {}
-  const [startTime, setStartTime] = useState(initialAtt.workStartTime || '09:30')
-  const [endTime, setEndTime] = useState(initialAtt.workEndTime || '18:30')
+  const initStart = splitTime(initialAtt.workStartTime, '09', '30', 'AM')
+  const initEnd = splitTime(initialAtt.workEndTime, '06', '30', 'PM')
+
+  const [startHour, setStartHour] = useState(initStart.hour)
+  const [startMinute, setStartMinute] = useState(initStart.minute)
+  const [startAmPm, setStartAmPm] = useState(initStart.ampm)
+
+  const [endHour, setEndHour] = useState(initEnd.hour)
+  const [endMinute, setEndMinute] = useState(initEnd.minute)
+  const [endAmPm, setEndAmPm] = useState(initEnd.ampm)
+
   const [graceMins, setGraceMins] = useState(initialAtt.gracePeriodMinutes ?? 15)
   const [wifiReq, setWifiReq] = useState(initialAtt.requireOfficeNetworkAndGps ?? true)
   const [geofenceRadius, setGeofenceRadius] = useState(initialAtt.maxGeofenceRadiusMeters || 50)
+  const [recalculating, setRecalculating] = useState(false)
+
   const [casualQuota, setCasualQuota] = useState(initialLeave.casualQuota ?? 12)
   const [sickQuota, setSickQuota] = useState(initialLeave.sickQuota ?? 10)
   const [earnedQuota, setEarnedQuota] = useState(initialLeave.earnedQuota ?? 15)
   const [maxCarry, setMaxCarry] = useState(initialLeave.maxCarryForwardDays ?? 8)
   const [approvalWorkflow, setApprovalWorkflow] = useState(initialLeave.approvalWorkflow || 'manager_hr')
 
+  const applyShiftPreset = (preset) => {
+    if (preset === 'day') {
+      setStartHour('09'); setStartMinute('30'); setStartAmPm('AM');
+      setEndHour('06'); setEndMinute('30'); setEndAmPm('PM');
+    } else if (preset === 'morning') {
+      setStartHour('08'); setStartMinute('00'); setStartAmPm('AM');
+      setEndHour('04'); setEndMinute('30'); setEndAmPm('PM');
+    } else if (preset === 'evening') {
+      setStartHour('06'); setStartMinute('30'); setStartAmPm('PM');
+      setEndHour('08'); setEndMinute('00'); setEndAmPm('PM');
+    } else if (preset === 'night') {
+      setStartHour('08'); setStartMinute('00'); setStartAmPm('PM');
+      setEndHour('11'); setEndMinute('00'); setEndAmPm('PM');
+    }
+  }
+
   // Keep form fields synchronized whenever companySettings loads or updates from backend
   useEffect(() => {
     const att = storeState.companySettings?.attendanceRules
     if (att) {
-      if (att.workStartTime) setStartTime(att.workStartTime)
-      if (att.workEndTime) setEndTime(att.workEndTime)
+      if (att.workStartTime) {
+        const s = splitTime(att.workStartTime, '09', '30', 'AM')
+        setStartHour(s.hour); setStartMinute(s.minute); setStartAmPm(s.ampm)
+      }
+      if (att.workEndTime) {
+        const e = splitTime(att.workEndTime, '06', '30', 'PM')
+        setEndHour(e.hour); setEndMinute(e.minute); setEndAmPm(e.ampm)
+      }
       if (att.gracePeriodMinutes !== undefined) setGraceMins(att.gracePeriodMinutes)
       if (att.requireOfficeNetworkAndGps !== undefined) setWifiReq(att.requireOfficeNetworkAndGps)
       if (att.maxGeofenceRadiusMeters !== undefined) setGeofenceRadius(att.maxGeofenceRadiusMeters)
@@ -4778,8 +4789,8 @@ function AdminSettingsModule({ user: propUser }) {
   const handleSavePolicies = async (e) => {
     e.preventDefault()
     try {
-      const cleanEnd = parseTimeHelper(endTime, null, true).h24
-      const cleanStart = parseTimeHelper(startTime, cleanEnd, false).h24
+      const cleanStart = joinTime24(startHour, startMinute, startAmPm)
+      const cleanEnd = joinTime24(endHour, endMinute, endAmPm)
       await hrStore.updateCompanySettings({
         attendanceRules: {
           workStartTime: cleanStart,
@@ -4798,11 +4809,38 @@ function AdminSettingsModule({ user: propUser }) {
           requireHrApproval: approvalWorkflow === 'hr' || approvalWorkflow === 'manager_hr',
         },
       })
-      setNotice('✓ Successfully saved attendance rules and annual leave policies to the database!')
-      setTimeout(() => setNotice(''), 4500)
+      await hrStore.recalculateTodayAttendance()
+      setNotice(`✓ Saved shift (${joinTime12(startHour, startMinute, startAmPm)} – ${joinTime12(endHour, endMinute, endAmPm)}) & policies! Today's attendance records recalculated successfully.`)
+      setTimeout(() => setNotice(''), 5500)
     } catch (err) {
       setNotice(`✕ Failed to save settings: ${err.message || 'Please check your connection and try again.'}`)
       setTimeout(() => setNotice(''), 6000)
+    }
+  }
+
+  const handleRecalculateAttendance = async () => {
+    setRecalculating(true)
+    try {
+      const cleanStart = joinTime24(startHour, startMinute, startAmPm)
+      const cleanEnd = joinTime24(endHour, endMinute, endAmPm)
+      await hrStore.updateCompanySettings({
+        attendanceRules: {
+          workStartTime: cleanStart,
+          workEndTime: cleanEnd,
+          gracePeriodMinutes: Number(graceMins),
+          requireOfficeNetworkAndGps: Boolean(wifiReq),
+          maxGeofenceRadiusMeters: Number(geofenceRadius) || 50,
+        },
+      })
+      const res = await hrStore.recalculateTodayAttendance()
+      const count = res?.updatedCount ?? res?.count ?? 0
+      setNotice(`⚡ Recalculated today's presence roster! Verified ${count} attendance records against ${joinTime12(startHour, startMinute, startAmPm)} – ${joinTime12(endHour, endMinute, endAmPm)} shift. All on-time check-ins updated.`)
+      setTimeout(() => setNotice(''), 6000)
+    } catch (err) {
+      setNotice(`✕ Recalculation failed: ${err.message || 'Unknown error'}`)
+      setTimeout(() => setNotice(''), 6000)
+    } finally {
+      setRecalculating(false)
     }
   }
 
@@ -4860,69 +4898,220 @@ function AdminSettingsModule({ user: propUser }) {
 
         <form onSubmit={handleSavePolicies}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px', marginBottom: '16px' }}>
-            {/* LEFT: SHIFT & PUNCH RULES */}
-            <div style={{ background: '#faf9f5', border: '1px solid var(--line)', borderRadius: '6px', padding: '14px' }}>
-              <strong style={{ fontSize: '13px', display: 'block', marginBottom: '10px' }}>Shift & Punch Rules</strong>
-              <div style={{ display: 'grid', gap: '10px' }}>
-                <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                    <label style={{ fontSize: '11px', color: 'var(--muted)', margin: 0, fontWeight: 600 }}>Shift Start Time</label>
-                    <span style={{ fontSize: '10.5px', fontWeight: 700, color: parseTimeHelper(startTime, endTime, false).isPM ? '#0284c7' : '#d97706', background: parseTimeHelper(startTime, endTime, false).isPM ? '#e0f2fe' : '#fef3c7', padding: '1px 6px', borderRadius: '4px' }}>
-                      {parseTimeHelper(startTime, endTime, false).h12} ({parseTimeHelper(startTime, endTime, false).period})
-                    </span>
-                  </div>
-                  <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                    <input
-                      type="time"
+            {/* LEFT: SHIFT & PUNCH RULES (COMPLETELY RECREATED) */}
+            <div style={{ background: '#faf9f5', border: '1px solid var(--line)', borderRadius: '8px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
+                <strong style={{ fontSize: '13.5px', color: 'var(--text)' }}>Shift & Punch Rules</strong>
+                <span className="role-badge" style={{ fontSize: '10.5px', background: '#e0f2fe', color: '#0369a1', border: '1px solid #bae6fd' }}>
+                  General ({joinTime12(startHour, startMinute, startAmPm)} – {joinTime12(endHour, endMinute, endAmPm)})
+                </span>
+              </div>
+
+              {/* Quick Shift Presets Bar */}
+              <div>
+                <label style={{ fontSize: '10.5px', fontWeight: 700, color: 'var(--muted)', display: 'block', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  ⚡ Quick Shift Presets
+                </label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => applyShiftPreset('day')}
+                    style={{ fontSize: '11px', padding: '4px 8px', borderRadius: '6px', cursor: 'pointer', background: startHour === '09' && startMinute === '30' && startAmPm === 'AM' && endHour === '06' && endAmPm === 'PM' ? 'var(--teal)' : '#fff', color: startHour === '09' && startMinute === '30' && startAmPm === 'AM' && endHour === '06' && endAmPm === 'PM' ? '#fff' : 'inherit' }}
+                  >
+                    ☀️ Day (09:30 AM – 06:30 PM)
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => applyShiftPreset('morning')}
+                    style={{ fontSize: '11px', padding: '4px 8px', borderRadius: '6px', cursor: 'pointer', background: startHour === '08' && startMinute === '00' && startAmPm === 'AM' && endHour === '04' && endAmPm === 'PM' ? 'var(--teal)' : '#fff', color: startHour === '08' && startMinute === '00' && startAmPm === 'AM' && endHour === '04' && endAmPm === 'PM' ? '#fff' : 'inherit' }}
+                  >
+                    🌅 Morning (08:00 AM – 04:30 PM)
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => applyShiftPreset('evening')}
+                    style={{ fontSize: '11px', padding: '4px 8px', borderRadius: '6px', cursor: 'pointer', background: startHour === '06' && startMinute === '30' && startAmPm === 'PM' && endHour === '08' && endAmPm === 'PM' ? 'var(--teal)' : '#fff', color: startHour === '06' && startMinute === '30' && startAmPm === 'PM' && endHour === '08' && endAmPm === 'PM' ? '#fff' : 'inherit' }}
+                  >
+                    🌆 Evening (06:30 PM – 08:00 PM)
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => applyShiftPreset('night')}
+                    style={{ fontSize: '11px', padding: '4px 8px', borderRadius: '6px', cursor: 'pointer', background: startHour === '08' && startMinute === '00' && startAmPm === 'PM' && endHour === '11' && endAmPm === 'PM' ? 'var(--teal)' : '#fff', color: startHour === '08' && startMinute === '00' && startAmPm === 'PM' && endHour === '11' && endAmPm === 'PM' ? '#fff' : 'inherit' }}
+                  >
+                    🌙 Night (08:00 PM – 11:00 PM)
+                  </button>
+                </div>
+              </div>
+
+              {/* Shift Start Time Picker */}
+              <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '6px', padding: '10px 12px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                  <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--muted)', margin: 0 }}>Shift Start Time</label>
+                  <span style={{ fontSize: '11px', fontWeight: 700, color: startAmPm === 'PM' ? '#0369a1' : '#b45309' }}>
+                    {joinTime12(startHour, startMinute, startAmPm)} ({startAmPm === 'PM' ? 'Evening/Night' : 'Morning'})
+                  </span>
+                </div>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flex: 1 }}>
+                    <select
                       className="text-input"
-                      value={parseTimeHelper(startTime, endTime, false).h24}
-                      onChange={(e) => setStartTime(e.target.value)}
-                      style={{ flex: 1, padding: '5px 8px', fontSize: '12px' }}
-                      required
+                      value={startHour}
+                      onChange={(e) => setStartHour(e.target.value)}
+                      style={{ flex: 1, padding: '6px 8px', fontSize: '12px', background: '#fff' }}
+                      title="Select Start Hour"
+                    >
+                      {['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12'].map((h) => (
+                        <option key={`sh-${h}`} value={h}>{h}</option>
+                      ))}
+                    </select>
+                    <span style={{ fontWeight: 700, color: 'var(--muted)' }}>:</span>
+                    <input
+                      type="text"
+                      className="text-input"
+                      value={startMinute}
+                      onChange={(e) => {
+                        const v = e.target.value.replace(/\D/g, '').slice(0, 2)
+                        setStartMinute(v)
+                      }}
+                      onBlur={() => {
+                        let m = parseInt(startMinute || '0', 10)
+                        if (isNaN(m) || m < 0) m = 0
+                        if (m > 59) m = 59
+                        setStartMinute(String(m).padStart(2, '0'))
+                      }}
+                      placeholder="00"
+                      maxLength={2}
+                      style={{ width: '48px', padding: '6px 8px', fontSize: '12px', textAlign: 'center', background: '#fff' }}
+                      title="Minute (00-59)"
                     />
+                  </div>
+                  {/* AM / PM Segmented Buttons */}
+                  <div style={{ display: 'inline-flex', borderRadius: '6px', border: '1px solid #cbd5e1', overflow: 'hidden' }}>
                     <button
                       type="button"
-                      className="btn btn-secondary"
-                      onClick={() => setStartTime(switchTimeAmPm(startTime, endTime, false))}
-                      title="Click to flip between AM (Morning) and PM (Evening)"
-                      style={{ padding: '4px 8px', fontSize: '11px', whiteSpace: 'nowrap', height: '32px', cursor: 'pointer' }}
+                      onClick={() => setStartAmPm('AM')}
+                      style={{
+                        padding: '6px 12px',
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        border: 'none',
+                        cursor: 'pointer',
+                        background: startAmPm === 'AM' ? '#d97706' : '#f8fafc',
+                        color: startAmPm === 'AM' ? '#ffffff' : '#64748b',
+                        transition: 'all 0.15s ease',
+                      }}
                     >
-                      {parseTimeHelper(startTime, endTime, false).isPM ? '☀️ Set to AM' : '🌙 Set to PM'}
+                      AM
                     </button>
-                  </div>
-                  <div style={{ fontSize: '10px', color: 'var(--muted)', marginTop: '3px' }}>
-                    Punch-in after <strong>{parseTimeHelper(startTime, endTime, false).h12}</strong> (+{graceMins}m grace) is marked as Late.
-                  </div>
-                </div>
-                <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                    <label style={{ fontSize: '11px', color: 'var(--muted)', margin: 0, fontWeight: 600 }}>Shift End Time</label>
-                    <span style={{ fontSize: '10.5px', fontWeight: 700, color: parseTimeHelper(endTime, startTime, true).isPM ? '#0284c7' : '#d97706', background: parseTimeHelper(endTime, startTime, true).isPM ? '#e0f2fe' : '#fef3c7', padding: '1px 6px', borderRadius: '4px' }}>
-                      {parseTimeHelper(endTime, startTime, true).h12} ({parseTimeHelper(endTime, startTime, true).period})
-                    </span>
-                  </div>
-                  <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                    <input
-                      type="time"
-                      className="text-input"
-                      value={parseTimeHelper(endTime, startTime, true).h24}
-                      onChange={(e) => setEndTime(e.target.value)}
-                      style={{ flex: 1, padding: '5px 8px', fontSize: '12px' }}
-                      required
-                    />
                     <button
                       type="button"
-                      className="btn btn-secondary"
-                      onClick={() => setEndTime(switchTimeAmPm(endTime, startTime, true))}
-                      title="Click to flip between AM (Morning) and PM (Evening)"
-                      style={{ padding: '4px 8px', fontSize: '11px', whiteSpace: 'nowrap', height: '32px', cursor: 'pointer' }}
+                      onClick={() => setStartAmPm('PM')}
+                      style={{
+                        padding: '6px 12px',
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        border: 'none',
+                        cursor: 'pointer',
+                        background: startAmPm === 'PM' ? 'var(--teal)' : '#f8fafc',
+                        color: startAmPm === 'PM' ? '#ffffff' : '#64748b',
+                        transition: 'all 0.15s ease',
+                      }}
                     >
-                      {parseTimeHelper(endTime, startTime, true).isPM ? '☀️ Set to AM' : '🌙 Set to PM'}
+                      PM
                     </button>
                   </div>
                 </div>
+              </div>
+
+              {/* Shift End Time Picker */}
+              <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '6px', padding: '10px 12px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                  <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--muted)', margin: 0 }}>Shift End Time</label>
+                  <span style={{ fontSize: '11px', fontWeight: 700, color: endAmPm === 'PM' ? '#0369a1' : '#b45309' }}>
+                    {joinTime12(endHour, endMinute, endAmPm)} ({endAmPm === 'PM' ? 'Evening/Night' : 'Morning'})
+                  </span>
+                </div>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flex: 1 }}>
+                    <select
+                      className="text-input"
+                      value={endHour}
+                      onChange={(e) => setEndHour(e.target.value)}
+                      style={{ flex: 1, padding: '6px 8px', fontSize: '12px', background: '#fff' }}
+                      title="Select End Hour"
+                    >
+                      {['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12'].map((h) => (
+                        <option key={`eh-${h}`} value={h}>{h}</option>
+                      ))}
+                    </select>
+                    <span style={{ fontWeight: 700, color: 'var(--muted)' }}>:</span>
+                    <input
+                      type="text"
+                      className="text-input"
+                      value={endMinute}
+                      onChange={(e) => {
+                        const v = e.target.value.replace(/\D/g, '').slice(0, 2)
+                        setEndMinute(v)
+                      }}
+                      onBlur={() => {
+                        let m = parseInt(endMinute || '0', 10)
+                        if (isNaN(m) || m < 0) m = 0
+                        if (m > 59) m = 59
+                        setEndMinute(String(m).padStart(2, '0'))
+                      }}
+                      placeholder="00"
+                      maxLength={2}
+                      style={{ width: '48px', padding: '6px 8px', fontSize: '12px', textAlign: 'center', background: '#fff' }}
+                      title="Minute (00-59)"
+                    />
+                  </div>
+                  {/* AM / PM Segmented Buttons */}
+                  <div style={{ display: 'inline-flex', borderRadius: '6px', border: '1px solid #cbd5e1', overflow: 'hidden' }}>
+                    <button
+                      type="button"
+                      onClick={() => setEndAmPm('AM')}
+                      style={{
+                        padding: '6px 12px',
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        border: 'none',
+                        cursor: 'pointer',
+                        background: endAmPm === 'AM' ? '#d97706' : '#f8fafc',
+                        color: endAmPm === 'AM' ? '#ffffff' : '#64748b',
+                        transition: 'all 0.15s ease',
+                      }}
+                    >
+                      AM
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEndAmPm('PM')}
+                      style={{
+                        padding: '6px 12px',
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        border: 'none',
+                        cursor: 'pointer',
+                        background: endAmPm === 'PM' ? 'var(--teal)' : '#f8fafc',
+                        color: endAmPm === 'PM' ? '#ffffff' : '#64748b',
+                        transition: 'all 0.15s ease',
+                      }}
+                    >
+                      PM
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Grace & Geofence Fields */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                 <div>
-                  <label style={{ fontSize: '11px', display: 'block', color: 'var(--muted)', marginBottom: '3px' }}>Grace Period (Minutes)</label>
+                  <label style={{ fontSize: '11px', display: 'block', color: 'var(--muted)', marginBottom: '3px', fontWeight: 600 }}>Grace (Minutes)</label>
                   <input
                     type="number"
                     min="0"
@@ -4935,7 +5124,7 @@ function AdminSettingsModule({ user: propUser }) {
                   />
                 </div>
                 <div>
-                  <label style={{ fontSize: '11px', display: 'block', color: 'var(--muted)', marginBottom: '3px' }}>Max GPS Geofence Radius (Meters, e.g. 50m)</label>
+                  <label style={{ fontSize: '11px', display: 'block', color: 'var(--muted)', marginBottom: '3px', fontWeight: 600 }}>Geofence Radius (Meters)</label>
                   <input
                     type="number"
                     min="5"
@@ -4947,20 +5136,60 @@ function AdminSettingsModule({ user: propUser }) {
                     style={{ width: '100%', padding: '5px 8px', fontSize: '12px' }}
                     required
                   />
-                  <small style={{ fontSize: '10px', color: 'var(--muted)', display: 'block', marginTop: '2px' }}>
-                    Permitted distance radius for attendance verification (Default: 50m).
-                  </small>
                 </div>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11px', cursor: 'pointer', marginTop: '4px' }}>
-                  <input
-                    type="checkbox"
-                    checked={wifiReq}
-                    onChange={(e) => setWifiReq(e.target.checked)}
-                    style={{ accentColor: 'var(--teal)' }}
-                  />
-                  Require BOTH registered office network AND accurate GPS for punch-in
-                </label>
               </div>
+
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11px', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={wifiReq}
+                  onChange={(e) => setWifiReq(e.target.checked)}
+                  style={{ accentColor: 'var(--teal)' }}
+                />
+                Require BOTH registered office network AND accurate GPS for punch-in
+              </label>
+
+              {/* Dynamic Live Policy Card */}
+              <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '6px', padding: '10px 12px', fontSize: '11px', color: '#166534', lineHeight: 1.5 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700, marginBottom: '4px' }}>
+                  <span>🟢 Active Rule Summary:</span>
+                </div>
+                <div>• <strong>Shift Hours:</strong> {joinTime12(startHour, startMinute, startAmPm)} to {joinTime12(endHour, endMinute, endAmPm)}</div>
+                <div>• <strong>On-Time Arrival:</strong> Up to {(() => {
+                  let [h, m] = joinTime24(startHour, startMinute, startAmPm).split(':').map(Number)
+                  let tot = h * 60 + m + Number(graceMins || 15)
+                  let lh = Math.floor(tot / 60) % 24
+                  let lm = tot % 60
+                  let am = lh >= 12 ? 'PM' : 'AM'
+                  lh = lh % 12 || 12
+                  return `${String(lh).padStart(2, '0')}:${String(lm).padStart(2, '0')} ${am}`
+                })()} (+{graceMins}m grace window)</div>
+                <div>• <strong>Late Arrivals:</strong> Marked as Late Login if checked in after the grace cutoff</div>
+              </div>
+
+              {/* Direct Recalculate Button */}
+              <button
+                type="button"
+                className="btn btn-secondary"
+                disabled={recalculating}
+                onClick={handleRecalculateAttendance}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  padding: '8px 12px',
+                  fontSize: '11.5px',
+                  fontWeight: 600,
+                  background: '#fef3c7',
+                  border: '1px solid #fde68a',
+                  color: '#92400e',
+                  borderRadius: '6px',
+                  cursor: recalculating ? 'wait' : 'pointer',
+                }}
+              >
+                <span>⚡</span> {recalculating ? "Recalculating Today's Records..." : "Recalculate Today's Attendance Now"}
+              </button>
             </div>
 
             {/* RIGHT: ANNUAL LEAVE ALLOWANCES & APPROVAL RULES */}
@@ -5041,7 +5270,28 @@ function AdminSettingsModule({ user: propUser }) {
             </div>
           </div>
 
-          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', alignItems: 'center' }}>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              disabled={recalculating}
+              onClick={handleRecalculateAttendance}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '8px 14px',
+                fontSize: '12px',
+                fontWeight: 600,
+                background: '#fef3c7',
+                border: '1px solid #fde68a',
+                color: '#92400e',
+                borderRadius: '8px',
+                cursor: recalculating ? 'wait' : 'pointer',
+              }}
+            >
+              <span>⚡</span> {recalculating ? "Recalculating Roster..." : "Recalculate Today's Attendance"}
+            </button>
             <Button type="submit">
               <Check size={13} /> Save Organization Policies
             </Button>

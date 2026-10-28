@@ -532,6 +532,88 @@ test('Evening shift normalization correctly recognizes PM shifts and prevents fa
   assert.equal(formatTime12('20:00', '18:36', true), '08:00 PM')
 })
 
+test('Recalculate attendance cleanses false late login and syncs active shift display', async () => {
+  const { createAttendanceService, parseTimeToMinutes, getNormalizedShiftMinutes } = await import('../src/modules/attendance/attendance.service.js')
+
+  // Mock repository with in-memory records
+  const records = [
+    {
+      id: 'att-test-1',
+      employeeId: 'ETS113828',
+      employeeName: 'Naitik Raj',
+      date: '2026-10-28',
+      checkIn: '07:50 PM',
+      checkOut: null,
+      status: 'late',
+      isLate: true,
+      lateCount: 1,
+      shift: 'General (09:30 AM – 06:30 PM)',
+      shiftCode: 'general',
+      totalHours: 'Active (Late)',
+      notes: 'Late Login (09:30 AM)',
+    },
+    {
+      id: 'att-test-2',
+      employeeId: 'ETS112991',
+      employeeName: 'Sandhiya P',
+      date: '2026-10-28',
+      checkIn: '06:53 PM',
+      checkOut: null,
+      status: 'late',
+      isLate: true,
+      lateCount: 1,
+      shift: 'General (09:30 AM – 06:30 PM)',
+      shiftCode: 'general',
+      totalHours: 'Active (Late)',
+      notes: 'Late Login (09:30 AM)',
+    },
+  ]
+
+  const mockRepo = {
+    list: async ({ date }) => records.filter((r) => r.date === date),
+    updateFields: async (id, fields) => {
+      const idx = records.findIndex((r) => r.id === id)
+      if (idx >= 0) {
+        records[idx] = { ...records[idx], ...fields }
+        return records[idx]
+      }
+      return null
+    },
+  }
+
+  const service = createAttendanceService({ repository: mockRepo })
+  service.updateConfig({
+    attendanceRules: {
+      workStartTime: '20:00',
+      workEndTime: '23:00',
+      gracePeriodMinutes: 15,
+    },
+  })
+
+  // Check-In 07:50 PM for 20:00 (08:00 PM) shift with 15m grace:
+  const inMins = parseTimeToMinutes('07:50 PM') // 1190
+  const shiftMins = getNormalizedShiftMinutes('20:00', '23:00', inMins) // 1200
+  assert.equal(inMins <= shiftMins + 15, true) // Must be ON-TIME
+
+  // Run recalculate
+  const result = await service.recalculateAttendance('2026-10-28')
+  assert.equal(result.updatedCount, 2)
+
+  // Verify records updated
+  const naitik = records.find((r) => r.employeeId === 'ETS113828')
+  assert.equal(naitik.isLate, false)
+  assert.equal(naitik.status, 'present')
+  assert.equal(naitik.lateCount, 0)
+  assert.equal(naitik.totalHours, 'Active (Live)')
+  assert.equal(naitik.shift, 'General (08:00 PM – 11:00 PM)')
+  assert.equal(naitik.notes, 'On-time verification (General Shift)')
+
+  const sandhiya = records.find((r) => r.employeeId === 'ETS112991')
+  assert.equal(sandhiya.isLate, false)
+  assert.equal(sandhiya.status, 'present')
+  assert.equal(sandhiya.totalHours, 'Active (Live)')
+})
+
 
 
 

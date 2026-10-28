@@ -151,6 +151,14 @@ export function createAttendanceRouter({ auth, service, useDatabase = false, per
   })
 
   // 1. Attendance Configuration & Policy
+  router.post('/recalculate', auth.authenticate, auth.requirePermission(PERMISSIONS.ATTENDANCE_WRITE), async (request, response, next) => {
+    try {
+      const date = request.body?.date
+      const result = await service.recalculateAttendance(date)
+      response.json({ success: true, data: result })
+    } catch (error) { next(error) }
+  })
+
   router.get('/config', auth.authenticate, (request, response) => {
     const rawConfig = service.getConfig()
     const isPrivileged = hasPermission(request.auth?.user, PERMISSIONS.ATTENDANCE_WRITE)
