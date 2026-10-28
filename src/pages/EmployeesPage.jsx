@@ -128,25 +128,32 @@ function EmployeeDirectory({ route } = {}) {
   const allEmployees = storeState.employees || []
 
   const allRoleOptions = useMemo(() => {
+    const deletedIds = new Set(storeState.deletedRoleIds || hrStore.getState?.()?.deletedRoleIds || [])
     const hrRoles = hrStore.getRoles ? hrStore.getRoles() : []
     const storeRoles = storeState.roles || []
     const roleMap = new Map()
-    // 1. Initial standard roles
+    // 1. Initial standard roles (excluding deleted ones)
     INITIAL_ROLES.forEach((r) => {
-      if (r?.id) roleMap.set(r.id, { id: r.id, name: r.name || r.label || r.id })
+      if (r?.id && !deletedIds.has(r.id)) {
+        roleMap.set(r.id, { id: r.id, name: r.name || r.label || r.id })
+      }
     })
     // 2. Roles from hrStore (which filters deleted roles and includes custom ones)
     hrRoles.forEach((r) => {
       const id = r.id || r.roleId
-      if (id) roleMap.set(id, { id, name: r.name || r.label || id })
+      if (id && !deletedIds.has(id)) {
+        roleMap.set(id, { id, name: r.name || r.label || id })
+      }
     })
     // 3. Roles in current storeState
     storeRoles.forEach((r) => {
       const id = r.id || r.roleId
-      if (id) roleMap.set(id, { id, name: r.name || r.label || id })
+      if (id && !deletedIds.has(id)) {
+        roleMap.set(id, { id, name: r.name || r.label || id })
+      }
     })
     return Array.from(roleMap.values())
-  }, [storeState.roles])
+  }, [storeState.roles, storeState.deletedRoleIds])
 
   const defaultNewForm = {
     employeeId: '',

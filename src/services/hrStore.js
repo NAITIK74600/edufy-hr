@@ -669,6 +669,27 @@ export const INITIAL_ROLES = [
       'holidays.read',
     ],
   },
+  {
+    id: 'employee',
+    name: 'Employee',
+    description: 'Standard enterprise employee account with self-service attendance, leave, tasks, salary slips, and company documents.',
+    badge: 'Employee',
+    isSystem: true,
+    permissions: [
+      'dashboard.read',
+      'leave.self.read',
+      'leave.self.write',
+      'attendance.read',
+      'attendance.write',
+      'payroll.self.read',
+      'tasks.read',
+      'training.read',
+      'documents.read',
+      'helpdesk.read',
+      'announcements.read',
+      'holidays.read',
+    ],
+  },
 ];
 
 export const INITIAL_DEPARTMENTS = [
@@ -4263,7 +4284,9 @@ const localStore = {
         status: newEmp.status === 'active' ? 'active' : 'inactive',
         avatarTone: 'teal',
         managerId: newEmp.managerId,
-        permissions: newEmp.role === 'admin' ? ['*'] : newEmp.role === 'hr' ? (INITIAL_USERS[1]?.permissions || []) : ['dashboard.read', 'leave.self.read', 'tasks.read', 'training.read', 'documents.read', 'helpdesk.read'],
+        permissions: (this.getRole(newEmp.role)?.permissions?.length)
+          ? this.getRole(newEmp.role).permissions
+          : (newEmp.role === 'admin' ? ['*'] : newEmp.role === 'hr' ? (INITIAL_USERS[1]?.permissions || []) : ['dashboard.read', 'leave.self.read', 'leave.self.write', 'attendance.read', 'attendance.write', 'attendance.self.read', 'payroll.self.read', 'tasks.read', 'training.read', 'documents.read', 'helpdesk.read', 'announcements.read', 'holidays.read']),
       }
       storeState.users = [newUser, ...(storeState.users || [])]
     }

@@ -88,6 +88,9 @@ export function findRoute(path) {
   if (path === '/employee/login') {
     return { path, label: 'Employee Login', group: 'Auth', description: 'Edufyi Employee Self-Service Authentication' }
   }
+  if (path === '/employee/organization') {
+    return allRoutes.find((route) => route.path === '/employee/hierarchy')
+  }
   const exact = allRoutes.find((route) => route.path === path)
   if (exact) return exact
   if (path.startsWith('/admin')) {

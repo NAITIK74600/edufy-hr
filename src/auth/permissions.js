@@ -151,45 +151,75 @@ export const ROLE_DEFAULT_PERMISSIONS = Object.freeze({
   director: LEADERSHIP_PERMISSIONS,
   co_founder: LEADERSHIP_PERMISSIONS,
   vertical_head: LEADERSHIP_PERMISSIONS,
+  general_manager: LEADERSHIP_PERMISSIONS,
+  assistant_general_manager: LEADERSHIP_PERMISSIONS,
   revenue_growth_manager: MANAGER_PERMISSIONS,
+  senior_manager: MANAGER_PERMISSIONS,
+  head_of_sales: MANAGER_PERMISSIONS,
+  head_of_marketing: MANAGER_PERMISSIONS,
   manager: MANAGER_PERMISSIONS,
   team_leader: TEAM_LEAD_PERMISSIONS,
   team_lead: TEAM_LEAD_PERMISSIONS,
   hr_executive: HR_DEFAULT_PERMISSIONS,
   hr: HR_DEFAULT_PERMISSIONS,
+  hr_intern: ESS_PERMISSIONS,
   operations_executive: ESS_PERMISSIONS,
   business_development_executive: ESS_PERMISSIONS,
   business_development_intern: ESS_PERMISSIONS,
   marketing_executive: ESS_PERMISSIONS,
   marketing_intern: ESS_PERMISSIONS,
+  digital_marketing_executive: ESS_PERMISSIONS,
+  digital_marketing_intern: ESS_PERMISSIONS,
   sde: ESS_PERMISSIONS,
   sde_intern: ESS_PERMISSIONS,
+  saas_intern: ESS_PERMISSIONS,
   seo_executive: ESS_PERMISSIONS,
   seo_intern: ESS_PERMISSIONS,
   post_sales_executive: ESS_PERMISSIONS,
   post_sales_intern: ESS_PERMISSIONS,
+  intern: ESS_PERMISSIONS,
   employee: ESS_PERMISSIONS,
 })
 
-export function hasPermission(user, permission) {
-  if (!permission) return true
-  let rolePerms = ROLE_DEFAULT_PERMISSIONS[user?.role] ?? []
-  if (typeof window !== 'undefined' && window.localStorage) {
-    try {
-      const stored = window.localStorage.getItem('edufyi.hrstore.v1')
-      if (stored) {
-        const parsed = JSON.parse(stored)
-        if (parsed.customRolePermissions && parsed.customRolePermissions[user?.role]) {
-          rolePerms = parsed.customRolePermissions[user?.role]
-        } else if (parsed.roles) {
-          const matched = parsed.roles.find((r) => r.id === user?.role)
-          if (matched && matched.permissions) {
-            rolePerms = matched.permissions
+export function getUserPermissions(user) {
+  if (user?.role === 'admin') return ['*']
+  if (Array.isArray(user?.permissions) && user.permissions.length > 0) {
+    return user.permissions
+  }
+  let rolePerms = ROLE_DEFAULT_PERMISSIONS[user?.role]
+  if (!rolePerms || rolePerms.length === 0) {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      try {
+        const stored = window.localStorage.getItem('edufyi.hrstore.v1')
+        if (stored) {
+          const parsed = JSON.parse(stored)
+          if (parsed.customRolePermissions && parsed.customRolePermissions[user?.role]) {
+            rolePerms = parsed.customRolePermissions[user?.role]
+          } else if (parsed.roles) {
+            const matched = parsed.roles.find((r) => r.id === user?.role || r.roleId === user?.role)
+            if (matched && matched.permissions && matched.permissions.length > 0) {
+              rolePerms = matched.permissions
+            }
           }
         }
-      }
-    } catch {}
+      } catch {}
+    }
   }
-  const permissions = [...new Set([...rolePerms, ...(user?.permissions ?? [])])]
+
+  if (rolePerms && rolePerms.length > 0) {
+    return rolePerms
+  }
+
+  const r = String(user?.role || '').toLowerCase()
+  if (r.includes('admin')) return ['*']
+  if (r.includes('hr')) return HR_DEFAULT_PERMISSIONS
+  if (r.includes('director') || r.includes('head') || r.includes('founder')) return LEADERSHIP_PERMISSIONS
+  if (r.includes('manager') || r.includes('lead')) return MANAGER_PERMISSIONS
+  return ESS_PERMISSIONS
+}
+
+export function hasPermission(user, permission) {
+  if (!permission) return true
+  const permissions = getUserPermissions(user)
   return permissions.includes('*') || permissions.includes(permission)
 }
