@@ -17,6 +17,16 @@ const settingsSchema = new mongoose.Schema({
     requireHrApproval: { type: Boolean, default: true },
     approvalWorkflow: { type: String, default: 'manager_hr' },
   },
+  helpDeskSettings: {
+    supportEmail: { type: String, default: 'leaveupdate@edufytechsolution.in' },
+    itSupportEmail: { type: String, default: 'itsupport@edufytechsolution.in' },
+    hrSupportEmail: { type: String, default: 'leaveupdate@edufytechsolution.in' },
+    payrollSupportEmail: { type: String, default: 'payroll@edufytechsolution.in' },
+    facilitiesEmail: { type: String, default: 'facilities@edufytechsolution.in' },
+    defaultPriority: { type: String, default: 'Medium' },
+    autoAssignToManager: { type: Boolean, default: true },
+    emailNotificationsEnabled: { type: Boolean, default: true },
+  },
   holidayCalendarImages: [{
     id: String,
     url: String,

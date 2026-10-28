@@ -441,6 +441,16 @@ export function createAttendanceService({ repository, companySettings = {} }) {
   let officeNetworkIPs = companySettings.officeNetworkIPs || []
   let attendanceRules = { ...DEFAULT_ATTENDANCE_RULES, ...(companySettings.attendanceRules || {}) }
   let holidayCalendarImages = companySettings.holidayCalendarImages || []
+  let helpDeskSettings = companySettings.helpDeskSettings || {
+    supportEmail: 'leaveupdate@edufytechsolution.in',
+    itSupportEmail: 'itsupport@edufytechsolution.in',
+    hrSupportEmail: 'leaveupdate@edufytechsolution.in',
+    payrollSupportEmail: 'payroll@edufytechsolution.in',
+    facilitiesEmail: 'facilities@edufytechsolution.in',
+    defaultPriority: 'Medium',
+    autoAssignToManager: true,
+    emailNotificationsEnabled: true,
+  }
   let leavePolicies = companySettings.leavePolicies || {
     casualQuota: 12,
     sickQuota: 10,
@@ -618,6 +628,7 @@ export function createAttendanceService({ repository, companySettings = {} }) {
         wifiNetworks: wifiNetworks.map((n) => ({ ssid: n.ssid, bssid: n.bssid, securityType: n.securityType, branchName: n.branchName })),
         attendanceRules,
         leavePolicies,
+        helpDeskSettings,
         holidayCalendarImages,
       }
     },
@@ -638,6 +649,12 @@ export function createAttendanceService({ repository, companySettings = {} }) {
           Object.entries(newConfig.leavePolicies).filter(([_, v]) => v !== undefined && v !== null && v !== '')
         )
         leavePolicies = { ...leavePolicies, ...cleanLeave }
+      }
+      if (newConfig.helpDeskSettings !== undefined && newConfig.helpDeskSettings !== null) {
+        const cleanHelp = Object.fromEntries(
+          Object.entries(newConfig.helpDeskSettings).filter(([_, v]) => v !== undefined && v !== null && v !== '')
+        )
+        helpDeskSettings = { ...helpDeskSettings, ...cleanHelp }
       }
       if (newConfig.holidayCalendarImages !== undefined) holidayCalendarImages = newConfig.holidayCalendarImages
       return this.getConfig()

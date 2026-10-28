@@ -3926,6 +3926,10 @@ const localStore = {
         ...(storeState.companySettings?.leavePolicies || {}),
         ...(updates.leavePolicies || {}),
       },
+      helpDeskSettings: {
+        ...(storeState.companySettings?.helpDeskSettings || {}),
+        ...(updates.helpDeskSettings || {}),
+      },
     }
     if (updates.attendanceRules) {
       try {

@@ -35,6 +35,7 @@ export function createAttendanceRouter({ auth, service, useDatabase = false, per
         wifiNetworks: saved?.wifiNetworks ?? [],
         attendanceRules: saved?.attendanceRules ?? {},
         leavePolicies: saved?.leavePolicies ?? {},
+        helpDeskSettings: saved?.helpDeskSettings ?? {},
         holidayCalendarImages: saved?.holidayCalendarImages ?? [],
       })
       next()
@@ -42,7 +43,7 @@ export function createAttendanceRouter({ auth, service, useDatabase = false, per
   })
   router.patch('/config', auth.authenticate, auth.requirePermission(PERMISSIONS.ATTENDANCE_WRITE), async (request, response, next) => {
     try {
-      const allowed = ['officeNetworkIPs', 'locations', 'allowedWifiSSIDs', 'wifiNetworks', 'attendanceRules', 'leavePolicies', 'holidayCalendarImages']
+      const allowed = ['officeNetworkIPs', 'locations', 'allowedWifiSSIDs', 'wifiNetworks', 'attendanceRules', 'leavePolicies', 'helpDeskSettings', 'holidayCalendarImages']
       const values = Object.fromEntries(allowed.filter((key) => request.body?.[key] !== undefined).map((key) => [key, request.body[key]]))
       if (values.officeNetworkIPs) {
         if (!Array.isArray(values.officeNetworkIPs)) throw Object.assign(new Error('Enter valid office IP addresses.'), { statusCode: 400, code: 'VALIDATION_ERROR' })
@@ -96,6 +97,12 @@ export function createAttendanceRouter({ auth, service, useDatabase = false, per
           values.attendanceRules = {
             ...(existingDoc?.attendanceRules || {}),
             ...values.attendanceRules,
+          }
+        }
+        if (values.helpDeskSettings) {
+          values.helpDeskSettings = {
+            ...(existingDoc?.helpDeskSettings || {}),
+            ...values.helpDeskSettings,
           }
         }
         const saved = await AttendanceSettings.findOneAndUpdate(

@@ -268,6 +268,10 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
           ...((rawLocal.getState?.()?.companySettings || state().companySettings)?.leavePolicies || {}),
           ...(data.config?.leavePolicies || {}),
         },
+        helpDeskSettings: {
+          ...((rawLocal.getState?.()?.companySettings || state().companySettings)?.helpDeskSettings || {}),
+          ...(data.config?.helpDeskSettings || {}),
+        },
         ...(data.payrollSettings || {}),
       }
       if (rawLocal.getState) {
@@ -462,6 +466,10 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
           ...(state().companySettings?.leavePolicies || {}),
           ...(updates.leavePolicies || {}),
         },
+        helpDeskSettings: {
+          ...(state().companySettings?.helpDeskSettings || {}),
+          ...(updates.helpDeskSettings || {}),
+        },
       }
       state().companySettings = updatedSettings
       if (rawLocal.getState) {
@@ -472,7 +480,7 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
         return state().companySettings
       }
       return mutate(async () => {
-        const attendanceKeys = ['attendanceRules', 'locations', 'officeNetworkIPs', 'allowedWifiSSIDs', 'wifiNetworks', 'leavePolicies']
+        const attendanceKeys = ['attendanceRules', 'locations', 'officeNetworkIPs', 'allowedWifiSSIDs', 'wifiNetworks', 'leavePolicies', 'helpDeskSettings']
         const hasAttendance = attendanceKeys.some((k) => updates[k] !== undefined)
         const payrollKeys = [
           'companyName', 'companyLegalName', 'address', 'city', 'state', 'country', 'pincode',
@@ -496,6 +504,10 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
               attendanceRules: {
                 ...(state().companySettings?.attendanceRules || {}),
                 ...(serverConfig.attendanceRules || {}),
+              },
+              helpDeskSettings: {
+                ...(state().companySettings?.helpDeskSettings || {}),
+                ...(serverConfig.helpDeskSettings || {}),
               },
             }
             state().companySettings = updatedCompanySettings
