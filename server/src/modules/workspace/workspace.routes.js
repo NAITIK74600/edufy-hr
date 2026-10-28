@@ -5,6 +5,7 @@ import { Employee } from '../../models/Employee.js'
 import { Notification } from '../../models/Notification.js'
 import { hasPermission } from '../../auth/permissions.js'
 import { ensureConnected } from '../leave/leave.repository.js'
+import { sendSupportTicketEmail, getMailConfig } from '../../services/mail.service.js'
 
 const permissions = { announcements: 'announcements.read', tasks: 'tasks.read', courses: 'training.read', enrollments: 'training.read', tickets: 'helpdesk.read', expenses: 'reports.read', dailyReports: 'reports.read', kudos: 'performance.read', performanceGoals: 'performance.read', performanceReviews: 'performance.read', holidays: 'holidays.read', documents: 'documents.read', requisitions: 'recruitment.read', notifications: 'dashboard.read', roles: 'dashboard.read', departments: 'dashboard.read', teams: 'dashboard.read' }
 const shared = new Set(['announcements', 'courses', 'holidays', 'documents', 'roles', 'departments', 'teams'])
@@ -403,6 +404,35 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
           }))
           await models.notifications.insertMany(notifDocs)
         }
+
+        // Live SMTP Email Dispatch for Support Tickets
+        try {
+          const emp = await Employee.findById(id(actor)) || await Employee.findOne({ employeeId: values.employeeId })
+          const isIt = (values.category || '').toLowerCase().includes('it')
+          const mailConfig = getMailConfig()
+          const supportMail = isIt ? mailConfig.itEmail : mailConfig.helpdeskEmail
+
+          // 1. Confirmation email to assigned employee
+          if (emp?.email) {
+            await sendSupportTicketEmail({
+              type: 'created',
+              ticket: record,
+              employee: emp,
+              recipientEmail: emp.email,
+            })
+          }
+          // 2. Dispatch alert to dedicated support mailbox (IT or Unified Helpdesk)
+          if (supportMail) {
+            await sendSupportTicketEmail({
+              type: 'created',
+              ticket: record,
+              employee: emp,
+              recipientEmail: supportMail,
+            })
+          }
+        } catch (emailErr) {
+          console.error('[workspace.routes] Ticket email dispatch error:', emailErr?.message || emailErr)
+        }
       } else {
         const recipient = resource === 'tasks' ? values.assigneeRef : resource === 'kudos' ? values.recipientId : !managementOnly.has(resource) ? id(actor) : null
         if (recipient) await models.notifications.create({ ownerId: recipient, title: resource === 'tasks' ? 'Task assigned' : resource === 'kudos' ? 'Kudos received' : resource === 'enrollments' ? 'Training enrollment saved' : `${resource} submitted`, message: values.title ?? values.subject ?? values.message ?? `Your ${resource} record was saved.`, type: resource, read: false })
@@ -674,6 +704,58 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
             type: 'ticket',
             read: false,
           })
+        }
+
+        // Live SMTP Email dispatch on ticket reply or status change
+        try {
+          const emp = await Employee.findById(record.ownerId) || await Employee.findOne({ employeeId: record.employeeId })
+          const isIt = (record.category || '').toLowerCase().includes('it')
+          const mailConfig = getMailConfig()
+          const supportMail = isIt ? mailConfig.itEmail : mailConfig.helpdeskEmail
+          const sender = actor.displayName || actor.name || (isIt ? 'Edufyi IT Support' : 'Edufyi Help Support')
+
+          if (req.body.response !== undefined) {
+            if (!management(actor)) {
+              // Employee replied -> send alert email to support team inbox
+              if (supportMail) {
+                await sendSupportTicketEmail({
+                  type: 'reply',
+                  ticket: record,
+                  employee: emp,
+                  recipientEmail: supportMail,
+                  senderName: emp?.name || sender,
+                  replyText: req.body.response,
+                })
+              }
+            } else {
+              // Support specialist replied -> send email to employee
+              if (emp?.email) {
+                await sendSupportTicketEmail({
+                  type: 'reply',
+                  ticket: record,
+                  employee: emp,
+                  recipientEmail: emp.email,
+                  senderName: sender,
+                  replyText: req.body.response,
+                })
+              }
+            }
+          } else if (req.body.status !== undefined) {
+            // Status changed (e.g. resolved, closed) -> send status update email to employee
+            if (emp?.email) {
+              const isResolved = req.body.status === 'resolved' || req.body.status === 'closed'
+              await sendSupportTicketEmail({
+                type: isResolved ? 'resolved' : 'reply',
+                ticket: record,
+                employee: emp,
+                recipientEmail: emp.email,
+                senderName: sender,
+                replyText: `Your support ticket has been updated to status: ${String(record.status).toUpperCase()}.`,
+              })
+            }
+          }
+        } catch (emailErr) {
+          console.error('[workspace.routes] Support ticket update email error:', emailErr?.message || emailErr)
         }
       }
       if (resource === 'enrollments') await models.notifications.create({ ownerId: record.ownerId, title: 'Training progress saved', message: `Your self-reported course progress is ${record.progress}%.`, type: 'training', read: false })

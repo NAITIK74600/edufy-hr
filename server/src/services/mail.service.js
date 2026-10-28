@@ -76,24 +76,38 @@ function getMailConfig() {
   const hrEmail = (process.env.HR_EMAIL || 'hr@edufyitech.in').trim()
   const hrPass = cleanPassword(process.env.HR_EMAIL_PASS)
 
+  const itEmail = (process.env.IT_EMAIL || 'itsupport@edufyitech.in').trim()
+  const itPass = cleanPassword(process.env.IT_EMAIL_PASS)
+
+  const helpdeskEmail = (process.env.HELPDESK_EMAIL || 'helpsupport@edufyitechsolution.in').trim()
+  const helpdeskPass = cleanPassword(process.env.HELPDESK_EMAIL_PASS)
+
   const publicUrl = process.env.APP_PUBLIC_URL || 'https://empoyee.edufyitechsolutions.com'
 
-  return { host, port, secure, adminEmail, adminPass, hrEmail, hrPass, publicUrl }
+  return { host, port, secure, adminEmail, adminPass, hrEmail, hrPass, itEmail, itPass, helpdeskEmail, helpdeskPass, publicUrl }
 }
 
 export function createTransporter(type = 'hr') {
   const config = getMailConfig()
   const isHr = type === 'hr'
+  const isIt = type === 'it'
+  const isSupport = type === 'support' || type === 'helpdesk'
 
   // Pick primary credentials or fall back to alternate
-  let user = isHr ? config.hrEmail : config.adminEmail
-  let pass = isHr ? config.hrPass : config.adminPass
-  let fromName = isHr ? `${DEFAULT_COMPANY.brandName} HR Operations` : `${DEFAULT_COMPANY.brandName} Administration`
+  let user = isIt ? config.itEmail : isSupport ? config.helpdeskEmail : isHr ? config.hrEmail : config.adminEmail
+  let pass = isIt ? config.itPass : isSupport ? config.helpdeskPass : isHr ? config.hrPass : config.adminPass
+  let fromName = isIt
+    ? `${DEFAULT_COMPANY.brandName} IT Support`
+    : isSupport
+    ? `${DEFAULT_COMPANY.brandName} Help Support`
+    : isHr
+    ? `${DEFAULT_COMPANY.brandName} HR Operations`
+    : `${DEFAULT_COMPANY.brandName} Administration`
 
   if (isPlaceholder(pass)) {
-    // Try falling back to alternate
-    const altPass = isHr ? config.adminPass : config.hrPass
-    const altUser = isHr ? config.adminEmail : config.hrEmail
+    // If IT or Support pass is not yet provided, fall back to configured admin or hr credentials
+    const altPass = !isPlaceholder(config.adminPass) ? config.adminPass : config.hrPass
+    const altUser = !isPlaceholder(config.adminPass) ? config.adminEmail : config.hrEmail
     if (!isPlaceholder(altPass)) {
       user = altUser
       pass = altPass
@@ -859,7 +873,120 @@ export async function sendGenericNotification({
 }
 
 // ---------------------------------------------------------------------------
-// 7. TEST / VERIFICATION EMAIL
+// 7. SUPPORT TICKET NOTIFICATIONS (IT SUPPORT & UNIFIED HELPDESK)
+// ---------------------------------------------------------------------------
+export async function sendSupportTicketEmail({
+  type = 'created', // 'created' | 'reply' | 'resolved'
+  ticket,
+  employee,
+  recipientEmail,
+  senderName = 'Support Desk',
+  replyText = '',
+}) {
+  if (!recipientEmail) return { success: false, reason: 'No recipient email' }
+  const isIt = (ticket.category || '').toLowerCase().includes('it')
+  const transporter = createTransporter(isIt ? 'it' : 'support')
+  const config = getMailConfig()
+  const publicUrl = config.publicUrl
+
+  const channelEmail = isIt ? config.itEmail : config.helpdeskEmail
+  const channelName = isIt ? 'Edufyi IT Support' : 'Edufyi Help Support'
+  const ticketIdStr = String(ticket._id || ticket.id || '').slice(-6).toUpperCase()
+
+  let emailSubject = ''
+  let heading = ''
+  let contentHtml = ''
+
+  if (type === 'created') {
+    emailSubject = `[${channelName} #${ticketIdStr}] New Ticket: ${ticket.subject} [${ticket.priority || 'Medium'}]`
+    heading = `Support Ticket #${ticketIdStr} Logged`
+    contentHtml = `
+      <h2 class="title-h2">${heading}</h2>
+      <p>Hello <strong>${employee?.name || ticket.employeeName || 'Team Member'}</strong>,</p>
+      <p>Your support ticket has been registered with <strong>${channelName}</strong>. Our assigned support specialist is reviewing your inquiry.</p>
+      
+      <div class="meta-box">
+        <div class="meta-row">
+          <span class="meta-label">Ticket ID:</span>
+          <span class="meta-val">#${ticketIdStr}</span>
+        </div>
+        <div class="meta-row">
+          <span class="meta-label">Category:</span>
+          <span class="meta-val">${ticket.category || 'Support'}</span>
+        </div>
+        <div class="meta-row">
+          <span class="meta-label">Priority:</span>
+          <span class="meta-val">${ticket.priority || 'Medium'}</span>
+        </div>
+        <div class="meta-row">
+          <span class="meta-label">Subject:</span>
+          <span class="meta-val">${ticket.subject}</span>
+        </div>
+        <div class="meta-row">
+          <span class="meta-label">Inquiry Details:</span>
+          <span class="meta-val" style="white-space:pre-wrap;">${ticket.description || '—'}</span>
+        </div>
+      </div>
+    `
+  } else if (type === 'reply') {
+    emailSubject = `[${channelName} #${ticketIdStr}] Update on: ${ticket.subject}`
+    heading = `New Response on Ticket #${ticketIdStr}`
+    contentHtml = `
+      <h2 class="title-h2">${heading}</h2>
+      <p>Hello <strong>${employee?.name || ticket.employeeName || 'Team Member'}</strong>,</p>
+      <p><strong>${senderName}</strong> posted a response to your ticket:</p>
+
+      <div style="background: #f0fdf4; border-left: 4px solid #16a34a; border-radius: 6px; padding: 14px 16px; margin: 16px 0; font-size: 13px; color: #166534; line-height: 1.5;">
+        ${replyText}
+      </div>
+
+      <div class="meta-box">
+        <div class="meta-row">
+          <span class="meta-label">Ticket:</span>
+          <span class="meta-val">#${ticketIdStr} — ${ticket.subject}</span>
+        </div>
+        <div class="meta-row">
+          <span class="meta-label">Current Status:</span>
+          <span class="meta-val">${String(ticket.status || 'open').toUpperCase()}</span>
+        </div>
+      </div>
+    `
+  } else if (type === 'resolved') {
+    emailSubject = `[${channelName} #${ticketIdStr}] Ticket Resolved: ${ticket.subject}`
+    heading = `Ticket #${ticketIdStr} Resolved`
+    contentHtml = `
+      <h2 class="title-h2" style="color: #059669;">✔ Ticket Marked as Resolved</h2>
+      <p>Hello <strong>${employee?.name || ticket.employeeName || 'Team Member'}</strong>,</p>
+      <p>Your support ticket #${ticketIdStr} (<em>${ticket.subject}</em>) has been resolved by <strong>${senderName}</strong>.</p>
+
+      ${replyText ? `
+      <div style="background: #f0fdf4; border-left: 4px solid #16a34a; border-radius: 6px; padding: 14px 16px; margin: 16px 0; font-size: 13px; color: #166534; line-height: 1.5;">
+        <strong>Resolution Notes:</strong><br />${replyText}
+      </div>` : ''}
+    `
+  }
+
+  const html = wrapInEmailLayout({
+    title: emailSubject,
+    preheader: `Ticket #${ticketIdStr} - ${ticket.subject}`,
+    contentHtml,
+    callToAction: {
+      label: 'Open Help Desk Portal',
+      url: `${publicUrl}/#/employee/helpdesk`,
+    },
+  })
+
+  return transporter.sendMail({
+    to: recipientEmail,
+    subject: emailSubject,
+    html,
+    replyTo: channelEmail,
+    attachments: getLogoAttachment(),
+  })
+}
+
+// ---------------------------------------------------------------------------
+// 8. TEST / VERIFICATION EMAIL
 // ---------------------------------------------------------------------------
 export async function sendTestEmail({ to, senderType = 'hr' }) {
   const transporter = createTransporter(senderType)
@@ -922,6 +1049,7 @@ export const mailService = {
   sendLeaveStatusEmail,
   sendDocumentStatusEmail,
   sendGenericNotification,
+  sendSupportTicketEmail,
   sendTestEmail,
   wrapInEmailLayout,
 }

@@ -5111,80 +5111,39 @@ function AdminSettingsModule({ user: propUser }) {
                 </a>
               </div>
 
-              <div style={{ display: 'grid', gap: '10px' }}>
+              <div style={{ display: 'grid', gap: '12px' }}>
                 <div>
-                  <label style={{ fontSize: '11px', display: 'block', color: 'var(--muted)', marginBottom: '3px' }}>
-                    Primary Support / Broadcast Email (Leave & General)
+                  <label style={{ fontSize: '11px', display: 'block', color: 'var(--muted)', marginBottom: '3px', fontWeight: 600 }}>
+                    1. Dedicated IT Support SMTP Channel (IT & Hardware)
+                  </label>
+                  <input
+                    type="email"
+                    className="text-input"
+                    value={itSupportEmail}
+                    onChange={(e) => setItSupportEmail(e.target.value)}
+                    style={{ width: '100%', padding: '8px 10px', fontSize: '12.5px' }}
+                    required
+                  />
+                  <span style={{ fontSize: '10px', color: 'var(--muted)', marginTop: '2px', display: 'block' }}>
+                    All IT & hardware inquiries come to this address. Replies and resolutions to assigned employees are sent from <strong>itsupport@edufyitech.in</strong>.
+                  </span>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '11px', display: 'block', color: 'var(--muted)', marginBottom: '3px', fontWeight: 600 }}>
+                    2. Unified Help Support SMTP Gateway (HR, Payroll & Facilities)
                   </label>
                   <input
                     type="email"
                     className="text-input"
                     value={supportEmail}
                     onChange={(e) => setSupportEmail(e.target.value)}
-                    style={{ width: '100%', padding: '6px 10px', fontSize: '12px' }}
+                    style={{ width: '100%', padding: '8px 10px', fontSize: '12.5px' }}
                     required
                   />
                   <span style={{ fontSize: '10px', color: 'var(--muted)', marginTop: '2px', display: 'block' }}>
-                    Authoritative sender address for official leave updates and helpdesk notifications (e.g. leaveupdate@edufytechsolution.in).
+                    Single unified SMTP medium (<strong>helpsupport@edufyitechsolution.in</strong>) delivering support requests & resolutions for HR Policies, Payroll, and Workplace Facilities to both assigned employees and support handlers.
                   </span>
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                  <div>
-                    <label style={{ fontSize: '11px', display: 'block', color: 'var(--muted)', marginBottom: '3px' }}>
-                      IT Support Routing Email
-                    </label>
-                    <input
-                      type="email"
-                      className="text-input"
-                      value={itSupportEmail}
-                      onChange={(e) => setItSupportEmail(e.target.value)}
-                      style={{ width: '100%', padding: '6px 10px', fontSize: '12px' }}
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '11px', display: 'block', color: 'var(--muted)', marginBottom: '3px' }}>
-                      HR & People Policy Email
-                    </label>
-                    <input
-                      type="email"
-                      className="text-input"
-                      value={hrSupportEmail}
-                      onChange={(e) => setHrSupportEmail(e.target.value)}
-                      style={{ width: '100%', padding: '6px 10px', fontSize: '12px' }}
-                      required
-                    />
-                  </div>
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                  <div>
-                    <label style={{ fontSize: '11px', display: 'block', color: 'var(--muted)', marginBottom: '3px' }}>
-                      Payroll & Compensation Routing Email
-                    </label>
-                    <input
-                      type="email"
-                      className="text-input"
-                      value={payrollSupportEmail}
-                      onChange={(e) => setPayrollSupportEmail(e.target.value)}
-                      style={{ width: '100%', padding: '6px 10px', fontSize: '12px' }}
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '11px', display: 'block', color: 'var(--muted)', marginBottom: '3px' }}>
-                      Workplace Facilities Routing Email
-                    </label>
-                    <input
-                      type="email"
-                      className="text-input"
-                      value={facilitiesEmail}
-                      onChange={(e) => setFacilitiesEmail(e.target.value)}
-                      style={{ width: '100%', padding: '6px 10px', fontSize: '12px' }}
-                      required
-                    />
-                  </div>
                 </div>
 
                 <div style={{ borderTop: '1px solid #e0f2fe', paddingTop: '12px', marginTop: '4px' }}>
