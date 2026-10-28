@@ -452,17 +452,36 @@ export function PayrollPage() {
     }
   }
 
-  // Finalize monthly drafts into official disbursed payslips
-  const handleFinalizeMonth = async () => {
+  // Finalize monthly drafts into official disbursed payslips and email all employees directly
+  const handleFinalizeMonth = async (resendAll = false) => {
     const targetMonth = selectedMonth !== 'all' ? selectedMonth : currentPayrollMonth()
-    if (!confirm(`Finalize and disburse all draft payslips for ${targetMonth}? Once finalized, all employees will see their official payslips in their ESS dashboard.`)) return
+    const confirmMsg = resendAll
+      ? `Re-email official payslips (with PDF attachments) to all employees for ${targetMonth}?`
+      : `Finalize and disburse payslips for ${targetMonth}? Once finalized, all employees will receive their official payslip with PDF attachment directly via email and see it in their ESS portal.`
+    if (!confirm(confirmMsg)) return
     try {
       setActionInProgress(true)
-      const res = await hrStore.executePayrollRun(targetMonth)
-      setSavingNotice(res?.data?.message || res?.message || `Payslips for ${targetMonth} finalized and disbursed.`)
-      setTimeout(() => setSavingNotice(null), 4500)
+      const res = await hrStore.executePayrollRun(targetMonth, { resendAll })
+      setSavingNotice(res?.data?.message || res?.message || `Payslips for ${targetMonth} finalized and emailed to all employees.`)
+      setTimeout(() => setSavingNotice(null), 5000)
     } catch (err) {
       alert(err.message || 'Failed to finalize monthly payroll.')
+    } finally {
+      setActionInProgress(false)
+    }
+  }
+
+  // Directly dispatch payslip emails to all employees for the selected month
+  const handleBulkEmailMonth = async () => {
+    const targetMonth = selectedMonth !== 'all' ? selectedMonth : currentPayrollMonth()
+    if (!confirm(`Email official payslips (with PDF attachments) directly to all employees for ${targetMonth}?`)) return
+    try {
+      setActionInProgress(true)
+      const res = await (hrStore.sendBulkEmail ? hrStore.sendBulkEmail(targetMonth, { forceAll: true }) : hrStore.executePayrollRun(targetMonth, { resendAll: true }))
+      setSavingNotice(res?.data?.message || res?.message || `Official payslips for ${targetMonth} emailed successfully.`)
+      setTimeout(() => setSavingNotice(null), 5000)
+    } catch (err) {
+      alert(err.message || 'Failed to dispatch payslip emails.')
     } finally {
       setActionInProgress(false)
     }
@@ -1152,19 +1171,33 @@ export function PayrollPage() {
               )}
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
               {!isEmployeeRole && (
-                <button
-                  type="button"
-                  onClick={handleFinalizeMonth}
-                  disabled={actionInProgress}
-                  className="ui-button primary"
-                  style={{ minHeight: '32px', padding: '0 12px', fontSize: '11px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-                  title="Finalize drafts and disburse for this month"
-                >
-                  <CheckCircle2 size={13} />
-                  Finalize {selectedMonth !== 'all' ? selectedMonth : 'Current'} Drafts
-                </button>
+                <>
+                  <button
+                    type="button"
+                    onClick={() => handleFinalizeMonth(false)}
+                    disabled={actionInProgress}
+                    className="ui-button primary"
+                    style={{ minHeight: '32px', padding: '0 12px', fontSize: '11px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                    title="Finalize drafts, disburse and email official payslip PDFs directly to all employees"
+                  >
+                    <CheckCircle2 size={13} />
+                    Finalize & Email {selectedMonth !== 'all' ? selectedMonth : 'Current'} Payslips
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleBulkEmailMonth}
+                    disabled={actionInProgress}
+                    className="ui-button secondary"
+                    style={{ minHeight: '32px', padding: '0 12px', fontSize: '11px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                    title="Directly email or re-send payslips with PDF attachments to all employees for this month"
+                  >
+                    <Mail size={13} />
+                    Email All Payslips
+                  </button>
+                </>
               )}
               <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--muted)' }}>
                 Showing {filteredRecords.length} payslip{filteredRecords.length === 1 ? '' : 's'}
@@ -1276,6 +1309,18 @@ export function PayrollPage() {
                           <StatusBadge tone={isDraft ? 'gold' : 'teal'}>
                             {isDraft ? 'Draft' : 'Disbursed'}
                           </StatusBadge>
+                          {r.emailSentAt ? (
+                            <div
+                              style={{ fontSize: '10px', color: '#16a34a', fontWeight: 600, marginTop: '3px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '3px' }}
+                              title={`Emailed on ${new Date(r.emailSentAt).toLocaleString('en-IN')}`}
+                            >
+                              <span>✉</span> Emailed
+                            </div>
+                          ) : !isDraft ? (
+                            <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: '3px' }}>
+                              Not Emailed
+                            </div>
+                          ) : null}
                         </td>
                         <td style={{ textAlign: 'right' }}>
                           <div className="payroll-action-icons">

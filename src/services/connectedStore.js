@@ -1671,9 +1671,14 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
       if (!user && rawLocal.deletePayrollRecord) return rawLocal.deletePayrollRecord(id)
       return mutate(() => apiClient.delete(`/payroll/${id}`))
     },
-    executePayrollRun(month) {
-      if (!user && rawLocal.executePayrollRun) return rawLocal.executePayrollRun(month)
-      return mutate(() => apiClient.post('/payroll/finalize', { month }))
+    executePayrollRun(month, options = {}) {
+      if (!user && rawLocal.executePayrollRun) return rawLocal.executePayrollRun(month, options)
+      return mutate(() => apiClient.post('/payroll/finalize', { month, ...options }))
+    },
+    sendBulkEmail(month, options = {}) {
+      if (!user && rawLocal.sendBulkEmail) return rawLocal.sendBulkEmail(month, options)
+      if (!user) return { success: true, message: 'Simulated bulk emails dispatched' }
+      return mutate(() => apiClient.post('/payroll/send-bulk-email', { month, ...options }))
     },
     bulkGeneratePayroll(payload) {
       if (!user && rawLocal.bulkGeneratePayroll) return rawLocal.bulkGeneratePayroll(payload)

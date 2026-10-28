@@ -6834,17 +6834,38 @@ const localStore = {
     this.addAuditLog('HR', 'PAYROLL_DELETE', `Deleted payroll entry ${id}`)
     notifyListeners()
   },
-  executePayrollRun(month = 'September 2026') {
+  executePayrollRun(month = 'September 2026', options = {}) {
+    const nowIso = new Date().toISOString()
+    const payDate = nowIso.split('T')[0]
     storeState.payroll = (storeState.payroll || []).map((p) =>
-      p.month === month ? { ...p, status: 'processed', paymentDate: new Date().toISOString().split('T')[0] } : p
+      p.month === month ? { ...p, status: 'processed', emailSentAt: nowIso, paymentDate: payDate } : p
     )
     this.addNotification({
-      title: `${month} Payroll Disbursed`,
-      message: `Direct bank transfers initiated for ${storeState.payroll.length} employees with statutory PF, ESI, and tax deductions.`,
+      title: `${month} Payroll Disbursed & Emailed`,
+      message: `Official payslips emailed directly to employees and direct bank transfers initiated for ${storeState.payroll.length} employees with statutory PF, ESI, and tax deductions.`,
       type: 'salary',
     })
-    this.addAuditLog('HR', 'PAYROLL_EXECUTE', `Executed and disbursed company-wide payroll for ${month}`)
+    this.addAuditLog('HR', 'PAYROLL_EXECUTE', `Executed, disbursed and emailed company-wide payroll for ${month}`)
     notifyListeners()
+    return {
+      success: true,
+      data: {
+        message: `Payslips for ${month} finalized, disbursed and emailed directly to all employees.`,
+      },
+    }
+  },
+  sendBulkEmail(month = 'September 2026') {
+    const nowIso = new Date().toISOString()
+    storeState.payroll = (storeState.payroll || []).map((p) =>
+      p.month === month ? { ...p, emailSentAt: nowIso } : p
+    )
+    notifyListeners()
+    return {
+      success: true,
+      data: {
+        message: `Official payslip emails dispatched to employees for ${month}.`,
+      },
+    }
   },
   async bulkGeneratePayroll({ month, employeeIds, department }) {
     const employees = storeState.employees || []

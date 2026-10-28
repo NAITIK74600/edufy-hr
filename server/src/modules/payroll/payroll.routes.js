@@ -563,32 +563,52 @@ export function createPayrollRouter({ auth }) {
     } catch (error) { next(error) }
   })
 
-  // Bulk dispatch payslip emails for a period
-  router.post('/send-bulk-email', management, async (req, res, next) => {
-    try {
-      ensureConnected()
-      const { month } = req.body ?? {}
-      payrollPeriod(month)
+  // Helper to email payslips to employees with generated PDF attachments
+  async function dispatchPayslipEmails({ month, forceAll = false }) {
+    const targetRecords = await PayrollRecord.find({ month, status: 'processed' })
+      .populate('employeeRef', 'name employeeId email department designation location bankDetails identity joiningDate')
 
-      const records = await PayrollRecord.find({ month, status: 'processed' })
-        .populate('employeeRef', 'name employeeId email department designation location bankDetails')
-      if (records.length === 0) {
-        throw invalid(`No finalized payslips found for period ${month}.`, 404)
-      }
+    if (targetRecords.length === 0) {
+      return { total: 0, sentCount: 0, failedCount: 0, skippedCount: 0 }
+    }
 
-      const settings = await getCompanySettings()
-      let sentCount = 0
-      let failedCount = 0
+    const settings = await getCompanySettings()
+    let sentCount = 0
+    let failedCount = 0
+    let skippedCount = 0
 
-      for (const record of records) {
-        const emp = record.employeeRef
+    const recordsToEmail = targetRecords.filter((record) => {
+      if (!record.emailSentAt || forceAll) return true
+      skippedCount++
+      return false
+    })
+
+    const BATCH_SIZE = 5
+    for (let i = 0; i < recordsToEmail.length; i += BATCH_SIZE) {
+      const batch = recordsToEmail.slice(i, i + BATCH_SIZE)
+      await Promise.all(batch.map(async (record) => {
+        let emp = record.employeeRef
+        if (!emp || !emp.email) {
+          emp = await Employee.findOne({
+            $or: [
+              { employeeId: record.employeeId },
+              ...(mongoose.isValidObjectId(record.employeeRef) ? [{ _id: record.employeeRef }] : []),
+            ],
+          }).lean()
+        }
+
         if (!emp?.email) {
           failedCount++
-          continue
+          return
         }
+
         try {
           const formatted = normalizePayrollData(record, emp, settings)
-          const pdfAttachment = await generatePayslipPdf(formatted).catch(() => null)
+          const pdfAttachment = await generatePayslipPdf(formatted).catch((err) => {
+            console.warn(`[PDF] Error rendering PDF for ${emp.email}:`, err?.message || err)
+            return null
+          })
+
           await sendPayslipEmail({
             employee: emp,
             record,
@@ -596,22 +616,47 @@ export function createPayrollRouter({ auth }) {
             settings,
             pdfAttachment,
           })
+
           record.emailSentAt = new Date()
           await record.save()
           sentCount++
         } catch (err) {
-          console.warn(`[MailService] Failed to send payslip to ${emp?.email}:`, err?.message || err)
+          console.warn(`[MailService] Failed to send payslip email to ${emp?.email}:`, err?.message || err)
           failedCount++
         }
+      }))
+    }
+
+    return {
+      total: targetRecords.length,
+      sentCount,
+      failedCount,
+      skippedCount,
+    }
+  }
+
+  // Bulk dispatch payslip emails for a period
+  router.post('/send-bulk-email', management, async (req, res, next) => {
+    try {
+      ensureConnected()
+      const { month } = req.body ?? {}
+      const cleanMonth = String(month ?? '').trim().replace(/\s+/g, ' ')
+      payrollPeriod(cleanMonth)
+      const forceAll = req.body?.forceAll !== false
+
+      const stats = await dispatchPayslipEmails({ month: cleanMonth, forceAll })
+      if (stats.total === 0) {
+        throw invalid(`No finalized payslips found for period ${cleanMonth}.`, 404)
       }
 
       res.json({
         success: true,
         data: {
-          total: records.length,
-          sentCount,
-          failedCount,
-          message: `Dispatched payslips to ${sentCount} employee(s). ${failedCount > 0 ? `${failedCount} skipped or failed.` : ''}`,
+          total: stats.total,
+          sentCount: stats.sentCount,
+          failedCount: stats.failedCount,
+          skippedCount: stats.skippedCount,
+          message: `Dispatched payslips to ${stats.sentCount} employee(s). ${stats.failedCount > 0 ? `${stats.failedCount} skipped or failed.` : ''} ${stats.skippedCount > 0 ? `(${stats.skippedCount} previously sent)` : ''}`.trim(),
         },
       })
     } catch (error) { next(error) }
@@ -684,6 +729,23 @@ export function createPayrollRouter({ auth }) {
 
       const settings = await getCompanySettings()
       const formatted = normalizePayrollData(record, employee, settings)
+
+      if (finalStatus === 'processed' && req.body.sendEmail === true && employee.email) {
+        try {
+          const pdfAttachment = await generatePayslipPdf(formatted).catch(() => null)
+          await sendPayslipEmail({
+            employee,
+            record,
+            month: record.month,
+            settings,
+            pdfAttachment,
+          })
+          await PayrollRecord.findByIdAndUpdate(record._id, { $set: { emailSentAt: new Date() } })
+          record.emailSentAt = new Date()
+        } catch (mailErr) {
+          console.warn(`[MailService] Failed to email single payslip to ${employee.email}:`, mailErr?.message || mailErr)
+        }
+      }
 
       res.json({
         success: true,
@@ -863,22 +925,53 @@ export function createPayrollRouter({ auth }) {
     } catch (error) { next(error) }
   })
 
-  // Finalize reviewed drafts
+  // Finalize reviewed drafts and automatically disburse payslips via email to all employees
   router.post('/finalize', management, async (req, res, next) => {
     try {
       ensureConnected()
-      payrollPeriod(req.body?.month)
+      const cleanMonth = String(req.body?.month ?? '').trim().replace(/\s+/g, ' ')
+      payrollPeriod(cleanMonth)
+      const shouldEmail = req.body?.sendEmail !== false
+      const forceAll = Boolean(req.body?.resendAll || req.body?.forceAll)
+
       const result = await PayrollRecord.updateMany(
-        { month: req.body.month, status: 'draft' },
+        { month: cleanMonth, status: 'draft' },
         { $set: { status: 'processed', reviewed: true, finalizedAt: new Date() } },
       )
+
+      let emailStats = { sentCount: 0, failedCount: 0, skippedCount: 0, total: 0 }
+      if (shouldEmail) {
+        emailStats = await dispatchPayslipEmails({ month: cleanMonth, forceAll })
+      }
+
+      const msgParts = []
+      if (result.modifiedCount > 0) {
+        msgParts.push(`Finalized ${result.modifiedCount} draft payslip(s)`)
+      } else if (emailStats.total > 0) {
+        msgParts.push(`All ${emailStats.total} payslip(s) are finalized`)
+      } else {
+        msgParts.push('All payslips for this period are already finalized and visible to employees')
+      }
+
+      if (emailStats.sentCount > 0) {
+        msgParts.push(`emailed payslip PDFs directly to ${emailStats.sentCount} employee(s)`)
+      }
+      if (emailStats.failedCount > 0) {
+        msgParts.push(`${emailStats.failedCount} skipped (no email configured)`)
+      }
+      if (emailStats.skippedCount > 0 && emailStats.sentCount === 0) {
+        msgParts.push(`${emailStats.skippedCount} employee(s) were already emailed previously`)
+      }
+
       res.json({
         success: true,
         data: {
           finalizedCount: result.modifiedCount,
-          message: result.modifiedCount > 0
-            ? `Successfully finalized and disbursed payslips for ${result.modifiedCount} employee(s).`
-            : 'All payslips for this period are already finalized and visible to employees.',
+          totalRecords: emailStats.total,
+          sentCount: emailStats.sentCount,
+          failedCount: emailStats.failedCount,
+          skippedCount: emailStats.skippedCount,
+          message: msgParts.join(', ') + '.',
         },
       })
     } catch (error) { next(error) }

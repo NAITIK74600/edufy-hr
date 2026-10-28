@@ -153,3 +153,39 @@ test('Payslip Service respects company defaultBranch and record-specific branch 
   const html = generatePayslipHtml(normOverride)
   assert.ok(html.includes('MUMBAI REGIONAL OFFICE'))
 })
+
+test('generatePayslipPdf produces a valid buffer and attachment filename', async () => {
+  const { generatePayslipPdf } = await import('../src/services/pdf.service.js')
+  const { sendPayslipEmail } = await import('../src/services/mail.service.js')
+
+  const sampleEmp = {
+    employeeId: 'EMP-EMAIL-TEST',
+    name: 'Email Receiver',
+    email: 'receiver@company.com',
+  }
+  const sampleRecord = {
+    month: 'October 2026',
+    grossEarnings: 50000,
+    totalDeductions: 2000,
+    netPay: 48000,
+    earningsList: [{ name: 'Basic', total: 30000 }],
+    deductionsList: [{ name: 'PF', amount: 1800 }],
+  }
+
+  const normalized = normalizePayrollData(sampleRecord, sampleEmp, {})
+  const pdfResult = await generatePayslipPdf(normalized)
+
+  assert.ok(pdfResult)
+  assert.ok(pdfResult.buffer instanceof Buffer)
+  assert.ok(pdfResult.filename.includes('October_2026'))
+
+  const mailResult = await sendPayslipEmail({
+    employee: sampleEmp,
+    record: sampleRecord,
+    month: 'October 2026',
+    pdfAttachment: pdfResult,
+  })
+
+  assert.ok(mailResult)
+  assert.equal(mailResult.to, 'receiver@company.com')
+})
