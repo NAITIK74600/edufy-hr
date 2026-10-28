@@ -113,8 +113,8 @@ export function readPath() {
         if (stored) {
           const u = JSON.parse(stored)
           if (u.role === 'admin') return '/admin'
-          if (u.role === 'employee' || u.role === 'manager') return '/employee'
-          return '/hr'
+          if (u.role === 'hr' || u.role === 'hr_executive') return '/hr'
+          return '/employee'
         }
       } catch {}
     }

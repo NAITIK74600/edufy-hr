@@ -4932,6 +4932,29 @@ const localStore = {
   },
   checkIn(...args) {
     let employeeId, employeeName, customWifi, date, gpsData, bssid, publicIp, shift, shiftCode
+    const buildDefaultShift = () => {
+      const rules = storeState.companySettings?.attendanceRules || {}
+      if (rules.workStartTime && rules.workEndTime) {
+        const f12 = (t, ref = null, isEnd = false) => {
+          if (!t) return ''
+          const clean = String(t).trim().replace(/[\u202F\u00A0]/g, ' ')
+          const m = clean.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/i)
+          if (!m) return t
+          let h = parseInt(m[1], 10)
+          const min = m[2]
+          const meridiem = m[3]?.toUpperCase()
+          if (meridiem === 'PM' && h < 12) h += 12
+          if (meridiem === 'AM' && h === 12) h = 0
+          if (!meridiem && isEnd && h >= 1 && h <= 11) h += 12
+          const ampm = h >= 12 ? 'PM' : 'AM'
+          h = h % 12 || 12
+          return `${String(h).padStart(2, '0')}:${min} ${ampm}`
+        }
+        return `General (${f12(rules.workStartTime, rules.workEndTime, false)} – ${f12(rules.workEndTime, rules.workStartTime, true)})`
+      }
+      return 'General (09:30 AM – 06:30 PM)'
+    }
+
     if (typeof args[0] === 'object' && args[0] !== null) {
       const p = args[0]
       employeeId = p.employeeId
@@ -4947,10 +4970,10 @@ const localStore = {
       }
       bssid = p.bssid || null
       publicIp = p.publicIp || null
-      shift = p.shift || 'General (09:30 AM – 06:30 PM)'
+      shift = p.shift || buildDefaultShift()
       shiftCode = p.shiftCode || 'general'
     } else {
-      [employeeId, employeeName, customWifi = 'Edufyi-Office-5G', date = '2026-09-30', gpsData = null, bssid = null, publicIp = null, shift = 'General (09:30 AM – 06:30 PM)', shiftCode = 'general'] = args
+      [employeeId, employeeName, customWifi = 'Edufyi-Office-5G', date = '2026-09-30', gpsData = null, bssid = null, publicIp = null, shift = buildDefaultShift(), shiftCode = 'general'] = args
     }
 
     const verification = this.verifyAttendanceLocation(gpsData?.latitude, gpsData?.longitude, customWifi, bssid, publicIp)
@@ -4975,6 +4998,16 @@ const localStore = {
       if (shiftCode === 'evening') return currentMins > 13 * 60 + 15
       if (shiftCode === 'night') return currentMins > 22 * 60 + 15
 
+      let extractedStart = null
+      let extractedEnd = null
+      if (shift && typeof shift === 'string') {
+        const timeMatch = shift.match(/\((.+?)\s*[-–—]\s*(.+?)\)/)
+        if (timeMatch) {
+          extractedStart = timeMatch[1].trim()
+          extractedEnd = timeMatch[2].trim()
+        }
+      }
+
       const parseMins = (t) => {
         if (!t) return null
         const clean = String(t).trim().replace(/[\u202F\u00A0]/g, ' ')
@@ -4988,8 +5021,8 @@ const localStore = {
         return h * 60 + min
       }
 
-      let startMins = parseMins(rules.workStartTime) ?? 570
-      let endMins = parseMins(rules.workEndTime) ?? 1110
+      let startMins = parseMins(extractedStart || rules.workStartTime) ?? 570
+      let endMins = parseMins(extractedEnd || rules.workEndTime) ?? 1110
 
       if (endMins < 720 && endMins <= startMins && (endMins + 720) <= 1440) {
         endMins += 720
@@ -5063,7 +5096,7 @@ const localStore = {
       gpsVerified: isGpsVerified,
       locationName: nearestLoc || (isGpsVerified ? (verification.nearestLocation || 'Office') : 'Remote Location'),
       verificationMethod: verification.method,
-      shift: shift || 'General (09:30 AM – 06:30 PM)',
+      shift: shift || buildDefaultShift(),
       shiftCode: shiftCode || 'general',
       isOnBreak: false,
       currentBreak: null,

@@ -535,8 +535,18 @@ export function createAttendanceService({ repository, companySettings = {} }) {
       if (newConfig.locations !== undefined) locations = newConfig.locations
       if (newConfig.allowedWifiSSIDs !== undefined) allowedWifiSSIDs = newConfig.allowedWifiSSIDs
       if (newConfig.wifiNetworks !== undefined) wifiNetworks = newConfig.wifiNetworks
-      if (newConfig.attendanceRules !== undefined) attendanceRules = { ...attendanceRules, ...newConfig.attendanceRules }
-      if (newConfig.leavePolicies !== undefined) leavePolicies = { ...leavePolicies, ...newConfig.leavePolicies }
+      if (newConfig.attendanceRules !== undefined && newConfig.attendanceRules !== null) {
+        const cleanRules = Object.fromEntries(
+          Object.entries(newConfig.attendanceRules).filter(([_, v]) => v !== undefined && v !== null && v !== '')
+        )
+        attendanceRules = { ...attendanceRules, ...cleanRules }
+      }
+      if (newConfig.leavePolicies !== undefined && newConfig.leavePolicies !== null) {
+        const cleanLeave = Object.fromEntries(
+          Object.entries(newConfig.leavePolicies).filter(([_, v]) => v !== undefined && v !== null && v !== '')
+        )
+        leavePolicies = { ...leavePolicies, ...cleanLeave }
+      }
       if (newConfig.holidayCalendarImages !== undefined) holidayCalendarImages = newConfig.holidayCalendarImages
       return this.getConfig()
     },
@@ -599,14 +609,26 @@ export function createAttendanceService({ repository, companySettings = {} }) {
       const now = new Date()
       const checkInTime = formatCurrentTime()
 
+      let extractedStart = null
+      let extractedEnd = null
+      if (shift && typeof shift === 'string') {
+        const timeMatch = shift.match(/\((.+?)\s*[-–—]\s*(.+?)\)/)
+        if (timeMatch) {
+          extractedStart = timeMatch[1].trim()
+          extractedEnd = timeMatch[2].trim()
+        }
+      }
+
       const matchedShift = SHIFT_DEFINITIONS.find((s) => s.code === shiftCode || s.name === shift || s.display === shift) || SHIFT_DEFINITIONS[0]
       const isGeneral = !shiftCode || shiftCode === 'general' || shiftCode === 'default' || matchedShift.code === 'general'
-      const shiftStartTime = isGeneral && attendanceRules.workStartTime ? attendanceRules.workStartTime : (matchedShift.startTime || '09:30')
-      const shiftEndTime = isGeneral && attendanceRules.workEndTime ? attendanceRules.workEndTime : (matchedShift.endTime || '18:30')
+      const shiftStartTime = extractedStart || (isGeneral && attendanceRules.workStartTime ? attendanceRules.workStartTime : (matchedShift.startTime || '09:30'))
+      const shiftEndTime = extractedEnd || (isGeneral && attendanceRules.workEndTime ? attendanceRules.workEndTime : (matchedShift.endTime || '18:30'))
       const chosenShiftCode = matchedShift.code
-      const chosenShiftDisplay = isGeneral && attendanceRules.workStartTime && attendanceRules.workEndTime
-        ? `General (${formatTime12(attendanceRules.workStartTime, attendanceRules.workEndTime, false)} – ${formatTime12(attendanceRules.workEndTime, attendanceRules.workStartTime, true)})`
-        : matchedShift.display
+      const chosenShiftDisplay = (shift && typeof shift === 'string' && shift.includes('('))
+        ? shift
+        : (isGeneral && attendanceRules.workStartTime && attendanceRules.workEndTime
+          ? `General (${formatTime12(attendanceRules.workStartTime, attendanceRules.workEndTime, false)} – ${formatTime12(attendanceRules.workEndTime, attendanceRules.workStartTime, true)})`
+          : matchedShift.display)
 
       const currentMins = getCurrentMinutes(now)
       const workStartMins = getNormalizedShiftMinutes(shiftStartTime, shiftEndTime, currentMins)

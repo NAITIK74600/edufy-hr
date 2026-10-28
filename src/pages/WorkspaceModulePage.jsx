@@ -66,37 +66,43 @@ const workspaceHandler = (handler) => workspaceAction(hrStore, handler)
 
 function formatShiftDisplay(shiftStr, shiftCode, attendanceRules) {
   const isGeneral = !shiftCode || shiftCode === 'general' || !shiftStr || String(shiftStr).startsWith('General')
-  if (isGeneral && attendanceRules?.workStartTime && attendanceRules?.workEndTime) {
-    const f12 = (t, referenceTime = null, isEnd = false) => {
-      if (!t) return ''
-      const clean = String(t).trim().replace(/[\u202F\u00A0]/g, ' ')
-      const m = clean.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/i)
-      if (!m) return t
-      let h = parseInt(m[1], 10)
-      const min = m[2]
-      const meridiem = m[3]?.toUpperCase()
-      if (meridiem === 'PM' && h < 12) h += 12
-      if (meridiem === 'AM' && h === 12) h = 0
+  const f12 = (t, referenceTime = null, isEnd = false) => {
+    if (!t) return ''
+    const clean = String(t).trim().replace(/[\u202F\u00A0]/g, ' ')
+    const m = clean.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/i)
+    if (!m) return t
+    let h = parseInt(m[1], 10)
+    const min = m[2]
+    const meridiem = m[3]?.toUpperCase()
+    if (meridiem === 'PM' && h < 12) h += 12
+    if (meridiem === 'AM' && h === 12) h = 0
 
-      if (!meridiem && isEnd && h >= 1 && h <= 11) {
-        h += 12
-      } else if (!meridiem && !isEnd && referenceTime) {
-        const refClean = String(referenceTime).trim().replace(/[\u202F\u00A0]/g, ' ')
-        const refMatch = refClean.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/i)
-        if (refMatch) {
-          let rh = parseInt(refMatch[1], 10)
-          if (refMatch[3]?.toUpperCase() === 'PM' && rh < 12) rh += 12
-          if (refMatch[3]?.toUpperCase() === 'AM' && rh === 12) rh = 0
-          if (rh >= 13 && h < 12 && (rh - h) > 8 && (h + 12) < rh + 2) {
-            h += 12
-          }
+    if (!meridiem && isEnd && h >= 1 && h <= 11) {
+      h += 12
+    } else if (!meridiem && !isEnd && referenceTime) {
+      const refClean = String(referenceTime).trim().replace(/[\u202F\u00A0]/g, ' ')
+      const refMatch = refClean.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/i)
+      if (refMatch) {
+        let rh = parseInt(refMatch[1], 10)
+        if (refMatch[3]?.toUpperCase() === 'PM' && rh < 12) rh += 12
+        if (refMatch[3]?.toUpperCase() === 'AM' && rh === 12) rh = 0
+        if (rh >= 13 && h < 12 && (rh - h) > 8 && (h + 12) < rh + 2) {
+          h += 12
         }
       }
-
-      const ampm = h >= 12 ? 'PM' : 'AM'
-      h = h % 12 || 12
-      return `${String(h).padStart(2, '0')}:${min} ${ampm}`
     }
+
+    const ampm = h >= 12 ? 'PM' : 'AM'
+    h = h % 12 || 12
+    return `${String(h).padStart(2, '0')}:${min} ${ampm}`
+  }
+
+  // If the record itself has an explicit non-default shift timing, preserve it
+  if (shiftStr && typeof shiftStr === 'string' && shiftStr.includes('(') && !shiftStr.includes('09:30 AM')) {
+    return shiftStr
+  }
+
+  if (isGeneral && attendanceRules?.workStartTime && attendanceRules?.workEndTime) {
     return `General (${f12(attendanceRules.workStartTime, attendanceRules.workEndTime, false)} – ${f12(attendanceRules.workEndTime, attendanceRules.workStartTime, true)})`
   }
   return shiftStr || 'General Shift'
@@ -432,11 +438,30 @@ function AttendanceModule() {
           <span>Late arrivals</span>
           <strong style={{ color: 'var(--gold)' }}>{lateCount} Staff</strong>
           <small>Checked in after {(() => {
-            const st = storeState.companySettings?.attendanceRules?.workStartTime
+            const rules = storeState.companySettings?.attendanceRules
+            const st = rules?.workStartTime
+            const et = rules?.workEndTime
             if (!st) return '09:30 AM'
-            const [h, m] = st.split(':').map(Number)
+            const clean = String(st).trim().replace(/[\u202F\u00A0]/g, ' ')
+            const m = clean.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/i)
+            if (!m) return st
+            let h = parseInt(m[1], 10)
+            const min = m[2]
+            const meridiem = m[3]?.toUpperCase()
+            if (meridiem === 'PM' && h < 12) h += 12
+            if (meridiem === 'AM' && h === 12) h = 0
+            if (!meridiem && et) {
+              const endClean = String(et).trim().replace(/[\u202F\u00A0]/g, ' ')
+              const endMatch = endClean.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/i)
+              if (endMatch) {
+                let eh = parseInt(endMatch[1], 10)
+                if (endMatch[3]?.toUpperCase() === 'PM' && eh < 12) eh += 12
+                if (eh >= 13 && h < 12 && (eh - h) > 8 && (h + 12) < eh + 2) h += 12
+              }
+            }
             const ampm = h >= 12 ? 'PM' : 'AM'
-            return `${String(h % 12 || 12).padStart(2, '0')}:${String(m || 0).padStart(2, '0')} ${ampm}`
+            h = h % 12 || 12
+            return `${String(h).padStart(2, '0')}:${min} ${ampm}`
           })()}</small>
         </div>
         <div className="panel module-kpi">
@@ -4919,14 +4944,31 @@ function SettingsModule() {
             <h4 style={{ margin: '4px 0' }}>{(() => {
               const r = storeState.companySettings?.attendanceRules
               if (r?.workStartTime && r?.workEndTime) {
-                const f12 = (t) => {
-                  const [h, m] = String(t).split(':').map(Number)
-                  if (isNaN(h)) return t
+                const f12 = (t, ref = null, isEnd = false) => {
+                  if (!t) return ''
+                  const clean = String(t).trim().replace(/[\u202F\u00A0]/g, ' ')
+                  const m = clean.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/i)
+                  if (!m) return t
+                  let h = parseInt(m[1], 10)
+                  const min = m[2]
+                  const meridiem = m[3]?.toUpperCase()
+                  if (meridiem === 'PM' && h < 12) h += 12
+                  if (meridiem === 'AM' && h === 12) h = 0
+                  if (!meridiem && isEnd && h >= 1 && h <= 11) h += 12
+                  else if (!meridiem && !isEnd && ref) {
+                    const endClean = String(ref).trim().replace(/[\u202F\u00A0]/g, ' ')
+                    const endMatch = endClean.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/i)
+                    if (endMatch) {
+                      let eh = parseInt(endMatch[1], 10)
+                      if (endMatch[3]?.toUpperCase() === 'PM' && eh < 12) eh += 12
+                      if (eh >= 13 && h < 12 && (eh - h) > 8 && (h + 12) < eh + 2) h += 12
+                    }
+                  }
                   const ampm = h >= 12 ? 'PM' : 'AM'
-                  const h12 = h % 12 || 12
-                  return `${String(h12).padStart(2, '0')}:${String(m || 0).padStart(2, '0')} ${ampm}`
+                  h = h % 12 || 12
+                  return `${String(h).padStart(2, '0')}:${min} ${ampm}`
                 }
-                return `${f12(r.workStartTime)} - ${f12(r.workEndTime)}`
+                return `${f12(r.workStartTime, r.workEndTime, false)} - ${f12(r.workEndTime, r.workStartTime, true)}`
               }
               return '09:30 AM - 06:30 PM'
             })()}</h4>

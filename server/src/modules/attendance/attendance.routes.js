@@ -23,7 +23,8 @@ export function createAttendanceRouter({ auth, service, useDatabase = false, per
   if (useDatabase) router.use(auth.authenticate, async (request, response, next) => {
     try {
       ensureConnected()
-      const saved = await AttendanceSettings.findOne({ $or: [{ key: 'office' }, { key: null }, { key: { $exists: false } }] }).lean()
+      const saved = (await AttendanceSettings.findOne({ key: 'office' }).sort({ updatedAt: -1 }).lean()) ||
+        (await AttendanceSettings.findOne({ $or: [{ key: null }, { key: { $exists: false } }] }).sort({ updatedAt: -1 }).lean())
       service.updateConfig({
         locations: saved?.locations && saved.locations.length > 0 ? saved.locations : undefined,
         officeNetworkIPs: saved?.officeNetworkIPs ?? [],
@@ -96,19 +97,20 @@ export function createAttendanceRouter({ auth, service, useDatabase = false, per
       }
       if (useDatabase) {
         ensureConnected()
-        const query = { $or: [{ key: 'office' }, { key: null }, { key: { $exists: false } }] }
+        const existingDoc = (await AttendanceSettings.findOne({ key: 'office' }).sort({ updatedAt: -1 }).lean()) ||
+          (await AttendanceSettings.findOne({ $or: [{ key: null }, { key: { $exists: false } }] }).sort({ updatedAt: -1 }).lean())
         if (values.attendanceRules) {
-          const existingDoc = await AttendanceSettings.findOne(query).lean()
           values.attendanceRules = {
             ...(existingDoc?.attendanceRules || {}),
             ...values.attendanceRules,
           }
         }
         const saved = await AttendanceSettings.findOneAndUpdate(
-          query,
+          { key: 'office' },
           { $set: { ...values, key: 'office' } },
           { upsert: true, new: true, returnDocument: 'after' }
         ).lean()
+        await AttendanceSettings.deleteMany({ key: { $ne: 'office' } }).catch(() => {})
         service.updateConfig(saved || values)
         if (values.attendanceRules) {
           await service.recalculateTodayAttendanceForRules(values.attendanceRules).catch(() => {})

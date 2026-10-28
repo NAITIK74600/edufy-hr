@@ -1359,17 +1359,22 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
             shift: shift || (() => {
               const attRules = state().companySettings?.attendanceRules || {}
               if (attRules.workStartTime && attRules.workEndTime) {
-                const f12 = (t) => {
+                const f12 = (t, ref = null, isEnd = false) => {
                   if (!t) return ''
-                  const parts = String(t).split(':')
-                  let h = parseInt(parts[0], 10)
-                  const m = parts[1] || '00'
-                  if (isNaN(h)) return t
+                  const clean = String(t).trim().replace(/[\u202F\u00A0]/g, ' ')
+                  const m = clean.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/i)
+                  if (!m) return t
+                  let h = parseInt(m[1], 10)
+                  const min = m[2]
+                  const meridiem = m[3]?.toUpperCase()
+                  if (meridiem === 'PM' && h < 12) h += 12
+                  if (meridiem === 'AM' && h === 12) h = 0
+                  if (!meridiem && isEnd && h >= 1 && h <= 11) h += 12
                   const ampm = h >= 12 ? 'PM' : 'AM'
                   h = h % 12 || 12
-                  return `${String(h).padStart(2, '0')}:${m} ${ampm}`
+                  return `${String(h).padStart(2, '0')}:${min} ${ampm}`
                 }
-                return `General (${f12(attRules.workStartTime)} – ${f12(attRules.workEndTime)})`
+                return `General (${f12(attRules.workStartTime, attRules.workEndTime, false)} – ${f12(attRules.workEndTime, attRules.workStartTime, true)})`
               }
               return 'General (09:30 AM – 06:30 PM)'
             })(),

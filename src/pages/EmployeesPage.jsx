@@ -128,11 +128,18 @@ function EmployeeDirectory({ route } = {}) {
   const allEmployees = storeState.employees || []
 
   const allRoleOptions = useMemo(() => {
-    const deletedIds = new Set(storeState.deletedRoleIds || hrStore.getState?.()?.deletedRoleIds || [])
+    const PROTECTED_ROLES = new Set([
+      'admin', 'hr', 'hr_executive', 'manager', 'employee', 'intern', 'team_lead',
+      'team_leader', 'director', 'managing_director', 'sde', 'operations_executive',
+      'marketing_executive', 'business_development_executive'
+    ])
+    const rawDeleted = storeState.deletedRoleIds || hrStore.getState?.()?.deletedRoleIds || []
+    const deletedIds = new Set(rawDeleted.filter((id) => !PROTECTED_ROLES.has(id)))
     const hrRoles = hrStore.getRoles ? hrStore.getRoles() : []
     const storeRoles = storeState.roles || []
     const roleMap = new Map()
-    // 1. Initial standard roles (excluding deleted ones)
+
+    // 1. Initial standard roles (excluding non-protected explicitly deleted ones)
     INITIAL_ROLES.forEach((r) => {
       if (r?.id && !deletedIds.has(r.id)) {
         roleMap.set(r.id, { id: r.id, name: r.name || r.label || r.id })
@@ -152,6 +159,14 @@ function EmployeeDirectory({ route } = {}) {
         roleMap.set(id, { id, name: r.name || r.label || id })
       }
     })
+
+    // Safety fallback: if roleMap is somehow too small, guarantee all standard roles are present
+    if (roleMap.size < 5) {
+      INITIAL_ROLES.forEach((r) => {
+        if (r?.id) roleMap.set(r.id, { id: r.id, name: r.name || r.label || r.id })
+      })
+    }
+
     return Array.from(roleMap.values())
   }, [storeState.roles, storeState.deletedRoleIds])
 
