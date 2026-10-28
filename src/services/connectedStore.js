@@ -300,9 +300,13 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
     if (data.salaryStructure !== undefined) payload.salaryStructure = data.salaryStructure
     if (data.policyConsents !== undefined) payload.policyConsents = data.policyConsents
     if (data.complianceDocs !== undefined) payload.complianceDocs = data.complianceDocs
-    if (data.bankDetails || data.bankName !== undefined) {
-      payload.bankDetails = { ...data.bankDetails }
-      for (const key of ['bankName', 'accountNumber', 'ifscCode', 'panTaxId', 'uanNumber']) if (data[key] !== undefined) payload.bankDetails[key] = data[key]
+    if (data.phone !== undefined) payload.phone = String(data.phone || '').trim()
+    if (data.employeeId !== undefined) payload.employeeId = String(data.employeeId || '').trim().toUpperCase()
+    if (data.bankDetails || data.bankName !== undefined || data.accountNumber !== undefined || data.ifscCode !== undefined || data.panTaxId !== undefined || data.uanNumber !== undefined) {
+      payload.bankDetails = { ...(data.bankDetails || {}) }
+      for (const key of ['bankName', 'accountNumber', 'ifscCode', 'panTaxId', 'uanNumber']) {
+        if (data[key] !== undefined) payload.bankDetails[key] = String(data[key] || '').trim()
+      }
     }
     if (payload.documents && !Array.isArray(payload.documents)) {
       payload.onboardingDocs = { ...(payload.onboardingDocs || {}), ...payload.documents }
@@ -1049,10 +1053,15 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
       if (data.salary !== undefined && (!Number.isFinite(Number(data.salary)) || Number(data.salary) < 0)) throw new Error('Enter a non-negative annual salary.')
       return mutate(async () => {
         const record = employee(id)
+        const targetId = record.id || record._id || record.employeeId || id
         try {
-          const updated = await apiClient.patch(`/employees/${record.id}`, employeePayload(data))
-          const fresh = normalizeEmployee(updated.data)
-          state().employees = (state().employees || []).map((e) => (e.id === record.id ? { ...e, ...fresh } : e))
+          const updated = await apiClient.patch(`/employees/${encodeURIComponent(targetId)}`, employeePayload(data))
+          const payloadData = updated?.data ?? updated
+          const fresh = payloadData ? normalizeEmployee(payloadData) : { ...record, ...data }
+          state().employees = (state().employees || []).map((e) => ((e.id === record.id || e._id === record._id || e.employeeId === record.employeeId) ? { ...e, ...fresh } : e))
+          if (rawLocal.updateEmployee) {
+            try { rawLocal.updateEmployee(targetId, data) } catch {}
+          }
           notify()
           return fresh
         } catch (err) {
@@ -1066,8 +1075,15 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
             delete clean.onboardingNotes
             delete clean.offboardingChecklist
             if (Object.keys(clean).length > 0) {
-              const res = await apiClient.patch(`/employees/${record.id}`, clean)
-              return normalizeEmployee(res.data)
+              const res = await apiClient.patch(`/employees/${encodeURIComponent(targetId)}`, clean)
+              const resData = res?.data ?? res
+              const fresh = resData ? normalizeEmployee(resData) : { ...record, ...clean }
+              state().employees = (state().employees || []).map((e) => ((e.id === record.id || e._id === record._id || e.employeeId === record.employeeId) ? { ...e, ...fresh } : e))
+              if (rawLocal.updateEmployee) {
+                try { rawLocal.updateEmployee(targetId, clean) } catch {}
+              }
+              notify()
+              return fresh
             }
             return record
           }

@@ -132,8 +132,20 @@ export function createMongoEmployeeRepository() {
     },
     async findForUpdate(id) {
       ensureConnected()
-      if (!mongoose.isValidObjectId(id)) return null
-      return Employee.findById(id).select('+authVersion +onboardingDocs')
+      if (!id) return null
+      let employee = null
+      if (mongoose.isValidObjectId(id)) {
+        employee = await Employee.findById(id).select('+authVersion +onboardingDocs')
+      }
+      if (!employee && typeof id === 'string') {
+        employee = await Employee.findOne({
+          $or: [
+            { employeeId: id.trim().toUpperCase() },
+            { email: id.trim().toLowerCase() },
+          ],
+        }).select('+authVersion +onboardingDocs')
+      }
+      return employee
     },
     async findManager(id) {
       ensureConnected()

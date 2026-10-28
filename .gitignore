@@ -48,6 +48,6 @@ WhatsApp*.jpeg
 .github/
 
 # Test files
-test/
+/test/
 
 .jwt_secret

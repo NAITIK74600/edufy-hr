@@ -278,7 +278,9 @@ export function createEmployeeService({ repository }) {
       for (const [field, value] of Object.entries(values)) employee[field] = value
       await repository.save(employee)
       await repository.addAudit(auditEvent(actor, 'employee.updated', employee.id ?? employee._id, changedFields))
-      return repository.findById(id)
+      const lookupId = employee.id ?? employee._id ?? id
+      const reloaded = await repository.findById(lookupId)
+      return reloaded || (await repository.findById(employee.employeeId)) || (repository.toPublicEmployee ? repository.toPublicEmployee(employee) : employee)
     },
     async setStatus(id, status, actor) {
       const employee = await repository.findForUpdate(id)

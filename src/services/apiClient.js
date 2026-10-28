@@ -80,7 +80,7 @@ async function executeApiRequest(path, options = {}, retries = 3) {
       fields: error.fields
     })
   }
-  return body
+  return body ?? { success: true }
 }
 
 export async function apiRequest(path, options = {}, retries = 3) {

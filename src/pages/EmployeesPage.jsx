@@ -369,24 +369,35 @@ function EmployeeDirectory({ route } = {}) {
     if (!editingEmployee || !editingEmployee.name || !editingEmployee.email) return
 
     const mgr = allEmployees.find((m) => m.id === editingEmployee.managerId || m.employeeId === editingEmployee.managerId)
+    const targetId = editingEmployee.id || editingEmployee._id || editingEmployee.employeeId
     const updates = {
       ...editingEmployee,
       campus: editingEmployee.campus || 'Ignite Campus',
       location: editingEmployee.campus || editingEmployee.location || 'Ignite Campus',
       employmentType: editingEmployee.employmentType || (editingEmployee.role?.includes('intern') ? 'intern' : 'full_time'),
       managerName: mgr ? mgr.name : editingEmployee.managerName,
-      salary: Number(editingEmployee.salary),
+      salary: Number(editingEmployee.salary) || 0,
       salaryStructure: editingEmployee.salaryStructure || {},
+      phone: editingEmployee.phone ? String(editingEmployee.phone).trim() : '',
+      employeeId: editingEmployee.employeeId ? String(editingEmployee.employeeId).trim().toUpperCase() : '',
+      bankDetails: {
+        ...(editingEmployee.bankDetails || {}),
+        bankName: editingEmployee.bankName || '',
+        accountNumber: String(editingEmployee.accountNumber || '').trim(),
+        ifscCode: String(editingEmployee.ifscCode || '').trim().toUpperCase(),
+        panTaxId: String(editingEmployee.panTaxId || '').trim().toUpperCase(),
+        uanNumber: String(editingEmployee.uanNumber || '').trim(),
+      },
     }
 
     setModalError('')
     try {
-      await hrStore.updateEmployee(editingEmployee.id, updates)
+      await hrStore.updateEmployee(targetId, updates)
       setEditingEmployee(null)
       showFeedback(`Updated profile for ${editingEmployee.name} (${editingEmployee.employeeId}).`)
     } catch (err) {
       const details = err?.fields ? ` (${Object.entries(err.fields).map(([k, v]) => `${k}: ${v}`).join(', ')})` : ''
-      setModalError(`Failed to save: ${err.message}${details}`)
+      setModalError(`Failed to save: ${err?.message || 'Unexpected error'}${details}`)
     }
   })
 
@@ -2771,9 +2782,10 @@ function EmployeeDetail({ id }) {
     e.preventDefault()
     if (!editingEmployee || !editingEmployee.name || !editingEmployee.email) return
 
-    await hrStore.updateEmployee(editingEmployee.id, {
+    const targetId = editingEmployee.id || editingEmployee._id || editingEmployee.employeeId
+    await hrStore.updateEmployee(targetId, {
       ...editingEmployee,
-      salary: Number(editingEmployee.salary),
+      salary: Number(editingEmployee.salary) || 0,
     })
     setEditingEmployee(null)
   })

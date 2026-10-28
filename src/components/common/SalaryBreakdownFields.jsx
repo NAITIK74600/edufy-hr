@@ -189,14 +189,14 @@ export function SalaryBreakdownFields({
           <div>
             <div style={{ fontSize: '10px', fontWeight: 600, color: '#0d9488', textTransform: 'uppercase' }}>Monthly Gross</div>
             <div style={{ fontSize: '15px', fontWeight: 700, color: '#0f766e' }}>
-              ₹{formatINR(monthlyGross > 0 ? monthlyGross : Math.round((Number(currentSalary) || 0) / 12))}
+              {formatINR(monthlyGross > 0 ? monthlyGross : Math.round((Number(currentSalary) || 0) / 12))}
             </div>
           </div>
           <div style={{ width: '1px', height: '28px', background: '#99f6e4' }} />
           <div>
             <div style={{ fontSize: '10px', fontWeight: 600, color: '#0d9488', textTransform: 'uppercase' }}>Annual CTC</div>
             <div style={{ fontSize: '15px', fontWeight: 700, color: '#0f766e' }}>
-              ₹{formatINR(effectiveAnnual)}
+              {formatINR(effectiveAnnual)}
             </div>
           </div>
         </div>
