@@ -4529,6 +4529,34 @@ function AdminSettingsModule({ user: propUser }) {
   const [newIpLabel, setNewIpLabel] = useState('')
   const [manualIp, setManualIp] = useState('')
 
+  function parseTimeHelper(val) {
+    if (!val) return { h24: '09:30', h12: '09:30 AM', isPM: false, period: 'Morning' }
+    const clean = String(val).trim().replace(/[\u202F\u00A0]/g, ' ')
+    const m = clean.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/i)
+    if (!m) return { h24: val, h12: val, isPM: false, period: 'Morning' }
+    let h = parseInt(m[1], 10)
+    const min = m[2]
+    const meridiem = m[3]?.toUpperCase()
+    if (meridiem === 'PM' && h < 12) h += 12
+    if (meridiem === 'AM' && h === 12) h = 0
+    const isPM = h >= 12
+    const h12 = h % 12 || 12
+    const h12Str = `${String(h12).padStart(2, '0')}:${min} ${isPM ? 'PM' : 'AM'}`
+    const h24Str = `${String(h).padStart(2, '0')}:${min}`
+    return { h24: h24Str, h12: h12Str, isPM, period: isPM ? 'Evening' : 'Morning' }
+  }
+
+  function switchTimeAmPm(val) {
+    const parsed = parseTimeHelper(val)
+    let [h, m] = parsed.h24.split(':').map(Number)
+    if (parsed.isPM) {
+      h = (h - 12) % 24
+    } else {
+      h = (h + 12) % 24
+    }
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+  }
+
   // Policy Form State
   const initialAtt = storeState.companySettings?.attendanceRules || {}
   const initialLeave = storeState.companySettings?.leavePolicies || {}
@@ -4725,10 +4753,12 @@ function AdminSettingsModule({ user: propUser }) {
   const handleSavePolicies = async (e) => {
     e.preventDefault()
     try {
+      const cleanStart = parseTimeHelper(startTime).h24
+      const cleanEnd = parseTimeHelper(endTime).h24
       await hrStore.updateCompanySettings({
         attendanceRules: {
-          workStartTime: startTime,
-          workEndTime: endTime,
+          workStartTime: cleanStart,
+          workEndTime: cleanEnd,
           gracePeriodMinutes: Number(graceMins),
           requireOfficeNetworkAndGps: Boolean(wifiReq),
           maxGeofenceRadiusMeters: Number(geofenceRadius) || 50,
@@ -4810,26 +4840,61 @@ function AdminSettingsModule({ user: propUser }) {
               <strong style={{ fontSize: '13px', display: 'block', marginBottom: '10px' }}>Shift & Punch Rules</strong>
               <div style={{ display: 'grid', gap: '10px' }}>
                 <div>
-                  <label style={{ fontSize: '11px', display: 'block', color: 'var(--muted)', marginBottom: '3px' }}>Shift Start Time</label>
-                  <input
-                    type="time"
-                    className="text-input"
-                    value={startTime}
-                    onChange={(e) => setStartTime(e.target.value)}
-                    style={{ width: '100%', padding: '5px 8px', fontSize: '12px' }}
-                    required
-                  />
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                    <label style={{ fontSize: '11px', color: 'var(--muted)', margin: 0, fontWeight: 600 }}>Shift Start Time</label>
+                    <span style={{ fontSize: '10.5px', fontWeight: 700, color: parseTimeHelper(startTime).isPM ? '#0284c7' : '#d97706', background: parseTimeHelper(startTime).isPM ? '#e0f2fe' : '#fef3c7', padding: '1px 6px', borderRadius: '4px' }}>
+                      {parseTimeHelper(startTime).h12} ({parseTimeHelper(startTime).period})
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                    <input
+                      type="time"
+                      className="text-input"
+                      value={parseTimeHelper(startTime).h24}
+                      onChange={(e) => setStartTime(e.target.value)}
+                      style={{ flex: 1, padding: '5px 8px', fontSize: '12px' }}
+                      required
+                    />
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={() => setStartTime(switchTimeAmPm(startTime))}
+                      title="Click to flip between AM (Morning) and PM (Evening)"
+                      style={{ padding: '4px 8px', fontSize: '11px', whiteSpace: 'nowrap', height: '32px', cursor: 'pointer' }}
+                    >
+                      {parseTimeHelper(startTime).isPM ? '☀️ Set to AM' : '🌙 Set to PM'}
+                    </button>
+                  </div>
+                  <div style={{ fontSize: '10px', color: 'var(--muted)', marginTop: '3px' }}>
+                    Punch-in after <strong>{parseTimeHelper(startTime).h12}</strong> (+{graceMins}m grace) is marked as Late.
+                  </div>
                 </div>
                 <div>
-                  <label style={{ fontSize: '11px', display: 'block', color: 'var(--muted)', marginBottom: '3px' }}>Shift End Time</label>
-                  <input
-                    type="time"
-                    className="text-input"
-                    value={endTime}
-                    onChange={(e) => setEndTime(e.target.value)}
-                    style={{ width: '100%', padding: '5px 8px', fontSize: '12px' }}
-                    required
-                  />
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                    <label style={{ fontSize: '11px', color: 'var(--muted)', margin: 0, fontWeight: 600 }}>Shift End Time</label>
+                    <span style={{ fontSize: '10.5px', fontWeight: 700, color: parseTimeHelper(endTime).isPM ? '#0284c7' : '#d97706', background: parseTimeHelper(endTime).isPM ? '#e0f2fe' : '#fef3c7', padding: '1px 6px', borderRadius: '4px' }}>
+                      {parseTimeHelper(endTime).h12} ({parseTimeHelper(endTime).period})
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                    <input
+                      type="time"
+                      className="text-input"
+                      value={parseTimeHelper(endTime).h24}
+                      onChange={(e) => setEndTime(e.target.value)}
+                      style={{ flex: 1, padding: '5px 8px', fontSize: '12px' }}
+                      required
+                    />
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={() => setEndTime(switchTimeAmPm(endTime))}
+                      title="Click to flip between AM (Morning) and PM (Evening)"
+                      style={{ padding: '4px 8px', fontSize: '11px', whiteSpace: 'nowrap', height: '32px', cursor: 'pointer' }}
+                    >
+                      {parseTimeHelper(endTime).isPM ? '☀️ Set to AM' : '🌙 Set to PM'}
+                    </button>
+                  </div>
                 </div>
                 <div>
                   <label style={{ fontSize: '11px', display: 'block', color: 'var(--muted)', marginBottom: '3px' }}>Grace Period (Minutes)</label>

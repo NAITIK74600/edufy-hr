@@ -129,7 +129,7 @@ export function calculateDistanceMeters(lat1, lon1, lat2, lon2) {
   return Math.round(R * c)
 }
 
-function parseTimeToMinutes(timeStr) {
+export function parseTimeToMinutes(timeStr) {
   if (!timeStr) return null
   const clean = String(timeStr).trim().replace(/[\u202F\u00A0]/g, ' ')
   const match = clean.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/i)
@@ -143,19 +143,28 @@ function parseTimeToMinutes(timeStr) {
   return hours * 60 + minutes
 }
 
-function formatCurrentTime(d = new Date()) {
+export function formatCurrentTime(d = new Date()) {
   return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' })
 }
 
-function formatTime12(time24) {
-  if (!time24) return ''
-  const parts = String(time24).split(':')
-  let hours = parseInt(parts[0], 10)
-  const mins = parts[1] || '00'
-  if (isNaN(hours)) return time24
+export function formatTime12(timeStr) {
+  if (!timeStr) return ''
+  const mins = parseTimeToMinutes(timeStr)
+  if (mins === null) return String(timeStr)
+  let hours = Math.floor(mins / 60)
+  const minutes = mins % 60
   const ampm = hours >= 12 ? 'PM' : 'AM'
   hours = hours % 12 || 12
-  return `${String(hours).padStart(2, '0')}:${mins} ${ampm}`
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')} ${ampm}`
+}
+
+export function formatTime24(timeStr) {
+  if (!timeStr) return '09:30'
+  const mins = parseTimeToMinutes(timeStr)
+  if (mins === null) return String(timeStr)
+  const hours = Math.floor(mins / 60)
+  const minutes = mins % 60
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`
 }
 
 function getTodayString() {
@@ -909,25 +918,41 @@ export function createAttendanceService({ repository, companySettings = {} }) {
       if (!records || !records.length) return
       const effectiveRules = { ...attendanceRules, ...newRules }
       const startTime = effectiveRules.workStartTime || '09:30'
+      const endTime = effectiveRules.workEndTime || '18:30'
       const startMins = parseTimeToMinutes(startTime) ?? 570
       const grace = Number(effectiveRules.gracePeriodMinutes ?? 15)
+      const shiftDisplay = `General (${formatTime12(startTime)} – ${formatTime12(endTime)})`
 
       for (const rec of records) {
         if (!rec.checkIn) continue
         const inMins = parseTimeToMinutes(rec.checkIn)
         if (inMins === null) continue
         const isLate = inMins > startMins + grace
-        const needsUpdate = rec.isLate !== isLate || (isLate && !rec.notes?.includes(startTime))
-        if (needsUpdate) {
+        const isGeneral = !rec.shiftCode || rec.shiftCode === 'general' || !rec.shift || rec.shift.startsWith('General')
+        const needsShiftUpdate = isGeneral && rec.shift !== shiftDisplay
+        const needsLateUpdate = rec.isLate !== isLate
+
+        if (needsLateUpdate || needsShiftUpdate) {
+          let updatedTotalHours = rec.totalHours
+          if (rec.totalHours && (rec.totalHours.startsWith('Active') || rec.totalHours === '—')) {
+            if (isLate) {
+              updatedTotalHours = rec.lateCount > 2 ? 'Active (Half-Day · Late)' : 'Active (Late)'
+            } else {
+              updatedTotalHours = 'Active (Live)'
+            }
+          }
           const updated = {
             ...rec,
             isLate,
+            shift: isGeneral ? shiftDisplay : rec.shift,
+            shiftCode: isGeneral ? 'general' : rec.shiftCode,
             status: isLate
               ? (rec.lateCount > 2 ? 'half-day' : 'late')
               : (['late', 'half-day'].includes(rec.status) ? 'present' : rec.status),
             notes: isLate
               ? `Late Login (${formatTime12(startTime)})`
               : 'On-time verification (General Shift)',
+            totalHours: updatedTotalHours,
           }
           if (repository.save) {
             await repository.save(updated).catch(() => {})

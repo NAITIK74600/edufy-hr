@@ -488,6 +488,19 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
         if (hasAttendance) {
           const attendancePayload = Object.fromEntries(attendanceKeys.filter((k) => updates[k] !== undefined).map((k) => [k, updates[k]]))
           lastResult = await apiClient.patch('/attendance/config', attendancePayload)
+          if (lastResult?.data) {
+            const serverConfig = lastResult.data
+            const updatedCompanySettings = {
+              ...(state().companySettings || {}),
+              ...serverConfig,
+              attendanceRules: {
+                ...(state().companySettings?.attendanceRules || {}),
+                ...(serverConfig.attendanceRules || {}),
+              },
+            }
+            state().companySettings = updatedCompanySettings
+            if (rawLocal.getState) rawLocal.getState().companySettings = updatedCompanySettings
+          }
           try {
             const management = ['admin', 'hr'].includes(user?.role)
             const freshAtt = await apiClient.get(management ? '/attendance' : '/attendance/self')

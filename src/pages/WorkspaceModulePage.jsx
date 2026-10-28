@@ -64,6 +64,28 @@ import { useAuth } from '../auth/AuthContext'
 import { formatINR, formatINRRaw, amountInWordsINR } from '../utils/currency'
 const workspaceHandler = (handler) => workspaceAction(hrStore, handler)
 
+function formatShiftDisplay(shiftStr, shiftCode, attendanceRules) {
+  const isGeneral = !shiftCode || shiftCode === 'general' || !shiftStr || String(shiftStr).startsWith('General')
+  if (isGeneral && attendanceRules?.workStartTime && attendanceRules?.workEndTime) {
+    const f12 = (t) => {
+      if (!t) return ''
+      const clean = String(t).trim().replace(/[\u202F\u00A0]/g, ' ')
+      const m = clean.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/i)
+      if (!m) return t
+      let h = parseInt(m[1], 10)
+      const min = m[2]
+      const meridiem = m[3]?.toUpperCase()
+      if (meridiem === 'PM' && h < 12) h += 12
+      if (meridiem === 'AM' && h === 12) h = 0
+      const ampm = h >= 12 ? 'PM' : 'AM'
+      h = h % 12 || 12
+      return `${String(h).padStart(2, '0')}:${min} ${ampm}`
+    }
+    return `General (${f12(attendanceRules.workStartTime)} – ${f12(attendanceRules.workEndTime)})`
+  }
+  return shiftStr || 'General Shift'
+}
+
 // ==========================================
 // 1. ATTENDANCE MANAGEMENT MODULE
 // ==========================================
@@ -624,7 +646,7 @@ function AttendanceModule() {
                     </div>
 
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '10px', color: 'var(--muted)' }}>
-                      <span>Shift: <strong>{r.shift || 'General Shift'}</strong></span>
+                      <span>Shift: <strong>{formatShiftDisplay(r.shift, r.shiftCode, storeState.companySettings?.attendanceRules)}</strong></span>
                       {r.isOnBreak ? (
                         <span style={{ color: '#b45309', fontWeight: 700 }}>⏸️ On Break ({r.currentBreak?.type || 'lunch'})</span>
                       ) : r.totalBreakMinutes > 0 ? (
@@ -694,7 +716,7 @@ function AttendanceModule() {
                   label: 'Shift',
                   render: (r) => (
                     <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--ink)' }}>
-                      {r.shift || 'General Shift'}
+                      {formatShiftDisplay(r.shift, r.shiftCode, storeState.companySettings?.attendanceRules)}
                     </span>
                   ),
                 },
@@ -1428,7 +1450,7 @@ function AttendanceModule() {
                         let updates = { ...editingAttendance, status: nextStatus };
                         if (nextStatus === 'late') {
                           const occ = getLateOccurrence(editingAttendance);
-                          const shift = editingAttendance.shift || 'General Shift';
+                          const shift = formatShiftDisplay(editingAttendance.shift, editingAttendance.shiftCode, storeState.companySettings?.attendanceRules);
                           updates.lateCount = occ;
                           updates.notes = `Late Login #${occ}/2 (${shift})`;
                         }
@@ -1458,7 +1480,7 @@ function AttendanceModule() {
                       <button
                         type="button"
                         onClick={() => {
-                          const shift = editingAttendance.shift || 'General Shift';
+                          const shift = formatShiftDisplay(editingAttendance.shift, editingAttendance.shiftCode, storeState.companySettings?.attendanceRules);
                           setEditingAttendance({
                             ...editingAttendance,
                             lateCount: 1,
@@ -1481,7 +1503,7 @@ function AttendanceModule() {
                       <button
                         type="button"
                         onClick={() => {
-                          const shift = editingAttendance.shift || 'General Shift';
+                          const shift = formatShiftDisplay(editingAttendance.shift, editingAttendance.shiftCode, storeState.companySettings?.attendanceRules);
                           setEditingAttendance({
                             ...editingAttendance,
                             lateCount: 2,

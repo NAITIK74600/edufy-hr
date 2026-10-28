@@ -6,6 +6,7 @@ import { AttendanceSettings } from '../../models/AttendanceSettings.js'
 import { LeavePolicy } from '../../models/LeavePolicy.js'
 import { ensureConnected } from '../leave/leave.repository.js'
 import { isIP } from 'node:net'
+import { formatTime24, formatTime12 } from './attendance.service.js'
 
 function getClientIp(req) {
   let ip = (req.ip || req.socket?.remoteAddress || '').trim()
@@ -22,7 +23,7 @@ export function createAttendanceRouter({ auth, service, useDatabase = false, per
   if (useDatabase) router.use(auth.authenticate, async (request, response, next) => {
     try {
       ensureConnected()
-      const saved = await AttendanceSettings.findOne({ key: 'office' }).lean()
+      const saved = await AttendanceSettings.findOne({ $or: [{ key: 'office' }, { key: null }, { key: { $exists: false } }] }).lean()
       service.updateConfig({
         locations: saved?.locations && saved.locations.length > 0 ? saved.locations : undefined,
         officeNetworkIPs: saved?.officeNetworkIPs ?? [],
@@ -77,6 +78,14 @@ export function createAttendanceRouter({ auth, service, useDatabase = false, per
           }
         }
       }
+      if (values.attendanceRules) {
+        if (values.attendanceRules.workStartTime) {
+          values.attendanceRules.workStartTime = formatTime24(values.attendanceRules.workStartTime)
+        }
+        if (values.attendanceRules.workEndTime) {
+          values.attendanceRules.workEndTime = formatTime24(values.attendanceRules.workEndTime)
+        }
+      }
       if (values.attendanceRules?.maxGeofenceRadiusMeters !== undefined) {
         const r = Number(values.attendanceRules.maxGeofenceRadiusMeters)
         if (!Number.isFinite(r) || r < 1 || r > 1000) {
@@ -85,15 +94,20 @@ export function createAttendanceRouter({ auth, service, useDatabase = false, per
       }
       if (useDatabase) {
         ensureConnected()
+        const query = { $or: [{ key: 'office' }, { key: null }, { key: { $exists: false } }] }
         if (values.attendanceRules) {
-          const existingDoc = await AttendanceSettings.findOne({ key: 'office' }).lean()
+          const existingDoc = await AttendanceSettings.findOne(query).lean()
           values.attendanceRules = {
             ...(existingDoc?.attendanceRules || {}),
             ...values.attendanceRules,
           }
         }
-        const saved = await AttendanceSettings.findOneAndUpdate({ key: 'office' }, { $set: values }, { upsert: true, returnDocument: 'after' }).lean()
-        service.updateConfig(saved)
+        const saved = await AttendanceSettings.findOneAndUpdate(
+          query,
+          { $set: { ...values, key: 'office' } },
+          { upsert: true, new: true, returnDocument: 'after' }
+        ).lean()
+        service.updateConfig(saved || values)
         if (values.attendanceRules) {
           await service.recalculateTodayAttendanceForRules(values.attendanceRules).catch(() => {})
         }
@@ -124,6 +138,9 @@ export function createAttendanceRouter({ auth, service, useDatabase = false, per
         }
       } else {
         service.updateConfig(values)
+        if (values.attendanceRules) {
+          await service.recalculateTodayAttendanceForRules(values.attendanceRules).catch(() => {})
+        }
       }
       response.json({ success: true, data: service.getConfig() })
     } catch (error) { next(error) }
