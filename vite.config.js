@@ -1,25 +1,10 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
-// Safely load visualizer only if installed, so production builds without devDependencies don't crash
-let visualizerPlugin = null
-try {
-  const { visualizer } = await import('rollup-plugin-visualizer')
-  visualizerPlugin = visualizer({
-    filename: 'dist/stats.html',
-    gzipSize: true,
-    brotliSize: true,
-    open: false,
-  })
-} catch {
-  // Ignore if rollup-plugin-visualizer is not installed
-}
-
 export default defineConfig({
   cacheDir: '.vite',
   plugins: [
     react(),
-    ...(visualizerPlugin ? [visualizerPlugin] : []),
   ],
   optimizeDeps: {
     entries: ['index.html'],
