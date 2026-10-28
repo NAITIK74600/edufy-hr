@@ -3309,6 +3309,60 @@ function HelpDeskModule() {
   const [categoryFilter, setCategoryFilter] = useState('all')
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [feedback, setFeedback] = useState('')
+  const [activeTab, setActiveTab] = useState('queue') // 'queue' | 'config'
+
+  // Help Desk Configuration Form State
+  const initialHelpDesk = storeState.companySettings?.helpDeskSettings || {}
+  const [supportEmail, setSupportEmail] = useState(initialHelpDesk.supportEmail || 'leaveupdate@edufytechsolution.in')
+  const [itSupportEmail, setItSupportEmail] = useState(initialHelpDesk.itSupportEmail || 'itsupport@edufytechsolution.in')
+  const [hrSupportEmail, setHrSupportEmail] = useState(initialHelpDesk.hrSupportEmail || 'leaveupdate@edufytechsolution.in')
+  const [payrollSupportEmail, setPayrollSupportEmail] = useState(initialHelpDesk.payrollSupportEmail || 'payroll@edufytechsolution.in')
+  const [facilitiesEmail, setFacilitiesEmail] = useState(initialHelpDesk.facilitiesEmail || 'facilities@edufytechsolution.in')
+  const [defaultPriority, setDefaultPriority] = useState(initialHelpDesk.defaultPriority || 'Medium')
+  const [autoAssignToManager, setAutoAssignToManager] = useState(initialHelpDesk.autoAssignToManager ?? true)
+  const [emailNotificationsEnabled, setEmailNotificationsEnabled] = useState(initialHelpDesk.emailNotificationsEnabled ?? true)
+  const [configSaving, setConfigSaving] = useState(false)
+
+  // Sync Help Desk settings when store updates
+  useEffect(() => {
+    const hd = storeState.companySettings?.helpDeskSettings
+    if (hd) {
+      if (hd.supportEmail !== undefined) setSupportEmail(hd.supportEmail)
+      if (hd.itSupportEmail !== undefined) setItSupportEmail(hd.itSupportEmail)
+      if (hd.hrSupportEmail !== undefined) setHrSupportEmail(hd.hrSupportEmail)
+      if (hd.payrollSupportEmail !== undefined) setPayrollSupportEmail(hd.payrollSupportEmail)
+      if (hd.facilitiesEmail !== undefined) setFacilitiesEmail(hd.facilitiesEmail)
+      if (hd.defaultPriority !== undefined) setDefaultPriority(hd.defaultPriority)
+      if (hd.autoAssignToManager !== undefined) setAutoAssignToManager(hd.autoAssignToManager)
+      if (hd.emailNotificationsEnabled !== undefined) setEmailNotificationsEnabled(hd.emailNotificationsEnabled)
+    }
+  }, [storeState.companySettings])
+
+  const handleSaveConfig = async (e) => {
+    e.preventDefault()
+    setConfigSaving(true)
+    try {
+      await hrStore.updateCompanySettings({
+        helpDeskSettings: {
+          supportEmail: supportEmail.trim(),
+          itSupportEmail: itSupportEmail.trim(),
+          hrSupportEmail: hrSupportEmail.trim(),
+          payrollSupportEmail: payrollSupportEmail.trim(),
+          facilitiesEmail: facilitiesEmail.trim(),
+          defaultPriority,
+          autoAssignToManager: Boolean(autoAssignToManager),
+          emailNotificationsEnabled: Boolean(emailNotificationsEnabled),
+        },
+      })
+      setFeedback('✓ Help desk & support routing configuration saved successfully!')
+      setTimeout(() => setFeedback(''), 5000)
+    } catch (err) {
+      setFeedback(`✕ Failed to save configuration: ${err.message || 'Please try again.'}`)
+      setTimeout(() => setFeedback(''), 5000)
+    } finally {
+      setConfigSaving(false)
+    }
+  }
 
   // New ticket form state
   const [newTicket, setNewTicket] = useState({
@@ -3400,6 +3454,14 @@ function HelpDeskModule() {
       >
         <button
           type="button"
+          className="ui-button secondary"
+          onClick={() => setActiveTab(activeTab === 'config' ? 'queue' : 'config')}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+        >
+          <Settings2 size={14} /> {activeTab === 'config' ? 'View Ticket Queue' : 'Help Desk Configuration'}
+        </button>
+        <button
+          type="button"
           className="ui-button primary"
           onClick={() => setShowCreateModal(true)}
           style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
@@ -3407,6 +3469,28 @@ function HelpDeskModule() {
           <Plus size={15} /> Raise Support Ticket
         </button>
       </PageHeader>
+
+      {/* Sub Navigation Tabs */}
+      <div className="subnav-tabs" style={{ marginBottom: '18px' }}>
+        <button
+          type="button"
+          className={`subnav-tab ${activeTab === 'queue' ? 'active' : ''}`}
+          onClick={() => setActiveTab('queue')}
+        >
+          <Ticket size={14} />
+          <span>Support Tickets Queue</span>
+          <span className="badge-pill">{allTickets.length}</span>
+        </button>
+
+        <button
+          type="button"
+          className={`subnav-tab ${activeTab === 'config' ? 'active' : ''}`}
+          onClick={() => setActiveTab('config')}
+        >
+          <Settings2 size={14} />
+          <span>Help Desk Configuration & SLAs</span>
+        </button>
+      </div>
 
       {/* Action Feedback Banner */}
       {feedback && (
@@ -3417,7 +3501,180 @@ function HelpDeskModule() {
         </div>
       )}
 
-      {/* KPI METRIC CARDS */}
+      {activeTab === 'config' ? (
+        <section className="panel" style={{ borderLeft: '4px solid #0284c7' }}>
+          <div className="panel-heading">
+            <div>
+              <p className="section-kicker">Support Infrastructure</p>
+              <h2>Help Desk Configuration & Department Routing</h2>
+            </div>
+            <span className="role-badge" style={{ fontSize: '10px', background: '#e0f2fe', color: '#0369a1', border: '1px solid #bae6fd' }}>
+              Multi-Tier SLA Engine
+            </span>
+          </div>
+          <p style={{ fontSize: '12px', color: 'var(--muted)', margin: '8px 0 16px' }}>
+            Configure enterprise support ticket routing emails, manager escalation protocols, and automated notification triggers for employee IT, HR, Payroll, and Facilities requests.
+          </p>
+
+          <form onSubmit={handleSaveConfig}>
+            <div style={{ maxWidth: '780px', marginBottom: '16px' }}>
+              <div style={{ background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: '8px', padding: '18px' }}>
+                <strong style={{ fontSize: '14px', color: '#0369a1', display: 'block', marginBottom: '14px' }}>
+                  Department Support Routing & Dispatch Emails
+                </strong>
+
+                <div style={{ display: 'grid', gap: '12px' }}>
+                  <div>
+                    <label style={{ fontSize: '11px', display: 'block', color: 'var(--muted)', marginBottom: '3px', fontWeight: 600 }}>
+                      Primary Support / Broadcast Email (Leave & General)
+                    </label>
+                    <input
+                      type="email"
+                      className="text-input"
+                      value={supportEmail}
+                      onChange={(e) => setSupportEmail(e.target.value)}
+                      style={{ width: '100%', padding: '8px 10px', fontSize: '12px' }}
+                      required
+                    />
+                    <span style={{ fontSize: '10px', color: 'var(--muted)', marginTop: '2px', display: 'block' }}>
+                      Authoritative sender address for official leave updates and helpdesk notifications (e.g. leaveupdate@edufytechsolution.in).
+                    </span>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                    <div>
+                      <label style={{ fontSize: '11px', display: 'block', color: 'var(--muted)', marginBottom: '3px', fontWeight: 600 }}>
+                        IT Support Routing Email
+                      </label>
+                      <input
+                        type="email"
+                        className="text-input"
+                        value={itSupportEmail}
+                        onChange={(e) => setItSupportEmail(e.target.value)}
+                        style={{ width: '100%', padding: '8px 10px', fontSize: '12px' }}
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '11px', display: 'block', color: 'var(--muted)', marginBottom: '3px', fontWeight: 600 }}>
+                        HR & People Policy Email
+                      </label>
+                      <input
+                        type="email"
+                        className="text-input"
+                        value={hrSupportEmail}
+                        onChange={(e) => setHrSupportEmail(e.target.value)}
+                        style={{ width: '100%', padding: '8px 10px', fontSize: '12px' }}
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                    <div>
+                      <label style={{ fontSize: '11px', display: 'block', color: 'var(--muted)', marginBottom: '3px', fontWeight: 600 }}>
+                        Payroll & Compensation Routing Email
+                      </label>
+                      <input
+                        type="email"
+                        className="text-input"
+                        value={payrollSupportEmail}
+                        onChange={(e) => setPayrollSupportEmail(e.target.value)}
+                        style={{ width: '100%', padding: '8px 10px', fontSize: '12px' }}
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '11px', display: 'block', color: 'var(--muted)', marginBottom: '3px', fontWeight: 600 }}>
+                        Workplace Facilities Routing Email
+                      </label>
+                      <input
+                        type="email"
+                        className="text-input"
+                        value={facilitiesEmail}
+                        onChange={(e) => setFacilitiesEmail(e.target.value)}
+                        style={{ width: '100%', padding: '8px 10px', fontSize: '12px' }}
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ borderTop: '1px solid #e0f2fe', paddingTop: '14px', marginTop: '6px' }}>
+                    <strong style={{ fontSize: '13px', color: '#0369a1', display: 'block', marginBottom: '12px' }}>
+                      Ticket Workflow & Automation Rules
+                    </strong>
+                    <div style={{ display: 'grid', gap: '12px' }}>
+                      <div>
+                        <label style={{ fontSize: '11px', display: 'block', color: 'var(--muted)', marginBottom: '3px', fontWeight: 600 }}>
+                          Default Ticket Priority Level
+                        </label>
+                        <select
+                          className="text-input"
+                          value={defaultPriority}
+                          onChange={(e) => setDefaultPriority(e.target.value)}
+                          style={{ width: '100%', padding: '8px 10px', fontSize: '12px', background: '#fff' }}
+                        >
+                          <option value="Low">Low — Non-urgent query</option>
+                          <option value="Medium">Medium — Standard SLA (24 hrs)</option>
+                          <option value="High">High — Critical blocker</option>
+                          <option value="Urgent">Urgent — Immediate intervention</option>
+                        </select>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <input
+                          type="checkbox"
+                          id="autoAssignManagerHelp"
+                          checked={autoAssignToManager}
+                          onChange={(e) => setAutoAssignToManager(e.target.checked)}
+                          style={{ cursor: 'pointer', width: '16px', height: '16px' }}
+                        />
+                        <label htmlFor="autoAssignManagerHelp" style={{ fontSize: '12px', cursor: 'pointer' }}>
+                          Auto-assign & notify direct reporting manager when employee raises a ticket
+                        </label>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <input
+                          type="checkbox"
+                          id="emailNotifsHelp"
+                          checked={emailNotificationsEnabled}
+                          onChange={(e) => setEmailNotificationsEnabled(e.target.checked)}
+                          style={{ cursor: 'pointer', width: '16px', height: '16px' }}
+                        />
+                        <label htmlFor="emailNotifsHelp" style={{ fontSize: '12px', cursor: 'pointer' }}>
+                          Enable automatic email notifications for ticket status transitions and replies
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-start', gap: '10px', alignItems: 'center' }}>
+              <button
+                type="submit"
+                className="ui-button primary"
+                disabled={configSaving}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '10px 20px', fontSize: '13px' }}
+              >
+                <Check size={14} /> {configSaving ? 'Saving Help Desk Configuration...' : 'Save Help Desk Configuration'}
+              </button>
+              <button
+                type="button"
+                className="ui-button secondary"
+                onClick={() => setActiveTab('queue')}
+                style={{ fontSize: '12px', padding: '10px 16px' }}
+              >
+                Back to Ticket Queue
+              </button>
+            </div>
+          </form>
+        </section>
+      ) : (
+        <>
+          {/* KPI METRIC CARDS */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px', marginBottom: '18px' }}>
         <div className="panel" style={{ padding: '14px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
@@ -3752,6 +4009,8 @@ function HelpDeskModule() {
           )}
         </div>
       </section>
+        </>
+      )}
 
       {/* RAISE SUPPORT TICKET MODAL */}
       {showCreateModal && (
