@@ -5,9 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#f7f6f2" />
     <title>Edufyi HR | People operations</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400..700;1,9..40,400..700&family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+    <link rel="icon" type="image/png" href="/elythra-edufyitech-logo.png" />
+
+    <!-- Self-hosted font preloads to prevent layout shifts (CLS) -->
+    <link rel="preload" href="/fonts/dm-sans-normal-400700.woff2" as="font" type="font/woff2" crossorigin />
+
+    <!-- Hero branding logo preload (eliminates LCP delay on login/entry view) -->
+    <link rel="preload" href="/elythra-edufyitech-logo.png" as="image" type="image/png" fetchpriority="high" />
   </head>
   <body>
     <div id="root">

@@ -35,5 +35,8 @@
     "react": "latest",
     "react-dom": "latest",
     "vite": "latest"
+  },
+  "devDependencies": {
+    "rollup-plugin-visualizer": "^7.1.1"
   }
 }

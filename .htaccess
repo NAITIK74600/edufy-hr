@@ -1,6 +1,27 @@
+# ==============================================================================
+# Edufyi HR Panel - High-Performance Apache .htaccess Configuration
+# Solves:
+#   1. Double Redirect (Single-hop canonical HTTPS & non-www)
+#   2. HTTP/2 protocol negotiation (h2, h2c, http/1.1)
+#   5. Long-term immutable caching for fingerprinted assets, fonts & images
+#   7. Gzip and Brotli compression for text, scripts, styles, and fonts
+# ==============================================================================
+
+# 1. Enable HTTP/2 Protocol (if mod_http2 is loaded)
+<IfModule mod_http2.c>
+  Protocols h2 h2c http/1.1
+</IfModule>
+
 RewriteEngine On
 
-# Disable compression and buffering for Server-Sent Events (SSE)
+# 2. FIX 1: Canonical Single-Hop HTTPS & Domain Enforcement
+# If request is HTTP OR arrives via www, redirect in a single 301 hop directly to https://empoyee.edufyitechsolutions.com
+RewriteCond %{HTTPS} off [OR]
+RewriteCond %{HTTP_HOST} ^www\.(.+)$ [NC]
+RewriteRule ^ https://empoyee.edufyitechsolutions.com%{REQUEST_URI} [R=301,L]
+
+# 3. Server-Sent Events (SSE) streaming preservation
+SetEnvIf Request_URI "^/api/v1/events" is_sse=1
 <IfModule mod_env.c>
   SetEnvIf Request_URI "^/api/v1/events" no-gzip=1
   SetEnvIf Request_URI "^/api/v1/events" dont-vary=1
@@ -11,4 +32,59 @@ RewriteEngine On
   SetEnvIf Request_URI "^/api/v1/events" proxy-sendchunked=1
 </IfModule>
 
-RewriteRule ^(.*)$ http://localhost:30006/$1 [P,L]
+# 4. FIX 5: Caching Headers
+<IfModule mod_headers.c>
+  # Keep-Alive connection reuse for HTTP/1.1 fallback
+  Header set Connection "keep-alive" env=!is_sse
+  Header set Keep-Alive "timeout=65, max=1000" env=!is_sse
+
+  # Fingerprinted Vite build assets, self-hosted fonts, brand images -> 1 Year Immutable
+  <FilesMatch "\.(js|css|woff2|woff|ttf|png|jpg|jpeg|gif|webp|ico|svg)$">
+    Header set Cache-Control "public, max-age=31536000, immutable"
+  </FilesMatch>
+
+  # Root HTML file -> Always revalidate so app updates propagate immediately
+  <FilesMatch "\.(html|htm)$">
+    Header set Cache-Control "no-cache, no-store, must-revalidate"
+    Header set Pragma "no-cache"
+    Header set Expires 0
+  </FilesMatch>
+</IfModule>
+
+<IfModule mod_expires.c>
+  ExpiresActive On
+  ExpiresDefault "access plus 1 month"
+  ExpiresByType text/html "access plus 0 seconds"
+  ExpiresByType text/css "access plus 1 year"
+  ExpiresByType application/javascript "access plus 1 year"
+  ExpiresByType application/x-javascript "access plus 1 year"
+  ExpiresByType text/javascript "access plus 1 year"
+  ExpiresByType font/woff2 "access plus 1 year"
+  ExpiresByType font/woff "access plus 1 year"
+  ExpiresByType image/png "access plus 1 year"
+  ExpiresByType image/jpeg "access plus 1 year"
+  ExpiresByType image/svg+xml "access plus 1 year"
+  ExpiresByType image/webp "access plus 1 year"
+  ExpiresByType image/x-icon "access plus 1 year"
+</IfModule>
+
+# 5. FIX 7: Compression (Brotli & Gzip)
+<IfModule mod_brotli.c>
+  AddOutputFilterByType BROTLI_COMPRESS text/html text/plain text/xml text/css text/javascript
+  AddOutputFilterByType BROTLI_COMPRESS application/javascript application/x-javascript
+  AddOutputFilterByType BROTLI_COMPRESS application/json application/xml application/xhtml+xml
+  AddOutputFilterByType BROTLI_COMPRESS image/svg+xml font/woff2 application/font-woff2
+</IfModule>
+
+<IfModule mod_deflate.c>
+  AddOutputFilterByType DEFLATE text/html text/plain text/xml text/css text/javascript
+  AddOutputFilterByType DEFLATE application/javascript application/x-javascript
+  AddOutputFilterByType DEFLATE application/json application/xml application/xhtml+xml
+  AddOutputFilterByType DEFLATE image/svg+xml font/woff2 application/font-woff2
+</IfModule>
+
+# 6. Proxy all requests to local Node.js application (Port 30006)
+<IfModule mod_proxy.c>
+  RewriteRule ^(.*)$ http://localhost:30006/$1 [P,L]
+  ProxyPassReverse / http://localhost:30006/
+</IfModule>

@@ -1,4 +1,4 @@
-import { Component, StrictMode, useEffect, useState } from 'react'
+import { Component, StrictMode, Suspense, lazy, useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { MotionConfig } from 'motion/react'
 import { AuthProvider, useAuth } from './auth/AuthContext'
@@ -6,19 +6,23 @@ import { hasPermission } from './auth/permissions'
 import { HRLayout } from './components/HRLayout'
 import { findRoute, readPath } from './app/routes'
 import { LoadingState } from './components/ui'
-import { AccessDeniedPage, EmployeeDashboardPage } from './pages/EmployeeDashboardPage'
-import { AdminDashboardPage, AdminUsersModule } from './pages/AdminDashboardPage'
-import { LoginPage } from './pages/LoginPage'
-import { NotFoundPage } from './pages/ModulePlaceholder'
-import { EmployeesPage } from './pages/EmployeesPage'
-import { OverviewPage } from './pages/OverviewPage'
-import { LeaveManagementPage } from './pages/LeaveManagementPage'
-import { WorkspaceModulePage } from './pages/WorkspaceModulePage'
-import { OrgHierarchyPage } from './components/OrgChart/OrgHierarchyPage'
 import './styles.css'
 import { hrStore } from './services/hrStore'
-import { PayrollPage } from './pages/PayrollPage'
-import { EmployeeProfilePage } from './pages/EmployeeProfilePage'
+
+// Route-based code splitting with React.lazy() for fast initial page load
+const LoginPage = lazy(() => import('./pages/LoginPage').then((m) => ({ default: m.LoginPage })))
+const NotFoundPage = lazy(() => import('./pages/ModulePlaceholder').then((m) => ({ default: m.NotFoundPage })))
+const EmployeeDashboardPage = lazy(() => import('./pages/EmployeeDashboardPage').then((m) => ({ default: m.EmployeeDashboardPage })))
+const AccessDeniedPage = lazy(() => import('./pages/EmployeeDashboardPage').then((m) => ({ default: m.AccessDeniedPage })))
+const AdminDashboardPage = lazy(() => import('./pages/AdminDashboardPage').then((m) => ({ default: m.AdminDashboardPage })))
+const AdminUsersModule = lazy(() => import('./pages/AdminDashboardPage').then((m) => ({ default: m.AdminUsersModule })))
+const EmployeesPage = lazy(() => import('./pages/EmployeesPage').then((m) => ({ default: m.EmployeesPage })))
+const OverviewPage = lazy(() => import('./pages/OverviewPage').then((m) => ({ default: m.OverviewPage })))
+const LeaveManagementPage = lazy(() => import('./pages/LeaveManagementPage').then((m) => ({ default: m.LeaveManagementPage })))
+const WorkspaceModulePage = lazy(() => import('./pages/WorkspaceModulePage').then((m) => ({ default: m.WorkspaceModulePage })))
+const OrgHierarchyPage = lazy(() => import('./components/OrgChart/OrgHierarchyPage').then((m) => ({ default: m.OrgHierarchyPage })))
+const PayrollPage = lazy(() => import('./pages/PayrollPage').then((m) => ({ default: m.PayrollPage })))
+const EmployeeProfilePage = lazy(() => import('./pages/EmployeeProfilePage').then((m) => ({ default: m.EmployeeProfilePage })))
 
 class ErrorBoundary extends Component {
   constructor(props) {
@@ -262,9 +266,21 @@ function App() {
   }, [route.path, status, user, isAuthRoute])
 
   if (status === 'loading') return <LoadingState />
-  if (status === 'signed-out' || isAuthRoute) return <LoginPage route={route} />
+  if (status === 'signed-out' || isAuthRoute) {
+    return (
+      <Suspense fallback={<LoadingState />}>
+        <LoginPage route={route} />
+      </Suspense>
+    )
+  }
   if (route.path === '/not-found' || route.group === 'Error') {
-    return <HRLayout route={route}><NotFoundPage /></HRLayout>
+    return (
+      <HRLayout route={route}>
+        <Suspense fallback={<LoadingState />}>
+          <NotFoundPage />
+        </Suspense>
+      </HRLayout>
+    )
   }
 
   // All cross-portal access is blocked by the redirect above - no access denied pages needed
@@ -272,10 +288,12 @@ function App() {
   if (route.permission && !hasPermission(user, route.permission)) {
     return (
       <HRLayout route={route}>
-        <AccessDeniedPage
-          title="Access Restricted"
-          message={`Your account (${user?.displayName || 'User'}) does not have permission (${route.permission}) to view this module.`}
-        />
+        <Suspense fallback={<LoadingState />}>
+          <AccessDeniedPage
+            title="Access Restricted"
+            message={`Your account (${user?.displayName || 'User'}) does not have permission (${route.permission}) to view this module.`}
+          />
+        </Suspense>
       </HRLayout>
     )
   }
@@ -313,7 +331,15 @@ function App() {
       ? <EmployeeDashboardPage route={route} />
       : <WorkspaceModulePage route={route} />
 
-  return <HRLayout route={route}><DataStatus>{page}</DataStatus></HRLayout>
+  return (
+    <HRLayout route={route}>
+      <DataStatus>
+        <Suspense fallback={<LoadingState />}>
+          {page}
+        </Suspense>
+      </DataStatus>
+    </HRLayout>
+  )
 }
 
 const container = document.getElementById('root')

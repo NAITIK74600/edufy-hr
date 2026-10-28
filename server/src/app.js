@@ -177,25 +177,48 @@ export function createApp(options = {}) {
   app.use('/api/v1/hierarchy', createHierarchyRouter({ auth, repository: employeeRepository }))
   app.use('/api/v1/mail', createMailRouter({ auth }))
   app.use('/api/v1', createAccessRouter(auth))
+  const isCacheableStatic = (filePath) => {
+    return /\.(woff2|woff|ttf|eot|png|jpe?g|gif|webp|svg|ico)$/i.test(filePath)
+  }
+
   const verificationFormsDir = path.resolve(process.cwd(), 'public', 'verification-forms')
   if (fs.existsSync(verificationFormsDir)) {
-    app.use('/verification-forms', express.static(verificationFormsDir))
+    app.use('/verification-forms', express.static(verificationFormsDir, {
+      maxAge: '7d',
+      setHeaders: (res) => {
+        res.setHeader('Cache-Control', 'public, max-age=604800')
+      },
+    }))
   }
   const companyPoliciesDir = path.resolve(process.cwd(), 'public', 'company-policies')
   if (fs.existsSync(companyPoliciesDir)) {
-    app.use('/company-policies', express.static(companyPoliciesDir))
+    app.use('/company-policies', express.static(companyPoliciesDir, {
+      maxAge: '7d',
+      setHeaders: (res) => {
+        res.setHeader('Cache-Control', 'public, max-age=604800')
+      },
+    }))
   }
   const publicDir = path.resolve(process.cwd(), 'public')
   if (fs.existsSync(publicDir)) {
-    app.use(express.static(publicDir))
-  }
-  if (options.staticDirectory && fs.existsSync(options.staticDirectory)) {
-    app.use(express.static(options.staticDirectory, {
-      maxAge: '1d',
+    app.use(express.static(publicDir, {
+      maxAge: '1y',
       setHeaders: (res, filePath) => {
         if (filePath.endsWith('.html')) {
           res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
-        } else if (filePath.includes(`${path.sep}assets${path.sep}`) || filePath.includes('/assets/')) {
+        } else if (isCacheableStatic(filePath) || filePath.includes(`${path.sep}fonts${path.sep}`) || filePath.includes('/fonts/')) {
+          res.setHeader('Cache-Control', 'public, max-age=31536000, immutable')
+        }
+      },
+    }))
+  }
+  if (options.staticDirectory && fs.existsSync(options.staticDirectory)) {
+    app.use(express.static(options.staticDirectory, {
+      maxAge: '1y',
+      setHeaders: (res, filePath) => {
+        if (filePath.endsWith('.html')) {
+          res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
+        } else if (filePath.includes(`${path.sep}assets${path.sep}`) || filePath.includes('/assets/') || isCacheableStatic(filePath)) {
           res.setHeader('Cache-Control', 'public, max-age=31536000, immutable')
         }
       },

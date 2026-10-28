@@ -1,9 +1,18 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import { visualizer } from 'rollup-plugin-visualizer'
 
 export default defineConfig({
   cacheDir: '.vite',
-  plugins: [react()],
+  plugins: [
+    react(),
+    visualizer({
+      filename: 'dist/stats.html',
+      gzipSize: true,
+      brotliSize: true,
+      open: false,
+    }),
+  ],
   optimizeDeps: {
     entries: ['index.html'],
   },
@@ -25,7 +34,7 @@ export default defineConfig({
     },
   },
   build: {
-    chunkSizeWarningLimit: 1500,
+    chunkSizeWarningLimit: 600,
     rollupOptions: {
       output: {
         manualChunks(id) {
@@ -37,6 +46,9 @@ export default defineConfig({
           }
           if (id.includes('node_modules/lucide-react/')) {
             return 'icons-vendor'
+          }
+          if (id.includes('node_modules/jspdf/') || id.includes('node_modules/html2canvas/')) {
+            return 'pdf-vendor'
           }
         },
       },

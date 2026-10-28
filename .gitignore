@@ -50,4 +50,7 @@ WhatsApp*.jpeg
 # Test files
 /test/
 
+# Build reports
+dist/stats.html
+
 .jwt_secret
