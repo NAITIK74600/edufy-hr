@@ -106,6 +106,7 @@ function GPSAttendanceStation({ user, todayRecord, onPunch, onStartBreak, onEndB
   const officeNetworkIPs = settings?.officeNetworkIPs || []
   const empKey = user?.employeeId || user?.id || 'STAFF'
   const todayDate = todayRecord?.date || todayKey()
+  const todayStr = todayDate
   const cachedCoordsKey = `att_cached_coords_${empKey}`
 
   const [customCoords, setCustomCoords] = useState(() => {
