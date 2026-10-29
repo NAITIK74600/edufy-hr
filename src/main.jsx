@@ -233,7 +233,7 @@ function App() {
       } else if (route.path.startsWith('/employee')) {
         window.location.hash = '#/employee/login'
       } else {
-        window.location.hash = '#/login'
+        window.location.hash = '#/employee/login'
       }
       return
     }

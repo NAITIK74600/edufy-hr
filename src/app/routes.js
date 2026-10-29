@@ -118,7 +118,7 @@ export function readPath() {
         }
       } catch {}
     }
-    return '/login'
+    return '/employee/login'
   }
   if (path === '/admin/login' || path === '/hr/login' || path === '/employee/login' || path.startsWith('/login')) {
     return path
@@ -126,5 +126,5 @@ export function readPath() {
   if (path.startsWith('/admin')) return path
   if (path.startsWith('/hr')) return path
   if (path.startsWith('/employee')) return path
-  return '/hr'
+  return '/employee'
 }

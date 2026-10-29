@@ -1113,19 +1113,20 @@ export function ManagementLoginPage({ defaultRole = 'hr' }) {
  * - If path is /admin/login, /hr/login, or /login -> renders ManagementLoginPage (matching Screenshot 1, NO switch console)
  */
 export function LoginPage({ route }) {
-  const isEmployee =
-    route?.path === '/employee/login' ||
-    (typeof window !== 'undefined' && window.location.hash.includes('employee'))
+  const hash = typeof window !== 'undefined' ? (window.location.hash || '').toLowerCase() : ''
+  const path = (route?.path || '').toLowerCase()
 
-  if (isEmployee) {
-    return <EmployeeLoginPage />
+  // 1. Explicit Admin Console Login URL
+  if (path === '/admin/login' || hash.includes('/admin/login') || hash.startsWith('#/admin')) {
+    return <ManagementLoginPage defaultRole="admin" />
   }
 
-  const defaultRole =
-    route?.path === '/admin/login' ||
-    (typeof window !== 'undefined' && window.location.hash.includes('admin'))
-      ? 'admin'
-      : 'hr'
+  // 2. Explicit HR Operations Login URL
+  if (path === '/hr/login' || hash.includes('/hr/login') || hash.startsWith('#/hr')) {
+    return <ManagementLoginPage defaultRole="hr" />
+  }
 
-  return <ManagementLoginPage defaultRole={defaultRole} />
+  // 3. Default for /employee/login, /login, or base root (/):
+  // Strictly renders the Employee Self-Service login portal
+  return <EmployeeLoginPage />
 }

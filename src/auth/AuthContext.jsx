@@ -269,13 +269,21 @@ export function AuthProvider({ children }) {
   }
 
   async function logout() {
+    const currentRole = user?.role
+    const currentHash = typeof window !== 'undefined' ? (window.location.hash || '') : ''
     try {
       if (token) await apiClient.post('/auth/logout', undefined)
     } catch {
       /* no-op */
     } finally {
       clearSession()
-      window.location.hash = '#/login'
+      if (currentRole === 'admin' || currentHash.startsWith('#/admin')) {
+        window.location.hash = '#/admin/login'
+      } else if (currentRole === 'hr' || currentHash.startsWith('#/hr')) {
+        window.location.hash = '#/hr/login'
+      } else {
+        window.location.hash = '#/employee/login'
+      }
     }
   }
 
