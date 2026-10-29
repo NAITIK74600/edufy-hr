@@ -506,6 +506,19 @@ test('Admin can update attendance security configuration via PATCH /config', asy
 })
 
 test('Neutral check-in records factual timestamp and presence verification without automatic late classification', async () => {
+  const adminToken = await login('admin@example.test', 'admin-password')
+  await request('/attendance/config', {
+    method: 'PATCH',
+    headers: { authorization: `Bearer ${adminToken}` },
+    body: JSON.stringify({
+      attendanceRules: {
+        workStartTime: '00:00',
+        workEndTime: '23:59',
+        gracePeriodMinutes: 1440,
+      },
+    }),
+  })
+
   const token = await login('employee@example.test', 'employee-password')
 
   const res = await request('/attendance/check-in', {

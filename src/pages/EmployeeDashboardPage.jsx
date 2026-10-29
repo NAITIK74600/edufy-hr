@@ -281,7 +281,7 @@ function GPSAttendanceStation({ user, todayRecord, onPunch, onStartBreak, onEndB
     }
 
     const empKey = user?.employeeId || user?.id || 'STAFF'
-    const storageKey = `att_disc_since_${empKey}`
+    const storageKey = `att_disc_since_${todayStr}_${empKey}`
 
     async function evaluatePresence() {
       let coords = customCoords
@@ -303,25 +303,41 @@ function GPSAttendanceStation({ user, todayRecord, onPunch, onStartBreak, onEndB
 
         if (data.autoPunchedOut) {
           setIsAutoPunchedOut(true)
-          if (typeof localStorage !== 'undefined') localStorage.removeItem(storageKey)
+          if (typeof localStorage !== 'undefined') {
+            localStorage.removeItem(storageKey)
+            localStorage.removeItem(`att_disc_since_${empKey}`)
+          }
           return
         }
 
         const isOfficeConnected = Boolean(data.isGpsVerified || data.isWifiVerified || data.isIpVerified)
         if (isOfficeConnected) {
-          if (typeof localStorage !== 'undefined') localStorage.removeItem(storageKey)
+          if (typeof localStorage !== 'undefined') {
+            localStorage.removeItem(storageKey)
+            localStorage.removeItem(`att_disc_since_${empKey}`)
+          }
           setDisconnectedMinutes(0)
         } else {
           let since = typeof localStorage !== 'undefined' ? localStorage.getItem(storageKey) : null
-          if (!since) {
+          const checkInMs = todayRecord?.checkInAt ? new Date(todayRecord.checkInAt).getTime() : Date.now()
+          if (!since || Number(since) < checkInMs) {
             since = String(Date.now())
             if (typeof localStorage !== 'undefined') localStorage.setItem(storageKey, since)
           }
-          const elapsedMins = Math.floor((Date.now() - Number(since)) / 60000)
+
+          const rawElapsedMins = Math.floor((Date.now() - Number(since)) / 60000)
+          // Disconnection duration can NEVER exceed total elapsed minutes since check-in
+          const totalMinsSinceCheckIn = todayRecord?.checkInAt
+            ? Math.floor((Date.now() - new Date(todayRecord.checkInAt).getTime()) / 60000)
+            : 0
+          const elapsedMins = Math.min(rawElapsedMins, Math.max(0, totalMinsSinceCheckIn))
           setDisconnectedMinutes(elapsedMins)
 
           if (elapsedMins >= 120) {
-            if (typeof localStorage !== 'undefined') localStorage.removeItem(storageKey)
+            if (typeof localStorage !== 'undefined') {
+              localStorage.removeItem(storageKey)
+              localStorage.removeItem(`att_disc_since_${empKey}`)
+            }
             try {
               await onPunch({
                 autoPunchOut: true,
@@ -335,14 +351,22 @@ function GPSAttendanceStation({ user, todayRecord, onPunch, onStartBreak, onEndB
         }
       } catch (err) {
         let since = typeof localStorage !== 'undefined' ? localStorage.getItem(storageKey) : null
-        if (!since) {
+        const checkInMs = todayRecord?.checkInAt ? new Date(todayRecord.checkInAt).getTime() : Date.now()
+        if (!since || Number(since) < checkInMs) {
           since = String(Date.now())
           if (typeof localStorage !== 'undefined') localStorage.setItem(storageKey, since)
         }
-        const elapsedMins = Math.floor((Date.now() - Number(since)) / 60000)
+        const rawElapsedMins = Math.floor((Date.now() - Number(since)) / 60000)
+        const totalMinsSinceCheckIn = todayRecord?.checkInAt
+          ? Math.floor((Date.now() - new Date(todayRecord.checkInAt).getTime()) / 60000)
+          : 0
+        const elapsedMins = Math.min(rawElapsedMins, Math.max(0, totalMinsSinceCheckIn))
         setDisconnectedMinutes(elapsedMins)
         if (elapsedMins >= 120) {
-          if (typeof localStorage !== 'undefined') localStorage.removeItem(storageKey)
+          if (typeof localStorage !== 'undefined') {
+            localStorage.removeItem(storageKey)
+            localStorage.removeItem(`att_disc_since_${empKey}`)
+          }
           try {
             await onPunch({
               autoPunchOut: true,
@@ -361,7 +385,7 @@ function GPSAttendanceStation({ user, todayRecord, onPunch, onStartBreak, onEndB
       clearInterval(timer)
       clearTimeout(initTimer)
     }
-  }, [isCheckedIn, isCompleted, customCoords, user])
+  }, [isCheckedIn, isCompleted, customCoords, user, todayRecord, todayStr])
 
   const matchedOfficeNet = { label: serverVerification?.matchedNetworkLabel }
   const isRealOfficeIp = Boolean(serverVerification?.isIpVerified)
@@ -1240,6 +1264,12 @@ function ESSOverview({ user }) {
         shiftCode,
       })
       setPunchNotice(`Successfully punched in at ${rec?.checkIn || 'now'}! (${rec?.ipVerified ? 'Office network verified' : rec?.gpsVerified ? 'GPS Geofence verified' : 'Recorded'})`)
+      if (typeof localStorage !== 'undefined') {
+        localStorage.removeItem(`att_disc_since_${todayStr}_${empId}`)
+        localStorage.removeItem(`att_disc_since_${empId}`)
+      }
+      setDisconnectedMinutes(0)
+      setIsAutoPunchedOut(false)
     } else if (isCheckedIn) {
       const isAuto = Boolean(opts.autoPunchOut)
       await hrStore.checkOut({

@@ -160,7 +160,8 @@ export async function resolveEmployeeShift(employeeId, dateStr) {
     if (rules?.workStartTime && rules?.workEndTime) {
       const startMins = parseTimeToMinutes(rules.workStartTime)
       const endMins = parseTimeToMinutes(rules.workEndTime)
-      const graceMins = Number(rules.gracePeriodMinutes) ?? 15
+      const rawGrace = Number(rules.gracePeriodMinutes)
+      const graceMins = Number.isFinite(rawGrace) && rawGrace >= 0 ? rawGrace : 15
       if (startMins !== null && endMins !== null) {
         const customShift = {
           shiftId: 'GENERAL',
@@ -191,10 +192,10 @@ export async function resolveEmployeeShift(employeeId, dateStr) {
     }
   } catch {}
 
-  // 3. Query system default shift from Shift collection
+  // 3. Query system default shift from Shift collection (ignoring obsolete 9:30 legacy rows)
   try {
     const defaultShift = await Shift.findOne({ isDefault: true, isActive: true }).lean()
-    if (defaultShift) {
+    if (defaultShift && defaultShift.startMinutes !== 570) {
       return {
         shift: normalizeShiftConfig(defaultShift),
         source: 'system_default',
@@ -238,8 +239,8 @@ export function evaluatePunchIn({ checkInTime, shift = STANDARD_SHIFT_DEF }) {
     relativeMins += 1440
   }
 
-  // Check boundary rules
-  if (inMins <= graceCutoffMinutes) {
+  // Check boundary rules: arrival before shift start or within grace cutoff is on-time
+  if (relativeMins <= 0 || inMins <= graceCutoffMinutes) {
     // Within grace period (e.g. 11:00 AM or 11:15 AM)
     return {
       status: 'present',

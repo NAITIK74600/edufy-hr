@@ -227,18 +227,26 @@ function AttendanceModule() {
     e.preventDefault()
     if (!editingAttendance) return
     const isNowPresent = editingAttendance.status === 'present'
+    const isCheckOutCleared = !editingAttendance.checkOut || editingAttendance.checkOut.trim() === '' || editingAttendance.checkOut === '—'
     const payload = {
       ...editingAttendance,
+      checkOut: isCheckOutCleared ? null : editingAttendance.checkOut,
+      checkOutAt: isCheckOutCleared ? null : editingAttendance.checkOutAt,
+      autoPunchOut: isCheckOutCleared ? false : Boolean(editingAttendance.autoPunchOut),
+      punchOutReason: isCheckOutCleared ? '' : (editingAttendance.punchOutReason || ''),
+      punchOutType: isCheckOutCleared ? 'manual' : (editingAttendance.punchOutType || 'manual'),
       isLate: isNowPresent ? false : Boolean(editingAttendance.isLate ?? (editingAttendance.status === 'late')),
       lateCount: isNowPresent ? 0 : (editingAttendance.lateCount || 0),
       isHalfDay: isNowPresent ? false : Boolean(editingAttendance.isHalfDay ?? (editingAttendance.status === 'half-day')),
       isEarlyLogout: isNowPresent ? false : Boolean(editingAttendance.isEarlyLogout ?? (editingAttendance.status === 'early-logout')),
       isLop: isNowPresent ? false : Boolean(editingAttendance.isLop ?? (editingAttendance.status === 'lop')),
-      totalHours: isNowPresent && typeof editingAttendance.totalHours === 'string' && editingAttendance.totalHours.includes('Late')
-        ? (editingAttendance.checkOut ? '8.0 hrs' : 'Active (Live)')
-        : editingAttendance.totalHours,
-      notes: isNowPresent && typeof editingAttendance.notes === 'string' && editingAttendance.notes.includes('Late')
-        ? 'On-time verification (General Shift)'
+      totalHours: isCheckOutCleared
+        ? (isNowPresent ? 'Active (Live)' : (editingAttendance.isLate ? 'Active (Late)' : 'Active (Live)'))
+        : (isNowPresent && typeof editingAttendance.totalHours === 'string' && editingAttendance.totalHours.includes('Late')
+            ? (editingAttendance.checkOut ? '8.0 hrs' : 'Active (Live)')
+            : editingAttendance.totalHours),
+      notes: isNowPresent && typeof editingAttendance.notes === 'string' && (editingAttendance.notes.includes('Late') || editingAttendance.notes.includes('Auto Punch Out'))
+        ? 'Verified Attendance (General Shift)'
         : (editingAttendance.notes || ''),
     }
     await hrStore.markAttendance(payload)

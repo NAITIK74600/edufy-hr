@@ -272,6 +272,15 @@ export function resolveShift(options = {}) {
 }
 
 export async function evaluateShiftLateness(checkInTime, employeeId = null, workDate = null) {
+  if (checkInTime && typeof checkInTime === 'object') {
+    return {
+      isLate: false,
+      isHalfDay: false,
+      lateMinutes: 0,
+      policyPending: true,
+      status: 'present',
+    }
+  }
   // Resolve the employee's shift, falling back to admin-configured shift timings if present.
   let resolvedShift = null;
   if (employeeId && workDate) {
@@ -283,7 +292,7 @@ export async function evaluateShiftLateness(checkInTime, employeeId = null, work
     }
   }
   // If admin has overridden shift timing via attendanceRules, apply those overrides.
-  if (!resolvedShift && service && service.getConfig) {
+  if (!resolvedShift && typeof service !== 'undefined' && service?.getConfig) {
     const rules = service.getConfig().attendanceRules || {};
     if (rules.workStartTime && rules.workEndTime) {
       const startMins = parseTimeToMinutes(rules.workStartTime);
@@ -759,6 +768,11 @@ export function createAttendanceService({ repository, companySettings = {} }) {
         verificationMethod: verification.method,
         totalHours: punchEval.isLate ? 'Active (Late)' : 'Active (Live)',
         notes: punchEval.isLate ? punchEval.notes : `Verified Attendance (${resolvedShiftConfig.name})`,
+        lastConnectedAt: now,
+        disconnectedSince: null,
+        autoPunchOut: false,
+        punchOutReason: '',
+        punchOutType: 'manual',
       }
 
       return repository.punchIn(record)
@@ -862,6 +876,16 @@ export function createAttendanceService({ repository, companySettings = {} }) {
       if (existing.checkOut) return existing
       const now = new Date()
 
+      // CRITICAL SAFEGUARD: Auto punch-out strictly requires AT LEAST 2 HOURS (120 min) elapsed since check-in
+      if (autoPunchOut) {
+        const TWO_HOURS_MS = 2 * 60 * 60 * 1000
+        const checkInTimeMs = existing.checkInAt ? new Date(existing.checkInAt).getTime() : null
+        if (checkInTimeMs && (now.getTime() - checkInTimeMs) < TWO_HOURS_MS) {
+          // Employee has been checked in for less than 2 hours. Auto punch-out cannot trigger!
+          return existing
+        }
+      }
+
       // Automatically end active break if employee punches out while on break
       let totalBreakMinutes = Number(existing.totalBreakMinutes || 0)
       let breaksList = Array.isArray(existing.breaks) ? [...existing.breaks] : []
@@ -963,6 +987,7 @@ export function createAttendanceService({ repository, companySettings = {} }) {
         status: finalStatus,
         isEarlyLogout: checkoutEval.isEarlyLogout,
         earlyLogoutCount: currentEarlyCount,
+        isLop: Boolean(existing.isLop || existing.status === 'lop'),
         isHalfDay: finalHalfDay,
         verifiedCampusMinutes: verifiedDurationMinutes,
         doubleLopStatus: doubleLopEval.applies ? (existing.doubleLopStatus === 'approved' ? 'approved' : 'pending_approval') : 'none',
@@ -992,18 +1017,20 @@ export function createAttendanceService({ repository, companySettings = {} }) {
       if (!isConnected) {
         const existing = await repository.findByEmployeeAndDate(employeeId, workDate)
         if (existing && existing.checkIn && !existing.checkOut) {
-          const disconnectedSince = existing.disconnectedSince ? new Date(existing.disconnectedSince).getTime() : Date.now()
-          const diffMs = Date.now() - disconnectedSince
+          const checkInTimeMs = existing.checkInAt ? new Date(existing.checkInAt).getTime() : null
           const TWO_HOURS_MS = 2 * 60 * 60 * 1000
-          if (diffMs >= TWO_HOURS_MS) {
-            await this.checkOut({
-              employeeId,
-              employeeName: existing.employeeName,
-              date: workDate,
-              autoPunchOut: true,
-              punchOutReason: 'Auto Punch Out (GPS & WiFi disconnected for 2 hrs)',
-            })
-            autoPunchedOut = true
+          if (checkInTimeMs && (Date.now() - checkInTimeMs) >= TWO_HOURS_MS) {
+            const disconnectedSince = existing.disconnectedSince ? new Date(existing.disconnectedSince).getTime() : null
+            if (disconnectedSince && disconnectedSince >= checkInTimeMs && (Date.now() - disconnectedSince) >= TWO_HOURS_MS) {
+              await this.checkOut({
+                employeeId,
+                employeeName: existing.employeeName,
+                date: workDate,
+                autoPunchOut: true,
+                punchOutReason: 'Auto Punch Out (GPS & WiFi disconnected for 2 hrs)',
+              })
+              autoPunchedOut = true
+            }
           }
         }
       }
@@ -1024,21 +1051,16 @@ export function createAttendanceService({ repository, companySettings = {} }) {
 
       for (const record of activeRecords) {
         if (!record.checkIn || record.checkOut) continue
+        const checkInTimeMs = record.checkInAt ? new Date(record.checkInAt).getTime() : null
+        if (!checkInTimeMs || (now - checkInTimeMs) < TWO_HOURS_MS) continue
+
         let shouldAutoPunch = false
         const reason = 'Auto Punch Out (GPS & WiFi disconnected for 2 hrs)'
 
         if (record.disconnectedSince) {
-          const diff = now - new Date(record.disconnectedSince).getTime()
-          if (diff >= TWO_HOURS_MS) {
+          const discMs = new Date(record.disconnectedSince).getTime()
+          if (discMs >= checkInTimeMs && (now - discMs) >= TWO_HOURS_MS) {
             shouldAutoPunch = true
-          }
-        } else {
-          const lastKnown = record.lastConnectedAt || record.checkInAt
-          if (lastKnown) {
-            const diff = now - new Date(lastKnown).getTime()
-            if (diff >= TWO_HOURS_MS) {
-              shouldAutoPunch = true
-            }
           }
         }
 
@@ -1095,7 +1117,16 @@ export function createAttendanceService({ repository, companySettings = {} }) {
     },
 
     async recalculateAttendance(date = getTodayString()) {
-      const records = await repository.list({ date })
+      const today = getTodayString()
+      if (date && date !== today) {
+        return {
+          updatedCount: 0,
+          date,
+          records: await repository.list({ date }),
+          message: 'Attendance policy recalculation for historical dates is currently inactive pending replacement policy configuration. Historical records are preserved intact.',
+        }
+      }
+      const records = await repository.list({ date: today })
       let updatedCount = 0
       for (const rec of (records || [])) {
         if (!rec.checkIn) continue
