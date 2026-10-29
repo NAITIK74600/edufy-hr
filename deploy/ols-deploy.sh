@@ -2,7 +2,7 @@
 set -e
 
 # ==============================================================================
-# Edufyi HR Panel - One-Click OpenLiteSpeed VPS Deployment Script
+# Edufyi HR Panel - One-Click OpenLiteSpeed VPS Deployment Script (v2)
 # Domain: https://edufyione.edufyitech.in
 # ==============================================================================
 
@@ -11,44 +11,31 @@ echo "🚀 Deploying Edufyi HR Panel to OpenLiteSpeed Server"
 echo "Target: https://edufyione.edufyitech.in"
 echo "============================================================"
 
-# 1. Locate the OpenLiteSpeed Node.js App Directory
-echo "[1/6] Detecting OpenLiteSpeed Node.js application directory..."
-SAMPLE_FILE=$(grep -rnwl "Hello World" /usr/local/lsws /var/www /home 2>/dev/null | head -n 1)
-
-if [ -n "$SAMPLE_FILE" ]; then
-    APP_DIR=$(dirname "$SAMPLE_FILE")
-    echo "Found active app directory: $APP_DIR"
-else
-    # Fallback paths for OpenLiteSpeed standard structures
-    if [ -d "/var/www/vhosts/edufyione.edufyitech.in/html" ]; then
-        APP_DIR="/var/www/vhosts/edufyione.edufyitech.in/html"
-    elif [ -d "/usr/local/lsws/Example/html/node" ]; then
-        APP_DIR="/usr/local/lsws/Example/html/node"
-    elif [ -d "/usr/local/lsws/Example/html" ]; then
-        APP_DIR="/usr/local/lsws/Example/html"
-    else
-        APP_DIR="/var/www/html"
-    fi
-    echo "Using default OpenLiteSpeed app directory: $APP_DIR"
+# 0. Clean up accidental deployment to man1 if present
+if [ -d "/usr/local/lsws/lsphp83/share/man/man1/server" ]; then
+    echo "Cleaning up prior test artifacts in man1..."
+    rm -rf /usr/local/lsws/lsphp83/share/man/man1/server \
+           /usr/local/lsws/lsphp83/share/man/man1/src \
+           /usr/local/lsws/lsphp83/share/man/man1/dist \
+           /usr/local/lsws/lsphp83/share/man/man1/public \
+           /usr/local/lsws/lsphp83/share/man/man1/node_modules \
+           /usr/local/lsws/lsphp83/share/man/man1/.env \
+           /usr/local/lsws/lsphp83/share/man/man1/package*.json 2>/dev/null || true
 fi
 
-# Detect port used by original sample app (default is usually 3000 or 30005)
-DETECTED_PORT="3000"
-if [ -f "$SAMPLE_FILE" ]; then
-    FOUND_PORT=$(grep -rohE "port = [0-9]+" "$SAMPLE_FILE" 2>/dev/null | awk '{print $3}' | head -n 1 || true)
-    if [ -n "$FOUND_PORT" ]; then
-        DETECTED_PORT="$FOUND_PORT"
-    fi
-fi
-echo "Target application port: $DETECTED_PORT"
-
-# 2. Ensure MongoDB is Installed and Running
-echo "[2/6] Verifying MongoDB..."
+# 1. Install MongoDB correctly for Ubuntu 22.04 / 24.04
+echo "[1/5] Setting up MongoDB Database..."
 if ! command -v mongod >/dev/null 2>&1; then
-    echo "Installing MongoDB Community Edition..."
-    curl -fsSL https://www.mongodb.org/static/pgp/server-7.0.asc | gpg --dearmor --yes -o /usr/share/keyrings/mongodb-server-7.0.gpg || true
     CODENAME=$(lsb_release -cs 2>/dev/null || echo "jammy")
-    echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-7.0.gpg ] https://repo.mongodb.org/apt/ubuntu ${CODENAME}/mongodb-org/7.0 multiverse" > /etc/apt/sources.list.d/mongodb-org-7.0.list || true
+    if [ "$CODENAME" = "noble" ]; then
+        MONGO_VER="8.0"
+    else
+        MONGO_VER="7.0"
+        CODENAME="jammy"
+    fi
+    echo "Installing MongoDB $MONGO_VER for Ubuntu ($CODENAME)..."
+    curl -fsSL "https://www.mongodb.org/static/pgp/server-${MONGO_VER}.asc" | gpg --dearmor --yes -o /usr/share/keyrings/mongodb-server.gpg || true
+    echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server.gpg ] https://repo.mongodb.org/apt/ubuntu ${CODENAME}/mongodb-org/${MONGO_VER} multiverse" > /etc/apt/sources.list.d/mongodb-org.list || true
     apt-get update -y || true
     apt-get install -y mongodb-org || apt-get install -y mongodb || true
     systemctl daemon-reload || true
@@ -56,26 +43,54 @@ if ! command -v mongod >/dev/null 2>&1; then
 fi
 systemctl start mongod 2>/dev/null || systemctl start mongodb 2>/dev/null || true
 
+# 2. Locate the Active OpenLiteSpeed Node.js Application Directory
+echo "[2/5] Locating OpenLiteSpeed Node.js app directory..."
+
+# Try 1: Check OpenLiteSpeed virtual host config
+APP_DIR=$(grep -h "location" /usr/local/lsws/conf/vhosts/*/vhconf.conf 2>/dev/null | awk '{print $2}' | tr -d '\r' | head -n 1 || true)
+
+# Try 2: Grep for the exact placeholder string served by OpenLiteSpeed
+if [ -z "$APP_DIR" ] || [ ! -d "$APP_DIR" ]; then
+    EXACT_FILE=$(grep -rl "From OpenLiteSpeed NodeJS" /usr/local/lsws /var/www /root /home /opt 2>/dev/null | head -n 1 || true)
+    if [ -n "$EXACT_FILE" ]; then
+        APP_DIR=$(dirname "$EXACT_FILE")
+    fi
+fi
+
+# Try 3: Standard known default paths
+if [ -z "$APP_DIR" ] || [ ! -d "$APP_DIR" ]; then
+    if [ -d "/usr/local/lsws/Example/html/node" ]; then
+        APP_DIR="/usr/local/lsws/Example/html/node"
+    elif [ -d "/usr/local/lsws/Example/html" ]; then
+        APP_DIR="/usr/local/lsws/Example/html"
+    elif [ -d "/var/www/vhosts/edufyione.edufyitech.in/html" ]; then
+        APP_DIR="/var/www/vhosts/edufyione.edufyitech.in/html"
+    else
+        APP_DIR="/var/www/html"
+    fi
+fi
+
+echo "Target Application Directory: $APP_DIR"
+
 # 3. Deploy Application Codebase
-echo "[3/6] Deploying clean HR panel code to $APP_DIR..."
+echo "[3/5] Deploying clean HR panel code to $APP_DIR..."
 mkdir -p "$APP_DIR"
 cd "$APP_DIR"
 
 if [ -f "$APP_DIR/app.js" ]; then
-    cp "$APP_DIR/app.js" "$APP_DIR/app.js.backup.$(date +%s)"
+    cp "$APP_DIR/app.js" "$APP_DIR/app.js.sample.bak" 2>/dev/null || true
 fi
 
-# Clone fresh copy from GitHub
 rm -rf /tmp/edufyi-hr-deploy
 git clone https://github.com/NAITIK74600/edufy-hr.git /tmp/edufyi-hr-deploy
 cp -r /tmp/edufyi-hr-deploy/. "$APP_DIR/"
 rm -rf /tmp/edufyi-hr-deploy
 
 # 4. Generate Production .env
-echo "[4/6] Creating production environment configuration..."
-cat << EOF > "$APP_DIR/.env"
+echo "[4/5] Writing production .env..."
+cat << 'EOF' > "$APP_DIR/.env"
 NODE_ENV=production
-PORT=$DETECTED_PORT
+PORT=3000
 JWT_SECRET=edufyi-secure-jwt-key-9f8e7d6c5b4a3210
 MONGODB_URI=mongodb://127.0.0.1:27017/admin_edufytech_employee_portal
 MONGO_POOL_SIZE=200
@@ -97,23 +112,24 @@ IT_EMAIL_PASS=3CD<u&3S>rUQ6uD*
 HELPDESK_EMAIL=helpsupport@edufyitechsolution.in
 EOF
 
-# 5. Install Dependencies & Set Permissions
-echo "[5/6] Installing production dependencies and configuring permissions..."
+# 5. Install Dependencies & Restart
+echo "[5/5] Installing dependencies and restarting server..."
 npm install --production
 
-# OpenLiteSpeed restart trigger
+# Create restart trigger for OpenLiteSpeed App Server
 mkdir -p "$APP_DIR/tmp"
 touch "$APP_DIR/tmp/restart.txt"
 
-# Set correct permissions so OpenLiteSpeed (nobody/nogroup) can read files
+# Set permissions for OpenLiteSpeed (nobody:nogroup)
 chown -R nobody:nogroup "$APP_DIR" 2>/dev/null || chown -R www-data:www-data "$APP_DIR" 2>/dev/null || true
 chmod -R 755 "$APP_DIR"
 
-# 6. Reload OpenLiteSpeed
-echo "[6/6] Reloading OpenLiteSpeed..."
+# Restart OpenLiteSpeed web server
 systemctl restart lsws 2>/dev/null || /usr/local/lsws/bin/lswsctrl restart 2>/dev/null || true
+touch "$APP_DIR/tmp/restart.txt"
 
 echo "============================================================"
-echo "🎉 SUCCESS! Edufyi HR Portal is now deployed on OpenLiteSpeed!"
-echo "Visit your site now: https://edufyione.edufyitech.in"
+echo "🎉 SUCCESS! Edufyi HR Portal has been deployed!"
+echo "App Directory: $APP_DIR"
+echo "Check your live site: https://edufyione.edufyitech.in"
 echo "============================================================"
