@@ -50,8 +50,10 @@ for (const envPath of envCandidatePaths) {
   }
 }
 
-const port = Number(process.env.PORT || 30005)
-logStartup(`Configured Port: ${port}`)
+const rawPort = process.env.PORT || 30005
+const isUnixSocket = typeof rawPort === 'string' && (rawPort.startsWith('/') || rawPort.includes('.sock') || rawPort.startsWith('\\\\.\\pipe'))
+const port = isUnixSocket ? rawPort : Number(rawPort || 30005)
+logStartup(`Configured Listen Target: ${port} (Type: ${isUnixSocket ? 'Unix Socket' : 'TCP Port'})`)
 
 if (!process.env.JWT_SECRET) {
   const secretPath = path.resolve(rootDir, '.jwt_secret')
@@ -112,8 +114,22 @@ process.on('unhandledRejection', (reason) => {
   logStartup(`[SERVER UNHANDLED REJECTION]: ${reason?.stack || reason?.message || reason}`)
 })
 
-const server = app.listen(port, '0.0.0.0', () => {
-  logStartup(`🚀 Edufyi HR API successfully listening on http://0.0.0.0:${port} (database: ${useDatabase ? 'MongoDB' : 'In-Memory Store'})`)
+// If listening on a Unix Domain Socket (e.g. OpenLiteSpeed App Server), clean dead socket before listening
+if (isUnixSocket) {
+  try {
+    if (fs.existsSync(port)) fs.unlinkSync(port)
+  } catch {}
+}
+
+const listenArgs = isUnixSocket ? [port] : [port, '0.0.0.0']
+
+const server = app.listen(...listenArgs, () => {
+  if (isUnixSocket) {
+    try { fs.chmodSync(port, 0o777) } catch {}
+    logStartup(`🚀 Edufyi HR API successfully listening on Unix Domain Socket: ${port} (database: ${useDatabase ? 'MongoDB' : 'In-Memory Store'})`)
+  } else {
+    logStartup(`🚀 Edufyi HR API successfully listening on http://0.0.0.0:${port} (database: ${useDatabase ? 'MongoDB' : 'In-Memory Store'})`)
+  }
   if (useDatabase) warmOnboardingDocsCache().catch((error) => logStartup(`Onboarding docs cache warm-up failed: ${error.message}`))
 })
 
@@ -124,7 +140,7 @@ server.requestTimeout = 30000
 
 server.on('error', (err) => {
   if (err.code === 'EADDRINUSE') {
-    logStartup(`[FATAL] Port ${port} is already in use by another process. Please close conflicting process and restart.`)
+    logStartup(`[FATAL] Port/Socket ${port} is already in use by another process. Please close conflicting process and restart.`)
     process.exit(1)
   } else {
     logStartup(`[API Server Error]: ${err?.stack || err?.message || err}`)
