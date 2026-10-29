@@ -172,17 +172,24 @@ export function createMemoryAttendanceRepository(seedRecords = []) {
     },
     async delete(id, options = {}) {
       const cleanId = String(id || '').trim()
-      const idx = records.findIndex((r) => {
-        if (cleanId && (r.id === cleanId || String(r._id) === cleanId)) return true
-        if (options?.employeeId && options?.date && r.employeeId?.toUpperCase() === String(options.employeeId).toUpperCase() && r.date === options.date) return true
-        if (cleanId && r.employeeId?.toUpperCase() === cleanId.toUpperCase()) return true
-        return false
-      })
-      if (idx >= 0) {
-        records.splice(idx, 1)
-        return true
+      const initialCount = records.length
+      const targetEmp = options?.employeeId ? String(options.employeeId).toUpperCase() : null
+      const targetDate = options?.date ? String(options.date) : null
+
+      const targetDoc = cleanId ? records.find((r) => r.id === cleanId || String(r._id) === cleanId) : null
+      const resolvedEmp = targetEmp || targetDoc?.employeeId?.toUpperCase()
+      const resolvedDate = targetDate || targetDoc?.date
+
+      for (let i = records.length - 1; i >= 0; i--) {
+        const r = records[i]
+        const rEmp = r.employeeId?.toUpperCase()
+        const matchEmpDate = resolvedEmp && resolvedDate && rEmp === resolvedEmp && r.date === resolvedDate
+        const matchId = cleanId && (r.id === cleanId || String(r._id) === cleanId)
+        if (matchEmpDate || matchId) {
+          records.splice(i, 1)
+        }
       }
-      return false
+      return records.length < initialCount
     },
     async getSummary(date) {
       const dayRecords = records.filter((r) => r.date === date)

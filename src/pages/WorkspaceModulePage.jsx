@@ -241,7 +241,7 @@ function AttendanceModule() {
       isEarlyLogout: isNowPresent ? false : Boolean(editingAttendance.isEarlyLogout ?? (editingAttendance.status === 'early-logout')),
       isLop: isNowPresent ? false : Boolean(editingAttendance.isLop ?? (editingAttendance.status === 'lop')),
       totalHours: isCheckOutCleared
-        ? (isNowPresent ? 'Active (Live)' : (editingAttendance.isLate ? 'Active (Late)' : 'Active (Live)'))
+        ? 'Active (Live)'
         : (isNowPresent && typeof editingAttendance.totalHours === 'string' && editingAttendance.totalHours.includes('Late')
             ? (editingAttendance.checkOut ? '8.0 hrs' : 'Active (Live)')
             : editingAttendance.totalHours),

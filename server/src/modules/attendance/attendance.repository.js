@@ -220,25 +220,50 @@ export function createMongoAttendanceRepository() {
     },
     async delete(id, options = {}) {
       const cleanId = String(id || '').trim()
-      let doc = null
-      if (cleanId && /^[0-9a-fA-F]{24}$/.test(cleanId)) {
-        doc = await AttendanceRecord.findByIdAndDelete(cleanId)
-      }
-      if (!doc && options?.employeeId && options?.date) {
-        doc = await AttendanceRecord.findOneAndDelete({
-          employeeId: String(options.employeeId).toUpperCase().trim(),
-          date: String(options.date).trim(),
+      let deleted = false
+
+      // 1. If employeeId and date are provided in options, delete ALL records for that day completely
+      if (options?.employeeId && options?.date) {
+        const empCode = String(options.employeeId).trim()
+        const targetDate = String(options.date).trim()
+        const res = await AttendanceRecord.deleteMany({
+          employeeId: { $regex: new RegExp(`^${empCode}$`, 'i') },
+          date: targetDate,
         })
+        if (res.deletedCount > 0) deleted = true
       }
-      if (!doc && cleanId) {
-        doc = await AttendanceRecord.findOneAndDelete({
+
+      // 2. If valid MongoDB ObjectId, locate the record and delete all records for that employee on that day
+      if (cleanId && /^[0-9a-fA-F]{24}$/.test(cleanId)) {
+        const target = await AttendanceRecord.findById(cleanId).lean()
+        if (target) {
+          const res = await AttendanceRecord.deleteMany({
+            $or: [
+              { _id: target._id },
+              ...(target.employeeId && target.date
+                ? [{ employeeId: { $regex: new RegExp(`^${target.employeeId}$`, 'i') }, date: target.date }]
+                : []),
+            ],
+          })
+          if (res.deletedCount > 0) deleted = true
+        } else {
+          const res = await AttendanceRecord.deleteOne({ _id: cleanId })
+          if (res.deletedCount > 0) deleted = true
+        }
+      }
+
+      // 3. Fallback: match by custom id or employeeId
+      if (!deleted && cleanId) {
+        const res = await AttendanceRecord.deleteMany({
           $or: [
             { id: cleanId },
             { employeeId: cleanId.toUpperCase() },
           ],
         })
+        if (res.deletedCount > 0) deleted = true
       }
-      return Boolean(doc)
+
+      return deleted
     },
     async getSummary(date) {
       const docs = await AttendanceRecord.find({ date }).lean()
