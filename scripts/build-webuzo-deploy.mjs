@@ -171,7 +171,7 @@ HELPDESK_EMAIL=helpsupport@edufyitechsolution.in
 HELPDESK_EMAIL_PASS=
 
 # Public application base URL for links embedded in emails
-APP_PUBLIC_URL=https://test.edufyitechsolutions.com
+APP_PUBLIC_URL=https://edufyione.edufyitech.in
 TRUST_PROXY=true
 `
 fs.writeFileSync(path.join(BUILD_DIR, '.env'), envContent)
