@@ -141,11 +141,37 @@ console.log('🔐 Creating production .env...')
 const envContent = `NODE_ENV=production
 PORT=30005
 JWT_SECRET=edufyi-production-jwt-key-change-this-in-production
-MONGODB_URI=mongodb+srv://naitikraj74600_db_user:uRVGHVhBdwtmctuY@cluster0.r5jflcg.mongodb.net/hr_dashboard?retryWrites=true&w=majority
+
+MONGODB_URI=mongodb://admin_edufytech:Q2j6fPfiaa@127.0.0.1:27017/admin_edufytech_employee_portal?authSource=admin
+MONGO_POOL_SIZE=200
+AUTH_USERS_JSON=[]
+VITE_API_BASE_URL=/api/v1
+
+# Admin & HR credentials (customizable email / gmail & password)
 ADMIN_EMAIL=admin@edufyitech.in
 ADMIN_PASSWORD=Password@123
 HR_EMAIL=hr@edufyitech.in
 HR_PASSWORD=Password@123
+
+# SMTP Workspace Mail Configuration
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_SECURE=false
+
+# Workspace / Gmail App Password
+ADMIN_EMAIL_PASS=ywly kgmv bbsm juca
+HR_EMAIL_PASS=tzen ptmu smjq oyoi
+
+# IT Support Workspace Email & App Password (Dedicated IT channel)
+IT_EMAIL=itsupport@edufyitech.in
+IT_EMAIL_PASS=3CD<u&3S>rUQ6uD*
+
+# General Help Support Workspace Email & App Password (HR, Payroll, Facilities)
+HELPDESK_EMAIL=helpsupport@edufyitechsolution.in
+HELPDESK_EMAIL_PASS=
+
+# Public application base URL for links embedded in emails
+APP_PUBLIC_URL=https://empoyee.edufyitechsolutions.com
 TRUST_PROXY=true
 `
 fs.writeFileSync(path.join(BUILD_DIR, '.env'), envContent)
