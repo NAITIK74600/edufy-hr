@@ -756,7 +756,7 @@ export function createAttendanceService({ repository, companySettings = {} }) {
         gpsVerified: verification.isGpsVerified,
         locationName: verification.nearestLocation,
         verificationMethod: verification.method,
-        totalHours: punchEval.isLate ? 'Active (Late)' : 'Active (Live)',
+        totalHours: 'Active (Live)',
         notes: punchEval.isLate ? punchEval.notes : `Verified Attendance (${resolvedShiftConfig.name})`,
         lastConnectedAt: now,
         disconnectedSince: null,
@@ -869,7 +869,15 @@ export function createAttendanceService({ repository, companySettings = {} }) {
       // CRITICAL SAFEGUARD: Auto punch-out strictly requires AT LEAST 2 HOURS (120 min) elapsed since check-in
       if (autoPunchOut) {
         const TWO_HOURS_MS = 2 * 60 * 60 * 1000
-        const checkInTimeMs = existing.checkInAt ? new Date(existing.checkInAt).getTime() : null
+        let checkInTimeMs = existing.checkInAt ? new Date(existing.checkInAt).getTime() : null;
+        if (!checkInTimeMs && existing.checkIn) {
+          const inM = parseTimeToMinutes(existing.checkIn);
+          if (inM !== null) {
+            const d = new Date();
+            d.setHours(Math.floor(inM / 60), inM % 60, 0, 0);
+            checkInTimeMs = d.getTime();
+          }
+        }
         if (checkInTimeMs && (now.getTime() - checkInTimeMs) < TWO_HOURS_MS) {
           // Employee has been checked in for less than 2 hours. Auto punch-out cannot trigger!
           return existing
@@ -1161,7 +1169,7 @@ export function createAttendanceService({ repository, companySettings = {} }) {
           status: finalStatus,
           isEarlyLogout: checkoutEval ? checkoutEval.isEarlyLogout : false,
           totalHours: isStillActive
-            ? (punchEval.isLate ? 'Active (Late)' : 'Active (Live)')
+            ? 'Active (Live)'
             : (typeof rec.totalHours === 'string' && rec.totalHours.includes('Active') ? '8.0 hrs' : rec.totalHours),
           notes: punchEval.isLate
             ? punchEval.notes

@@ -48,6 +48,28 @@ function filter(user, resource) {
   if (resource === 'tasks') return { assigneeRef: id(user) }
   if (resource === 'performanceGoals' || resource === 'performanceReviews') return { employeeRef: id(user) }
   if (resource === 'kudos') return { $or: [{ ownerId: id(user) }, { recipientId: id(user) }] }
+  if (resource === 'tickets') {
+    const actorId = id(user)
+    const empId = user?.employeeId
+    const email = (user?.email || '').trim().toLowerCase()
+    const orConditions = [
+      { ownerId: actorId },
+      { ownerId: String(actorId) },
+      { assignedToId: actorId },
+      { assignedToId: String(actorId) },
+    ]
+    if (empId) {
+      orConditions.push(
+        { ownerId: empId },
+        { employeeId: empId },
+        { assignedToId: empId }
+      )
+    }
+    if (email) {
+      orConditions.push({ assignedToEmail: new RegExp(`^${email}$`, 'i') })
+    }
+    return { $or: orConditions }
+  }
   return { ownerId: id(user) }
 }
 function allowedBody(body, fields) {
@@ -151,8 +173,36 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
   })
   async function list(actor, resource, people) {
     if (!access(actor, resource)) return []
-    const query = filter(actor, resource)
+    let query = filter(actor, resource)
     if (resource === 'announcements' && !management(actor)) query.targetAudience = { $in: ['All Employees', actor.department].filter(Boolean) }
+    if (resource === 'tickets' && !management(actor)) {
+      try {
+        const settingsDoc = (await AttendanceSettings.findOne({ key: 'office' }).lean()) || (await AttendanceSettings.findOne().sort({ updatedAt: -1 }).lean())
+        const hd = settingsDoc?.helpDeskSettings || {}
+        const actorIdStr = id(actor)
+        const actorEmpId = String(actor.employeeId || '').toUpperCase()
+        const actorEmail = String(actor.email || '').trim().toLowerCase()
+
+        const isItSpecialist = Boolean(
+          (hd.itSupportEmployeeId && [actorIdStr, actorEmpId].includes(String(hd.itSupportEmployeeId).toUpperCase())) ||
+          (hd.itSupportEmployeeEmail && actorEmail === String(hd.itSupportEmployeeEmail).trim().toLowerCase())
+        )
+        const isGeneralSpecialist = Boolean(
+          (hd.generalSupportEmployeeId && [actorIdStr, actorEmpId].includes(String(hd.generalSupportEmployeeId).toUpperCase())) ||
+          (hd.generalSupportEmployeeEmail && actorEmail === String(hd.generalSupportEmployeeEmail).trim().toLowerCase())
+        )
+
+        if (isItSpecialist && isGeneralSpecialist) {
+          query = {}
+        } else if (isItSpecialist) {
+          const baseOr = query.$or || [{ ownerId: actorIdStr }]
+          query = { $or: [...baseOr, { category: { $regex: /it/i } }] }
+        } else if (isGeneralSpecialist) {
+          const baseOr = query.$or || [{ ownerId: actorIdStr }]
+          query = { $or: [...baseOr, { category: { $not: { $regex: /it/i } } }] }
+        }
+      } catch {}
+    }
     const records = await models[resource].find(query).sort({ createdAt: -1 }).lean()
     if (!people) {
       const references = [...new Set(records.flatMap((record) => [record.ownerId, record.assigneeRef, record.employeeRef, record.recipientId]).filter((value) => mongoose.isValidObjectId(value)))]
@@ -240,6 +290,24 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
                 assignedId = hd.generalSupportEmployeeId || ''
                 assignedName = hd.generalSupportEmployeeName || ''
                 assignedEmail = hd.generalSupportEmployeeEmail || hd.generalSupportEmail || 'helpsupport@edufyitechsolution.in'
+              }
+            } catch {}
+          }
+          if (assignedId && (!assignedEmail || !assignedName)) {
+            try {
+              const empDoc = await Employee.findOne(mongoose.isValidObjectId(assignedId) ? { _id: assignedId } : { employeeId: assignedId }).lean()
+              if (empDoc) {
+                assignedName = assignedName || empDoc.name
+                assignedEmail = assignedEmail || empDoc.email
+              }
+            } catch {}
+          }
+          if (!assignedId && assignedEmail) {
+            try {
+              const empDoc = await Employee.findOne({ email: new RegExp(`^${assignedEmail}$`, 'i') }).lean()
+              if (empDoc) {
+                assignedId = String(empDoc._id)
+                assignedName = assignedName || empDoc.name
               }
             } catch {}
           }
@@ -594,6 +662,26 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
       } else {
         if (!mongoose.isValidObjectId(recordId)) throw fail('Invalid record identifier.')
         query = { ...filter(actor, resource), _id: recordId }
+        if (resource === 'tickets' && !management(actor)) {
+          try {
+            const settingsDoc = (await AttendanceSettings.findOne({ key: 'office' }).lean()) || (await AttendanceSettings.findOne().sort({ updatedAt: -1 }).lean())
+            const hd = settingsDoc?.helpDeskSettings || {}
+            const actorIdStr = id(actor)
+            const actorEmpId = String(actor.employeeId || '').toUpperCase()
+            const actorEmail = String(actor.email || '').trim().toLowerCase()
+            const isItSpecialist = Boolean(
+              (hd.itSupportEmployeeId && [actorIdStr, actorEmpId].includes(String(hd.itSupportEmployeeId).toUpperCase())) ||
+              (hd.itSupportEmployeeEmail && actorEmail === String(hd.itSupportEmployeeEmail).trim().toLowerCase())
+            )
+            const isGeneralSpecialist = Boolean(
+              (hd.generalSupportEmployeeId && [actorIdStr, actorEmpId].includes(String(hd.generalSupportEmployeeId).toUpperCase())) ||
+              (hd.generalSupportEmployeeEmail && actorEmail === String(hd.generalSupportEmployeeEmail).trim().toLowerCase())
+            )
+            if (isItSpecialist || isGeneralSpecialist) {
+              query = { _id: recordId }
+            }
+          } catch {}
+        }
         if (resource === 'announcements') {
           if (req.body.liked !== undefined) {
             allowedBody(req.body, ['liked'])
@@ -731,42 +819,59 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
           read: false,
         })
       } else if (resource === 'tickets') {
+        const actorIdStr = id(actor)
+        const isRequester = (String(record.ownerId) === actorIdStr || (record.employeeId && record.employeeId === actor.employeeId))
+        const isStaffAction = !isRequester || management(actor)
+
         if (req.body.response !== undefined) {
-          if (!management(actor)) {
-            // Employee replied -> notify all active Admin & HR users
+          if (!isStaffAction) {
+            // Requester replied -> notify assigned specialist and all active Admin & HR users
+            const notifs = []
+            if (record.assignedToId && String(record.assignedToId) !== actorIdStr) {
+              notifs.push({
+                ownerId: String(record.assignedToId),
+                recipientId: String(record.assignedToId),
+                title: `Requester Reply on Ticket: ${record.subject}`,
+                message: `${actor.name || actor.displayName || 'Requester'} replied to ticket #${String(record._id).slice(-6).toUpperCase()}: "${req.body.response.slice(0, 100)}"`,
+                type: 'ticket',
+                read: false,
+              })
+            }
             const adminAndHr = await Employee.find({
               status: 'active',
               role: { $in: ['admin', 'hr', 'hr_executive', 'director', 'managing_director', 'co_founder', 'vertical_head'] },
             }).select('_id role').lean()
-            if (adminAndHr.length > 0) {
-              const notifDocs = adminAndHr.map((staff) => ({
-                ownerId: String(staff._id),
-                recipientRole: staff.role,
-                title: `New Reply on Ticket: ${record.subject}`,
-                message: `${actor.name || actor.displayName || 'Employee'} replied to support ticket "${record.subject}".`,
-                type: 'ticket',
-                read: false,
-              }))
-              await models.notifications.insertMany(notifDocs)
+            for (const staff of adminAndHr) {
+              if (String(staff._id) !== actorIdStr && String(staff._id) !== String(record.assignedToId)) {
+                notifs.push({
+                  ownerId: String(staff._id),
+                  recipientRole: staff.role,
+                  title: `New Reply on Ticket: ${record.subject}`,
+                  message: `${actor.name || actor.displayName || 'Requester'} replied to ticket #${String(record._id).slice(-6).toUpperCase()}: "${record.subject}".`,
+                  type: 'ticket',
+                  read: false,
+                })
+              }
             }
+            if (notifs.length > 0) await models.notifications.insertMany(notifs)
           } else {
-            // Management replied -> notify employee
+            // Support specialist / management replied -> notify employee requester
             await models.notifications.create({
               ownerId: record.ownerId,
               recipientId: record.ownerId,
               title: `Support Reply: ${record.subject}`,
-              message: `${actor.name || actor.displayName || 'Support Team'} replied to your ticket "${record.subject}".`,
+              message: `${actor.name || actor.displayName || 'Support Team'} replied: "${req.body.response.slice(0, 100)}"`,
               type: 'ticket',
               read: false,
             })
           }
         } else if (req.body.status !== undefined) {
-          // Status updated -> notify employee
+          // Status updated -> notify employee requester
           await models.notifications.create({
             ownerId: record.ownerId,
             recipientId: record.ownerId,
-            title: `Ticket Status Updated: ${record.status}`,
-            message: `Your support ticket "${record.subject}" is now marked as ${record.status}.`,
+            title: `Ticket Status Updated: ${String(record.status).toUpperCase()}`,
+            message: `Your support ticket "${record.subject}" is now marked as ${String(record.status).toUpperCase()}.`,
             type: 'ticket',
             read: false,
           })
@@ -781,8 +886,8 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
           const sender = actor.displayName || actor.name || (isIt ? 'Edufyi IT Support' : 'Edufyi Help Support')
 
           if (req.body.response !== undefined) {
-            if (!management(actor)) {
-              // Employee replied -> send alert email to support team inbox
+            if (!isStaffAction) {
+              // Requester replied -> send alert email to support mailbox AND to assigned specialist
               if (supportMail) {
                 await sendSupportTicketEmail({
                   type: 'reply',
@@ -793,8 +898,18 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
                   replyText: req.body.response,
                 })
               }
+              if (record.assignedToEmail && record.assignedToEmail.toLowerCase() !== supportMail.toLowerCase()) {
+                await sendSupportTicketEmail({
+                  type: 'reply',
+                  ticket: record,
+                  employee: emp,
+                  recipientEmail: record.assignedToEmail,
+                  senderName: emp?.name || sender,
+                  replyText: req.body.response,
+                })
+              }
             } else {
-              // Support specialist replied -> send email to employee
+              // Support specialist replied -> send email to requester
               if (emp?.email) {
                 await sendSupportTicketEmail({
                   type: 'reply',
@@ -807,7 +922,7 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
               }
             }
           } else if (req.body.status !== undefined) {
-            // Status changed (e.g. resolved, closed) -> send status update email to employee
+            // Status changed (e.g. resolved, closed) -> send status update email to requester
             if (emp?.email) {
               const isResolved = req.body.status === 'resolved' || req.body.status === 'closed'
               await sendSupportTicketEmail({

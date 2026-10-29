@@ -705,12 +705,12 @@ function AttendanceModule() {
                   render: (r) => {
                     const isLateStatus = r.status === 'late'
                     let displayHours = r.totalHours || '—'
-                    if (!r.checkOut) {
-                      displayHours = isLateStatus ? 'Active (Late)' : 'Active (Live)'
+                    if (!r.checkOut || (typeof displayHours === 'string' && displayHours.includes('Active'))) {
+                      displayHours = 'Active (Live)'
                     }
                     return (
                       <div>
-                        <strong style={{ color: r.isOnBreak ? '#b45309' : (isLateStatus ? '#dc2626' : 'var(--teal)') }}>
+                        <strong style={{ color: r.isOnBreak ? '#b45309' : (displayHours === 'Active (Live)' ? 'var(--teal)' : (isLateStatus ? '#dc2626' : 'var(--teal)')) }}>
                           {r.isOnBreak ? `⏸️ On ${r.currentBreak?.type === 'tea' ? 'Tea Break' : 'Lunch Break'}` : displayHours}
                         </strong>
                         {r.totalBreakMinutes > 0 && (
