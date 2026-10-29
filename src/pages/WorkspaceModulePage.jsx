@@ -51,7 +51,7 @@ import {
   Calculator,
 } from 'lucide-react'
 import { Button, ConfirmationDialog, DataTable, EmptyState, Field, PageHeader, StatusBadge } from '../components/ui'
-import { formatAttendanceNotes } from '../utils/attendanceUtils'
+import { formatAttendanceNotes, getDailyAttendanceStatus, getLateCountInfo } from '../utils/attendanceUtils'
 import { hrStore, storeAction } from '../services/hrStore'
 import { workspaceAction } from '../services/workspaceStore'
 import { PerformanceWorkspace, WorkspaceReports, WorkspaceNotifications } from '../components/WorkspaceRecords'
@@ -503,6 +503,8 @@ function AttendanceModule() {
               dailyAttendance.map((r) => {
                 const isInside = r.distanceMeters !== undefined && r.distanceMeters !== null ? r.distanceMeters <= maxGeofenceRadius : r.gpsVerified
                 const distText = r.distanceMeters !== undefined && r.distanceMeters !== null ? `${r.distanceMeters}m` : (r.wifiVerified ? `<${maxGeofenceRadius}m` : '—')
+                const statusInfo = getDailyAttendanceStatus(r)
+                const lateInfo = getLateCountInfo(r, storeState.attendance, selectedDate)
                 return (
                   <div
                     key={r.id}
@@ -521,40 +523,28 @@ function AttendanceModule() {
                         <strong style={{ fontSize: '13px' }}>{r.employeeName}</strong>
                         <span style={{ fontSize: '11px', color: 'var(--muted)', marginLeft: '6px' }}>({r.employeeId})</span>
                       </div>
-                      <div style={{ textAlign: 'right' }}>
-                        <StatusBadge
-                          tone={
-                            r.status === 'present' || r.status === 'late'
-                              ? 'info'
-                              : r.status === 'early-logout'
-                              ? 'warning'
-                              : r.status === 'lop'
-                              ? 'danger'
-                              : r.status === 'half-day'
-                              ? 'warning'
-                              : r.status === 'on-leave'
-                              ? 'neutral'
-                              : 'warning'
-                          }
-                        >
-                          {r.status === 'present' || r.status === 'late'
-                            ? 'Present'
-                            : r.status === 'early-logout'
-                            ? 'Early Logout'
-                            : r.status === 'lop'
-                            ? 'Loss of Pay (LOP)'
-                            : r.status === 'half-day'
-                            ? 'Half Day'
-                            : r.status === 'on-leave'
-                            ? 'On Leave'
-                            : 'Absent'}
+                      <div style={{ textAlign: 'right', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <StatusBadge tone={statusInfo.tone}>
+                          {statusInfo.label}
                         </StatusBadge>
-                    </div>
-                    {formatAttendanceNotes(r.notes) && (
-                      <div style={{ fontSize: '10px', color: '#b45309', marginTop: '2px', lineHeight: 1.2 }}>
-                        {formatAttendanceNotes(r.notes)}
+                        {lateInfo.count > 0 && (
+                          <span
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              padding: '2px 6px',
+                              borderRadius: '4px',
+                              fontSize: '10px',
+                              fontWeight: 700,
+                              background: lateInfo.count >= 3 ? '#fee2e2' : '#fef3c7',
+                              color: lateInfo.count >= 3 ? '#b91c1c' : '#b45309',
+                              border: `1px solid ${lateInfo.count >= 3 ? '#fca5a5' : '#fde68a'}`,
+                            }}
+                          >
+                            #{lateInfo.count}{lateInfo.lopDays > 0 ? ` (${lateInfo.lopDays} LOP)` : ''}
+                          </span>
+                        )}
                       </div>
-                    )}
                     </div>
 
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '6px', fontSize: '11px', background: 'var(--surface-sunken)', padding: '8px 10px', borderRadius: '6px' }}>
@@ -764,52 +754,54 @@ function AttendanceModule() {
                   key: 'status',
                   label: 'Status',
                   render: (r) => {
-                    const cleanedNotes = formatAttendanceNotes(r.notes);
-
+                    const statusInfo = getDailyAttendanceStatus(r)
                     return (
-                      <div style={{ minWidth: '150px', maxWidth: '280px' }}>
-                        <StatusBadge
-                          tone={
-                            r.status === 'present' || r.status === 'late'
-                              ? 'info'
-                              : r.status === 'early-logout'
-                              ? 'warning'
-                              : r.status === 'lop'
-                              ? 'danger'
-                              : r.status === 'half-day'
-                              ? 'warning'
-                              : r.status === 'on-leave'
-                              ? 'neutral'
-                              : 'warning'
-                          }
+                      <StatusBadge tone={statusInfo.tone}>
+                        {statusInfo.label}
+                      </StatusBadge>
+                    )
+                  },
+                },
+                {
+                  key: 'lateCount',
+                  label: 'Late Count',
+                  render: (r) => {
+                    const { count, lopDays } = getLateCountInfo(r, storeState.attendance, selectedDate)
+                    if (!count || count <= 0) {
+                      return <span style={{ color: 'var(--muted)', fontSize: '12px' }}>—</span>
+                    }
+                    return (
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                        <span
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            padding: '2px 8px',
+                            borderRadius: '6px',
+                            fontSize: '11px',
+                            fontWeight: 700,
+                            background: count >= 3 ? '#fee2e2' : '#fef3c7',
+                            color: count >= 3 ? '#b91c1c' : '#b45309',
+                            border: `1px solid ${count >= 3 ? '#fca5a5' : '#fde68a'}`,
+                          }}
                         >
-                          {r.status === 'present' || r.status === 'late'
-                            ? 'Present'
-                            : r.status === 'early-logout'
-                            ? 'Early Logout'
-                            : r.status === 'lop'
-                            ? 'Loss of Pay (LOP)'
-                            : r.status === 'half-day'
-                            ? 'Half Day'
-                            : r.status === 'on-leave'
-                            ? 'On Leave'
-                            : 'Absent'}
-                        </StatusBadge>
-                        {cleanedNotes && (
-                          <div style={{
-                            fontSize: '10px',
-                            color: '#b45309',
-                            marginTop: '3px',
-                            maxWidth: '280px',
-                            whiteSpace: 'normal',
-                            wordBreak: 'break-word',
-                            lineHeight: 1.25,
-                          }}>
-                            {cleanedNotes}
-                          </div>
+                          #{count}
+                        </span>
+                        {lopDays > 0 && (
+                          <span
+                            style={{
+                              fontSize: '10.5px',
+                              fontWeight: 700,
+                              color: '#dc2626',
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            {lopDays} LOP
+                          </span>
                         )}
                       </div>
-                    );
+                    )
                   },
                 },
                 {

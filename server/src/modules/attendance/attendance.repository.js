@@ -133,7 +133,11 @@ export function createMongoAttendanceRepository() {
     },
     async list(filters = {}) {
       const query = {}
-      if (typeof filters.date === 'string' && filters.date.trim()) query.date = filters.date.trim()
+      if (typeof filters.date === 'string' && filters.date.trim()) {
+        query.date = filters.date.trim()
+      } else if (typeof filters.month === 'string' && filters.month.trim()) {
+        query.date = { $regex: new RegExp(`^${filters.month.trim()}`) }
+      }
       if (typeof filters.employeeId === 'string' && filters.employeeId.trim()) query.employeeId = filters.employeeId.trim().toUpperCase()
       if (Array.isArray(filters.allowedEmployeeIds) && filters.allowedEmployeeIds.length > 0) {
         const allowed = filters.allowedEmployeeIds.map((id) => String(id).trim().toUpperCase()).filter(Boolean)

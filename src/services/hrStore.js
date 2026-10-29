@@ -6937,6 +6937,22 @@ const localStore = {
         }
       }
 
+      // 3. Late login LOP deduction: every 3 late logins = 0.5 LOP day, 6 late logins = 1.0 LOP day
+      const empAttendance = attendanceList.filter((a) => {
+        if (String(a.employeeId || '').toUpperCase() !== empIdStr) return false
+        if (month && a.date) {
+          try {
+            const aDate = new Date(`${a.date}T12:00:00`)
+            const aMonthStr = aDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+            if (aMonthStr !== month && !a.date.startsWith(month)) return false
+          } catch {}
+        }
+        return true
+      })
+      const lateLoginsCount = empAttendance.filter((a) => a.isLate || a.status === 'late').length
+      const lateLopDays = Math.floor(lateLoginsCount / 3) * 0.5
+      calculatedLopDays += lateLopDays
+
       const standardDays = 30
       const lopDays = calculatedLopDays
       const payableDays = Math.max(0, standardDays - lopDays)
@@ -7004,7 +7020,11 @@ const localStore = {
         totalDeductions,
         netPay,
         status: 'Processed',
-        notes: lopDays > 0 ? `Bulk generated payroll draft (${lopDays} LOP day(s) deducted)` : 'Bulk generated payroll draft',
+        notes: lopDays > 0
+          ? (lateLopDays > 0
+              ? `Bulk generated payroll draft (${lopDays} LOP day(s) deducted, including ${lateLopDays} LOP from ${lateLoginsCount} late logins)`
+              : `Bulk generated payroll draft (${lopDays} LOP day(s) deducted)`)
+          : 'Bulk generated payroll draft',
       }
 
       const existingIndex = updatedPayroll.findIndex(

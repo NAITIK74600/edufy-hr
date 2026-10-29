@@ -125,6 +125,7 @@ export function createMemoryAttendanceRepository(seedRecords = []) {
     async list(filters = {}) {
       return records.filter((r) => {
         if (filters.date && r.date !== filters.date) return false
+        if (filters.month && (!r.date || !r.date.startsWith(filters.month))) return false
         if (filters.employeeId && r.employeeId?.toUpperCase() !== filters.employeeId?.toUpperCase()) return false
         if (filters.status && filters.status !== 'all' && r.status !== filters.status) return false
         if (filters.search) {

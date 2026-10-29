@@ -2016,11 +2016,6 @@ function ESSAttendanceView({ user }) {
                               ? 'On Leave'
                               : 'Absent'}
                 </StatusBadge>
-                {formatAttendanceNotes(row.notes) && (
-                  <div style={{ fontSize: '10px', color: '#b45309', marginTop: '3px', lineHeight: 1.2 }}>
-                    {formatAttendanceNotes(row.notes)}
-                  </div>
-                )}
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '6px', fontSize: '11px', background: 'var(--surface-sunken)', padding: '8px 10px', borderRadius: '6px' }}>
@@ -2124,11 +2119,6 @@ function ESSAttendanceView({ user }) {
                                     ? 'On Leave'
                                     : 'Absent'}
                       </StatusBadge>
-                      {row.notes && (
-                        <div style={{ fontSize: '10px', color: '#b45309', marginTop: '3px', maxWidth: '180px', lineHeight: 1.2 }}>
-                          {formatAttendanceNotes(row.notes)}
-                        </div>
-                      )}
                     </td>
                   </tr>
                 ))
