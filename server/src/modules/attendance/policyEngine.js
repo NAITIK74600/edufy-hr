@@ -128,31 +128,8 @@ export async function resolveEmployeeShift(employeeId, dateStr) {
   const cleanEmpId = String(employeeId || '').trim().toUpperCase()
   const targetDate = String(dateStr || '').trim()
 
-  if (cleanEmpId && targetDate) {
-    try {
-      // 1. Check for specific assignment on this date
-      const assignment = await ShiftAssignment.findOne({
-        employeeId: cleanEmpId,
-        effectiveFrom: { $lte: targetDate },
-        $or: [{ effectiveTo: null }, { effectiveTo: { $gte: targetDate } }],
-      }).sort({ effectiveFrom: -1, assignedAt: -1 }).lean()
-
-      if (assignment?.shiftId) {
-        const configuredShift = await Shift.findOne({ shiftId: assignment.shiftId.toUpperCase(), isActive: true }).lean()
-        if (configuredShift) {
-          return {
-            shift: normalizeShiftConfig(configuredShift),
-            source: 'assignment',
-            assignmentId: assignment._id,
-          }
-        }
-      }
-    } catch {
-      // Fall through to default if database is unavailable or model not ready
-    }
-  }
-
-  // 2. Query authoritative attendance settings configured by admin
+  // 1. Authoritative Attendance Settings configured by Admin
+  let adminShift = null
   try {
     const settings = (await AttendanceSettings.findOne({ key: 'office' }).lean()) ||
       (await AttendanceSettings.findOne({}).sort({ updatedAt: -1 }).lean())
@@ -163,7 +140,7 @@ export async function resolveEmployeeShift(employeeId, dateStr) {
       const rawGrace = Number(rules.gracePeriodMinutes)
       const graceMins = Number.isFinite(rawGrace) && rawGrace >= 0 ? rawGrace : 15
       if (startMins !== null && endMins !== null) {
-        const customShift = {
+        adminShift = normalizeShiftConfig({
           shiftId: 'GENERAL',
           name: `General (${formatMinutesToTime(startMins)} – ${formatMinutesToTime(endMins)})`,
           startTime: formatMinutesToTime(startMins),
@@ -183,16 +160,51 @@ export async function resolveEmployeeShift(employeeId, dateStr) {
           requiredCampusHours: 4,
           requiredCampusMinutes: 240,
           timezone: 'Asia/Kolkata',
-        }
-        return {
-          shift: normalizeShiftConfig(customShift),
-          source: 'attendance_settings',
-        }
+        })
       }
     }
   } catch {}
 
-  // 3. Query system default shift from Shift collection (ignoring obsolete 9:30 legacy rows)
+  // 2. Specific employee shift assignment (e.g. specialized Night/Evening shifts)
+  if (cleanEmpId && targetDate) {
+    try {
+      const assignment = await ShiftAssignment.findOne({
+        employeeId: cleanEmpId,
+        effectiveFrom: { $lte: targetDate },
+        $or: [{ effectiveTo: null }, { effectiveTo: { $gte: targetDate } }],
+      }).sort({ effectiveFrom: -1, assignedAt: -1 }).lean()
+
+      if (assignment?.shiftId) {
+        const assignedId = assignment.shiftId.toUpperCase()
+        // If assigned to GENERAL, use admin's configured shift timing
+        if (assignedId === 'GENERAL' && adminShift) {
+          return {
+            shift: adminShift,
+            source: 'attendance_settings_assignment',
+            assignmentId: assignment._id,
+          }
+        }
+        const configuredShift = await Shift.findOne({ shiftId: assignedId, isActive: true }).lean()
+        if (configuredShift && configuredShift.startMinutes !== 570) {
+          return {
+            shift: normalizeShiftConfig(configuredShift),
+            source: 'assignment',
+            assignmentId: assignment._id,
+          }
+        }
+      }
+    } catch {}
+  }
+
+  // 3. Return admin configured shift
+  if (adminShift) {
+    return {
+      shift: adminShift,
+      source: 'attendance_settings',
+    }
+  }
+
+  // 4. Query system default shift from Shift collection (ignoring obsolete 9:30 legacy rows)
   try {
     const defaultShift = await Shift.findOne({ isDefault: true, isActive: true }).lean()
     if (defaultShift && defaultShift.startMinutes !== 570) {
@@ -203,7 +215,7 @@ export async function resolveEmployeeShift(employeeId, dateStr) {
     }
   } catch {}
 
-  // 4. Fallback to standard in-memory policy definition
+  // 5. Fallback to standard in-memory policy definition
   return {
     shift: { ...STANDARD_SHIFT_DEF },
     source: 'standard_policy',

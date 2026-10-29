@@ -319,21 +319,39 @@ function GPSAttendanceStation({ user, todayRecord, onPunch, onStartBreak, onEndB
           setDisconnectedMinutes(0)
         } else {
           let since = typeof localStorage !== 'undefined' ? localStorage.getItem(storageKey) : null
-          const checkInMs = todayRecord?.checkInAt ? new Date(todayRecord.checkInAt).getTime() : Date.now()
-          if (!since || Number(since) < checkInMs) {
+          let checkInEpoch = null
+          if (todayRecord?.checkInAt) {
+            const parsed = new Date(todayRecord.checkInAt).getTime()
+            if (!Number.isNaN(parsed) && parsed > 0) checkInEpoch = parsed
+          }
+          if (!checkInEpoch && todayRecord?.checkIn) {
+            const timeMatch = /(\d+):(\d+)(?::(\d+))?\s*(AM|PM)?/i.exec(todayRecord.checkIn)
+            if (timeMatch) {
+              let h = parseInt(timeMatch[1], 10)
+              const m = parseInt(timeMatch[2], 10)
+              const mer = timeMatch[4]?.toUpperCase()
+              if (mer === 'PM' && h < 12) h += 12
+              if (mer === 'AM' && h === 12) h = 0
+              const d = new Date()
+              d.setHours(h, m, 0, 0)
+              checkInEpoch = d.getTime()
+            }
+          }
+          if (!checkInEpoch) checkInEpoch = Date.now()
+
+          if (!since || Number(since) < checkInEpoch || Number(since) > Date.now()) {
             since = String(Date.now())
             if (typeof localStorage !== 'undefined') localStorage.setItem(storageKey, since)
           }
 
-          const rawElapsedMins = Math.floor((Date.now() - Number(since)) / 60000)
+          const rawElapsedMins = Math.max(0, Math.floor((Date.now() - Number(since)) / 60000))
+          const totalMinsSinceCheckIn = Math.max(0, Math.floor((Date.now() - checkInEpoch) / 60000))
           // Disconnection duration can NEVER exceed total elapsed minutes since check-in
-          const totalMinsSinceCheckIn = todayRecord?.checkInAt
-            ? Math.floor((Date.now() - new Date(todayRecord.checkInAt).getTime()) / 60000)
-            : 0
-          const elapsedMins = Math.min(rawElapsedMins, Math.max(0, totalMinsSinceCheckIn))
+          const elapsedMins = Math.min(rawElapsedMins, totalMinsSinceCheckIn)
           setDisconnectedMinutes(elapsedMins)
 
-          if (elapsedMins >= 120) {
+          // STRICT SAFEGUARD: Auto punch out strictly requires at least 120 minutes (2 hours) since BOTH check-in and disconnection
+          if (elapsedMins >= 120 && totalMinsSinceCheckIn >= 120) {
             if (typeof localStorage !== 'undefined') {
               localStorage.removeItem(storageKey)
               localStorage.removeItem(`att_disc_since_${empKey}`)
@@ -351,18 +369,37 @@ function GPSAttendanceStation({ user, todayRecord, onPunch, onStartBreak, onEndB
         }
       } catch (err) {
         let since = typeof localStorage !== 'undefined' ? localStorage.getItem(storageKey) : null
-        const checkInMs = todayRecord?.checkInAt ? new Date(todayRecord.checkInAt).getTime() : Date.now()
-        if (!since || Number(since) < checkInMs) {
+        let checkInEpoch = null
+        if (todayRecord?.checkInAt) {
+          const parsed = new Date(todayRecord.checkInAt).getTime()
+          if (!Number.isNaN(parsed) && parsed > 0) checkInEpoch = parsed
+        }
+        if (!checkInEpoch && todayRecord?.checkIn) {
+          const timeMatch = /(\d+):(\d+)(?::(\d+))?\s*(AM|PM)?/i.exec(todayRecord.checkIn)
+          if (timeMatch) {
+            let h = parseInt(timeMatch[1], 10)
+            const m = parseInt(timeMatch[2], 10)
+            const mer = timeMatch[4]?.toUpperCase()
+            if (mer === 'PM' && h < 12) h += 12
+            if (mer === 'AM' && h === 12) h = 0
+            const d = new Date()
+            d.setHours(h, m, 0, 0)
+            checkInEpoch = d.getTime()
+          }
+        }
+        if (!checkInEpoch) checkInEpoch = Date.now()
+
+        if (!since || Number(since) < checkInEpoch || Number(since) > Date.now()) {
           since = String(Date.now())
           if (typeof localStorage !== 'undefined') localStorage.setItem(storageKey, since)
         }
-        const rawElapsedMins = Math.floor((Date.now() - Number(since)) / 60000)
-        const totalMinsSinceCheckIn = todayRecord?.checkInAt
-          ? Math.floor((Date.now() - new Date(todayRecord.checkInAt).getTime()) / 60000)
-          : 0
-        const elapsedMins = Math.min(rawElapsedMins, Math.max(0, totalMinsSinceCheckIn))
+
+        const rawElapsedMins = Math.max(0, Math.floor((Date.now() - Number(since)) / 60000))
+        const totalMinsSinceCheckIn = Math.max(0, Math.floor((Date.now() - checkInEpoch) / 60000))
+        const elapsedMins = Math.min(rawElapsedMins, totalMinsSinceCheckIn)
         setDisconnectedMinutes(elapsedMins)
-        if (elapsedMins >= 120) {
+
+        if (elapsedMins >= 120 && totalMinsSinceCheckIn >= 120) {
           if (typeof localStorage !== 'undefined') {
             localStorage.removeItem(storageKey)
             localStorage.removeItem(`att_disc_since_${empKey}`)
@@ -1272,6 +1309,27 @@ function ESSOverview({ user }) {
       setIsAutoPunchedOut(false)
     } else if (isCheckedIn) {
       const isAuto = Boolean(opts.autoPunchOut)
+      if (isAuto) {
+        let checkInMs = todayRecord?.checkInAt ? new Date(todayRecord.checkInAt).getTime() : null
+        if (!checkInMs && todayRecord?.checkIn) {
+          const timeMatch = /(\d+):(\d+)(?::(\d+))?\s*(AM|PM)?/i.exec(todayRecord.checkIn)
+          if (timeMatch) {
+            let h = parseInt(timeMatch[1], 10)
+            const m = parseInt(timeMatch[2], 10)
+            const mer = timeMatch[4]?.toUpperCase()
+            if (mer === 'PM' && h < 12) h += 12
+            if (mer === 'AM' && h === 12) h = 0
+            const d = new Date()
+            d.setHours(h, m, 0, 0)
+            checkInMs = d.getTime()
+          }
+        }
+        // Strict guard: verify elapsed time since check-in is at least 120 minutes (2 hours)
+        if (checkInMs && (Date.now() - checkInMs) < 120 * 60 * 1000) {
+          console.warn('[AutoPunchOut] Suppressed: Less than 120 minutes elapsed since check-in')
+          return
+        }
+      }
       await hrStore.checkOut({
         employeeId: empId,
         employeeName: user?.displayName || 'Employee',
