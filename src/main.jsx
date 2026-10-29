@@ -359,3 +359,20 @@ if (container) {
     </StrictMode>
   )
 }
+
+// Register PWA Service Worker for Offline, Mobile App & Background Execution
+if (typeof window !== 'undefined' && 'serviceWorker' in navigator && window.location.protocol.startsWith('http')) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker
+      .register('/sw.js')
+      .then((reg) => {
+        console.log('[PWA] Service Worker registered with scope:', reg.scope)
+        if ('sync' in reg) {
+          reg.sync.register('sync-attendance-heartbeat').catch(() => {})
+        }
+      })
+      .catch((err) => {
+        console.warn('[PWA] Service Worker registration failed:', err)
+      })
+  })
+}

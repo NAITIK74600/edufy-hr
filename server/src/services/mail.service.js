@@ -964,6 +964,43 @@ export async function sendSupportTicketEmail({
         <strong>Resolution Notes:</strong><br />${replyText}
       </div>` : ''}
     `
+  } else if (type === 'assigned') {
+    emailSubject = `[${channelName} #${ticketIdStr}] Ticket Assigned to You: ${ticket.subject} [${ticket.priority || 'Medium'}]`
+    heading = `Support Ticket #${ticketIdStr} Assigned to You`
+    contentHtml = `
+      <h2 class="title-h2">${heading}</h2>
+      <p>Hello <strong>${employee?.name || 'Support Specialist'}</strong>,</p>
+      <p>A support ticket has been assigned to you by <strong>${senderName}</strong> for investigation and resolution.</p>
+
+      <div class="meta-box">
+        <div class="meta-row">
+          <span class="meta-label">Ticket ID:</span>
+          <span class="meta-val">#${ticketIdStr}</span>
+        </div>
+        <div class="meta-row">
+          <span class="meta-label">Requester:</span>
+          <span class="meta-val">${ticket.employeeName || 'Staff Member'} (${ticket.department || 'Workforce'})</span>
+        </div>
+        <div class="meta-row">
+          <span class="meta-label">Category:</span>
+          <span class="meta-val">${ticket.category || 'Support'}</span>
+        </div>
+        <div class="meta-row">
+          <span class="meta-label">Priority:</span>
+          <span class="meta-val">${ticket.priority || 'Medium'}</span>
+        </div>
+        <div class="meta-row">
+          <span class="meta-label">Subject:</span>
+          <span class="meta-val">${ticket.subject}</span>
+        </div>
+        <div class="meta-row">
+          <span class="meta-label">Inquiry Details:</span>
+          <span class="meta-val" style="white-space:pre-wrap;">${ticket.description || '—'}</span>
+        </div>
+      </div>
+
+      <p style="margin-top: 14px;">Please log in to your Edufyi HR portal to update the status, post replies, and resolve this inquiry.</p>
+    `
   }
 
   const html = wrapInEmailLayout({

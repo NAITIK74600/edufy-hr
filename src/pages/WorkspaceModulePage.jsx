@@ -3976,7 +3976,39 @@ function HelpDeskModule() {
                 </div>
                 <div>
                   <span style={{ color: 'var(--muted)', fontSize: '9px', textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>Assigned Specialist</span>
-                  <strong style={{ color: '#0284c7' }}>{selectedTicket.assignedToName || 'General Queue'}</strong>
+                  <select
+                    value={selectedTicket.assignedToId || ''}
+                    onChange={async (e) => {
+                      const val = e.target.value
+                      const emp = (storeState.employees || []).find((em) => String(em.employeeId || em.id || em._id) === val)
+                      const payload = {
+                        assignedToId: emp ? (emp.employeeId || emp.id || emp._id) : '',
+                        assignedToName: emp ? emp.name : 'General Queue',
+                        assignedToEmail: emp ? (emp.email || '') : '',
+                      }
+                      setSelectedTicket({ ...selectedTicket, ...payload })
+                      await hrStore.assignTicket(selectedTicket.id, payload)
+                      showFeedback(`Ticket assigned to ${payload.assignedToName}.`)
+                    }}
+                    style={{
+                      fontSize: '11px',
+                      padding: '2px 4px',
+                      borderRadius: '4px',
+                      border: '1px solid #cbd5e1',
+                      background: '#fff',
+                      color: '#0284c7',
+                      fontWeight: 600,
+                      maxWidth: '135px',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <option value="">General Queue</option>
+                    {(storeState.employees || []).map((em) => (
+                      <option key={em.employeeId || em.id || em._id} value={em.employeeId || em.id || em._id}>
+                        {em.name} ({em.employeeId || em.department || 'Staff'})
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 <div>
                   <span style={{ color: 'var(--muted)', fontSize: '9px', textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>Priority</span>

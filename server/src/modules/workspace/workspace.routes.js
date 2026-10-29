@@ -52,6 +52,7 @@ function filter(user, resource) {
     const actorId = id(user)
     const empId = user?.employeeId
     const email = (user?.email || '').trim().toLowerCase()
+    const name = (user?.displayName || user?.name || '').trim()
     const orConditions = [
       { ownerId: actorId },
       { ownerId: String(actorId) },
@@ -62,11 +63,21 @@ function filter(user, resource) {
       orConditions.push(
         { ownerId: empId },
         { employeeId: empId },
-        { assignedToId: empId }
+        { assignedToId: empId },
+        { assignedTo: empId }
       )
     }
     if (email) {
-      orConditions.push({ assignedToEmail: new RegExp(`^${email}$`, 'i') })
+      orConditions.push(
+        { assignedToEmail: new RegExp(`^${email}$`, 'i') },
+        { assignedTo: new RegExp(`^${email}$`, 'i') }
+      )
+    }
+    if (name) {
+      orConditions.push(
+        { assignedToName: new RegExp(`^${name}$`, 'i') },
+        { assignedTo: new RegExp(`^${name}$`, 'i') }
+      )
     }
     return { $or: orConditions }
   }
@@ -714,7 +725,11 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
             }
             if (resource === 'tickets') {
               if (req.body.assignedToId !== undefined) update.$set.assignedToId = req.body.assignedToId ? string(req.body, 'assignedToId', false, 100) : null
-              if (req.body.assignedToName !== undefined) update.$set.assignedToName = req.body.assignedToName ? string(req.body, 'assignedToName', false, 100) : null
+              if (req.body.assignedToName !== undefined) {
+                const aName = req.body.assignedToName ? string(req.body, 'assignedToName', false, 100) : null
+                update.$set.assignedToName = aName
+                update.$set.assignedTo = aName || 'General Queue'
+              }
               if (req.body.assignedToEmail !== undefined) update.$set.assignedToEmail = req.body.assignedToEmail ? string(req.body, 'assignedToEmail', false, 100) : null
             }
           }
@@ -933,6 +948,31 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
                 senderName: sender,
                 replyText: `Your support ticket has been updated to status: ${String(record.status).toUpperCase()}.`,
               })
+            }
+          } else if (req.body.assignedToId !== undefined || req.body.assignedToEmail !== undefined) {
+            // Ticket assigned/reassigned -> notify assigned specialist via in-app notification & SMTP email
+            const assigneeId = record.assignedToId
+            const assigneeEmail = record.assignedToEmail
+            const assigneeName = record.assignedToName || 'Specialist'
+            if (assigneeId) {
+              await models.notifications.create({
+                ownerId: String(assigneeId),
+                recipientId: String(assigneeId),
+                title: `Support Ticket Assigned: ${record.subject}`,
+                message: `You have been assigned support ticket #${String(record._id).slice(-6).toUpperCase()} (${record.category || 'Support'}) by ${actor.name || actor.displayName || 'HR Admin'}.`,
+                type: 'ticket',
+                read: false,
+              }).catch(() => {})
+            }
+            if (assigneeEmail) {
+              await sendSupportTicketEmail({
+                type: 'assigned',
+                ticket: record,
+                employee: { name: assigneeName, email: assigneeEmail },
+                recipientEmail: assigneeEmail,
+                senderName: actor.name || actor.displayName || 'Edufyi Help Desk Administrator',
+                replyText: `A new support inquiry (${record.category || 'General Support'}) has been assigned to you for resolution.`,
+              }).catch((err) => console.warn('[workspace.routes] Assignment email error:', err?.message || err))
             }
           }
         } catch (emailErr) {

@@ -188,6 +188,11 @@ function GPSAttendanceStation({ user, todayRecord, onPunch, onStartBreak, onEndB
   useEffect(() => {
     let active = true
     setIpLoading(true)
+    if (typeof window !== 'undefined' && window.__edufyi_last_gps) {
+      updateCustomCoords(window.__edufyi_last_gps)
+      setGpsLive(true)
+      setPermissionStatus('granted')
+    }
     if (typeof navigator !== 'undefined' && navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
@@ -1394,16 +1399,36 @@ function ESSOverview({ user }) {
   const pendingTasks = myTasks.filter((t) => t.status !== 'completed')
   const completedTasks = myTasks.filter((t) => t.status === 'completed')
 
-  // Filter helpdesk tickets dynamically for the current employee
+  // Filter helpdesk tickets dynamically for the current employee (both raised by employee and assigned to employee)
+  const uEmailLower = String(user?.email || '').trim().toLowerCase()
   const myTickets = (storeState.tickets || []).filter((t) => {
     if (!t) return false
     const tEmp = String(t.employeeId || '').toUpperCase()
     const uEmp = String(currentEmpId).toUpperCase()
     const tOwner = String(t.ownerId || '')
     const tName = String(t.employeeName || '').toLowerCase()
-    return (uEmp && tEmp === uEmp) || (currentUserId && tOwner === currentUserId) || (currentUserName && tName === currentUserName)
+    const isOwner = (uEmp && tEmp === uEmp) || (currentUserId && tOwner === currentUserId) || (currentUserName && tName === currentUserName)
+    const isAssigned = Boolean(
+      (t.assignedToId && [currentUserId, String(user?._id), uEmp].filter(Boolean).map(String).includes(String(t.assignedToId))) ||
+      (t.assignedToEmail && uEmailLower && String(t.assignedToEmail).trim().toLowerCase() === uEmailLower) ||
+      (t.assignedToName && currentUserName && String(t.assignedToName).trim().toLowerCase() === currentUserName) ||
+      (t.assignedTo && currentUserName && String(t.assignedTo).trim().toLowerCase() === currentUserName) ||
+      (t.assignedTo && uEmp && String(t.assignedTo).toUpperCase() === uEmp)
+    )
+    return isOwner || isAssigned
   })
   const openTickets = myTickets.filter((t) => (t.status || 'open') !== 'resolved' && t.status !== 'closed')
+  const assignedToMeTickets = myTickets.filter((t) => {
+    const uEmp = String(currentEmpId).toUpperCase()
+    return Boolean(
+      (t.assignedToId && [currentUserId, String(user?._id), uEmp].filter(Boolean).map(String).includes(String(t.assignedToId))) ||
+      (t.assignedToEmail && uEmailLower && String(t.assignedToEmail).trim().toLowerCase() === uEmailLower) ||
+      (t.assignedToName && currentUserName && String(t.assignedToName).trim().toLowerCase() === currentUserName) ||
+      (t.assignedTo && currentUserName && String(t.assignedTo).trim().toLowerCase() === currentUserName) ||
+      (t.assignedTo && uEmp && String(t.assignedTo).toUpperCase() === uEmp)
+    )
+  })
+  const assignedOpenCount = assignedToMeTickets.filter((t) => (t.status || 'open') !== 'resolved' && t.status !== 'closed').length
 
   // Filter expenses dynamically for the current employee
   const myExpenses = (storeState.expenses || []).filter((e) => {
@@ -1545,14 +1570,17 @@ function ESSOverview({ user }) {
           <ArrowRight size={14} className="metric-link-icon" />
         </a>
 
-        <a href="#/employee/helpdesk" className="metric-card metric-link">
-          <div className="metric-icon" style={{ background: '#eaf4f1', color: 'var(--teal)' }}>
+        <a href="#/employee/helpdesk" className="metric-card metric-link" style={assignedOpenCount > 0 ? { border: '1.5px solid #60a5fa', background: '#eff6ff' } : {}}>
+          <div className="metric-icon" style={{ background: assignedOpenCount > 0 ? '#dbeafe' : '#eaf4f1', color: assignedOpenCount > 0 ? '#1d4ed8' : 'var(--teal)' }}>
             <HelpCircle size={20} />
           </div>
           <div className="metric-copy">
-            <span>Help Desk</span>
-            <strong>{openTickets.length} Open Tickets</strong>
-            <small>{myTickets.length - openTickets.length} resolved • {myTickets.length} total logged</small>
+            <span>Help Desk {assignedOpenCount > 0 ? `(${assignedOpenCount} Assigned to You)` : ''}</span>
+            <strong style={assignedOpenCount > 0 ? { color: '#1d4ed8' } : {}}>{openTickets.length} Open Tickets</strong>
+            <small>
+              {assignedOpenCount > 0 ? `${assignedOpenCount} assigned to you • ` : ''}
+              {myTickets.length - openTickets.length} resolved • {myTickets.length} total logged
+            </small>
           </div>
           <ArrowRight size={14} className="metric-link-icon" />
         </a>
@@ -4222,6 +4250,7 @@ function ESSHelpDeskView({ user }) {
   const [ticketDesc, setTicketDesc] = useState('')
   const [notice, setNotice] = useState('')
   const [statusTab, setStatusTab] = useState('all') // 'all' | 'open' | 'in_progress' | 'resolved'
+  const [ticketViewTab, setTicketViewTab] = useState('all') // 'all' | 'assigned' | 'created'
   const [searchTerm, setSearchTerm] = useState('')
 
   useEffect(() => {
@@ -4234,25 +4263,55 @@ function ESSHelpDeskView({ user }) {
     })
   }, [selectedTicket])
 
+  const uId = String(user?.id || '')
+  const uMongoId = String(user?._id || '')
+  const uEmp = String(user?.employeeId || '').toUpperCase()
+  const uEmail = String(user?.email || '').trim().toLowerCase()
+  const uName = String(user?.displayName || user?.name || '').trim().toLowerCase()
+
+  const isTicketAssignedToMe = (t) => {
+    if (!user || !t) return false
+    return Boolean(
+      (t.assignedToId && [uId, uMongoId, uEmp].filter(Boolean).includes(String(t.assignedToId).toUpperCase())) ||
+      (t.assignedToEmail && uEmail && String(t.assignedToEmail).trim().toLowerCase() === uEmail) ||
+      (t.assignedToName && uName && String(t.assignedToName).trim().toLowerCase() === uName) ||
+      (t.assignedTo && uName && String(t.assignedTo).trim().toLowerCase() === uName) ||
+      (t.assignedTo && uEmp && String(t.assignedTo).toUpperCase() === uEmp)
+    )
+  }
+
+  const isTicketCreatedByMe = (t) => {
+    if (!user || !t) return false
+    return Boolean(
+      (t.ownerId && [uId, uMongoId].includes(String(t.ownerId))) ||
+      (t.employeeId && uEmp && String(t.employeeId).toUpperCase() === uEmp) ||
+      (t.employeeName && uName && String(t.employeeName).trim().toLowerCase() === uName)
+    )
+  }
+
+  const hd = storeState.companySettings?.helpDeskSettings || {}
+  const isItSpecialist = Boolean(
+    (hd.itSupportEmployeeId && [uId, uMongoId, uEmp].includes(String(hd.itSupportEmployeeId).toUpperCase())) ||
+    (hd.itSupportEmployeeEmail && uEmail && String(hd.itSupportEmployeeEmail).trim().toLowerCase() === uEmail)
+  )
+  const isGeneralSpecialist = Boolean(
+    (hd.generalSupportEmployeeId && [uId, uMongoId, uEmp].includes(String(hd.generalSupportEmployeeId).toUpperCase())) ||
+    (hd.generalSupportEmployeeEmail && uEmail && String(hd.generalSupportEmployeeEmail).trim().toLowerCase() === uEmail)
+  )
+
   const myTickets = (storeState.tickets || []).filter((t) => {
     if (!user) return true
     if (['admin', 'hr'].includes(user.role)) return true
-    const isOwner = (
-      t.ownerId === user.id ||
-      t.ownerId === user._id ||
-      t.employeeId === user.employeeId ||
-      t.employeeId === user.id ||
-      t.employeeName === user.displayName ||
-      t.employeeName === user.name
-    )
-    const isAssigned = Boolean(
-      (t.assignedToId && (String(t.assignedToId) === String(user.id) || String(t.assignedToId) === String(user._id) || String(t.assignedToId) === String(user.employeeId))) ||
-      (t.assignedToEmail && user.email && t.assignedToEmail.toLowerCase() === user.email.toLowerCase())
-    )
-    return isOwner || isAssigned
+    const isOwner = isTicketCreatedByMe(t)
+    const isAssigned = isTicketAssignedToMe(t)
+    const isSpecialistForTicket = (isItSpecialist && /it/i.test(t.category || '')) ||
+                                  (isGeneralSpecialist && !/it/i.test(t.category || ''))
+    return isOwner || isAssigned || isSpecialistForTicket
   })
 
   const filteredTickets = myTickets.filter((t) => {
+    if (ticketViewTab === 'assigned' && !isTicketAssignedToMe(t)) return false
+    if (ticketViewTab === 'created' && !isTicketCreatedByMe(t)) return false
     const s = (t.status || 'open').toLowerCase()
     if (statusTab === 'open' && s !== 'open') return false
     if (statusTab === 'in_progress' && s !== 'in_progress') return false
@@ -4270,6 +4329,8 @@ function ESSHelpDeskView({ user }) {
   const openCount = myTickets.filter((t) => (t.status || 'open').toLowerCase() === 'open').length
   const inProgressCount = myTickets.filter((t) => (t.status || '').toLowerCase() === 'in_progress').length
   const resolvedCount = myTickets.filter((t) => (t.status || '').toLowerCase() === 'resolved' || (t.status || '').toLowerCase() === 'closed').length
+  const totalAssignedCount = myTickets.filter(isTicketAssignedToMe).length
+  const totalCreatedCount = myTickets.filter(isTicketCreatedByMe).length
 
   const handleCreateTicket = workspaceAction(hrStore, async (e) => {
     e.preventDefault()
@@ -4381,26 +4442,98 @@ function ESSHelpDeskView({ user }) {
             <p className="section-kicker">My Inquiries</p>
             <h2>Support Tickets Track Record</h2>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            {/* View Scope Filter: All | Assigned to Me | Raised by Me */}
+            <div style={{ display: 'flex', gap: '3px', background: '#f1f5f9', padding: '3px', borderRadius: '8px' }}>
+              <button
+                type="button"
+                onClick={() => setTicketViewTab('all')}
+                style={{
+                  padding: '4px 9px',
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  borderRadius: '6px',
+                  border: 0,
+                  cursor: 'pointer',
+                  background: ticketViewTab === 'all' ? '#fff' : 'transparent',
+                  color: ticketViewTab === 'all' ? 'var(--teal)' : 'var(--muted)',
+                  boxShadow: ticketViewTab === 'all' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                }}
+              >
+                All ({myTickets.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setTicketViewTab('assigned')}
+                style={{
+                  padding: '4px 9px',
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  borderRadius: '6px',
+                  border: 0,
+                  cursor: 'pointer',
+                  background: ticketViewTab === 'assigned' ? '#2563eb' : 'transparent',
+                  color: ticketViewTab === 'assigned' ? '#fff' : (totalAssignedCount > 0 ? '#1d4ed8' : 'var(--muted)'),
+                  boxShadow: ticketViewTab === 'assigned' ? '0 1px 3px rgba(37,99,235,0.25)' : 'none',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                }}
+              >
+                <span>Assigned to Me</span>
+                {totalAssignedCount > 0 && (
+                  <span
+                    style={{
+                      fontSize: '9px',
+                      background: ticketViewTab === 'assigned' ? 'rgba(255,255,255,0.3)' : '#dbeafe',
+                      color: ticketViewTab === 'assigned' ? '#fff' : '#1e40af',
+                      padding: '1px 5px',
+                      borderRadius: '10px',
+                      fontWeight: 700,
+                    }}
+                  >
+                    {totalAssignedCount}
+                  </span>
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={() => setTicketViewTab('created')}
+                style={{
+                  padding: '4px 9px',
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  borderRadius: '6px',
+                  border: 0,
+                  cursor: 'pointer',
+                  background: ticketViewTab === 'created' ? '#fff' : 'transparent',
+                  color: ticketViewTab === 'created' ? 'var(--teal)' : 'var(--muted)',
+                  boxShadow: ticketViewTab === 'created' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                }}
+              >
+                Raised by Me ({totalCreatedCount})
+              </button>
+            </div>
+
             <div style={{ position: 'relative' }}>
               <Search size={13} style={{ position: 'absolute', left: '10px', top: '9px', color: 'var(--muted)' }} />
               <input
                 type="text"
                 className="text-input"
-                placeholder="Search my tickets..."
+                placeholder="Search tickets..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                style={{ width: '180px', paddingLeft: '28px', fontSize: '11px', height: '30px' }}
+                style={{ width: '150px', paddingLeft: '28px', fontSize: '11px', height: '30px' }}
               />
             </div>
-            <div style={{ display: 'flex', gap: '4px', background: '#f1f5f9', padding: '3px', borderRadius: '8px' }}>
+            <div style={{ display: 'flex', gap: '3px', background: '#f1f5f9', padding: '3px', borderRadius: '8px' }}>
               {['all', 'open', 'in_progress', 'resolved'].map((tab) => (
                 <button
                   key={tab}
                   type="button"
                   onClick={() => setStatusTab(tab)}
                   style={{
-                    padding: '4px 10px',
+                    padding: '4px 8px',
                     fontSize: '11px',
                     fontWeight: 600,
                     borderRadius: '6px',
@@ -4458,12 +4591,9 @@ function ESSHelpDeskView({ user }) {
                       <td>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
                           <span className="role-badge" style={{ fontSize: '9.5px' }}>{t.category || 'General'}</span>
-                          {Boolean(user && (
-                            (t.assignedToId && (String(t.assignedToId) === String(user.id) || String(t.assignedToId) === String(user._id) || String(t.assignedToId) === String(user.employeeId))) ||
-                            (t.assignedToEmail && user.email && t.assignedToEmail.toLowerCase() === user.email.toLowerCase())
-                          )) && (
+                          {isTicketAssignedToMe(t) && (
                             <span style={{ fontSize: '8.5px', background: '#dbeafe', color: '#1e40af', padding: '1px 5px', borderRadius: '4px', fontWeight: 700, width: 'fit-content' }}>
-                              Assigned Specialist
+                              Assigned to You
                             </span>
                           )}
                         </div>
@@ -4556,8 +4686,9 @@ function ESSHelpDeskView({ user }) {
               {/* Specialist Action Toolbar if Assigned or Admin/HR */}
               {user && (
                 ['admin', 'hr'].includes(user.role) ||
-                (selectedTicket.assignedToId && (String(selectedTicket.assignedToId) === String(user.id) || String(selectedTicket.assignedToId) === String(user._id) || String(selectedTicket.assignedToId) === String(user.employeeId))) ||
-                (selectedTicket.assignedToEmail && user.email && selectedTicket.assignedToEmail.toLowerCase() === user.email.toLowerCase())
+                isTicketAssignedToMe(selectedTicket) ||
+                (isItSpecialist && /it/i.test(selectedTicket.category || '')) ||
+                (isGeneralSpecialist && !/it/i.test(selectedTicket.category || ''))
               ) && (
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#f0fdf4', border: '1px solid #bbf7d0', padding: '8px 12px', borderRadius: '8px', flexWrap: 'wrap', gap: '6px' }}>
                   <span style={{ fontSize: '11px', color: '#166534', fontWeight: 600 }}>Specialist Resolution Controls:</span>

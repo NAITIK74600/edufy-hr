@@ -1,0 +1,42 @@
+{
+  "name": "Edufyi HR Management System",
+  "short_name": "Edufyi HR",
+  "description": "Enterprise HR, Attendance, Payroll & Help Desk Workforce System",
+  "start_url": "/#/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0a2328",
+  "theme_color": "#006e6f",
+  "orientation": "any",
+  "categories": ["business", "productivity"],
+  "icons": [
+    {
+      "src": "/elythra-edufyitech-logo.png",
+      "sizes": "192x192 512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/elythra-edufyitech-logo.png",
+      "sizes": "192x192 512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Punch Attendance",
+      "short_name": "Attendance",
+      "description": "Punch check-in or view attendance roster",
+      "url": "/#/employee/attendance",
+      "icons": [{ "src": "/elythra-edufyitech-logo.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Help Desk",
+      "short_name": "Help Desk",
+      "description": "View and manage support tickets",
+      "url": "/#/employee/helpdesk",
+      "icons": [{ "src": "/elythra-edufyitech-logo.png", "sizes": "192x192" }]
+    }
+  ]
+}

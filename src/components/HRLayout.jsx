@@ -48,6 +48,7 @@ import { adminRoutes, hrRoutes, employeeRoutes } from '../app/routes'
 import { useAuth } from '../auth/AuthContext'
 import { hasPermission } from '../auth/permissions'
 import { hrStore } from '../services/hrStore'
+import { GpsBackgroundManager } from './GpsBackgroundManager'
 import { workspaceAction } from '../services/workspaceStore'
 import { getTimeOfDayGreeting, getRoleBadgeLabel, resolveUserDisplayName } from '../utils/greeting'
 import { apiClient } from '../services/apiClient'
@@ -425,6 +426,7 @@ export function HRLayout({ route, children }) {
 
   return (
     <div className={`app-shell ${portalClass}`}>
+      <GpsBackgroundManager user={user} />
 
       <aside className={`sidebar ${mobileOpen ? 'sidebar-open' : ''}`}>
         <div className="sidebar-top">

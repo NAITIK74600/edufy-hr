@@ -6335,6 +6335,24 @@ const localStore = {
       console.warn('Backend ticket reply sync:', err.message)
     }
   },
+  async assignTicket(ticketId, { assignedToId, assignedToName, assignedToEmail }) {
+    storeState.tickets = (storeState.tickets || []).map((t) =>
+      (t.id === ticketId || t._id === ticketId)
+        ? { ...t, assignedToId, assignedToName, assignedToEmail, assignedTo: assignedToName || 'General Queue' }
+        : t
+    )
+    notifyListeners()
+    try {
+      await apiClient.patch(`/workspace/tickets/${encodeURIComponent(ticketId)}`, {
+        assignedToId: assignedToId || '',
+        assignedToName: assignedToName || '',
+        assignedToEmail: assignedToEmail || '',
+      })
+      await this.refresh?.()
+    } catch (err) {
+      console.warn('Backend ticket assignment sync:', err.message)
+    }
+  },
 
   // Announcements
   getAnnouncements() {
