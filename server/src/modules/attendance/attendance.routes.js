@@ -73,14 +73,23 @@ export function createAttendanceRouter({ auth, service, useDatabase = false, per
         if (!Array.isArray(values.locations)) throw Object.assign(new Error('Locations must be an array.'), { statusCode: 400, code: 'VALIDATION_ERROR' })
         for (const loc of values.locations) {
           if (!loc.name) throw Object.assign(new Error('Each location requires a name.'), { statusCode: 400, code: 'VALIDATION_ERROR' })
-          if (loc.lat !== undefined && loc.lat !== null && (typeof loc.lat !== 'number' || loc.lat < -90 || loc.lat > 90 || !Number.isFinite(loc.lat))) {
-            throw Object.assign(new Error(`Invalid latitude for location "${loc.name}". Must be between -90 and 90.`), { statusCode: 400, code: 'VALIDATION_ERROR' })
+          if (loc.lat !== undefined && loc.lat !== null && loc.lat !== '') {
+            loc.lat = Number(loc.lat)
+            if (!Number.isFinite(loc.lat) || loc.lat < -90 || loc.lat > 90) {
+              throw Object.assign(new Error(`Invalid latitude for location "${loc.name}". Must be between -90 and 90.`), { statusCode: 400, code: 'VALIDATION_ERROR' })
+            }
           }
-          if (loc.lng !== undefined && loc.lng !== null && (typeof loc.lng !== 'number' || loc.lng < -180 || loc.lng > 180 || !Number.isFinite(loc.lng))) {
-            throw Object.assign(new Error(`Invalid longitude for location "${loc.name}". Must be between -180 and 180.`), { statusCode: 400, code: 'VALIDATION_ERROR' })
+          if (loc.lng !== undefined && loc.lng !== null && loc.lng !== '') {
+            loc.lng = Number(loc.lng)
+            if (!Number.isFinite(loc.lng) || loc.lng < -180 || loc.lng > 180) {
+              throw Object.assign(new Error(`Invalid longitude for location "${loc.name}". Must be between -180 and 180.`), { statusCode: 400, code: 'VALIDATION_ERROR' })
+            }
           }
-          if (loc.radiusMeters !== undefined && (typeof loc.radiusMeters !== 'number' || loc.radiusMeters < 1 || loc.radiusMeters > 1000 || !Number.isFinite(loc.radiusMeters))) {
-            throw Object.assign(new Error(`Invalid radius for location "${loc.name}". Must be between 1 and 1000 meters.`), { statusCode: 400, code: 'VALIDATION_ERROR' })
+          if (loc.radiusMeters !== undefined && loc.radiusMeters !== null && loc.radiusMeters !== '') {
+            loc.radiusMeters = Number(loc.radiusMeters)
+            if (!Number.isFinite(loc.radiusMeters) || loc.radiusMeters < 1 || loc.radiusMeters > 1000) {
+              throw Object.assign(new Error(`Invalid radius for location "${loc.name}". Must be between 1 and 1000 meters.`), { statusCode: 400, code: 'VALIDATION_ERROR' })
+            }
           }
         }
       }

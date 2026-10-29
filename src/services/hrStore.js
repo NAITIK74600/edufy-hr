@@ -2386,7 +2386,7 @@ const INITIAL_COMPANY_SETTINGS = {
     { id: 'loc-2', name: 'Tech Hub - Austin', city: 'Austin', lat: 30.267153, lng: -97.743061, radiusMeters: 200, isDefault: false },
     { id: 'loc-3', name: 'Global Center - London', city: 'London', lat: 51.507351, lng: -0.127758, radiusMeters: 200, isDefault: false },
   ],
-  allowedWifiSSIDs: ['Edufyi-Office-5G', 'Edufyi-Corp-Secure', 'Edufyi-Guest-HighSpeed'],
+  allowedWifiSSIDs: ['edufyi', 'Edufyi', 'Edufyi-Office-5G', 'Edufyi-Corp-Secure', 'Edufyi-Guest-HighSpeed'],
   // Office networks are verified in-browser by PUBLIC IP (every device on the same
   // Wi-Fi shares one public/egress IP). Admin registers the office's public IP while
   // physically on the office Wi-Fi; employees are "on the office network" when their
@@ -4968,7 +4968,7 @@ const localStore = {
       const p = args[0]
       employeeId = p.employeeId
       employeeName = p.employeeName
-      customWifi = p.wifiSSID || storeState.companySettings?.allowedWifiSSIDs?.[0] || 'Edufyi'
+      customWifi = (p.wifiSSID && !/airtel|dji/i.test(p.wifiSSID)) ? p.wifiSSID : 'edufyi'
       date = p.date || '2026-09-30'
       gpsData = {
         latitude: p.latitude ?? p.gpsData?.latitude ?? null,

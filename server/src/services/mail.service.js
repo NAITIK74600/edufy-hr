@@ -1013,13 +1013,28 @@ export async function sendSupportTicketEmail({
     },
   })
 
-  return transporter.sendMail({
-    to: recipientEmail,
-    subject: emailSubject,
-    html,
-    replyTo: channelEmail,
-    attachments: getLogoAttachment(),
-  })
+  try {
+    return await transporter.sendMail({
+      to: recipientEmail,
+      subject: emailSubject,
+      html,
+      replyTo: channelEmail,
+      attachments: getLogoAttachment(),
+    })
+  } catch (primaryErr) {
+    console.error(`[MailService] Primary transport failed for ${isIt ? 'IT' : 'Support'} (${primaryErr.message}). Falling back to HR/Admin transporter...`)
+    const fallbackTransporter = createTransporter('hr')
+    if (fallbackTransporter.configured) {
+      return await fallbackTransporter.sendMail({
+        to: recipientEmail,
+        subject: emailSubject,
+        html,
+        replyTo: channelEmail,
+        attachments: getLogoAttachment(),
+      })
+    }
+    throw primaryErr
+  }
 }
 
 // ---------------------------------------------------------------------------

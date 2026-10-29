@@ -245,9 +245,10 @@ function GPSAttendanceStation({ user, todayRecord, onPunch, onStartBreak, onEndB
     }
   }, [isCheckedIn, isCompleted])
 
-  const primaryWifiSSID = settings?.allowedWifiSSIDs?.[0] || 'Edufyi'
-  const matchedNetwork = (settings?.wifiNetworks || []).find((n) => n.ssid === primaryWifiSSID)
-  const targetBranch = matchedNetwork?.branchName || settings?.locations?.[0]?.name || 'IGNITE CAMPUS'
+  const assignedCampus = user?.campus || user?.location || 'IGNITE CAMPUS'
+  const primaryWifiSSID = (settings?.allowedWifiSSIDs || []).find((w) => !/airtel|dji/i.test(w) && /edufyi/i.test(w)) || 'edufyi'
+  const matchedNetwork = (settings?.wifiNetworks || []).find((n) => n.ssid?.toLowerCase() === primaryWifiSSID.toLowerCase() && !/san francisco|austin|london/i.test(n.branchName || ''))
+  const targetBranch = assignedCampus || matchedNetwork?.branchName || 'IGNITE CAMPUS'
 
   async function handleRefreshNetwork(coordsOverride) {
     setIpLoading(true)
@@ -434,8 +435,10 @@ function GPSAttendanceStation({ user, todayRecord, onPunch, onStartBreak, onEndB
   const isRealOfficeIp = Boolean(serverVerification?.isIpVerified)
   const isRealOfficeWifi = Boolean(serverVerification?.isWifiVerified)
   const isOnOfficeNetwork = isRealOfficeIp || isRealOfficeWifi
+  const rawNetLabel = matchedOfficeNet?.label || ''
+  const cleanNetLabel = /airtel|dji/i.test(rawNetLabel) ? null : rawNetLabel
   const networkLabel = isOnOfficeNetwork
-    ? (matchedOfficeNet?.label || (serverVerification?.isWifiVerified ? `${primaryWifiSSID} (${targetBranch})` : `Office Network (${targetBranch})`))
+    ? (cleanNetLabel || `${primaryWifiSSID} (${targetBranch})`)
     : (publicIp ? 'External Network' : (ipLoading ? 'Detecting…' : 'Unknown Network'))
 
   const verification = serverVerification ?? {}
@@ -445,7 +448,8 @@ function GPSAttendanceStation({ user, todayRecord, onPunch, onStartBreak, onEndB
   const distanceLabel = distance != null ? `${distance}m` : '—'
   const isWifiVerified = isOnOfficeNetwork
   const primaryLocation = settings?.locations?.[0] || null
-  const nearestOfficeName = verification.nearestLocation || primaryLocation?.name || 'Office'
+  const rawNearest = verification.nearestLocation
+  const nearestOfficeName = (/san francisco|austin|london/i.test(rawNearest || '') || !rawNearest) ? assignedCampus : rawNearest
   const maxGeofenceRadius = Number(settings?.attendanceRules?.maxGeofenceRadiusMeters) || Number(verification?.maxAllowedRadius) || 50
 
   // Inside campus requires office Wi-Fi / IP verification OR verified GPS geofence (<=maxGeofenceRadius)
@@ -737,13 +741,13 @@ function GPSAttendanceStation({ user, todayRecord, onPunch, onStartBreak, onEndB
           longitude: currentCoords?.longitude ?? null,
           accuracy: currentCoords?.accuracy ?? null,
           distanceMeters: latestVerification.distanceMeters,
-          locationName: latestVerification.nearestLocation || primaryLocation?.name || 'Office',
+          locationName: (/san francisco|austin|london/i.test(latestVerification.nearestLocation || '') || !latestVerification.nearestLocation) ? assignedCampus : latestVerification.nearestLocation,
           gpsData: {
             latitude: currentCoords?.latitude ?? null,
             longitude: currentCoords?.longitude ?? null,
             accuracy: currentCoords?.accuracy ?? null,
             distanceMeters: latestVerification.distanceMeters,
-            locationName: latestVerification.nearestLocation || primaryLocation?.name || 'Office',
+            locationName: (/san francisco|austin|london/i.test(latestVerification.nearestLocation || '') || !latestVerification.nearestLocation) ? assignedCampus : latestVerification.nearestLocation,
           },
         })
       )
@@ -1284,7 +1288,7 @@ function ESSOverview({ user }) {
   const isCompleted = !!todayAttendance?.checkIn && !!todayAttendance?.checkOut
 
   async function handlePunch(opts = {}) {
-    const wifi = opts.wifiSSID || storeState.companySettings?.allowedWifiSSIDs?.[0] || 'Edufyi'
+    const wifi = opts.wifiSSID && !/airtel|dji/i.test(opts.wifiSSID) ? opts.wifiSSID : 'edufyi'
     const bssid = opts.bssid || null
     const publicIp = opts.publicIp || null
     const gps = opts.gpsData
@@ -1401,6 +1405,14 @@ function ESSOverview({ user }) {
 
   // Filter helpdesk tickets dynamically for the current employee (both raised by employee and assigned to employee)
   const uEmailLower = String(user?.email || '').trim().toLowerCase()
+  const hdConfig = storeState.companySettings?.helpDeskSettings || {}
+  const isItStaff = Boolean(
+    uEmailLower === 'itsupport@edufyitech.in' ||
+    user?.role === 'it' ||
+    (user?.department && /it|tech|support/i.test(user.department)) ||
+    (hdConfig.itSupportEmployeeId && [currentUserId, String(user?._id), String(currentEmpId)].map((s) => String(s || '').toUpperCase()).includes(String(hdConfig.itSupportEmployeeId).toUpperCase())) ||
+    (hdConfig.itSupportEmployeeEmail && uEmailLower === String(hdConfig.itSupportEmployeeEmail).trim().toLowerCase())
+  )
   const myTickets = (storeState.tickets || []).filter((t) => {
     if (!t) return false
     const tEmp = String(t.employeeId || '').toUpperCase()
@@ -1413,7 +1425,8 @@ function ESSOverview({ user }) {
       (t.assignedToEmail && uEmailLower && String(t.assignedToEmail).trim().toLowerCase() === uEmailLower) ||
       (t.assignedToName && currentUserName && String(t.assignedToName).trim().toLowerCase() === currentUserName) ||
       (t.assignedTo && currentUserName && String(t.assignedTo).trim().toLowerCase() === currentUserName) ||
-      (t.assignedTo && uEmp && String(t.assignedTo).toUpperCase() === uEmp)
+      (t.assignedTo && uEmp && String(t.assignedTo).toUpperCase() === uEmp) ||
+      (isItStaff && /it/i.test(t.category || ''))
     )
     return isOwner || isAssigned
   })
@@ -1425,7 +1438,8 @@ function ESSOverview({ user }) {
       (t.assignedToEmail && uEmailLower && String(t.assignedToEmail).trim().toLowerCase() === uEmailLower) ||
       (t.assignedToName && currentUserName && String(t.assignedToName).trim().toLowerCase() === currentUserName) ||
       (t.assignedTo && currentUserName && String(t.assignedTo).trim().toLowerCase() === currentUserName) ||
-      (t.assignedTo && uEmp && String(t.assignedTo).toUpperCase() === uEmp)
+      (t.assignedTo && uEmp && String(t.assignedTo).toUpperCase() === uEmp) ||
+      (isItStaff && /it/i.test(t.category || ''))
     )
   })
   const assignedOpenCount = assignedToMeTickets.filter((t) => (t.status || 'open') !== 'resolved' && t.status !== 'closed').length
@@ -4291,12 +4305,19 @@ function ESSHelpDeskView({ user }) {
 
   const hd = storeState.companySettings?.helpDeskSettings || {}
   const isItSpecialist = Boolean(
+    uEmail === 'itsupport@edufyitech.in' ||
+    user?.role === 'it' ||
+    (user?.department && /it|tech|support/i.test(user.department)) ||
     (hd.itSupportEmployeeId && [uId, uMongoId, uEmp].includes(String(hd.itSupportEmployeeId).toUpperCase())) ||
-    (hd.itSupportEmployeeEmail && uEmail && String(hd.itSupportEmployeeEmail).trim().toLowerCase() === uEmail)
+    (hd.itSupportEmployeeEmail && uEmail && String(hd.itSupportEmployeeEmail).trim().toLowerCase() === uEmail) ||
+    (hd.itSupportEmail && uEmail && String(hd.itSupportEmail).trim().toLowerCase() === uEmail)
   )
   const isGeneralSpecialist = Boolean(
+    uEmail === 'helpsupport@edufyitechsolution.in' ||
+    (user?.department && /hr/i.test(user.department)) ||
     (hd.generalSupportEmployeeId && [uId, uMongoId, uEmp].includes(String(hd.generalSupportEmployeeId).toUpperCase())) ||
-    (hd.generalSupportEmployeeEmail && uEmail && String(hd.generalSupportEmployeeEmail).trim().toLowerCase() === uEmail)
+    (hd.generalSupportEmployeeEmail && uEmail && String(hd.generalSupportEmployeeEmail).trim().toLowerCase() === uEmail) ||
+    (hd.generalSupportEmail && uEmail && String(hd.generalSupportEmail).trim().toLowerCase() === uEmail)
   )
 
   const myTickets = (storeState.tickets || []).filter((t) => {

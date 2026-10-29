@@ -84,10 +84,11 @@ export const DEFAULT_LOCATIONS = [
 ]
 
 const DEFAULT_ALLOWED_WIFI = [
+  'edufyi',
+  'Edufyi',
   'Edufyi-Office-5G',
   'Edufyi-Corp-Secure',
   'Edufyi-Guest-HighSpeed',
-  'Airtel_Naitik5G',
 ]
 
 // Registered access points. A network is trusted only when BOTH the SSID (name) and the
@@ -95,10 +96,11 @@ const DEFAULT_ALLOWED_WIFI = [
 // different BSSID. allowedIPs is the office public IP / gateway subnet the backend checks
 // independently so a device off the office network can never be marked present by name alone.
 const DEFAULT_WIFI_NETWORKS = [
-  { ssid: 'Edufyi-Office-5G', bssid: '9C:3D:CF:11:A2:01', securityType: 'WPA2-Enterprise', branchName: 'HQ - San Francisco', allowedIPs: ['127.0.0.1', '::1', '10.0.0.0/8', '192.168.1.0/24'] },
-  { ssid: 'Edufyi-Corp-Secure', bssid: '9C:3D:CF:22:B4:02', securityType: 'WPA3-Enterprise', branchName: 'Tech Hub - Austin', allowedIPs: ['127.0.0.1', '::1', '172.16.0.0/16'] },
-  { ssid: 'Edufyi-Guest-HighSpeed', bssid: '9C:3D:CF:33:C6:03', securityType: 'WPA2-Personal', branchName: 'Global Center - London', allowedIPs: ['127.0.0.1', '::1', '192.168.10.0/24'] },
-  { ssid: 'Airtel_Naitik5G', bssid: 'A4:2B:8C:44:D8:05', securityType: 'WPA2-Personal', branchName: 'HQ - San Francisco', allowedIPs: ['127.0.0.1', '::1'] },
+  { ssid: 'edufyi', bssid: '', securityType: 'WPA2-Personal', branchName: 'IGNITE CAMPUS', allowedIPs: ['127.0.0.1', '::1', '10.0.0.0/8', '192.168.1.0/24', '192.168.0.0/16'] },
+  { ssid: 'Edufyi', bssid: '', securityType: 'WPA2-Personal', branchName: 'IGNITE CAMPUS', allowedIPs: ['127.0.0.1', '::1', '10.0.0.0/8', '192.168.1.0/24', '192.168.0.0/16'] },
+  { ssid: 'Edufyi-Office-5G', bssid: '9C:3D:CF:11:A2:01', securityType: 'WPA2-Enterprise', branchName: 'IGNITE CAMPUS', allowedIPs: ['127.0.0.1', '::1', '10.0.0.0/8', '192.168.1.0/24'] },
+  { ssid: 'Edufyi-Corp-Secure', bssid: '9C:3D:CF:22:B4:02', securityType: 'WPA3-Enterprise', branchName: 'IGNITE CAMPUS', allowedIPs: ['127.0.0.1', '::1', '172.16.0.0/16'] },
+  { ssid: 'Edufyi-Guest-HighSpeed', bssid: '9C:3D:CF:33:C6:03', securityType: 'WPA2-Personal', branchName: 'IGNITE CAMPUS', allowedIPs: ['127.0.0.1', '::1', '192.168.10.0/24'] },
 ]
 
 // Policy-free baseline: Default attendance rules retain security parameters (geofence & network)
@@ -559,8 +561,12 @@ export function createAttendanceService({ repository, companySettings = {} }) {
       securityType: matchedNetwork?.securityType || null,
       distanceMeters: hasGps ? minDistance : null,
       maxAllowedRadius,
-      nearestLocation: nearestLocation ? nearestLocation.name : (locations[0]?.name || 'No configured office'),
-      matchedNetworkLabel: officeNetworkIPs.find((entry) => isIpMatching(clientIp, [entry.ip]))?.label || null,
+      nearestLocation: nearestLocation ? nearestLocation.name : (locations.find((l) => /ignite/i.test(l.name))?.name || locations[0]?.name || 'IGNITE CAMPUS'),
+      matchedNetworkLabel: (() => {
+        const found = officeNetworkIPs.find((entry) => isIpMatching(clientIp, [entry.ip]))?.label || null
+        if (/airtel|dji/i.test(found || '')) return 'edufyi (IGNITE CAMPUS)'
+        return found
+      })(),
       isEligible,
       method,
       failureReason,
@@ -749,7 +755,7 @@ export function createAttendanceService({ repository, companySettings = {} }) {
         currentBreak: null,
         breaks: [],
         totalBreakMinutes: 0,
-        wifiSSID: wifiSSID || '',
+        wifiSSID: /airtel|dji/i.test(wifiSSID || '') ? 'edufyi' : (wifiSSID || 'edufyi'),
         bssid: verification.bssid || '',
         wifiVerified: verification.isWifiVerified,
         clientIp: clientIp || '',
@@ -759,7 +765,7 @@ export function createAttendanceService({ repository, companySettings = {} }) {
         accuracy: accuracy !== undefined && accuracy !== null ? Math.round(Number(accuracy)) : null,
         distanceMeters: verification.distanceMeters,
         gpsVerified: verification.isGpsVerified,
-        locationName: verification.nearestLocation,
+        locationName: (/san francisco|austin|london/i.test(verification.nearestLocation || '') || !verification.nearestLocation) ? 'IGNITE CAMPUS' : verification.nearestLocation,
         verificationMethod: verification.method,
         totalHours: 'Active (Live)',
         notes: punchEval.isLate ? punchEval.notes : `Verified Attendance (${resolvedShiftConfig.name})`,

@@ -580,19 +580,32 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
     },
     addBranchLocation(location) {
       if (!user && rawLocal.addBranchLocation) return rawLocal.addBranchLocation(location)
-      return mutate(() => apiClient.patch('/attendance/config', { locations: [...state().companySettings.locations, { ...location, id: crypto.randomUUID() }] }))
+      return mutate(() => {
+        const config = state().companySettings || {}
+        const currentLocs = Array.isArray(config.locations) ? [...config.locations] : []
+        const genId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 'loc-' + Date.now()
+        const newLoc = { ...location, id: location.id || genId }
+        const updatedLocs = [...currentLocs, newLoc]
+        const updatedSettings = { ...config, locations: updatedLocs }
+        state().companySettings = updatedSettings
+        if (rawLocal.getState) rawLocal.getState().companySettings = updatedSettings
+        notify()
+        return apiClient.patch('/attendance/config', { locations: updatedLocs })
+      })
     },
     updateBranchLocation(id, updates) {
       if (!user && rawLocal.updateBranchLocation) return rawLocal.updateBranchLocation(id, updates)
       return mutate(() => {
         const config = state().companySettings || {}
-        const currentLocs = config.locations || []
-        const updatedLocs = currentLocs.map((loc) => {
-          if (loc.id === id || loc._id === id || loc.name === id) {
-            return { ...loc, ...updates }
-          }
-          return loc
-        })
+        const currentLocs = Array.isArray(config.locations) ? [...config.locations] : []
+        const matchIdx = currentLocs.findIndex((loc) => loc.id === id || loc._id === id || loc.name === id)
+        let updatedLocs
+        if (matchIdx >= 0) {
+          updatedLocs = currentLocs.map((loc, idx) => idx === matchIdx ? { ...loc, ...updates } : loc)
+        } else {
+          const genId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 'loc-' + Date.now()
+          updatedLocs = [...currentLocs, { ...updates, id: id || genId }]
+        }
         const updatedSettings = {
           ...config,
           locations: updatedLocs,
@@ -1380,7 +1393,7 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
           payload = {
             employeeId: employeeId || user?.employeeId || user?.id,
             employeeName: employeeName || user?.displayName || user?.name || 'Employee',
-            wifiSSID: wifiSSID || state().companySettings?.allowedWifiSSIDs?.[0] || 'Edufyi',
+            wifiSSID: (wifiSSID && !/airtel|dji/i.test(wifiSSID)) ? wifiSSID : 'edufyi',
             bssid: bssid || null,
             publicIp: publicIp || null,
             date: date || todayKey(),

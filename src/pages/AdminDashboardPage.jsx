@@ -6114,11 +6114,37 @@ function AdminSettingsModule({ user: propUser }) {
       {/* EDIT CAMPUS & GEOFENCE MODAL */}
       {editingCampus && (
         <AdminModalPortal>
-          <div className="modal-backdrop" onClick={() => setEditingCampus(null)}>
+          <div
+            className="payslip-voucher-overlay"
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: 'rgba(15, 23, 42, 0.75)',
+              backdropFilter: 'blur(4px)',
+              zIndex: 99999,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '16px',
+            }}
+            onClick={() => setEditingCampus(null)}
+          >
             <div
-              className="modal-content"
+              className="payslip-voucher"
               onClick={(e) => e.stopPropagation()}
-              style={{ maxWidth: '580px', width: '92%', borderRadius: '14px', padding: '24px' }}
+              style={{
+                maxWidth: '580px',
+                width: '100%',
+                maxHeight: '90vh',
+                overflowY: 'auto',
+                borderRadius: '16px',
+                background: '#ffffff',
+                boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+                padding: '24px',
+              }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
