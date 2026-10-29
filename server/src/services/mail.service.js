@@ -35,9 +35,9 @@ export const DEFAULT_COMPANY = {
   city: 'Bengaluru',
   phone: '+91 80 4567 8900',
   email: 'hr@edufyitech.in',
-  website: 'https://empoyee.edufyitechsolutions.com',
+  website: 'https://employee.edufyitechsolutions.com',
   taxId: '29AABCE1234F1Z5',
-  logoUrl: 'https://empoyee.edufyitechsolutions.com/elythra-edufyitech-logo.png',
+  logoUrl: 'https://employee.edufyitechsolutions.com/elythra-edufyitech-logo.png',
   primaryColor: '#087E9E',
   secondaryColor: '#0B3155',
 }
@@ -82,7 +82,7 @@ export function getMailConfig() {
   const helpdeskEmail = (process.env.HELPDESK_EMAIL || 'helpsupport@edufyitechsolution.in').trim()
   const helpdeskPass = cleanPassword(process.env.HELPDESK_EMAIL_PASS)
 
-  const publicUrl = process.env.APP_PUBLIC_URL || 'https://empoyee.edufyitechsolutions.com'
+  const publicUrl = process.env.APP_PUBLIC_URL || 'https://employee.edufyitechsolutions.com'
 
   return { host, port, secure, adminEmail, adminPass, hrEmail, hrPass, itEmail, itPass, helpdeskEmail, helpdeskPass, publicUrl }
 }
@@ -210,11 +210,11 @@ export function wrapInEmailLayout({
   inlineLogoCid = true,
 }) {
   const currentYear = new Date().getFullYear()
-  const publicUrl = process.env.APP_PUBLIC_URL || 'https://empoyee.edufyitechsolutions.com'
+  const publicUrl = process.env.APP_PUBLIC_URL || 'https://employee.edufyitechsolutions.com'
 
   const logoImgSrc = (inlineLogoCid && logoFilePath)
     ? 'cid:edufyilogo'
-    : (DEFAULT_COMPANY.logoUrl || 'https://empoyee.edufyitechsolutions.com/elythra-edufyitech-logo.png')
+    : (DEFAULT_COMPANY.logoUrl || 'https://employee.edufyitechsolutions.com/elythra-edufyitech-logo.png')
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -439,7 +439,7 @@ export function wrapInEmailLayout({
           </div>
         </div>
         <div style="margin-top: 8px; border-top: 1px solid #1e293b; padding-top: 8px;">
-          Support: <a href="mailto:${DEFAULT_COMPANY.email}">${DEFAULT_COMPANY.email}</a> | Tel: ${DEFAULT_COMPANY.phone} | <a href="${publicUrl}" target="_blank">Employee Portal</a>
+          Support: <a href="mailto:${DEFAULT_COMPANY.email}">${DEFAULT_COMPANY.email}</a> | Tel: ${DEFAULT_COMPANY.phone} | <a href="${publicUrl.replace(/\/+$/, '')}/#/employee/login" target="_blank">Employee Portal</a>
         </div>
         ${showConfidentialNotice ? `
           <div style="margin-top: 8px; font-size: 10px; color: #64748b;">
@@ -478,7 +478,7 @@ export async function sendWelcomeEmail({ employee, temporaryPassword, loginUrl }
   if (!to) return { success: false, reason: 'No recipient email' }
 
   const rolePath = employee.role === 'admin' ? 'admin/login' : (employee.role === 'hr' ? 'hr/login' : 'employee/login')
-  const baseAppUrl = (process.env.APP_PUBLIC_URL || 'https://empoyee.edufyitechsolutions.com').replace(/\/+$/, '')
+  const baseAppUrl = (process.env.APP_PUBLIC_URL || 'https://employee.edufyitechsolutions.com').replace(/\/+$/, '')
   let portalUrl = loginUrl || `${baseAppUrl}/#/${rolePath}`
   if (!portalUrl.includes('#/')) {
     portalUrl = `${portalUrl.replace(/\/+$/, '')}/#/${rolePath}`
@@ -575,7 +575,13 @@ export async function sendPasswordResetEmail({ employee, user, newPassword, temp
   const to = target.email
   if (!to) return { success: false, reason: 'No recipient email' }
 
-  const portalUrl = loginUrl || process.env.APP_PUBLIC_URL || 'https://empoyee.edufyitechsolutions.com'
+  const role = target.role || 'employee'
+  const rolePath = role === 'admin' ? 'admin/login' : (role === 'hr' ? 'hr/login' : 'employee/login')
+  const baseAppUrl = (process.env.APP_PUBLIC_URL || 'https://employee.edufyitechsolutions.com').replace(/\/+$/, '')
+  let portalUrl = loginUrl || `${baseAppUrl}/#/${rolePath}`
+  if (!portalUrl.includes('#/')) {
+    portalUrl = `${portalUrl.replace(/\/+$/, '')}/#/${rolePath}`
+  }
   const empName = target.name || target.displayName || 'Employee'
   const pass = newPassword || temporaryPassword
 
@@ -737,7 +743,7 @@ export async function sendLeaveStatusEmail({ employee, leaveRequest, action, app
     contentHtml,
     callToAction: {
       label: 'View Leave Balances & History',
-      url: `${process.env.APP_PUBLIC_URL || 'https://empoyee.edufyitechsolutions.com'}#/employee/leave`,
+      url: `${process.env.APP_PUBLIC_URL || 'https://employee.edufyitechsolutions.com'}#/employee/leave`,
     },
   })
 
@@ -805,7 +811,7 @@ export async function sendDocumentStatusEmail({ employee, documentName, docType,
     contentHtml,
     callToAction: {
       label: 'Open Onboarding Documents',
-      url: `${process.env.APP_PUBLIC_URL || 'https://empoyee.edufyitechsolutions.com'}#/onboarding`,
+      url: `${process.env.APP_PUBLIC_URL || 'https://employee.edufyitechsolutions.com'}#/onboarding`,
     },
   })
 

@@ -144,7 +144,7 @@ export function createAuthRouter({ authService, auth, userStore }) {
 
       if (cleanEmail) {
         const rolePath = (role === 'admin') ? 'admin/login' : (role === 'hr' ? 'hr/login' : 'employee/login')
-        const publicBase = (process.env.APP_PUBLIC_URL || 'https://empoyee.edufyitechsolutions.com').replace(/\/+$/, '')
+        const publicBase = (process.env.APP_PUBLIC_URL || 'https://employee.edufyitechsolutions.com').replace(/\/+$/, '')
         const portalUrl = `${publicBase}/#/${rolePath}`
 
         sendWelcomeEmail({
@@ -277,7 +277,7 @@ export function createAuthRouter({ authService, auth, userStore }) {
         sendPasswordResetEmail({
           employee: target,
           newPassword: password,
-          loginUrl: process.env.APP_PUBLIC_URL || 'https://empoyee.edufyitechsolutions.com',
+          loginUrl: process.env.APP_PUBLIC_URL || 'https://employee.edufyitechsolutions.com',
         }).catch((err) => console.warn('[MailService] Password reset email notice:', err?.message || err))
       }
 
