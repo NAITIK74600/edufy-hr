@@ -49,6 +49,7 @@ import {
   Edit3,
   Copy,
   Calculator,
+  Mail,
 } from 'lucide-react'
 import { Button, ConfirmationDialog, DataTable, EmptyState, Field, PageHeader, StatusBadge } from '../components/ui'
 import { formatAttendanceNotes, getDailyAttendanceStatus, getLateCountInfo } from '../utils/attendanceUtils'
@@ -4277,6 +4278,7 @@ function AnnouncementsModule() {
     content: '',
     priority: 'Normal',
     pinned: false,
+    sendEmailBroadcast: true,
   })
 
   useEffect(() => {
@@ -4293,15 +4295,17 @@ function AnnouncementsModule() {
   const handleCreate = workspaceHandler(async (e) => {
     e.preventDefault()
     if (!annForm.title.trim() || !annForm.content.trim()) return
+    const willEmail = Boolean(annForm.sendEmailBroadcast)
     await hrStore.createAnnouncement({
       ...annForm,
       title: annForm.title.trim(),
       content: annForm.content.trim(),
       author: user?.displayName || user?.name || 'HR Operations',
+      sendEmailBroadcast: willEmail,
     })
     setShowCreateModal(false)
-    setAnnForm({ title: '', category: 'News', targetAudience: 'All Employees', content: '', priority: 'Normal', pinned: false })
-    showNotice('Announcement published and broadcast to enterprise feed.')
+    setAnnForm({ title: '', category: 'News', targetAudience: 'All Employees', content: '', priority: 'Normal', pinned: false, sendEmailBroadcast: true })
+    showNotice(willEmail ? '✓ Announcement published & broadcast email sent from Admin (admin@edufyitech.in)!' : '✓ Announcement published to enterprise feed.')
   })
 
   const handleUpdate = workspaceHandler(async (e) => {
@@ -4694,6 +4698,26 @@ function AnnouncementsModule() {
                       <span>Pin to top of feed</span>
                     </label>
                   </Field>
+                </div>
+
+                {/* Email Broadcast Option from Admin */}
+                <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '8px', padding: '12px 14px', marginBottom: '8px' }}>
+                  <label style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      style={{ marginTop: '3px', cursor: 'pointer', accentColor: '#059669' }}
+                      checked={annForm.sendEmailBroadcast ?? true}
+                      onChange={(e) => setAnnForm({ ...annForm, sendEmailBroadcast: e.target.checked })}
+                    />
+                    <div>
+                      <strong style={{ fontSize: '13px', color: '#166534', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <Mail size={15} color="#16a34a" /> Send Notification Email from Admin (admin@edufyitech.in)
+                      </strong>
+                      <p style={{ margin: '3px 0 0', fontSize: '11.5px', color: '#14532d', lineHeight: 1.4 }}>
+                        Delivers an official email broadcast with full announcement text and direct portal link to all employees in <strong>{annForm.targetAudience}</strong>.
+                      </p>
+                    </div>
+                  </label>
                 </div>
 
                 <Field label="Announcement Content" required>

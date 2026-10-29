@@ -210,7 +210,7 @@ export function createEmployeeService({ repository }) {
 
       if (employee.email) {
         const rolePath = (values.role === 'admin') ? 'admin/login' : (values.role === 'hr' ? 'hr/login' : 'employee/login')
-        const publicBase = (process.env.APP_PUBLIC_URL || 'https://employee.edufyitechsolutions.com').replace(/\/+$/, '')
+        const publicBase = (process.env.APP_PUBLIC_URL || 'https://edufyione.edufyitech.in').replace(/\/+$/, '')
         const portalUrl = `${publicBase}/#/${rolePath}`
 
         sendWelcomeEmail({
@@ -299,7 +299,7 @@ export function createEmployeeService({ repository }) {
 
       if (status === 'invited' && employee.email) {
         const rolePath = (employee.role === 'admin') ? 'admin/login' : (employee.role === 'hr' ? 'hr/login' : 'employee/login')
-        const publicBase = (process.env.APP_PUBLIC_URL || 'https://employee.edufyitechsolutions.com').replace(/\/+$/, '')
+        const publicBase = (process.env.APP_PUBLIC_URL || 'https://edufyione.edufyitech.in').replace(/\/+$/, '')
         const portalUrl = `${publicBase}/#/${rolePath}`
         const envPassword = process.env.DEFAULT_EMPLOYEE_PASSWORD || process.env.EMPLOYEE_PASSWORD || 'Password@123'
         sendWelcomeEmail({

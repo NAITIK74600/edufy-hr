@@ -141,6 +141,7 @@ export function createApp(options = {}) {
         const host = parsed.hostname.toLowerCase()
         const isEdufyiDomain = host === 'edufyitechsolutions.com' || host.endsWith('.edufyitechsolutions.com') ||
           host === 'edufyi.in' || host.endsWith('.edufyi.in') ||
+          host === 'edufyitech.in' || host.endsWith('.edufyitech.in') ||
           host === 'edufyi.local' || host.endsWith('.edufyi.local')
         const isLocal = host === 'localhost' || host === '127.0.0.1' || host.startsWith('192.168.') || host.startsWith('10.')
         const isConfigured = process.env.APP_PUBLIC_URL && origin.startsWith(process.env.APP_PUBLIC_URL.replace(/\/+$/, ''))

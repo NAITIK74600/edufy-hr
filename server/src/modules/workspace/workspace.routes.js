@@ -6,7 +6,7 @@ import { AttendanceSettings } from '../../models/AttendanceSettings.js'
 import { Notification } from '../../models/Notification.js'
 import { hasPermission } from '../../auth/permissions.js'
 import { ensureConnected } from '../leave/leave.repository.js'
-import { sendSupportTicketEmail, getMailConfig } from '../../services/mail.service.js'
+import { sendSupportTicketEmail, sendAnnouncementEmailBroadcast, getMailConfig } from '../../services/mail.service.js'
 
 const permissions = { announcements: 'announcements.read', tasks: 'tasks.read', courses: 'training.read', enrollments: 'training.read', tickets: 'helpdesk.read', expenses: 'reports.read', dailyReports: 'reports.read', kudos: 'performance.read', performanceGoals: 'performance.read', performanceReviews: 'performance.read', holidays: 'holidays.read', documents: 'documents.read', requisitions: 'recruitment.read', notifications: 'dashboard.read', roles: 'dashboard.read', departments: 'dashboard.read', teams: 'dashboard.read' }
 const shared = new Set(['announcements', 'courses', 'holidays', 'documents', 'roles', 'departments', 'teams'])
@@ -289,7 +289,7 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
       const actorName = actor.name ?? actor.displayName
       switch (resource) {
         case 'announcements':
-          allowedBody(body, ['title', 'content', 'category', 'priority', 'targetAudience', 'pinned'])
+          allowedBody(body, ['title', 'content', 'category', 'priority', 'targetAudience', 'pinned', 'sendEmailBroadcast', 'sendEmail'])
           if (body.pinned !== undefined && typeof body.pinned !== 'boolean') throw fail('pinned must be a boolean.')
           values = { ...values, title: string(body, 'title', true, 200), content: string(body, 'content'), category: string(body, 'category'), priority: choice(body, 'priority', ['Normal', 'High', 'Urgent']), targetAudience: string(body, 'targetAudience', true, 200), pinned: body.pinned ?? false, author: actorName, date: today, likedBy: [] }
           break
@@ -1248,9 +1248,42 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
 
       if (resource === 'announcements' || resource === 'documents' || resource === 'courses') {
         const audience = { status: 'active' }
-        if (resource === 'announcements' && values.targetAudience !== 'All Employees') audience.department = values.targetAudience
-        const recipients = await Employee.find(audience).select('_id').lean()
-        if (recipients.length) await models.notifications.insertMany(recipients.map((person) => ({ ownerId: String(person._id), title: resource === 'announcements' ? 'Company announcement' : resource === 'courses' ? 'Training course published' : 'Document published', message: values.title, type: resource, read: false })))
+        if (resource === 'announcements' && values.targetAudience && values.targetAudience !== 'All Employees') {
+          if (values.targetAudience === 'Managers') {
+            audience.$or = [{ role: { $in: ['manager', 'lead', 'admin', 'hr'] } }, { isManager: true }]
+          } else {
+            audience.department = values.targetAudience
+          }
+        }
+        const recipients = await Employee.find(audience).select('_id email name displayName department').lean()
+        if (recipients.length) {
+          await models.notifications.insertMany(recipients.map((person) => ({
+            ownerId: String(person._id),
+            title: resource === 'announcements' ? 'Company announcement' : resource === 'courses' ? 'Training course published' : 'Document published',
+            message: values.title,
+            type: resource,
+            read: false,
+          })))
+        }
+
+        // Live Email Broadcast via Admin channel (admin@edufyitech.in)
+        if (resource === 'announcements' && (body.sendEmailBroadcast || body.sendEmail)) {
+          const publicUrl = (process.env.APP_PUBLIC_URL || 'https://edufyione.edufyitech.in').replace(/\/+$/, '')
+          sendAnnouncementEmailBroadcast({
+            announcement: {
+              title: values.title,
+              content: values.content,
+              category: values.category,
+              priority: values.priority,
+              targetAudience: values.targetAudience,
+              author: actorName || 'Corporate Administration',
+            },
+            recipients,
+            publicUrl,
+          })
+            .then((res) => console.log(`[workspace.routes] Announcement email broadcast dispatched to ${res.sentCount || 0} employees via ADMIN channel`))
+            .catch((err) => console.error('[workspace.routes] Failed delivering announcement broadcast:', err?.message || err))
+        }
       }
       res.status(201).json({ success: true, data: serialize(resource, record.toObject(), actor) })
     } catch (error) {

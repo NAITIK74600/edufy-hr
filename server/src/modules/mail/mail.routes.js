@@ -85,7 +85,7 @@ export function createMailRouter({ auth }) {
       const result = await sendWelcomeEmail({
         employee,
         temporaryPassword,
-        loginUrl: loginUrl || process.env.APP_PUBLIC_URL || 'https://employee.edufyitechsolutions.com',
+        loginUrl: loginUrl || process.env.APP_PUBLIC_URL || 'https://edufyione.edufyitech.in',
       })
 
       res.json({
@@ -121,7 +121,7 @@ export function createMailRouter({ auth }) {
       const result = await sendPasswordResetEmail({
         employee: target,
         temporaryPassword,
-        loginUrl: loginUrl || process.env.APP_PUBLIC_URL || 'https://employee.edufyitechsolutions.com',
+        loginUrl: loginUrl || process.env.APP_PUBLIC_URL || 'https://edufyione.edufyitech.in',
       })
 
       res.json({

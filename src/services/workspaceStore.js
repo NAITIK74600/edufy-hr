@@ -39,7 +39,7 @@ export function createWorkspaceStore(store, mutate, getUser = null, rawLocal = {
     createHelpDeskTicket(data) { return this.createTicket(data) },
     updateTicketStatus: (id, status) => (isLocal() && rawLocal.updateTicketStatus ? rawLocal.updateTicketStatus(id, status) : patch('tickets', id, { status })),
     replyToTicket: (id, response) => (isLocal() && rawLocal.replyToTicket ? rawLocal.replyToTicket(id, response) : patch('tickets', id, { response })),
-    createAnnouncement: (data) => (isLocal() && rawLocal.createAnnouncement ? rawLocal.createAnnouncement(data) : create('announcements', pick(data, ['title', 'content', 'category', 'priority', 'targetAudience', 'pinned']))),
+    createAnnouncement: (data) => (isLocal() && rawLocal.createAnnouncement ? rawLocal.createAnnouncement(data) : create('announcements', pick(data, ['title', 'content', 'category', 'priority', 'targetAudience', 'pinned', 'sendEmailBroadcast', 'sendEmail']))),
     updateAnnouncement: (id, data) => (isLocal() && rawLocal.updateAnnouncement ? rawLocal.updateAnnouncement(id, data) : patch('announcements', id, pick(data, ['title', 'content', 'category', 'priority', 'targetAudience', 'pinned']))),
     deleteAnnouncement: (id) => (isLocal() && rawLocal.deleteAnnouncement ? rawLocal.deleteAnnouncement(id) : save('delete', `/announcements/${encodeURIComponent(id)}`)),
     togglePinAnnouncement: (id, pinned) => (isLocal() && rawLocal.togglePinAnnouncement ? rawLocal.togglePinAnnouncement(id, pinned) : patch('announcements', id, { pinned })),
