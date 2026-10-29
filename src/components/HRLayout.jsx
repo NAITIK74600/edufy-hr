@@ -42,6 +42,7 @@ import {
   LifeBuoy,
   BellRing,
   KeyRound,
+  Download,
 } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
 import { adminRoutes, hrRoutes, employeeRoutes } from '../app/routes'
@@ -509,8 +510,20 @@ export function HRLayout({ route, children }) {
           })}
         </nav>
 
-        {!isAdmin && (
-          <div className="sidebar-bottom">
+        <div className="sidebar-bottom">
+          <button
+            type="button"
+            className="nav-item"
+            style={{ border: 0, background: 'transparent', textAlign: 'left', width: '100%', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px' }}
+            onClick={() => {
+              setMobileOpen(false)
+              window.dispatchEvent(new CustomEvent('edufyi-trigger-install'))
+            }}
+          >
+            <Download size={16} />
+            <span>Install Web App</span>
+          </button>
+          {!isAdmin && (
             <a
               className="nav-item"
               href={isHR ? '#/hr/helpdesk' : '#/employee/helpdesk'}
@@ -519,8 +532,8 @@ export function HRLayout({ route, children }) {
               <CircleHelp size={16} />
               <span>Help & Support</span>
             </a>
-          </div>
-        )}
+          )}
+        </div>
       </aside>
 
       {mobileOpen && <button className="scrim" onClick={() => setMobileOpen(false)} aria-label="Close navigation overlay" />}
