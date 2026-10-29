@@ -39,6 +39,7 @@ import { createAttendanceRouter } from './modules/attendance/attendance.routes.j
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js'
 import { seedAllEmployees } from './modules/employees/seedAllEmployees.js'
 import { sanitizeMiddleware } from './middleware/sanitize.js'
+import { PERMISSIONS } from './auth/permissions.js'
 
 export function createApp(options = {}) {
   const app = express()
@@ -168,6 +169,13 @@ export function createApp(options = {}) {
   app.use('/api/v1/auth', createAuthRouter({ authService, auth, userStore }))
   app.use('/api/v1/employees', createEmployeeRouter({ auth, service: employeeService }))
   app.use('/api/v1/leave', createLeaveRouter({ auth, service: leaveService }))
+  app.post(['/api/v1/attendance/recalculate', '/api/v1/attendance/recalculateToday'], auth.authenticate, auth.requirePermission(PERMISSIONS.ATTENDANCE_WRITE), async (request, response, next) => {
+    try {
+      const date = request.body?.date
+      const result = await attendanceService.recalculateAttendance(date)
+      response.json({ success: true, data: result })
+    } catch (error) { next(error) }
+  })
   app.use('/api/v1/attendance', createAttendanceRouter({
     auth, service: attendanceService, useDatabase,
     persistenceAvailable: useDatabase || Boolean(options.attendanceRepository || options.attendanceService),

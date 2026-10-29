@@ -703,14 +703,14 @@ function AttendanceModule() {
                   key: 'totalHours',
                   label: 'Work Duration / Breaks',
                   render: (r) => {
-                    const isLateRecord = Boolean(r.isLate || r.status === 'late')
+                    const isLateStatus = r.status === 'late'
                     let displayHours = r.totalHours || '—'
-                    if (!r.checkOut && displayHours.includes('Active')) {
-                      displayHours = isLateRecord ? 'Active (Late)' : 'Active (Live)'
+                    if (!r.checkOut) {
+                      displayHours = isLateStatus ? 'Active (Late)' : 'Active (Live)'
                     }
                     return (
                       <div>
-                        <strong style={{ color: r.isOnBreak ? '#b45309' : (isLateRecord ? '#dc2626' : 'var(--teal)') }}>
+                        <strong style={{ color: r.isOnBreak ? '#b45309' : (isLateStatus ? '#dc2626' : 'var(--teal)') }}>
                           {r.isOnBreak ? `⏸️ On ${r.currentBreak?.type === 'tea' ? 'Tea Break' : 'Lunch Break'}` : displayHours}
                         </strong>
                         {r.totalBreakMinutes > 0 && (

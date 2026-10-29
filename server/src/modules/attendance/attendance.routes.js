@@ -118,7 +118,7 @@ export function createAttendanceRouter({ auth, service, useDatabase = false, per
         if (values.attendanceRules?.workStartTime && values.attendanceRules?.workEndTime) {
           const sMins = parseTimeToMinutes(values.attendanceRules.workStartTime)
           const eMins = parseTimeToMinutes(values.attendanceRules.workEndTime)
-          const gMins = Number(values.attendanceRules.gracePeriodMinutes) ?? 15
+          const gMins = Number(values.attendanceRules.gracePeriodMinutes) > 0 ? Number(values.attendanceRules.gracePeriodMinutes) : 30
           if (sMins !== null && eMins !== null) {
             const shiftName = `General (${formatMinutesToTime(sMins)} – ${formatMinutesToTime(eMins)})`
             await Shift.updateMany({}, { $set: { isDefault: false } }).catch(() => {})
@@ -178,7 +178,7 @@ export function createAttendanceRouter({ auth, service, useDatabase = false, per
   })
 
   // 1. Attendance Configuration & Policy
-  router.post('/recalculate', auth.authenticate, auth.requirePermission(PERMISSIONS.ATTENDANCE_WRITE), async (request, response, next) => {
+  router.post(['/recalculate', '/recalculateToday', '/attendance/recalculate'], auth.authenticate, auth.requirePermission(PERMISSIONS.ATTENDANCE_WRITE), async (request, response, next) => {
     try {
       const date = request.body?.date
       const result = await service.recalculateAttendance(date)

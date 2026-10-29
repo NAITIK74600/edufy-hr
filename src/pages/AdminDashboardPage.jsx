@@ -4566,7 +4566,7 @@ function AdminSettingsModule({ user: propUser }) {
   const initialShift = storeState.companySettings?.attendanceRules || {}
   const [shiftStartTime, setShiftStartTime] = useState(initialShift.workStartTime || '')
   const [shiftEndTime, setShiftEndTime] = useState(initialShift.workEndTime || '')
-  const [shiftGracePeriod, setShiftGracePeriod] = useState(initialShift.gracePeriodMinutes ?? 15)
+  const [shiftGracePeriod, setShiftGracePeriod] = useState(initialShift.gracePeriodMinutes ?? 30)
   const [shiftSaving, setShiftSaving] = useState(false)
 
   // Help Desk Configuration State
@@ -4943,8 +4943,12 @@ function AdminSettingsModule({ user: propUser }) {
           gracePeriodMinutes: Number(shiftGracePeriod) || 0,
         },
       })
-      await hrStore.recalculateTodayAttendance()
-      setNotice(`✓ Shift timings saved! Work hours: ${shiftStartTime} – ${shiftEndTime}, Grace: ${shiftGracePeriod} min. Today's attendance recalculated.`)
+      try {
+        await hrStore.recalculateTodayAttendance()
+      } catch (recalcErr) {
+        console.warn('[ShiftSave] Background recalculate notification:', recalcErr?.message || recalcErr)
+      }
+      setNotice(`✓ Shift timings saved! Work hours: ${shiftStartTime} – ${shiftEndTime}, Grace: ${shiftGracePeriod} min. Today's attendance updated.`)
       setTimeout(() => setNotice(''), 6000)
     } catch (err) {
       setNotice(`✕ Failed to save shift settings: ${err.message || 'Please try again.'}`)

@@ -77,7 +77,7 @@ export function normalizeShiftConfig(raw) {
   const startMins = raw.startMinutes ?? parseTimeToMinutes(raw.startTime) ?? STANDARD_SHIFT_DEF.startMinutes
   const endMins = raw.endMinutes ?? parseTimeToMinutes(raw.endTime) ?? STANDARD_SHIFT_DEF.endMinutes
   const isOvernight = Boolean(raw.isOvernight ?? (endMins < startMins))
-  const graceMins = raw.gracePeriodMinutes ?? 15
+  const graceMins = Number(raw.gracePeriodMinutes) > 0 ? Number(raw.gracePeriodMinutes) : 30
   const graceCutoff = startMins + graceMins
 
   // Half day cutoff: explicitly configured, or 60 minutes after start time
@@ -138,7 +138,7 @@ export async function resolveEmployeeShift(employeeId, dateStr) {
       const startMins = parseTimeToMinutes(rules.workStartTime)
       const endMins = parseTimeToMinutes(rules.workEndTime)
       const rawGrace = Number(rules.gracePeriodMinutes)
-      const graceMins = Number.isFinite(rawGrace) && rawGrace >= 0 ? rawGrace : 15
+      const graceMins = Number.isFinite(rawGrace) && rawGrace > 0 ? rawGrace : 30
       if (startMins !== null && endMins !== null) {
         adminShift = normalizeShiftConfig({
           shiftId: 'GENERAL',
