@@ -343,17 +343,19 @@ function App() {
 }
 
 const container = document.getElementById('root')
-if (!window.__react_root) {
-  window.__react_root = createRoot(container)
+if (container) {
+  if (!window.__react_root) {
+    window.__react_root = createRoot(container)
+  }
+  window.__react_root.render(
+    <StrictMode>
+      <ErrorBoundary>
+        <MotionConfig reducedMotion="user">
+          <AuthProvider>
+            <App />
+          </AuthProvider>
+        </MotionConfig>
+      </ErrorBoundary>
+    </StrictMode>
+  )
 }
-window.__react_root.render(
-  <StrictMode>
-    <ErrorBoundary>
-      <MotionConfig reducedMotion="user">
-        <AuthProvider>
-          <App />
-        </AuthProvider>
-      </MotionConfig>
-    </ErrorBoundary>
-  </StrictMode>
-)

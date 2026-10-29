@@ -19,9 +19,9 @@ export const STANDARD_SHIFT_DEF = Object.freeze({
   startMinutes: 660,    // 11 * 60
   endMinutes: 1200,     // 20 * 60
   isOvernight: false,
-  gracePeriodMinutes: 15,
-  graceCutoffMinutes: 675, // 11:15 AM
-  halfDayCutoffMinutes: 720, // 12:00 PM
+  gracePeriodMinutes: 30,
+  graceCutoffMinutes: 690, // 11:30 AM
+  halfDayCutoffMinutes: 750, // 12:30 PM
   earlyLogoutWindow: Object.freeze({
     startMinutes: 1110, // 18:30 (06:30 PM)
     endMinutes: 1180,   // 19:40 (07:40 PM)
@@ -77,11 +77,12 @@ export function normalizeShiftConfig(raw) {
   const startMins = raw.startMinutes ?? parseTimeToMinutes(raw.startTime) ?? STANDARD_SHIFT_DEF.startMinutes
   const endMins = raw.endMinutes ?? parseTimeToMinutes(raw.endTime) ?? STANDARD_SHIFT_DEF.endMinutes
   const isOvernight = Boolean(raw.isOvernight ?? (endMins < startMins))
-  const graceMins = Number(raw.gracePeriodMinutes) > 0 ? Number(raw.gracePeriodMinutes) : 30
+  const rawGrace = Number(raw.gracePeriodMinutes)
+  const graceMins = Number.isFinite(rawGrace) && rawGrace >= 0 ? rawGrace : 30
   const graceCutoff = startMins + graceMins
 
-  // Half day cutoff: explicitly configured, or 60 minutes after start time
-  const halfDayCutoff = raw.halfDayCutoffMinutes ?? (startMins + 60)
+  // Half day cutoff: explicitly configured, or at least 60 minutes after start time and after grace cutoff
+  const halfDayCutoff = raw.halfDayCutoffMinutes ?? (startMins + Math.max(60, graceMins + 15))
 
   // Early logout window:
   let earlyStart = raw.earlyLogoutWindow?.startMinutes
@@ -138,7 +139,7 @@ export async function resolveEmployeeShift(employeeId, dateStr) {
       const startMins = parseTimeToMinutes(rules.workStartTime)
       const endMins = parseTimeToMinutes(rules.workEndTime)
       const rawGrace = Number(rules.gracePeriodMinutes)
-      const graceMins = Number.isFinite(rawGrace) && rawGrace > 0 ? rawGrace : 30
+      const graceMins = Number.isFinite(rawGrace) && rawGrace >= 0 ? rawGrace : 30
       if (startMins !== null && endMins !== null) {
         adminShift = normalizeShiftConfig({
           shiftId: 'GENERAL',
@@ -150,7 +151,7 @@ export async function resolveEmployeeShift(employeeId, dateStr) {
           isOvernight: endMins < startMins,
           gracePeriodMinutes: graceMins,
           graceCutoffMinutes: startMins + graceMins,
-          halfDayCutoffMinutes: startMins + 60,
+          halfDayCutoffMinutes: startMins + Math.max(60, graceMins + 15),
           earlyLogoutWindow: {
             startMinutes: Math.max(0, endMins - 90),
             endMinutes: Math.max(0, endMins - 20),

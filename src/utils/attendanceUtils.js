@@ -57,24 +57,44 @@ export function formatAttendanceNotes(notes) {
 }
 
 /**
- * Returns clean daily status:
+ * Returns clean daily status dynamically evaluated against active shift rules:
  * - On-Time (punch in within on-time or grace period)
  * - Half Day (worked minimum 4 hrs)
  * - Absent (worked less than 4 hrs)
  * - Early Logout (worked 6 hr 30 min / early window)
+ * - Late (punch-in after grace period)
  * - On Leave (approved leave)
  * - Loss of Pay (explicit LOP)
  */
-export function getDailyAttendanceStatus(r) {
+export function getDailyAttendanceStatus(r, attendanceRules = null) {
   if (!r) return { label: 'Absent', tone: 'danger' }
 
   if (r.status === 'on-leave') {
     return { label: 'On Leave', tone: 'neutral' }
   }
 
+  // Explicit LOP
+  if (r.status === 'lop' || r.isLop) {
+    return { label: 'Loss of Pay', tone: 'danger' }
+  }
+
+  // DYNAMIC CHECK: Evaluate punch-in against active shift rules
+  let isPunchLate = Boolean(r.isLate || r.status === 'late')
+  if (r.checkIn) {
+    const checkInM = parseTimeToMinutes(r.checkIn)
+    const startM = attendanceRules?.workStartTime ? parseTimeToMinutes(attendanceRules.workStartTime) : 660 // default 11:00 AM
+    const grace = Number.isFinite(Number(attendanceRules?.gracePeriodMinutes)) && Number(attendanceRules.gracePeriodMinutes) >= 0
+      ? Number(attendanceRules.gracePeriodMinutes)
+      : 30
+    if (checkInM !== null && startM !== null) {
+      isPunchLate = checkInM > (startM + grace)
+    }
+  }
+
   // Calculate worked hours if check-in and check-out exist
   let workedHours = null
-  if (r.checkIn && r.checkOut && r.checkOut !== '—' && r.checkOut !== '-') {
+  const hasCheckedOut = Boolean(r.checkOut && r.checkOut !== '—' && r.checkOut !== '-' && !String(r.checkOut).includes('Active'))
+  if (r.checkIn && hasCheckedOut) {
     const inM = parseTimeToMinutes(r.checkIn)
     const outM = parseTimeToMinutes(r.checkOut)
     if (inM !== null && outM !== null) {
@@ -85,55 +105,77 @@ export function getDailyAttendanceStatus(r) {
     }
   }
 
-  // 1. Absent: worked less than 4 hours (< 4 hrs) or status is absent
-  if (r.status === 'absent' || (workedHours !== null && workedHours < 4)) {
+  // If employee has checked out, status is determined by worked duration
+  if (hasCheckedOut && workedHours !== null) {
+    // 1. Absent: worked less than 4 hours (< 4 hrs)
+    if (workedHours < 4) {
+      return { label: 'Absent', tone: 'danger' }
+    }
+    // 2. Half Day: minimum 4 hrs (4 <= workedHours < 6.5)
+    if (workedHours < 6.5) {
+      return { label: 'Half Day', tone: 'warning' }
+    }
+    // 3. Early Logout: 6 hr 30 min (6.5 <= workedHours < 8)
+    if (workedHours < 8) {
+      return { label: 'Early Logout', tone: 'warning' }
+    }
+    // Full day worked (>= 8 hrs)
+    return isPunchLate ? { label: 'Late', tone: 'warning' } : { label: 'On-Time', tone: 'info' }
+  }
+
+  // If employee is actively working (no checkout yet) or check-in only
+  if (r.checkIn) {
+    return isPunchLate ? { label: 'Late', tone: 'warning' } : { label: 'On-Time', tone: 'info' }
+  }
+
+  if (r.status === 'absent') {
     return { label: 'Absent', tone: 'danger' }
   }
 
-  // 2. Half Day: minimum 4 hrs worked (4 <= workedHours < 6.5) or status is half-day
-  if (r.status === 'half-day' || r.isHalfDay || (workedHours !== null && workedHours >= 4 && workedHours < 6.5)) {
-    return { label: 'Half Day', tone: 'warning' }
-  }
-
-  // 3. Early Logout: 6 hr 30 min (6.5 <= workedHours < 8) or status is early-logout
-  if (r.status === 'early-logout' || r.isEarlyLogout || (workedHours !== null && workedHours >= 6.5 && workedHours < 8)) {
-    return { label: 'Early Logout', tone: 'warning' }
-  }
-
-  // Explicit LOP
-  if (r.status === 'lop' || r.isLop) {
-    return { label: 'Loss of Pay', tone: 'danger' }
-  }
-
-  // 4. Punch in on time (grace period is counted in on-time)
-  if (!r.isLate && r.status !== 'late') {
-    return { label: 'On-Time', tone: 'info' }
-  }
-
-  // 5. Punch in was late
-  return { label: 'Late', tone: 'warning' }
+  return { label: 'Absent', tone: 'danger' }
 }
 
 /**
- * Returns late occurrence count for the month and corresponding LOP day deduction:
+ * Returns late occurrence count for the month and corresponding LOP day deduction dynamically:
+ * - Only counts if the punch-in was late
  * - 3 late logins = 0.5 LOP day
  * - 6 late logins = 1.0 LOP day
  */
-export function getLateCountInfo(r, allAttendance = [], targetDate = '') {
+export function getLateCountInfo(r, allAttendance = [], targetDate = '', attendanceRules = null) {
   if (!r) return { count: 0, lopDays: 0 }
   const empCode = String(r.employeeId || '').toUpperCase()
   const dateStr = r.date || targetDate || ''
   const monthPrefix = dateStr.slice(0, 7)
 
-  // Find all attendance records of this employee in the month up to this date
+  // Dynamically test if a record is late under active shift rules
+  const isRecordLate = (record) => {
+    if (record.checkIn) {
+      const inM = parseTimeToMinutes(record.checkIn)
+      const startM = attendanceRules?.workStartTime ? parseTimeToMinutes(attendanceRules.workStartTime) : 660
+      const grace = Number.isFinite(Number(attendanceRules?.gracePeriodMinutes)) && Number(attendanceRules.gracePeriodMinutes) >= 0
+        ? Number(attendanceRules.gracePeriodMinutes)
+        : 30
+      if (inM !== null && startM !== null) {
+        return inM > (startM + grace)
+      }
+    }
+    return Boolean(record.isLate || record.status === 'late')
+  }
+
+  const isCurrentRecordLate = isRecordLate(r)
+  if (!isCurrentRecordLate) {
+    return { count: 0, lopDays: 0 }
+  }
+
+  // Find all attendance records of this employee in the month up to this date that were late
   const monthLates = (allAttendance || []).filter(
     (a) => String(a.employeeId || '').toUpperCase() === empCode &&
            a.date && a.date.startsWith(monthPrefix) &&
            a.date <= dateStr &&
-           (a.isLate || a.status === 'late')
+           isRecordLate(a)
   ).length
 
-  const count = r.lateCount > 0 ? r.lateCount : (r.isLate ? Math.max(1, monthLates) : monthLates)
+  const count = Math.max(1, monthLates)
   // On every 3 late logins = 0.5 LOP, for 6 = 1.0 LOP
   const lopDays = count > 0 ? Math.floor(count / 3) * 0.5 : 0
 

@@ -78,7 +78,7 @@ import { PayslipPreviewModal } from '../components/payroll/PayslipPreviewModal'
 import { doesPayrollMatchUser, unmaskBankAccount, findEmployeeForUser } from '../utils/payrollMatcher'
 import { OnboardingDossierView } from '../components/OnboardingDossierView'
 import { CompanyPoliciesView } from '../components/CompanyPoliciesView'
-import { formatAttendanceNotes } from '../utils/attendanceUtils'
+import { formatAttendanceNotes, getDailyAttendanceStatus, getLateCountInfo } from '../utils/attendanceUtils'
 import { HolidayCalendarShowcase } from '../components/HolidayCalendarShowcase'
 import { CompanyDocumentsView } from '../components/CompanyDocumentsView'
 
@@ -1672,19 +1672,22 @@ function ESSOverview({ user }) {
                       </td>
                     </tr>
                   ) : (
-                    recentUserLogs.map((log) => (
-                      <tr key={log.id || log._id || log.date}>
-                        <td><strong>{log.date}</strong></td>
-                        <td>{log.checkIn || '–'}</td>
-                        <td>{log.checkOut || '–'}</td>
-                        <td>{log.totalHours || '–'}</td>
-                        <td>
-                          <StatusBadge tone={log.status === 'present' ? 'success' : log.status === 'late' ? 'warning' : log.status === 'half_day' ? 'info' : 'neutral'}>
-                            {log.status === 'present' ? 'Present' : log.status === 'late' ? 'Late In' : log.status === 'half_day' ? 'Half Day' : (log.status || 'Present')}
-                          </StatusBadge>
-                        </td>
-                      </tr>
-                    ))
+                    recentUserLogs.map((log) => {
+                      const statusInfo = getDailyAttendanceStatus(log, storeState.companySettings?.attendanceRules)
+                      return (
+                        <tr key={log.id || log._id || log.date}>
+                          <td><strong>{log.date}</strong></td>
+                          <td>{log.checkIn || '–'}</td>
+                          <td>{log.checkOut || '–'}</td>
+                          <td>{log.totalHours || '–'}</td>
+                          <td>
+                            <StatusBadge tone={statusInfo.tone}>
+                              {statusInfo.label}
+                            </StatusBadge>
+                          </td>
+                        </tr>
+                      )
+                    })
                   )}
                 </tbody>
               </table>
@@ -1847,6 +1850,7 @@ function ESSAttendanceView({ user }) {
   }
 
   const monthlyLogs = storeState.attendance.filter((record) => record.employeeId === empId && record.date.startsWith(todayKey().slice(0, 7))).map((record) => ({
+    ...record,
     date: record.date, day: new Date(`${record.date}T12:00:00`).toLocaleDateString('en-US', { weekday: 'long' }),
     shift: record.shift || '—', in: record.checkIn || '-', out: record.checkOut || '-',
     hours: record.totalHours || '-', wifi: record.ipVerified ? 'Server-verified network' : record.wifiSSID || '-',
@@ -1982,41 +1986,28 @@ function ESSAttendanceView({ user }) {
                 gap: '8px',
               }}
             >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                  <strong style={{ fontSize: '13px' }}>{row.date}</strong>
-                  <span style={{ fontSize: '11px', color: 'var(--muted)', marginLeft: '6px' }}>({row.day})</span>
-                </div>
-                <StatusBadge
-                  tone={
-                    row.status === 'present' || row.status === 'late'
-                      ? 'success'
-                      : row.status === 'early-logout'
-                        ? 'warning'
-                        : row.status === 'lop'
-                          ? 'danger'
-                          : (row.status === 'half-day' || row.status === 'half_day')
-                            ? 'info'
-                            : row.status === 'short-hours'
-                              ? 'danger'
-                              : 'neutral'
-                  }
-                >
-                  {row.status === 'present' || row.status === 'late'
-                    ? 'Present (Full Day)'
-                    : row.status === 'early-logout'
-                      ? 'Early Logout'
-                      : row.status === 'lop'
-                        ? 'Loss of Pay (LOP)'
-                        : (row.status === 'half-day' || row.status === 'half_day')
-                          ? 'Half Day (4h+)'
-                          : row.status === 'short-hours'
-                            ? 'Short Hours (<4h)'
-                            : row.status === 'on-leave'
-                              ? 'On Leave'
-                              : 'Absent'}
-                </StatusBadge>
-              </div>
+              {(() => {
+                const statusInfo = getDailyAttendanceStatus({ ...row, checkIn: row.in, checkOut: row.out }, storeState.companySettings?.attendanceRules)
+                const lateInfo = getLateCountInfo(row, storeState.attendance, row.date, storeState.companySettings?.attendanceRules)
+                return (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <strong style={{ fontSize: '13px' }}>{row.date}</strong>
+                      <span style={{ fontSize: '11px', color: 'var(--muted)', marginLeft: '6px' }}>({row.day})</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <StatusBadge tone={statusInfo.tone}>
+                        {statusInfo.label}
+                      </StatusBadge>
+                      {lateInfo.count > 0 && (
+                        <span style={{ fontSize: '11px', color: '#dc2626', fontWeight: 600 }}>
+                          #{lateInfo.count}{lateInfo.lopDays > 0 ? ` (${lateInfo.lopDays} LOP)` : ''}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )
+              })()}
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '6px', fontSize: '11px', background: 'var(--surface-sunken)', padding: '8px 10px', borderRadius: '6px' }}>
                 <div>
@@ -2058,70 +2049,58 @@ function ESSAttendanceView({ user }) {
                 <th>Break Taken</th>
                 <th>Network Verification</th>
                 <th>Status</th>
+                <th>Late Count</th>
               </tr>
             </thead>
             <tbody>
               {filteredLogs.length === 0 ? (
                 <tr>
-                  <td colSpan={8} style={{ textAlign: 'center', padding: '24px 12px', color: 'var(--muted)', fontSize: '12px' }}>
+                  <td colSpan={9} style={{ textAlign: 'center', padding: '24px 12px', color: 'var(--muted)', fontSize: '12px' }}>
                     No attendance records found for this period.
                   </td>
                 </tr>
               ) : (
-                filteredLogs.map((row, idx) => (
-                  <tr key={idx}>
-                    <td><strong>{row.date}</strong></td>
-                    <td>{row.day}</td>
-                    <td>{row.in}</td>
-                    <td>{row.out}</td>
-                    <td><strong>{row.hours}</strong></td>
-                    <td>
-                      <span style={{ fontSize: '11px', color: row.breaks !== '–' ? '#b45309' : 'var(--muted)', fontWeight: row.breaks !== '–' ? 600 : 400 }}>
-                        {row.breaks}
-                      </span>
-                    </td>
-                    <td>
-                      {row.wifi !== '–' ? (
-                        <span className="wifi-verified-badge" style={{ fontSize: '9px', padding: '2px 6px' }}>
-                          <Wifi size={10} /> {row.wifi}
+                filteredLogs.map((row, idx) => {
+                  const statusInfo = getDailyAttendanceStatus({ ...row, checkIn: row.in, checkOut: row.out }, storeState.companySettings?.attendanceRules)
+                  const lateInfo = getLateCountInfo(row, storeState.attendance, row.date, storeState.companySettings?.attendanceRules)
+                  return (
+                    <tr key={idx}>
+                      <td><strong>{row.date}</strong></td>
+                      <td>{row.day}</td>
+                      <td>{row.in}</td>
+                      <td>{row.out}</td>
+                      <td><strong>{row.hours}</strong></td>
+                      <td>
+                        <span style={{ fontSize: '11px', color: row.breaks !== '–' ? '#b45309' : 'var(--muted)', fontWeight: row.breaks !== '–' ? 600 : 400 }}>
+                          {row.breaks}
                         </span>
-                      ) : (
-                        '–'
-                      )}
-                    </td>
-                    <td>
-                      <StatusBadge
-                        tone={
-                          row.status === 'present' || row.status === 'late'
-                            ? 'success'
-                            : row.status === 'early-logout'
-                              ? 'warning'
-                              : row.status === 'lop'
-                                ? 'danger'
-                                : (row.status === 'half-day' || row.status === 'half_day')
-                                  ? 'info'
-                                  : row.status === 'short-hours'
-                                    ? 'danger'
-                                    : 'neutral'
-                        }
-                      >
-                        {row.status === 'present' || row.status === 'late'
-                          ? 'Present (Full Day)'
-                          : row.status === 'early-logout'
-                            ? 'Early Logout'
-                            : row.status === 'lop'
-                              ? 'Loss of Pay (LOP)'
-                              : (row.status === 'half-day' || row.status === 'half_day')
-                                ? 'Half Day (4h+)'
-                                : row.status === 'short-hours'
-                                  ? 'Short Hours (<4h)'
-                                  : row.status === 'on-leave'
-                                    ? 'On Leave'
-                                    : 'Absent'}
-                      </StatusBadge>
-                    </td>
-                  </tr>
-                ))
+                      </td>
+                      <td>
+                        {row.wifi !== '–' ? (
+                          <span className="wifi-verified-badge" style={{ fontSize: '9px', padding: '2px 6px' }}>
+                            <Wifi size={10} /> {row.wifi}
+                          </span>
+                        ) : (
+                          '–'
+                        )}
+                      </td>
+                      <td>
+                        <StatusBadge tone={statusInfo.tone}>
+                          {statusInfo.label}
+                        </StatusBadge>
+                      </td>
+                      <td>
+                        {lateInfo.count > 0 ? (
+                          <span style={{ fontSize: '11px', color: '#dc2626', fontWeight: 600 }}>
+                            #{lateInfo.count}{lateInfo.lopDays > 0 ? ` (${lateInfo.lopDays} LOP)` : ''}
+                          </span>
+                        ) : (
+                          <span style={{ color: 'var(--muted)', fontSize: '12px' }}>—</span>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })
               )}
             </tbody>
           </table>

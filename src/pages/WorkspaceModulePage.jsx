@@ -503,8 +503,8 @@ function AttendanceModule() {
               dailyAttendance.map((r) => {
                 const isInside = r.distanceMeters !== undefined && r.distanceMeters !== null ? r.distanceMeters <= maxGeofenceRadius : r.gpsVerified
                 const distText = r.distanceMeters !== undefined && r.distanceMeters !== null ? `${r.distanceMeters}m` : (r.wifiVerified ? `<${maxGeofenceRadius}m` : '—')
-                const statusInfo = getDailyAttendanceStatus(r)
-                const lateInfo = getLateCountInfo(r, storeState.attendance, selectedDate)
+                const statusInfo = getDailyAttendanceStatus(r, storeState.companySettings?.attendanceRules)
+                const lateInfo = getLateCountInfo(r, storeState.attendance, selectedDate, storeState.companySettings?.attendanceRules)
                 return (
                   <div
                     key={r.id}
@@ -577,7 +577,9 @@ function AttendanceModule() {
                       </div>
                       <div>
                         <span style={{ color: 'var(--muted)', display: 'block', fontSize: '10px' }}>Duration</span>
-                        <strong style={{ color: 'var(--teal)' }}>{r.totalHours || '—'}</strong>
+                        <strong style={{ color: 'var(--teal)' }}>
+                          {(!r.checkOut || (typeof r.totalHours === 'string' && r.totalHours.includes('Active'))) ? 'Active (Live)' : (r.totalHours || '—')}
+                        </strong>
                       </div>
                     </div>
 
@@ -754,7 +756,7 @@ function AttendanceModule() {
                   key: 'status',
                   label: 'Status',
                   render: (r) => {
-                    const statusInfo = getDailyAttendanceStatus(r)
+                    const statusInfo = getDailyAttendanceStatus(r, storeState.companySettings?.attendanceRules)
                     return (
                       <StatusBadge tone={statusInfo.tone}>
                         {statusInfo.label}
@@ -766,7 +768,7 @@ function AttendanceModule() {
                   key: 'lateCount',
                   label: 'Late Count',
                   render: (r) => {
-                    const { count, lopDays } = getLateCountInfo(r, storeState.attendance, selectedDate)
+                    const { count, lopDays } = getLateCountInfo(r, storeState.attendance, selectedDate, storeState.companySettings?.attendanceRules)
                     if (!count || count <= 0) {
                       return <span style={{ color: 'var(--muted)', fontSize: '12px' }}>—</span>
                     }

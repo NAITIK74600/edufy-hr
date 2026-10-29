@@ -669,13 +669,13 @@ export function createAttendanceService({ repository, companySettings = {} }) {
       const now = new Date()
       const checkInTime = formatCurrentTime()
 
-      // Authoritative policy punch-in: check attendanceRules first, then resolveEmployeeShift
+      // Dynamic policy punch-in: check active attendanceRules first, then fallback to resolveEmployeeShift
       let resolvedShiftConfig = null
       if (attendanceRules?.workStartTime && attendanceRules?.workEndTime) {
         const sMins = parseTimeToMinutes(attendanceRules.workStartTime)
         const eMins = parseTimeToMinutes(attendanceRules.workEndTime)
         const rawGrace = Number(attendanceRules.gracePeriodMinutes)
-        const gMins = Number.isFinite(rawGrace) && rawGrace >= 0 ? rawGrace : 15
+        const gMins = Number.isFinite(rawGrace) && rawGrace >= 0 ? rawGrace : 30
         if (sMins !== null && eMins !== null) {
           resolvedShiftConfig = normalizeShiftConfig({
             shiftId: 'GENERAL',
@@ -687,15 +687,20 @@ export function createAttendanceService({ repository, companySettings = {} }) {
             isOvernight: eMins < sMins,
             gracePeriodMinutes: gMins,
             graceCutoffMinutes: sMins + gMins,
-            halfDayCutoffMinutes: sMins + (gMins > 60 ? gMins : 60),
-            requiredCampusHours: 0,
-            requiredCampusMinutes: 0,
+            halfDayCutoffMinutes: sMins + Math.max(60, gMins + 15),
+            requiredCampusHours: 4,
+            requiredCampusMinutes: 240,
           })
         }
       }
+
       if (!resolvedShiftConfig) {
-        const resShift = await resolveEmployeeShift(employeeId, workDate)
-        resolvedShiftConfig = resShift?.shift
+        try {
+          const resShift = await resolveEmployeeShift(employeeId, workDate)
+          if (resShift?.shift) {
+            resolvedShiftConfig = resShift.shift
+          }
+        } catch {}
       }
 
       if (!resolvedShiftConfig) {
@@ -1151,6 +1156,18 @@ export function createAttendanceService({ repository, companySettings = {} }) {
           isAbsent: rec.status === 'absent',
         })
 
+        let recLateCount = 0
+        if (punchEval.isLate) {
+          try {
+            const monthKey = (rec.date || today).slice(0, 7)
+            const priorMonthRecords = await repository.list({ employeeId: rec.employeeId.toUpperCase(), month: monthKey })
+            const priorLates = (priorMonthRecords || []).filter(r => r.date < (rec.date || today) && (r.isLate || r.status === 'late')).length
+            recLateCount = priorLates + 1
+          } catch {
+            recLateCount = 1
+          }
+        }
+
         const isStillActive = !rec.checkOut
         const finalStatus = punchEval.status === 'half-day'
           ? 'half-day'
@@ -1165,6 +1182,7 @@ export function createAttendanceService({ repository, companySettings = {} }) {
           shift: shiftConfig.name,
           shiftCode: shiftConfig.shiftId.toLowerCase(),
           isLate: punchEval.isLate,
+          lateCount: recLateCount,
           isHalfDay: punchEval.isHalfDay || (checkoutEval ? checkoutEval.isCampusShortfall : false),
           status: finalStatus,
           isEarlyLogout: checkoutEval ? checkoutEval.isEarlyLogout : false,
