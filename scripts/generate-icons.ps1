@@ -47,3 +47,4 @@ function Create-PwaIcon($size, $outputPath, $isMaskable = $false) {
 Create-PwaIcon 192 "public\icon-192.png" $false
 Create-PwaIcon 512 "public\icon-512.png" $false
 Create-PwaIcon 512 "public\icon-maskable-512.png" $true
+
