@@ -271,7 +271,7 @@ export function resolveShift(options = {}) {
   }
 }
 
-export async function evaluateShiftLateness(checkInTime, employeeId = null, workDate = null) {
+export function evaluateShiftLateness(checkInTime, employeeId = null, workDate = null) {
   if (checkInTime && typeof checkInTime === 'object') {
     return {
       isLate: false,
@@ -281,44 +281,9 @@ export async function evaluateShiftLateness(checkInTime, employeeId = null, work
       status: 'present',
     }
   }
-  // Resolve the employee's shift, falling back to admin-configured shift timings if present.
-  let resolvedShift = null;
-  if (employeeId && workDate) {
-    try {
-      const { shift } = await resolveEmployeeShift(employeeId, workDate);
-      resolvedShift = shift;
-    } catch {
-      // fallback to standard definition on error
-    }
-  }
-  // If admin has overridden shift timing via attendanceRules, apply those overrides.
-  if (!resolvedShift && typeof service !== 'undefined' && service?.getConfig) {
-    const rules = service.getConfig().attendanceRules || {};
-    if (rules.workStartTime && rules.workEndTime) {
-      const startMins = parseTimeToMinutes(rules.workStartTime);
-      const endMins = parseTimeToMinutes(rules.workEndTime);
-      const graceMins = Number(rules.gracePeriodMinutes) || 0;
-      resolvedShift = {
-        shiftId: 'CUSTOM',
-        name: `Custom Shift (${rules.workStartTime} – ${rules.workEndTime})`,
-        startTime: rules.workStartTime,
-        endTime: rules.workEndTime,
-        startMinutes: startMins,
-        endMinutes: endMins,
-        isOvernight: endMins !== null && startMins !== null && endMins < startMins,
-        gracePeriodMinutes: graceMins,
-        graceCutoffMinutes: (startMins ?? 0) + graceMins,
-        halfDayCutoffMinutes: null,
-        earlyLogoutWindow: { startMinutes: null, endMinutes: null, startTime: null, endTime: null },
-        requiredCampusHours: 0,
-        requiredCampusMinutes: 0,
-        timezone: 'Asia/Kolkata',
-      };
-    }
-  }
   const evalResult = evaluatePunchIn({
     checkInTime,
-    shift: resolvedShift || STANDARD_SHIFT_DEF,
+    shift: STANDARD_SHIFT_DEF,
   });
   return {
     isLate: evalResult.isLate,
@@ -490,7 +455,7 @@ export function createAttendanceService({ repository, companySettings = {} }) {
       })
     }
 
-    const maxAllowedRadius = Number(attendanceRules.maxGeofenceRadiusMeters) || Number(nearestLocation?.radiusMeters) || 50
+    const maxAllowedRadius = Number(nearestLocation?.radiusMeters) || Number(attendanceRules.maxGeofenceRadiusMeters) || 50
     const hasGps = hasValidCoords && minDistance !== Infinity
     const numAccuracy = typeof accuracy === 'number' && Number.isFinite(accuracy) ? accuracy : null
     const accurateGps = numAccuracy !== null ? (numAccuracy >= 0 && numAccuracy <= 250) : true
@@ -704,9 +669,34 @@ export function createAttendanceService({ repository, companySettings = {} }) {
       const now = new Date()
       const checkInTime = formatCurrentTime()
 
-      // Authoritative policy punch-in: resolves employee shift & evaluates late login / half-day
-      const resShift = await resolveEmployeeShift(employeeId, workDate)
-      let resolvedShiftConfig = resShift?.shift
+      // Authoritative policy punch-in: check attendanceRules first, then resolveEmployeeShift
+      let resolvedShiftConfig = null
+      if (attendanceRules?.workStartTime && attendanceRules?.workEndTime) {
+        const sMins = parseTimeToMinutes(attendanceRules.workStartTime)
+        const eMins = parseTimeToMinutes(attendanceRules.workEndTime)
+        const rawGrace = Number(attendanceRules.gracePeriodMinutes)
+        const gMins = Number.isFinite(rawGrace) && rawGrace >= 0 ? rawGrace : 15
+        if (sMins !== null && eMins !== null) {
+          resolvedShiftConfig = normalizeShiftConfig({
+            shiftId: 'GENERAL',
+            name: `General (${formatMinutesToTime(sMins)} – ${formatMinutesToTime(eMins)})`,
+            startTime: formatMinutesToTime(sMins),
+            endTime: formatMinutesToTime(eMins),
+            startMinutes: sMins,
+            endMinutes: eMins,
+            isOvernight: eMins < sMins,
+            gracePeriodMinutes: gMins,
+            graceCutoffMinutes: sMins + gMins,
+            halfDayCutoffMinutes: sMins + (gMins > 60 ? gMins : 60),
+            requiredCampusHours: 0,
+            requiredCampusMinutes: 0,
+          })
+        }
+      }
+      if (!resolvedShiftConfig) {
+        const resShift = await resolveEmployeeShift(employeeId, workDate)
+        resolvedShiftConfig = resShift?.shift
+      }
 
       if (!resolvedShiftConfig) {
         if (shift && typeof shift === 'object' && shift.startMinutes) {
@@ -968,9 +958,12 @@ export function createAttendanceService({ repository, companySettings = {} }) {
 
       let finalStatus = existing.status || 'present'
       let finalHalfDay = Boolean(existing.isHalfDay)
-      if (checkoutEval.isCampusShortfall && verifiedDurationMinutes < (resolvedOutShift.requiredCampusMinutes || 240)) {
+      if (existing.isHalfDay || existing.status === 'half-day') {
         finalHalfDay = true
-        if (finalStatus === 'present') finalStatus = 'half-day'
+        finalStatus = 'half-day'
+      } else if (attendanceRules?.minCampusHours && checkoutEval.isCampusShortfall && verifiedDurationMinutes < (resolvedOutShift.requiredCampusMinutes || 240)) {
+        finalHalfDay = true
+        finalStatus = 'half-day'
       }
 
       const defaultReason = autoPunchOut ? 'Auto Punch Out (GPS & WiFi disconnected for 2 hrs)' : ''

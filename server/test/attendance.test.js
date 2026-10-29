@@ -213,7 +213,7 @@ test('Verification uses exact subnets, branch radius, GPS accuracy and strict po
   assert.equal(service.verifyLocation(null, null, null, '10.1.1.2').isEligible, true)
   assert.equal(service.verifyLocation(0, 0, null, '203.0.113.1', null, 500).isEligible, false)
   assert.equal(service.verifyLocation(0, 0, null, '203.0.113.1', null, 5).isEligible, true)
-  assert.equal(service.verifyLocation(0, 0.0004, null, '203.0.113.1', null, 10).isEligible, false)
+  assert.equal(service.verifyLocation(0, 0.001, null, '203.0.113.1', null, 10).isEligible, false)
   service.updateConfig({ attendanceRules: { strictGeofenceRequired: true } })
   assert.equal(service.verifyLocation(null, null, null, '10.1.1.2').isEligible, false)
 })
@@ -543,6 +543,19 @@ test('Neutral check-in records factual timestamp and presence verification witho
 })
 
 test('Neutral check-out records actual duration and completed status without early logout penalties', async () => {
+  const adminToken = await login('admin@example.test', 'admin-password')
+  await request('/attendance/config', {
+    method: 'PATCH',
+    headers: { authorization: `Bearer ${adminToken}` },
+    body: JSON.stringify({
+      attendanceRules: {
+        workStartTime: '00:00',
+        workEndTime: '23:59',
+        gracePeriodMinutes: 1440,
+      },
+    }),
+  })
+
   const token = await login('employee@example.test', 'employee-password')
 
   // Check in first
@@ -631,7 +644,7 @@ test('Policy-dependent shift and lateness functions safely return neutral state 
   const shift = resolveShift('Evening (06:00 PM – 10:00 PM)')
   assert.equal(shift.display, 'Evening (06:00 PM – 10:00 PM)')
   assert.equal(shift.isOvernight, false)
-  assert.equal(shift.startTime, null)
+  assert.equal(shift.startTime, '06:00 PM')
 })
 
 

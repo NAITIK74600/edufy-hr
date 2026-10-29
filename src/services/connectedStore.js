@@ -582,6 +582,27 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
       if (!user && rawLocal.addBranchLocation) return rawLocal.addBranchLocation(location)
       return mutate(() => apiClient.patch('/attendance/config', { locations: [...state().companySettings.locations, { ...location, id: crypto.randomUUID() }] }))
     },
+    updateBranchLocation(id, updates) {
+      if (!user && rawLocal.updateBranchLocation) return rawLocal.updateBranchLocation(id, updates)
+      return mutate(() => {
+        const config = state().companySettings || {}
+        const currentLocs = config.locations || []
+        const updatedLocs = currentLocs.map((loc) => {
+          if (loc.id === id || loc._id === id || loc.name === id) {
+            return { ...loc, ...updates }
+          }
+          return loc
+        })
+        const updatedSettings = {
+          ...config,
+          locations: updatedLocs,
+        }
+        state().companySettings = updatedSettings
+        if (rawLocal.getState) rawLocal.getState().companySettings = updatedSettings
+        notify()
+        return apiClient.patch('/attendance/config', { locations: updatedLocs })
+      })
+    },
     removeBranchLocation(id) {
       if (!user && rawLocal.removeBranchLocation) return rawLocal.removeBranchLocation(id)
       return mutate(() => {

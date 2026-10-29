@@ -4520,6 +4520,7 @@ function AdminSettingsModule({ user: propUser }) {
   const [branchCity, setBranchCity] = useState('')
   const [branchLatitude, setBranchLatitude] = useState('')
   const [branchLongitude, setBranchLongitude] = useState('')
+  const [branchRadius, setBranchRadius] = useState('50')
   const [holidayTitle, setHolidayTitle] = useState('')
   const [holidayDate, setHolidayDate] = useState('')
   const [detectingOfficeGps, setDetectingOfficeGps] = useState(false)
@@ -4528,6 +4529,28 @@ function AdminSettingsModule({ user: propUser }) {
   const [ipLoading, setIpLoading] = useState(true)
   const [newIpLabel, setNewIpLabel] = useState('')
   const [manualIp, setManualIp] = useState('')
+
+  // Section / Category Tab State
+  const [activeConfigTab, setActiveConfigTab] = useState('all') // 'all', 'campuses', 'networks', 'shifts', 'helpdesk', 'policies'
+
+  // Edit Campus Modal State
+  const [editingCampus, setEditingCampus] = useState(null)
+  const [editingName, setEditingName] = useState('')
+  const [editingCity, setEditingCity] = useState('')
+  const [editingRadius, setEditingRadius] = useState(50)
+  const [editingLat, setEditingLat] = useState('')
+  const [editingLng, setEditingLng] = useState('')
+  const [editingWifiSSID, setEditingWifiSSID] = useState('')
+  const [editingWifiBSSID, setEditingWifiBSSID] = useState('')
+  const [detectingEditGps, setDetectingEditGps] = useState(false)
+  const [campusSaving, setCampusSaving] = useState(false)
+
+  // Global Geofence Policy State
+  const initialRules = storeState.companySettings?.attendanceRules || {}
+  const [globalGeofenceRadius, setGlobalGeofenceRadius] = useState(initialRules.maxGeofenceRadiusMeters || 50)
+  const [strictGeofenceRequired, setStrictGeofenceRequired] = useState(initialRules.strictGeofenceRequired ?? true)
+  const [requireOfficeNetworkAndGps, setRequireOfficeNetworkAndGps] = useState(initialRules.requireOfficeNetworkAndGps ?? true)
+  const [globalGeofenceSaving, setGlobalGeofenceSaving] = useState(false)
 
 
   // Policy Form State
@@ -4579,6 +4602,9 @@ function AdminSettingsModule({ user: propUser }) {
       if (ar.workStartTime) setShiftStartTime(ar.workStartTime)
       if (ar.workEndTime) setShiftEndTime(ar.workEndTime)
       if (ar.gracePeriodMinutes !== undefined) setShiftGracePeriod(ar.gracePeriodMinutes)
+      if (ar.maxGeofenceRadiusMeters !== undefined) setGlobalGeofenceRadius(ar.maxGeofenceRadiusMeters)
+      if (ar.strictGeofenceRequired !== undefined) setStrictGeofenceRequired(ar.strictGeofenceRequired)
+      if (ar.requireOfficeNetworkAndGps !== undefined) setRequireOfficeNetworkAndGps(ar.requireOfficeNetworkAndGps)
     }
     // Sync help desk fields
     const hd = storeState.companySettings?.helpDeskSettings
@@ -4727,14 +4753,118 @@ function AdminSettingsModule({ user: propUser }) {
     e.preventDefault()
     if (!branchName.trim() || !branchCity.trim()) return
     if (branchLatitude === '' || branchLongitude === '' || !Number.isFinite(Number(branchLatitude)) || !Number.isFinite(Number(branchLongitude))) throw new Error('Enter the actual office latitude and longitude.')
-    await hrStore.addBranchLocation({ name: branchName.trim(), city: branchCity.trim(), lat: Number(branchLatitude), lng: Number(branchLongitude), radiusMeters: Number(geofenceRadius) || 30 })
+    const radiusNum = Number(branchRadius) || 50
+    await hrStore.addBranchLocation({ name: branchName.trim(), city: branchCity.trim(), lat: Number(branchLatitude), lng: Number(branchLongitude), radiusMeters: radiusNum })
     setBranchName('')
     setBranchCity('')
     setBranchLatitude('')
     setBranchLongitude('')
-    setNotice('Added office branch location with GPS geofence!')
-    setTimeout(() => setNotice(''), 3500)
+    setBranchRadius('50')
+    setNotice(`✓ Added office campus "${branchName.trim()}" with ${radiusNum}m geofence radius!`)
+    setTimeout(() => setNotice(''), 4500)
   })
+
+  const handleStartEditCampus = (loc) => {
+    setEditingCampus(loc)
+    setEditingName(loc.name || '')
+    setEditingCity(loc.city || '')
+    setEditingRadius(loc.radiusMeters || 50)
+    setEditingLat(loc.lat !== undefined && loc.lat !== null ? String(loc.lat) : '')
+    setEditingLng(loc.lng !== undefined && loc.lng !== null ? String(loc.lng) : '')
+    setEditingWifiSSID('')
+    setEditingWifiBSSID('')
+  }
+
+  const handleSaveCampusEdit = async (e) => {
+    e.preventDefault()
+    if (!editingCampus) return
+    const latNum = Number(editingLat)
+    const lngNum = Number(editingLng)
+    const radiusNum = Number(editingRadius) || 50
+
+    if (editingLat !== '' && editingLng !== '' && (!Number.isFinite(latNum) || !Number.isFinite(lngNum))) {
+      setNotice('✕ Please enter valid decimal numbers for latitude and longitude.')
+      setTimeout(() => setNotice(''), 4500)
+      return
+    }
+
+    setCampusSaving(true)
+    try {
+      const campusId = editingCampus.id || editingCampus._id || editingCampus.name
+      const updates = {
+        name: editingName.trim() || editingCampus.name,
+        city: editingCity.trim() || editingCampus.city,
+        radiusMeters: radiusNum,
+        lat: Number.isFinite(latNum) ? latNum : editingCampus.lat,
+        lng: Number.isFinite(lngNum) ? lngNum : editingCampus.lng,
+      }
+
+      await hrStore.updateBranchLocation(campusId, updates)
+
+      // If a new Wi-Fi SSID was provided for this campus, register it too
+      if (editingWifiSSID.trim()) {
+        const bssid = editingWifiBSSID.trim().toUpperCase()
+        await hrStore.addWifiSSID(editingWifiSSID.trim(), updates.name, 'Admin', {
+          bssid: bssid || null,
+          securityType: 'WPA2-Enterprise',
+        })
+      }
+
+      setNotice(`✓ Updated campus "${updates.name}"! Geofence radius: ${radiusNum}m, Coordinates: ${updates.lat}, ${updates.lng}.`)
+      setTimeout(() => setNotice(''), 5500)
+      setEditingCampus(null)
+    } catch (err) {
+      setNotice(`✕ Failed to update campus: ${err.message || 'Please try again.'}`)
+      setTimeout(() => setNotice(''), 5500)
+    } finally {
+      setCampusSaving(false)
+    }
+  }
+
+  const handleDetectEditCoords = () => {
+    if (typeof navigator === 'undefined' || !navigator.geolocation) {
+      setNotice('✕ Geolocation not supported by this browser.')
+      setTimeout(() => setNotice(''), 4000)
+      return
+    }
+    setDetectingEditGps(true)
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setEditingLat(pos.coords.latitude.toFixed(6))
+        setEditingLng(pos.coords.longitude.toFixed(6))
+        setDetectingEditGps(false)
+        setNotice(`📍 Captured live coordinates: ${pos.coords.latitude.toFixed(6)}, ${pos.coords.longitude.toFixed(6)}`)
+        setTimeout(() => setNotice(''), 4000)
+      },
+      (err) => {
+        setDetectingEditGps(false)
+        setNotice(`✕ Could not get location: ${err.message}`)
+        setTimeout(() => setNotice(''), 4500)
+      },
+      { enableHighAccuracy: true, timeout: 8000 }
+    )
+  }
+
+  const handleSaveGlobalGeofence = async (e) => {
+    e.preventDefault()
+    setGlobalGeofenceSaving(true)
+    try {
+      await hrStore.updateCompanySettings({
+        attendanceRules: {
+          maxGeofenceRadiusMeters: Number(globalGeofenceRadius) || 50,
+          strictGeofenceRequired: Boolean(strictGeofenceRequired),
+          requireOfficeNetworkAndGps: Boolean(requireOfficeNetworkAndGps),
+        },
+      })
+      setNotice(`✓ Global geofence rules saved! Standard radius: ${globalGeofenceRadius}m, Strict: ${strictGeofenceRequired ? 'ON' : 'OFF'}`)
+      setTimeout(() => setNotice(''), 5000)
+    } catch (err) {
+      setNotice(`✕ Failed to save geofence rules: ${err.message}`)
+      setTimeout(() => setNotice(''), 5000)
+    } finally {
+      setGlobalGeofenceSaving(false)
+    }
+  }
 
   const handleAutoDetectOfficeCoords = () => {
     if (typeof navigator === 'undefined' || !navigator.geolocation) {
@@ -4893,736 +5023,1304 @@ function AdminSettingsModule({ user: propUser }) {
         </div>
       )}
 
-      {/* ANNUAL LEAVE ALLOWANCES & APPROVAL RULES */}
-      <section className="panel" style={{ borderLeft: '4px solid var(--teal)' }}>
-        <div className="panel-heading">
-          <div>
-            <p className="section-kicker">Operating Policies</p>
-            <h2>Annual Leave Quotas & Approval Rules</h2>
-          </div>
-          <span className="role-badge" style={{ fontSize: '10px' }}>Global Defaults</span>
-        </div>
-        <p style={{ fontSize: '12px', color: 'var(--muted)', margin: '8px 0 16px' }}>
-          Define enterprise-wide annual employee paid leave entitlements and multi-tier approval workflows. Shift timing restrictions and late login penalties are currently disabled.
-        </p>
-
-        <form onSubmit={handleSavePolicies}>
-          <div style={{ maxWidth: '720px', marginBottom: '16px' }}>
-            {/* ANNUAL LEAVE ALLOWANCES & APPROVAL RULES */}
-            <div style={{ background: '#faf9f5', border: '1px solid var(--line)', borderRadius: '8px', padding: '16px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                <strong style={{ fontSize: '13.5px' }}>Annual Leave Quotas & Approval Rules</strong>
-                <a href="#/admin/leave" style={{ fontSize: '11px', color: 'var(--teal)', textDecoration: 'none', fontWeight: 600 }}>
-                  Advanced Leave Engine →
-                </a>
-              </div>
-              <div style={{ display: 'grid', gap: '10px' }}>
-                <div>
-                  <label style={{ fontSize: '11px', display: 'block', color: 'var(--muted)', marginBottom: '3px' }}>Casual Leave (CL) Quota / Year</label>
-                  <input
-                    type="number"
-                    min="0"
-                    max="60"
-                    className="text-input"
-                    value={casualQuota}
-                    onChange={(e) => setCasualQuota(e.target.value)}
-                    style={{ width: '100%', padding: '5px 8px', fontSize: '12px' }}
-                    required
-                  />
-                </div>
-                <div>
-                  <label style={{ fontSize: '11px', display: 'block', color: 'var(--muted)', marginBottom: '3px' }}>Sick Leave (SL) Quota / Year</label>
-                  <input
-                    type="number"
-                    min="0"
-                    max="60"
-                    className="text-input"
-                    value={sickQuota}
-                    onChange={(e) => setSickQuota(e.target.value)}
-                    style={{ width: '100%', padding: '5px 8px', fontSize: '12px' }}
-                    required
-                  />
-                </div>
-                <div>
-                  <label style={{ fontSize: '11px', display: 'block', color: 'var(--muted)', marginBottom: '3px' }}>Earned / Paid Leave (EL/PL) Quota / Year</label>
-                  <input
-                    type="number"
-                    min="0"
-                    max="60"
-                    className="text-input"
-                    value={earnedQuota}
-                    onChange={(e) => setEarnedQuota(e.target.value)}
-                    style={{ width: '100%', padding: '5px 8px', fontSize: '12px' }}
-                    required
-                  />
-                </div>
-                <div>
-                  <label style={{ fontSize: '11px', display: 'block', color: 'var(--muted)', marginBottom: '3px' }}>Max Carry-Forward Days to Next Year</label>
-                  <input
-                    type="number"
-                    min="0"
-                    max="30"
-                    className="text-input"
-                    value={maxCarry}
-                    onChange={(e) => setMaxCarry(e.target.value)}
-                    style={{ width: '100%', padding: '5px 8px', fontSize: '12px' }}
-                    required
-                  />
-                </div>
-                <div>
-                  <label style={{ fontSize: '11px', display: 'block', color: 'var(--muted)', marginBottom: '3px' }}>Leave Approval Workflow</label>
-                  <select
-                    className="text-input"
-                    value={approvalWorkflow}
-                    onChange={(e) => setApprovalWorkflow(e.target.value)}
-                    style={{ width: '100%', padding: '5px 8px', fontSize: '12px', background: '#fff' }}
-                  >
-                    <option value="manager_hr">Assigned Manager then HR Review</option>
-                    <option value="manager">Assigned Manager Review Only</option>
-                    <option value="hr">HR Operations Review Only</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', alignItems: 'center' }}>
+      {/* CATEGORY NAVIGATION TABS */}
+      <div
+        style={{
+          display: 'flex',
+          gap: '8px',
+          overflowX: 'auto',
+          paddingBottom: '4px',
+          borderBottom: '2px solid var(--line, #e2e8f0)',
+          marginBottom: '16px',
+        }}
+      >
+        {[
+          { id: 'all', label: 'All Settings', icon: Globe },
+          { id: 'campuses', label: `Campuses & Geofencing (${locations.length})`, icon: MapPin },
+          { id: 'networks', label: `Office Networks & Wi-Fi (${wifiList.length})`, icon: Wifi },
+          { id: 'shifts', label: 'Shift Timings & Grace', icon: Clock },
+          { id: 'helpdesk', label: 'Help Desk Routing', icon: Mail },
+          { id: 'policies', label: 'Leave Quotas & Holidays', icon: Calendar },
+        ].map((tab) => {
+          const Icon = tab.icon
+          const isActive = activeConfigTab === tab.id
+          return (
             <button
+              key={tab.id}
               type="button"
-              className="btn btn-secondary"
-              disabled={recalculating}
-              onClick={handleRecalculateAttendance}
+              onClick={() => setActiveConfigTab(tab.id)}
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
-                gap: '6px',
-                padding: '8px 14px',
-                fontSize: '12px',
-                fontWeight: 600,
-                background: '#fef3c7',
-                border: '1px solid #fde68a',
-                color: '#92400e',
-                borderRadius: '8px',
-                cursor: recalculating ? 'wait' : 'pointer',
+                gap: '8px',
+                padding: '10px 18px',
+                fontSize: '13px',
+                fontWeight: isActive ? 700 : 500,
+                borderRadius: '8px 8px 0 0',
+                border: 'none',
+                borderBottom: isActive ? '3px solid var(--teal, #006e6f)' : '3px solid transparent',
+                backgroundColor: isActive ? 'rgba(0, 110, 111, 0.08)' : 'transparent',
+                color: isActive ? 'var(--teal, #006e6f)' : 'var(--muted, #586D72)',
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+                transition: 'all 0.15s ease',
               }}
             >
-              <span>⚡</span> {recalculating ? "Recalculating Roster..." : "Recalculate Today's Attendance"}
+              <Icon size={15} />
+              <span>{tab.label}</span>
             </button>
-            <Button type="submit">
-              <Check size={13} /> Save Organization Policies
-            </Button>
-          </div>
-        </form>
-      </section>
+          )
+        })}
+      </div>
 
-      {/* SHIFT MANAGEMENT — Work Timings & Grace Period */}
-      <section className="panel" style={{ borderLeft: '4px solid #6366f1' }}>
-        <div className="panel-heading">
-          <div>
-            <p className="section-kicker">Attendance Policy</p>
-            <h2>Shift Timing & Grace Period</h2>
-          </div>
-          <span className="role-badge" style={{ fontSize: '10px', background: shiftStartTime && shiftEndTime ? '#dcfce7' : '#fef3c7', color: shiftStartTime && shiftEndTime ? '#166534' : '#92400e' }}>
-            {shiftStartTime && shiftEndTime ? '✓ Configured' : '⚠ Not Set'}
-          </span>
-        </div>
-        <p style={{ fontSize: '12px', color: 'var(--muted)', margin: '8px 0 16px' }}>
-          Configure the default work shift timings for all employees. Attendance will be marked as <strong>Late</strong> if an employee punches in after the Work Start Time + Grace Period. These settings apply to all employees who do not have a specific shift assignment.
-        </p>
-
-        <form onSubmit={handleSaveShiftSettings}>
-          <div style={{ maxWidth: '720px', marginBottom: '16px' }}>
-            <div style={{ background: '#f5f3ff', border: '1px solid #e0e7ff', borderRadius: '8px', padding: '16px' }}>
-              <strong style={{ fontSize: '13.5px', display: 'block', marginBottom: '12px' }}>Default Shift Configuration</strong>
-              <div style={{ display: 'grid', gap: '12px', gridTemplateColumns: '1fr 1fr' }}>
-                <div>
-                  <label style={{ fontSize: '11px', display: 'block', color: 'var(--muted)', marginBottom: '3px' }}>Work Start Time</label>
-                  <input
-                    type="time"
-                    className="text-input"
-                    value={shiftStartTime}
-                    onChange={(e) => setShiftStartTime(e.target.value)}
-                    style={{ width: '100%', padding: '8px 10px', fontSize: '13px' }}
-                    required
-                  />
-                  <span style={{ fontSize: '10px', color: 'var(--muted)', marginTop: '2px', display: 'block' }}>
-                    {shiftStartTime ? `Set to ${shiftStartTime}` : 'e.g. 09:00 for 9:00 AM'}
-                  </span>
-                </div>
-                <div>
-                  <label style={{ fontSize: '11px', display: 'block', color: 'var(--muted)', marginBottom: '3px' }}>Work End Time</label>
-                  <input
-                    type="time"
-                    className="text-input"
-                    value={shiftEndTime}
-                    onChange={(e) => setShiftEndTime(e.target.value)}
-                    style={{ width: '100%', padding: '8px 10px', fontSize: '13px' }}
-                    required
-                  />
-                  <span style={{ fontSize: '10px', color: 'var(--muted)', marginTop: '2px', display: 'block' }}>
-                    {shiftEndTime ? `Set to ${shiftEndTime}` : 'e.g. 18:00 for 6:00 PM'}
-                  </span>
-                </div>
-              </div>
-              <div style={{ marginTop: '12px' }}>
-                <label style={{ fontSize: '11px', display: 'block', color: 'var(--muted)', marginBottom: '3px' }}>Grace Period (minutes)</label>
-                <input
-                  type="number"
-                  min="0"
-                  max="120"
-                  className="text-input"
-                  value={shiftGracePeriod}
-                  onChange={(e) => setShiftGracePeriod(e.target.value)}
-                  style={{ width: '120px', padding: '8px 10px', fontSize: '13px' }}
-                />
-                <span style={{ fontSize: '10px', color: 'var(--muted)', marginTop: '2px', display: 'block' }}>
-                  Employees arriving within {shiftGracePeriod || 0} minute(s) after start time will NOT be marked late.
-                </span>
-              </div>
-              {shiftStartTime && shiftEndTime && (
-                <div style={{ marginTop: '14px', padding: '10px 12px', background: '#ede9fe', borderRadius: '6px', fontSize: '12px', color: '#4c1d95' }}>
-                  <strong>Preview:</strong> Shift {shiftStartTime} – {shiftEndTime} | Late after {shiftStartTime ? (() => {
-                    const [h, m] = shiftStartTime.split(':').map(Number);
-                    const total = h * 60 + m + (Number(shiftGracePeriod) || 0);
-                    const newH = Math.floor(total / 60) % 24;
-                    const newM = total % 60;
-                    return `${String(newH).padStart(2, '0')}:${String(newM).padStart(2, '0')}`;
-                  })() : '--:--'} ({shiftGracePeriod || 0} min grace)
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', alignItems: 'center' }}>
-            <Button type="submit" disabled={shiftSaving}>
-              <Check size={13} /> {shiftSaving ? 'Saving Shift...' : 'Save Shift Settings'}
-            </Button>
-          </div>
-        </form>
-      </section>
-
-      {/* HELP DESK & SUPPORT TICKET CONFIGURATION */}
-      <section className="panel" style={{ borderLeft: '4px solid #0284c7' }}>
-        <div className="panel-heading">
-          <div>
-            <p className="section-kicker">Support Infrastructure</p>
-            <h2>Help Desk Configuration & Ticket Routing</h2>
-          </div>
-          <span className="role-badge" style={{ fontSize: '10px', background: '#e0f2fe', color: '#0369a1', border: '1px solid #bae6fd' }}>
-            Multi-Tier SLA Engine
-          </span>
-        </div>
-        <p style={{ fontSize: '12px', color: 'var(--muted)', margin: '8px 0 16px' }}>
-          Configure enterprise support ticket routing emails, manager escalation protocols, and automated notification triggers for employee IT, HR, Payroll, and Facilities requests.
-        </p>
-
-        <form onSubmit={handleSaveHelpDeskSettings}>
-          <div style={{ maxWidth: '720px', marginBottom: '16px' }}>
-            <div style={{ background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: '8px', padding: '16px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                <strong style={{ fontSize: '13.5px', color: '#0369a1' }}>Department Support Routing Emails</strong>
-                <a href="#/admin/helpdesk" style={{ fontSize: '11px', color: '#0284c7', textDecoration: 'none', fontWeight: 600 }}>
-                  View Help Desk Queue →
-                </a>
-              </div>
-
-              <div style={{ display: 'grid', gap: '16px' }}>
-                {/* 1. IT Support Dedicated Assignment */}
-                <div style={{ background: '#fff', border: '1px solid #bfdbfe', borderRadius: '8px', padding: '14px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                    <span style={{ background: '#0284c7', color: '#fff', fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '4px' }}>IT CHANNEL</span>
-                    <strong style={{ fontSize: '13px', color: '#0f172a' }}>Dedicated IT Support Assignment</strong>
-                  </div>
-                  
-                  <label style={{ fontSize: '11.5px', display: 'block', color: 'var(--muted)', marginBottom: '5px', fontWeight: 600 }}>
-                    Select Support Employee for IT Issues (All hardware & IT tickets route to this person):
-                  </label>
-                  <select
-                    className="select-control"
-                    value={itSupportEmployeeId}
-                    onChange={(e) => {
-                      const selId = e.target.value
-                      setItSupportEmployeeId(selId)
-                      const emp = (storeState.employees || []).find((x) => String(x.id || x._id || x.employeeId) === selId)
-                      if (emp) {
-                        setItSupportEmployeeName(emp.name || emp.displayName || '')
-                        setItSupportEmployeeEmail(emp.email || '')
-                      } else {
-                        setItSupportEmployeeName('')
-                        setItSupportEmployeeEmail('')
-                      }
-                    }}
-                    style={{ width: '100%', padding: '8px 10px', fontSize: '12.5px', borderRadius: '6px', border: '1px solid #cbd5e1', marginBottom: '8px' }}
-                  >
-                    <option value="">-- Choose Dedicated IT Support Employee from Staff List --</option>
-                    {(storeState.employees || []).map((emp) => (
-                      <option key={emp.id || emp._id} value={String(emp.id || emp._id || emp.employeeId)}>
-                        {emp.name} ({emp.employeeId || 'STAFF'}) — {emp.designation || emp.department || 'General'}
-                      </option>
-                    ))}
-                  </select>
-
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', fontSize: '11px', background: '#f8fafc', padding: '8px 12px', borderRadius: '6px' }}>
-                    <div>
-                      <span style={{ color: 'var(--muted)' }}>Assigned Employee:</span>{' '}
-                      <strong>{itSupportEmployeeName ? `${itSupportEmployeeName} (${itSupportEmployeeEmail || 'No email'})` : 'None selected'}</strong>
-                    </div>
-                    <div>
-                      <span style={{ color: 'var(--muted)' }}>Dispatch SMTP Address:</span>{' '}
-                      <strong style={{ color: '#0284c7' }}>{itSupportEmail || 'itsupport@edufyitech.in'}</strong>
-                    </div>
-                  </div>
-                  <span style={{ fontSize: '10.5px', color: 'var(--muted)', marginTop: '6px', display: 'block' }}>
-                    When an employee submits an IT inquiry, it arrives on <strong>itsupport@edufyitech.in</strong> and directly in this employee&apos;s portal queue. When resolved, an email response is sent from <strong>itsupport@edufyitech.in</strong> to the requester.
-                  </span>
-                </div>
-
-                {/* 2. General Support Assignment (HR, Payroll, Facilities) */}
-                <div style={{ background: '#fff', border: '1px solid #bbf7d0', borderRadius: '8px', padding: '14px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                    <span style={{ background: '#16a34a', color: '#fff', fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '4px' }}>GENERAL SUPPORT</span>
-                    <strong style={{ fontSize: '13px', color: '#0f172a' }}>HR, Payroll &amp; Facilities Assignment</strong>
-                  </div>
-
-                  <label style={{ fontSize: '11.5px', display: 'block', color: 'var(--muted)', marginBottom: '5px', fontWeight: 600 }}>
-                    Select Support Employee for HR, Payroll &amp; Facilities:
-                  </label>
-                  <select
-                    className="select-control"
-                    value={generalSupportEmployeeId}
-                    onChange={(e) => {
-                      const selId = e.target.value
-                      setGeneralSupportEmployeeId(selId)
-                      const emp = (storeState.employees || []).find((x) => String(x.id || x._id || x.employeeId) === selId)
-                      if (emp) {
-                        setGeneralSupportEmployeeName(emp.name || emp.displayName || '')
-                        setGeneralSupportEmployeeEmail(emp.email || '')
-                      } else {
-                        setGeneralSupportEmployeeName('')
-                        setGeneralSupportEmployeeEmail('')
-                      }
-                    }}
-                    style={{ width: '100%', padding: '8px 10px', fontSize: '12.5px', borderRadius: '6px', border: '1px solid #cbd5e1', marginBottom: '8px' }}
-                  >
-                    <option value="">-- Choose Dedicated General Support Employee from Staff List --</option>
-                    {(storeState.employees || []).map((emp) => (
-                      <option key={emp.id || emp._id} value={String(emp.id || emp._id || emp.employeeId)}>
-                        {emp.name} ({emp.employeeId || 'STAFF'}) — {emp.designation || emp.department || 'General'}
-                      </option>
-                    ))}
-                  </select>
-
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', fontSize: '11px', background: '#f8fafc', padding: '8px 12px', borderRadius: '6px' }}>
-                    <div>
-                      <span style={{ color: 'var(--muted)' }}>Assigned Employee:</span>{' '}
-                      <strong>{generalSupportEmployeeName ? `${generalSupportEmployeeName} (${generalSupportEmployeeEmail || 'No email'})` : 'None selected'}</strong>
-                    </div>
-                    <div>
-                      <span style={{ color: 'var(--muted)' }}>Unified Gateway Address:</span>{' '}
-                      <strong style={{ color: '#16a34a' }}>{generalSupportEmail || 'helpsupport@edufyitechsolution.in'}</strong>
-                    </div>
-                  </div>
-                  <span style={{ fontSize: '10.5px', color: 'var(--muted)', marginTop: '6px', display: 'block' }}>
-                    All HR Policies, Payroll, and Facilities tickets are routed to this employee and dispatched via the unified <strong>helpsupport@edufyitechsolution.in</strong> gateway.
-                  </span>
-                </div>
-
-                <div style={{ borderTop: '1px solid #e0f2fe', paddingTop: '12px', marginTop: '4px' }}>
-                  <strong style={{ fontSize: '12.5px', color: '#0369a1', display: 'block', marginBottom: '10px' }}>
-                    Ticket Workflow & Automation Rules
-                  </strong>
-                  <div style={{ display: 'grid', gap: '10px' }}>
-                    <div>
-                      <label style={{ fontSize: '11px', display: 'block', color: 'var(--muted)', marginBottom: '3px' }}>
-                        Default Ticket Priority
-                      </label>
-                      <select
-                        className="text-input"
-                        value={defaultPriority}
-                        onChange={(e) => setDefaultPriority(e.target.value)}
-                        style={{ width: '100%', padding: '6px 10px', fontSize: '12px', background: '#fff' }}
-                      >
-                        <option value="Low">Low — Non-urgent query</option>
-                        <option value="Medium">Medium — Standard SLA (24 hrs)</option>
-                        <option value="High">High — Critical blocker</option>
-                        <option value="Urgent">Urgent — Immediate intervention</option>
-                      </select>
-                    </div>
-
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <input
-                        type="checkbox"
-                        id="autoAssignManager"
-                        checked={autoAssignToManager}
-                        onChange={(e) => setAutoAssignToManager(e.target.checked)}
-                        style={{ cursor: 'pointer' }}
-                      />
-                      <label htmlFor="autoAssignManager" style={{ fontSize: '12px', cursor: 'pointer' }}>
-                        Auto-assign & notify direct reporting manager when employee raises a ticket
-                      </label>
-                    </div>
-
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <input
-                        type="checkbox"
-                        id="emailNotifs"
-                        checked={emailNotificationsEnabled}
-                        onChange={(e) => setEmailNotificationsEnabled(e.target.checked)}
-                        style={{ cursor: 'pointer' }}
-                      />
-                      <label htmlFor="emailNotifs" style={{ fontSize: '12px', cursor: 'pointer' }}>
-                        Enable automatic email notifications for ticket status transitions and replies
-                      </label>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', alignItems: 'center' }}>
-            <Button type="submit" disabled={helpDeskSaving}>
-              <Check size={13} /> {helpDeskSaving ? 'Saving Help Desk...' : 'Save Help Desk Settings'}
-            </Button>
-          </div>
-        </form>
-      </section>
-
-      {/* OFFICE NETWORK (PUBLIC IP) — REAL WI-FI VERIFICATION */}
-      <section className="panel">
-        <div className="panel-heading">
-          <div>
-            <p className="section-kicker">Geofencing & Network</p>
-            <h2>Office Network Verification ({officeNetworkIPs.length})</h2>
-          </div>
-          <StatusBadge tone={officeNetworkIPs.length ? 'success' : 'warning'}>
-            {officeNetworkIPs.length ? 'Live' : 'Not configured'}
-          </StatusBadge>
-        </div>
-        <p style={{ fontSize: '12px', color: 'var(--muted)', margin: '8px 0 14px' }}>
-          <strong>Understanding Office Wi-Fi & Gateway IPs:</strong> On any local office Wi-Fi router, each device (phones, laptops, tablets) receives a unique device IP where only the last digits differ (e.g. <code>192.168.1.15</code> vs <code>192.168.1.18</code>), but all share the exact same <strong>gateway subnet (/24)</strong>. Registering your office Wi-Fi subnet (e.g. <code>192.168.1.0/24</code>) or exact IP authorizes all employees connected to this router.
-        </p>
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '12px', marginBottom: '16px' }}>
-          {/* Quick register current egress IP or Subnet */}
-          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-end', gap: '10px', background: '#f5f8f7', border: '1px solid rgba(29, 138, 122, 0.25)', borderRadius: '8px', padding: '12px' }}>
-            <div style={{ display: 'grid', gap: '3px' }}>
-              <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--muted)' }}>CURRENT DEVICE IP</span>
-              <strong style={{ fontFamily: 'monospace', fontSize: '14px' }}>{ipLoading ? 'Detecting…' : (myPublicIp || 'Unavailable')}</strong>
-              {mySubnet && (
-                <span style={{ fontSize: '10px', color: 'var(--teal)', fontWeight: 600 }}>
-                  Gateway Subnet: {mySubnet}
-                </span>
-              )}
-            </div>
-            <button type="button" className="ui-button secondary" onClick={handleRefreshMyIP} disabled={ipLoading} style={{ height: '34px', fontSize: '11px' }}>
-              <RefreshCw size={12} className={ipLoading ? 'animate-spin' : ''} /> Re-check
-            </button>
-            <div style={{ display: 'grid', gap: '3px', flex: 1, minWidth: '130px' }}>
-              <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--muted)' }}>LABEL</span>
-              <input
-                value={newIpLabel}
-                onChange={(e) => setNewIpLabel(e.target.value)}
-                placeholder="e.g. Office Gateway Subnet"
-                style={{ padding: '6px 8px', fontSize: '11px', borderRadius: '6px', border: '1px solid var(--line)', background: '#fff' }}
-              />
-            </div>
-            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-              {mySubnet && (
-                <button
-                  type="button"
-                  className="ui-button primary"
-                  onClick={handleRegisterSubnet}
-                  disabled={ipLoading || !mySubnet}
-                  title="Authorizes all phones, laptops, and devices on this Wi-Fi router (recommended)"
-                  style={{ height: '34px', fontSize: '11px' }}
-                >
-                  <Plus size={12} /> Register Wi-Fi Subnet ({mySubnet})
-                </button>
-              )}
-              <button
-                type="button"
-                className="ui-button secondary"
-                onClick={handleRegisterCurrentIP}
-                disabled={ipLoading || !myPublicIp}
-                title="Authorizes this exact IP address"
-                style={{ height: '34px', fontSize: '11px' }}
-              >
-                Register Exact IP
-              </button>
-            </div>
-          </div>
-
-          {/* Manual IP or CIDR Subnet registration */}
-          <form onSubmit={handleRegisterManualIP} style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-end', gap: '10px', background: '#faf9f5', border: '1px solid var(--line)', borderRadius: '8px', padding: '12px' }}>
-            <div style={{ display: 'grid', gap: '3px', flex: 1, minWidth: '150px' }}>
-              <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--muted)' }}>MANUAL OFFICE IP / CIDR / WILDCARD</span>
-              <input
-                value={manualIp}
-                onChange={(e) => setManualIp(e.target.value)}
-                placeholder="e.g. 192.168.1.0/24 or 192.168.1.* or 203.0.113.10"
-                style={{ padding: '6px 8px', fontSize: '11px', borderRadius: '6px', border: '1px solid var(--line)', background: '#fff', fontFamily: 'monospace' }}
-                required
-              />
-            </div>
-            <button type="submit" className="ui-button secondary" disabled={!manualIp.trim()} style={{ height: '34px', fontSize: '11px' }}>
-              <Plus size={12} /> Add IP / Subnet
-            </button>
-          </form>
-        </div>
-
-        {officeNetworkIPs.length === 0 ? (
-          <div style={{ fontSize: '12px', color: '#92400e', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '8px', padding: '10px 12px' }}>
-            No office networks registered yet. Connect to your office Wi-Fi and click “Register this network”. Until then, attendance relies on the GPS geofence only.
-          </div>
-        ) : (
-          <div style={{ display: 'grid', gap: '8px' }}>
-            {officeNetworkIPs.map((entry) => (
-              <div key={entry.ip} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', background: '#faf9f5', border: '1px solid var(--line)', borderRadius: '8px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <Wifi size={15} color="var(--teal)" />
-                  <div>
-                    <strong style={{ fontSize: '13px', fontFamily: 'monospace' }}>{entry.ip}</strong>
-                    <div style={{ fontSize: '10px', color: 'var(--muted)', marginTop: '2px' }}>
-                      {entry.label || 'Office Network'} • added {entry.addedAt || '—'}{myPublicIp === entry.ip ? ' • this is your current network' : ''}
-                    </div>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  className="icon-button"
-                  onClick={storeAction(() => hrStore.removeOfficeNetworkIP(entry.ip, 'Admin'))}
-                  title="Remove office network"
-                  style={{ color: '#cb3a31' }}
-                >
-                  <Trash2 size={13} />
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
-
-      {/* WI-FI SSID SETUP & BRANCH LINKING */}
-      <section className="dashboard-grid">
-        <div className="panel">
+      {/* 1. CAMPUSES & GEOFENCING SECTION */}
+      {(activeConfigTab === 'all' || activeConfigTab === 'campuses') && (
+        <section className="panel" style={{ borderLeft: '4px solid #0d9488' }}>
           <div className="panel-heading">
             <div>
-              <p className="section-kicker">Geofencing & Network</p>
-              <h2>Verified Office Wi-Fi Networks ({wifiList.length})</h2>
+              <p className="section-kicker">Geofence & Centers</p>
+              <h2>Office Campuses & Geofence Centers ({locations.length})</h2>
             </div>
-            <StatusBadge tone="success">Active for All Employees</StatusBadge>
+            <StatusBadge tone={locations.length ? 'success' : 'warning'}>
+              {locations.length ? `${locations.length} Active Campuses` : 'No Campus'}
+            </StatusBadge>
           </div>
-          <p style={{ fontSize: '12px', color: 'var(--muted)', margin: '8px 0 14px' }}>
-            Register the office network IP and actual office GPS coordinates. Browsers cannot read router SSID or BSSID; these names are descriptive metadata, not authentication. Strict punch-in requires both network and GPS checks.
+          <p style={{ fontSize: '12px', color: 'var(--muted)', margin: '8px 0 16px' }}>
+            Manage separate geofence perimeters, GPS coordinates, and assigned Wi-Fi routers for each office campus. When employees punch in, their GPS distance is verified against their campus radius.
           </p>
 
-          {/* ACTIVE WI-FI REGISTRY LIST */}
-          <div style={{ display: 'grid', gap: '8px', marginBottom: '16px' }}>
-            {wifiList.map((ssid) => {
-              const matchedNetwork = wifiNetworks.find((n) => n.ssid === ssid)
-              const branchLabel = matchedNetwork?.branchName || locations?.[0]?.name || 'Office'
-              return (
-                <div key={ssid} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', background: '#faf9f5', border: '1px solid var(--line)', borderRadius: '8px' }}>
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <Wifi size={15} color="var(--teal)" />
-                      <strong style={{ fontSize: '13px' }}>{ssid}</strong>
-                      <span className="wifi-verified-badge" style={{ fontSize: '9px' }}>{matchedNetwork?.securityType || 'WPA2'}</span>
-                    </div>
-                    <div style={{ fontSize: '10px', color: 'var(--muted)', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <MapPin size={11} color="var(--teal)" />
-                      <span>{branchLabel} (≤{storeState.companySettings?.attendanceRules?.maxGeofenceRadiusMeters || 50}m) • BSSID: <strong style={{ fontFamily: 'monospace' }}>{matchedNetwork?.bssid || '⚠ not set'}</strong></span>
+          {/* GLOBAL GEOFENCE POLICY CARD */}
+          <div style={{ background: '#f0fdfa', border: '1px solid #99f6e4', borderRadius: '10px', padding: '16px', marginBottom: '20px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <ShieldCheck size={18} color="#0d9488" />
+                <strong style={{ fontSize: '13.5px', color: '#134e4a' }}>Global Geofence & Boundary Policy</strong>
+              </div>
+              <span style={{ fontSize: '11px', background: '#ccfbf1', color: '#115e59', padding: '2px 8px', borderRadius: '12px', fontWeight: 600 }}>
+                Default: {globalGeofenceRadius}m Radius
+              </span>
+            </div>
+
+            <form onSubmit={handleSaveGlobalGeofence} style={{ display: 'grid', gap: '14px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '14px', alignItems: 'center' }}>
+                <div>
+                  <label style={{ fontSize: '11.5px', fontWeight: 600, display: 'block', color: 'var(--ink)', marginBottom: '4px' }}>
+                    Default Fallback Radius (meters):
+                  </label>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <input
+                      type="number"
+                      min="1"
+                      max="1000"
+                      value={globalGeofenceRadius}
+                      onChange={(e) => setGlobalGeofenceRadius(e.target.value)}
+                      className="text-input"
+                      style={{ width: '110px', padding: '6px 10px', fontSize: '13px', fontWeight: 600 }}
+                      required
+                    />
+                    <div style={{ display: 'flex', gap: '4px' }}>
+                      {[30, 50, 100, 200].map((preset) => (
+                        <button
+                          key={preset}
+                          type="button"
+                          onClick={() => setGlobalGeofenceRadius(preset)}
+                          style={{
+                            padding: '4px 8px',
+                            fontSize: '11px',
+                            borderRadius: '6px',
+                            border: '1px solid #99f6e4',
+                            background: Number(globalGeofenceRadius) === preset ? '#0d9488' : '#fff',
+                            color: Number(globalGeofenceRadius) === preset ? '#fff' : '#0d9488',
+                            cursor: 'pointer',
+                            fontWeight: 600,
+                          }}
+                        >
+                          {preset}m
+                        </button>
+                      ))}
                     </div>
                   </div>
+                  <small style={{ fontSize: '10.5px', color: 'var(--muted)', marginTop: '4px', display: 'block' }}>
+                    Applies to any branch that does not specify an individual radius override.
+                  </small>
+                </div>
+
+                <div style={{ display: 'grid', gap: '8px' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={strictGeofenceRequired}
+                      onChange={(e) => setStrictGeofenceRequired(e.target.checked)}
+                      style={{ cursor: 'pointer' }}
+                    />
+                    <span><strong>Strict Geofence Enforcement:</strong> Reject punch-ins if employee is outside geofence</span>
+                  </label>
+
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={requireOfficeNetworkAndGps}
+                      onChange={(e) => setRequireOfficeNetworkAndGps(e.target.checked)}
+                      style={{ cursor: 'pointer' }}
+                    />
+                    <span><strong>Dual Verification:</strong> Require Office Network IP + GPS for on-site presence</span>
+                  </label>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <Button type="submit" disabled={globalGeofenceSaving} style={{ height: '34px', fontSize: '12px' }}>
+                  <Check size={13} /> {globalGeofenceSaving ? 'Saving Policy...' : 'Save Global Geofence Policy'}
+                </Button>
+              </div>
+            </form>
+          </div>
+
+          {/* LIST OF REGISTERED CAMPUSES */}
+          <div style={{ marginBottom: '20px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+              <strong style={{ fontSize: '13px', color: 'var(--ink)' }}>Configured Campus Centers ({locations.length})</strong>
+              <span style={{ fontSize: '11px', color: 'var(--muted)' }}>Click &quot;Configure Campus&quot; to edit radius, GPS coordinates, or Wi-Fi</span>
+            </div>
+
+            {locations.length === 0 ? (
+              <div style={{ padding: '20px', textAlign: 'center', background: '#faf9f5', border: '1px solid var(--line)', borderRadius: '8px', color: 'var(--muted)', fontSize: '12.5px' }}>
+                No office campuses configured yet. Add your main office campus below.
+              </div>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '12px' }}>
+                {locations.map((loc) => {
+                  const linkedWifis = wifiNetworks.filter((w) => w.branchName === loc.name)
+                  const radius = loc.radiusMeters || globalGeofenceRadius || 50
+                  const hasCoords = loc.lat !== undefined && loc.lat !== null && loc.lng !== undefined && loc.lng !== null
+                  return (
+                    <div
+                      key={loc.id || loc._id || loc.name}
+                      style={{
+                        background: '#ffffff',
+                        border: '1.5px solid #e2e8f0',
+                        borderRadius: '10px',
+                        padding: '14px 16px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: 'space-between',
+                        gap: '12px',
+                        boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
+                      }}
+                    >
+                      <div>
+                        {/* Header: Campus Name & City */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px', marginBottom: '6px' }}>
+                          <div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <Building size={16} color="var(--teal)" />
+                              <strong style={{ fontSize: '14px', color: 'var(--ink)' }}>{loc.name}</strong>
+                            </div>
+                            <span style={{ fontSize: '11px', color: 'var(--muted)', marginLeft: '22px' }}>
+                              {loc.city || 'Office Center'}
+                            </span>
+                          </div>
+                          <span
+                            style={{
+                              fontSize: '11px',
+                              fontWeight: 700,
+                              padding: '2px 8px',
+                              borderRadius: '12px',
+                              background: '#ecfdf5',
+                              color: '#065f46',
+                              border: '1px solid #a7f3d0',
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            📍 {radius}m Radius
+                          </span>
+                        </div>
+
+                        {/* Details: GPS Coordinates & Google Maps Link */}
+                        <div style={{ background: '#f8fafc', border: '1px solid #f1f5f9', borderRadius: '8px', padding: '8px 10px', marginTop: '8px', fontSize: '11px', display: 'grid', gap: '4px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ color: 'var(--muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <MapPin size={11} color="#0d9488" /> GPS Center:
+                            </span>
+                            <span style={{ fontFamily: 'monospace', fontWeight: 600, color: 'var(--ink)' }}>
+                              {hasCoords ? `${Number(loc.lat).toFixed(6)}, ${Number(loc.lng).toFixed(6)}` : '⚠ No coordinates set'}
+                            </span>
+                          </div>
+                          {hasCoords && (
+                            <div style={{ textAlign: 'right' }}>
+                              <a
+                                href={`https://www.google.com/maps?q=${loc.lat},${loc.lng}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                style={{ fontSize: '10.5px', color: 'var(--teal)', textDecoration: 'none', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '3px' }}
+                              >
+                                <span>View on Map</span> <ExternalLink size={10} />
+                              </a>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Linked Wi-Fi routers */}
+                        <div style={{ marginTop: '8px', fontSize: '11px' }}>
+                          <span style={{ color: 'var(--muted)', fontSize: '10.5px', display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '4px' }}>
+                            <Wifi size={11} color="var(--teal)" /> Linked Wi-Fi Routers ({linkedWifis.length}):
+                          </span>
+                          {linkedWifis.length > 0 ? (
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                              {linkedWifis.map((w) => (
+                                <span
+                                  key={w.ssid}
+                                  style={{
+                                    fontSize: '10px',
+                                    background: '#e0f2fe',
+                                    color: '#0369a1',
+                                    padding: '2px 6px',
+                                    borderRadius: '4px',
+                                    fontFamily: 'monospace',
+                                    border: '1px solid #bae6fd',
+                                  }}
+                                >
+                                  {w.ssid}
+                                </span>
+                              ))}
+                            </div>
+                          ) : (
+                            <span style={{ color: 'var(--muted)', fontSize: '10px', fontStyle: 'italic' }}>
+                              No dedicated Wi-Fi router linked yet
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Action buttons */}
+                      <div style={{ display: 'flex', gap: '8px', borderTop: '1px solid #f1f5f9', paddingTop: '10px' }}>
+                        <button
+                          type="button"
+                          onClick={() => handleStartEditCampus(loc)}
+                          style={{
+                            flex: 1,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '6px',
+                            padding: '6px 12px',
+                            fontSize: '11.5px',
+                            fontWeight: 600,
+                            borderRadius: '6px',
+                            border: '1px solid #cbd5e1',
+                            background: '#f8fafc',
+                            color: 'var(--ink)',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          <Edit size={12} color="var(--teal)" /> Configure Campus &amp; Geofence
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteBranch(loc)}
+                          title="Remove Campus"
+                          style={{
+                            padding: '6px 10px',
+                            borderRadius: '6px',
+                            border: '1px solid #fecaca',
+                            background: '#fef2f2',
+                            color: '#dc2626',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* ADD NEW CAMPUS FORM */}
+          <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '16px' }}>
+            <strong style={{ fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '12px', color: 'var(--ink)' }}>
+              <Plus size={14} color="var(--teal)" /> Add New Office Campus &amp; Geofence Center
+            </strong>
+
+            <form onSubmit={handleAddBranch} style={{ display: 'grid', gap: '12px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px' }}>
+                <div>
+                  <label style={{ fontSize: '10.5px', color: 'var(--muted)', display: 'block', marginBottom: '3px' }}>Campus / Branch Name</label>
+                  <input
+                    type="text"
+                    className="text-input"
+                    placeholder="e.g. IGNITE CAMPUS or Bengaluru Tech Park"
+                    value={branchName}
+                    onChange={(e) => setBranchName(e.target.value)}
+                    style={{ width: '100%', padding: '7px 10px', fontSize: '12px', background: '#fff' }}
+                    required
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: '10.5px', color: 'var(--muted)', display: 'block', marginBottom: '3px' }}>City / Region</label>
+                  <input
+                    type="text"
+                    className="text-input"
+                    placeholder="e.g. Bengaluru"
+                    value={branchCity}
+                    onChange={(e) => setBranchCity(e.target.value)}
+                    style={{ width: '100%', padding: '7px 10px', fontSize: '12px', background: '#fff' }}
+                    required
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: '10.5px', color: 'var(--muted)', display: 'block', marginBottom: '3px' }}>
+                    Geofence Radius (meters)
+                  </label>
+                  <div style={{ display: 'flex', gap: '6px' }}>
+                    <input
+                      type="number"
+                      min="1"
+                      max="1000"
+                      className="text-input"
+                      placeholder="e.g. 50"
+                      value={branchRadius}
+                      onChange={(e) => setBranchRadius(e.target.value)}
+                      style={{ width: '80px', padding: '7px 10px', fontSize: '12px', background: '#fff', fontWeight: 600 }}
+                      required
+                    />
+                    {[30, 50, 100, 200].map((preset) => (
+                      <button
+                        key={preset}
+                        type="button"
+                        onClick={() => setBranchRadius(String(preset))}
+                        style={{
+                          padding: '3px 6px',
+                          fontSize: '10px',
+                          borderRadius: '4px',
+                          border: '1px solid #cbd5e1',
+                          background: branchRadius === String(preset) ? 'var(--teal)' : '#fff',
+                          color: branchRadius === String(preset) ? '#fff' : 'var(--ink)',
+                          cursor: 'pointer',
+                          fontWeight: 600,
+                        }}
+                      >
+                        {preset}m
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto auto', gap: '10px', alignItems: 'flex-end' }}>
+                <div>
+                  <label style={{ fontSize: '10.5px', color: 'var(--muted)', display: 'block', marginBottom: '3px' }}>Latitude</label>
+                  <input
+                    type="number"
+                    aria-label="Office latitude"
+                    placeholder="e.g. 12.909980"
+                    min="-90"
+                    max="90"
+                    step="any"
+                    required
+                    value={branchLatitude}
+                    onChange={(event) => setBranchLatitude(event.target.value)}
+                    style={{ width: '100%', padding: '7px 10px', fontSize: '12px', background: '#fff' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: '10.5px', color: 'var(--muted)', display: 'block', marginBottom: '3px' }}>Longitude</label>
+                  <input
+                    type="number"
+                    aria-label="Office longitude"
+                    placeholder="e.g. 77.651740"
+                    min="-180"
+                    max="180"
+                    step="any"
+                    required
+                    value={branchLongitude}
+                    onChange={(event) => setBranchLongitude(event.target.value)}
+                    style={{ width: '100%', padding: '7px 10px', fontSize: '12px', background: '#fff' }}
+                  />
+                </div>
+                <button
+                  type="button"
+                  className="ui-button secondary"
+                  onClick={handleAutoDetectOfficeCoords}
+                  disabled={detectingOfficeGps}
+                  title="Detect current location and autofill latitude and longitude"
+                  style={{ height: '36px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap' }}
+                >
+                  <MapPin size={12} /> {detectingOfficeGps ? 'Detecting…' : 'Use My GPS'}
+                </button>
+                <Button type="submit" style={{ height: '36px', whiteSpace: 'nowrap' }}>
+                  <Plus size={13} /> Add Campus
+                </Button>
+              </div>
+            </form>
+          </div>
+        </section>
+      )}
+
+      {/* 2. OFFICE NETWORKS & WI-FI SECTION */}
+      {(activeConfigTab === 'all' || activeConfigTab === 'networks') && (
+        <>
+          {/* OFFICE NETWORK (PUBLIC IP) — REAL WI-FI VERIFICATION */}
+          <section className="panel">
+            <div className="panel-heading">
+              <div>
+                <p className="section-kicker">Geofencing & Network</p>
+                <h2>Office Network Verification ({officeNetworkIPs.length})</h2>
+              </div>
+              <StatusBadge tone={officeNetworkIPs.length ? 'success' : 'warning'}>
+                {officeNetworkIPs.length ? 'Live' : 'Not configured'}
+              </StatusBadge>
+            </div>
+            <p style={{ fontSize: '12px', color: 'var(--muted)', margin: '8px 0 14px' }}>
+              <strong>Understanding Office Wi-Fi & Gateway IPs:</strong> On any local office Wi-Fi router, each device (phones, laptops, tablets) receives a unique device IP where only the last digits differ (e.g. <code>192.168.1.15</code> vs <code>192.168.1.18</code>), but all share the exact same <strong>gateway subnet (/24)</strong>. Registering your office Wi-Fi subnet (e.g. <code>192.168.1.0/24</code>) or exact IP authorizes all employees connected to this router.
+            </p>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '12px', marginBottom: '16px' }}>
+              {/* Quick register current egress IP or Subnet */}
+              <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-end', gap: '10px', background: '#f5f8f7', border: '1px solid rgba(29, 138, 122, 0.25)', borderRadius: '8px', padding: '12px' }}>
+                <div style={{ display: 'grid', gap: '3px' }}>
+                  <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--muted)' }}>CURRENT DEVICE IP</span>
+                  <strong style={{ fontFamily: 'monospace', fontSize: '14px' }}>{ipLoading ? 'Detecting…' : (myPublicIp || 'Unavailable')}</strong>
+                  {mySubnet && (
+                    <span style={{ fontSize: '10px', color: 'var(--teal)', fontWeight: 600 }}>
+                      Gateway Subnet: {mySubnet}
+                    </span>
+                  )}
+                </div>
+                <button type="button" className="ui-button secondary" onClick={handleRefreshMyIP} disabled={ipLoading} style={{ height: '34px', fontSize: '11px' }}>
+                  <RefreshCw size={12} className={ipLoading ? 'animate-spin' : ''} /> Re-check
+                </button>
+                <div style={{ display: 'grid', gap: '3px', flex: 1, minWidth: '130px' }}>
+                  <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--muted)' }}>LABEL</span>
+                  <input
+                    value={newIpLabel}
+                    onChange={(e) => setNewIpLabel(e.target.value)}
+                    placeholder="e.g. Office Gateway Subnet"
+                    style={{ padding: '6px 8px', fontSize: '11px', borderRadius: '6px', border: '1px solid var(--line)', background: '#fff' }}
+                  />
+                </div>
+                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                  {mySubnet && (
+                    <button
+                      type="button"
+                      className="ui-button primary"
+                      onClick={handleRegisterSubnet}
+                      disabled={ipLoading || !mySubnet}
+                      title="Authorizes all phones, laptops, and devices on this Wi-Fi router (recommended)"
+                      style={{ height: '34px', fontSize: '11px' }}
+                    >
+                      <Plus size={12} /> Register Wi-Fi Subnet ({mySubnet})
+                    </button>
+                  )}
                   <button
                     type="button"
-                    className="icon-button"
-                    onClick={storeAction(() => hrStore.removeWifiSSID(ssid, 'Admin'))}
-                    title="Remove Wi-Fi Network"
-                    style={{ color: '#cb3a31' }}
+                    className="ui-button secondary"
+                    onClick={handleRegisterCurrentIP}
+                    disabled={ipLoading || !myPublicIp}
+                    title="Authorizes this exact IP address"
+                    style={{ height: '34px', fontSize: '11px' }}
                   >
-                    <Trash2 size={13} />
+                    Register Exact IP
                   </button>
                 </div>
-              )
-            })}
-          </div>
+              </div>
 
-          {/* QUICK REGISTER CURRENT WI-FI FORM */}
-          <form onSubmit={handleAddWifi} style={{ background: '#f5f8f7', border: '1px solid rgba(29, 138, 122, 0.25)', borderRadius: '8px', padding: '12px', display: 'grid', gap: '10px' }}>
-            <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--teal)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Plus size={13} /> Register New Office Router
+              {/* Manual IP or CIDR Subnet registration */}
+              <form onSubmit={handleRegisterManualIP} style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-end', gap: '10px', background: '#faf9f5', border: '1px solid var(--line)', borderRadius: '8px', padding: '12px' }}>
+                <div style={{ display: 'grid', gap: '3px', flex: 1, minWidth: '150px' }}>
+                  <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--muted)' }}>MANUAL OFFICE IP / CIDR / WILDCARD</span>
+                  <input
+                    value={manualIp}
+                    onChange={(e) => setManualIp(e.target.value)}
+                    placeholder="e.g. 192.168.1.0/24 or 192.168.1.* or 203.0.113.10"
+                    style={{ padding: '6px 8px', fontSize: '11px', borderRadius: '6px', border: '1px solid var(--line)', background: '#fff', fontFamily: 'monospace' }}
+                    required
+                  />
+                </div>
+                <button type="submit" className="ui-button secondary" disabled={!manualIp.trim()} style={{ height: '34px', fontSize: '11px' }}>
+                  <Plus size={12} /> Add IP / Subnet
+                </button>
+              </form>
+            </div>
+
+            {officeNetworkIPs.length === 0 ? (
+              <div style={{ fontSize: '12px', color: '#92400e', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '8px', padding: '10px 12px' }}>
+                No office networks registered yet. Connect to your office Wi-Fi and click “Register this network”. Until then, attendance relies on the GPS geofence only.
+              </div>
+            ) : (
+              <div style={{ display: 'grid', gap: '8px' }}>
+                {officeNetworkIPs.map((entry) => (
+                  <div key={entry.ip} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', background: '#faf9f5', border: '1px solid var(--line)', borderRadius: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <Wifi size={15} color="var(--teal)" />
+                      <div>
+                        <strong style={{ fontSize: '13px', fontFamily: 'monospace' }}>{entry.ip}</strong>
+                        <div style={{ fontSize: '10px', color: 'var(--muted)', marginTop: '2px' }}>
+                          {entry.label || 'Office Network'} • added {entry.addedAt || '—'}{myPublicIp === entry.ip ? ' • this is your current network' : ''}
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      className="icon-button"
+                      onClick={storeAction(() => hrStore.removeOfficeNetworkIP(entry.ip, 'Admin'))}
+                      title="Remove office network"
+                      style={{ color: '#cb3a31' }}
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+
+          {/* WI-FI SSID SETUP & BRANCH LINKING */}
+          <section className="panel">
+            <div className="panel-heading">
+              <div>
+                <p className="section-kicker">Geofencing & Network</p>
+                <h2>Verified Office Wi-Fi Networks ({wifiList.length})</h2>
+              </div>
+              <StatusBadge tone="success">Active for All Employees</StatusBadge>
+            </div>
+            <p style={{ fontSize: '12px', color: 'var(--muted)', margin: '8px 0 14px' }}>
+              Register the office network IP and actual office GPS coordinates. Browsers cannot read router SSID or BSSID; these names are descriptive metadata, not authentication. Strict punch-in requires both network and GPS checks.
+            </p>
+
+            {/* ACTIVE WI-FI REGISTRY LIST */}
+            <div style={{ display: 'grid', gap: '8px', marginBottom: '16px' }}>
+              {wifiList.map((ssid) => {
+                const matchedNetwork = wifiNetworks.find((n) => n.ssid === ssid)
+                const branchLabel = matchedNetwork?.branchName || locations?.[0]?.name || 'Office'
+                return (
+                  <div key={ssid} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', background: '#faf9f5', border: '1px solid var(--line)', borderRadius: '8px' }}>
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <Wifi size={15} color="var(--teal)" />
+                        <strong style={{ fontSize: '13px' }}>{ssid}</strong>
+                        <span className="wifi-verified-badge" style={{ fontSize: '9px' }}>{matchedNetwork?.securityType || 'WPA2'}</span>
+                      </div>
+                      <div style={{ fontSize: '10px', color: 'var(--muted)', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <MapPin size={11} color="var(--teal)" />
+                        <span>{branchLabel} (≤{storeState.companySettings?.attendanceRules?.maxGeofenceRadiusMeters || 50}m) • BSSID: <strong style={{ fontFamily: 'monospace' }}>{matchedNetwork?.bssid || '⚠ not set'}</strong></span>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      className="icon-button"
+                      onClick={storeAction(() => hrStore.removeWifiSSID(ssid, 'Admin'))}
+                      title="Remove Wi-Fi Network"
+                      style={{ color: '#cb3a31' }}
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* QUICK REGISTER CURRENT WI-FI FORM */}
+            <form onSubmit={handleAddWifi} style={{ background: '#f5f8f7', border: '1px solid rgba(29, 138, 122, 0.25)', borderRadius: '8px', padding: '12px', display: 'grid', gap: '10px' }}>
+              <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--teal)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Plus size={13} /> Register New Office Router
+              </span>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                <div>
+                  <label style={{ fontSize: '10px', color: 'var(--muted)', display: 'block', marginBottom: '2px' }}>Wi-Fi SSID Name</label>
+                  <input
+                    type="text"
+                    className="text-input"
+                    placeholder="e.g. Edufyi-Floor2-5G"
+                    value={newSSID}
+                    onChange={(e) => setNewSSID(e.target.value)}
+                    style={{ width: '100%', padding: '6px 10px', fontSize: '12px', background: '#fff' }}
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '10px', color: 'var(--muted)', display: 'block', marginBottom: '2px' }}>Router BSSID (MAC) - Optional</label>
+                  <input
+                    type="text"
+                    className="text-input"
+                    placeholder="Optional (e.g. AA:BB:CC:DD:EE:FF)"
+                    value={newBSSID}
+                    onChange={(e) => setNewBSSID(e.target.value)}
+                    style={{ width: '100%', padding: '6px 10px', fontSize: '12px', background: '#fff', fontFamily: 'monospace' }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                <div>
+                  <label style={{ fontSize: '10px', color: 'var(--muted)', display: 'block', marginBottom: '2px' }}>Security Type</label>
+                  <select
+                    value={newSecurityType}
+                    onChange={(e) => setNewSecurityType(e.target.value)}
+                    style={{ width: '100%', padding: '6px 8px', fontSize: '11px', borderRadius: '6px', border: '1px solid var(--line)', background: '#fff' }}
+                  >
+                    <option value="WPA3-Enterprise">WPA3-Enterprise</option>
+                    <option value="WPA2-Enterprise">WPA2-Enterprise</option>
+                    <option value="WPA3-Personal">WPA3-Personal</option>
+                    <option value="WPA2-Personal">WPA2-Personal</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '10px', color: 'var(--muted)', display: 'block', marginBottom: '2px' }}>Assign to Branch</label>
+                  <select
+                    value={wifiBranch}
+                    onChange={(e) => setWifiBranch(e.target.value)}
+                    style={{ width: '100%', padding: '6px 8px', fontSize: '11px', borderRadius: '6px', border: '1px solid var(--line)', background: '#fff' }}
+                  >
+                    {locations.map((loc) => (
+                      <option key={loc.id} value={loc.name}>
+                        {loc.name} ({loc.city})
+                      </option>
+                    ))}
+                    <option value="All Company Branches">All Company Branches (Global)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '2px' }}>
+                <Button type="submit">
+                  <Check size={13} /> Register &amp; Activate for All
+                </Button>
+              </div>
+            </form>
+          </section>
+        </>
+      )}
+
+      {/* 3. SHIFT TIMING & GRACE PERIOD SECTION */}
+      {(activeConfigTab === 'all' || activeConfigTab === 'shifts') && (
+        <section className="panel" style={{ borderLeft: '4px solid #6366f1' }}>
+          <div className="panel-heading">
+            <div>
+              <p className="section-kicker">Attendance Policy</p>
+              <h2>Shift Timing &amp; Grace Period</h2>
+            </div>
+            <span className="role-badge" style={{ fontSize: '10px', background: shiftStartTime && shiftEndTime ? '#dcfce7' : '#fef3c7', color: shiftStartTime && shiftEndTime ? '#166534' : '#92400e' }}>
+              {shiftStartTime && shiftEndTime ? '✓ Configured' : '⚠ Not Set'}
             </span>
+          </div>
+          <p style={{ fontSize: '12px', color: 'var(--muted)', margin: '8px 0 16px' }}>
+            Configure the default work shift timings for all employees. Attendance will be marked as <strong>Late</strong> if an employee punches in after the Work Start Time + Grace Period. These settings apply to all employees who do not have a specific shift assignment.
+          </p>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-              <div>
-                <label style={{ fontSize: '10px', color: 'var(--muted)', display: 'block', marginBottom: '2px' }}>Wi-Fi SSID Name</label>
-                <input
-                  type="text"
-                  className="text-input"
-                  placeholder="e.g. Edufyi-Floor2-5G"
-                  value={newSSID}
-                  onChange={(e) => setNewSSID(e.target.value)}
-                  style={{ width: '100%', padding: '6px 10px', fontSize: '12px', background: '#fff' }}
-                  required
-                />
-              </div>
-
-              <div>
-                <label style={{ fontSize: '10px', color: 'var(--muted)', display: 'block', marginBottom: '2px' }}>Router BSSID (MAC) - Optional</label>
-                <input
-                  type="text"
-                  className="text-input"
-                  placeholder="Optional (e.g. AA:BB:CC:DD:EE:FF)"
-                  value={newBSSID}
-                  onChange={(e) => setNewBSSID(e.target.value)}
-                  style={{ width: '100%', padding: '6px 10px', fontSize: '12px', background: '#fff', fontFamily: 'monospace' }}
-                />
+          <form onSubmit={handleSaveShiftSettings}>
+            <div style={{ maxWidth: '720px', marginBottom: '16px' }}>
+              <div style={{ background: '#f5f3ff', border: '1px solid #e0e7ff', borderRadius: '8px', padding: '16px' }}>
+                <strong style={{ fontSize: '13.5px', display: 'block', marginBottom: '12px' }}>Default Shift Configuration</strong>
+                <div style={{ display: 'grid', gap: '12px', gridTemplateColumns: '1fr 1fr' }}>
+                  <div>
+                    <label style={{ fontSize: '11px', display: 'block', color: 'var(--muted)', marginBottom: '3px' }}>Work Start Time</label>
+                    <input
+                      type="time"
+                      className="text-input"
+                      value={shiftStartTime}
+                      onChange={(e) => setShiftStartTime(e.target.value)}
+                      style={{ width: '100%', padding: '8px 10px', fontSize: '13px' }}
+                      required
+                    />
+                    <span style={{ fontSize: '10px', color: 'var(--muted)', marginTop: '2px', display: 'block' }}>
+                      {shiftStartTime ? `Set to ${shiftStartTime}` : 'e.g. 11:00 for 11:00 AM'}
+                    </span>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '11px', display: 'block', color: 'var(--muted)', marginBottom: '3px' }}>Work End Time</label>
+                    <input
+                      type="time"
+                      className="text-input"
+                      value={shiftEndTime}
+                      onChange={(e) => setShiftEndTime(e.target.value)}
+                      style={{ width: '100%', padding: '8px 10px', fontSize: '13px' }}
+                      required
+                    />
+                    <span style={{ fontSize: '10px', color: 'var(--muted)', marginTop: '2px', display: 'block' }}>
+                      {shiftEndTime ? `Set to ${shiftEndTime}` : 'e.g. 20:00 for 8:00 PM'}
+                    </span>
+                  </div>
+                </div>
+                <div style={{ marginTop: '12px' }}>
+                  <label style={{ fontSize: '11px', display: 'block', color: 'var(--muted)', marginBottom: '3px' }}>Grace Period (minutes)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="120"
+                    className="text-input"
+                    value={shiftGracePeriod}
+                    onChange={(e) => setShiftGracePeriod(e.target.value)}
+                    style={{ width: '120px', padding: '8px 10px', fontSize: '13px' }}
+                  />
+                  <span style={{ fontSize: '10px', color: 'var(--muted)', marginTop: '2px', display: 'block' }}>
+                    Employees arriving within {shiftGracePeriod || 0} minute(s) after start time will NOT be marked late.
+                  </span>
+                </div>
+                {shiftStartTime && shiftEndTime && (
+                  <div style={{ marginTop: '14px', padding: '10px 12px', background: '#ede9fe', borderRadius: '6px', fontSize: '12px', color: '#4c1d95' }}>
+                    <strong>Preview:</strong> Shift {shiftStartTime} – {shiftEndTime} | Late after {shiftStartTime ? (() => {
+                      const [h, m] = shiftStartTime.split(':').map(Number);
+                      const total = h * 60 + m + (Number(shiftGracePeriod) || 0);
+                      const newH = Math.floor(total / 60) % 24;
+                      const newM = total % 60;
+                      return `${String(newH).padStart(2, '0')}:${String(newM).padStart(2, '0')}`;
+                    })() : '--:--'} ({shiftGracePeriod || 0} min grace)
+                  </div>
+                )}
               </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-              <div>
-                <label style={{ fontSize: '10px', color: 'var(--muted)', display: 'block', marginBottom: '2px' }}>Security Type</label>
-                <select
-                  value={newSecurityType}
-                  onChange={(e) => setNewSecurityType(e.target.value)}
-                  style={{ width: '100%', padding: '6px 8px', fontSize: '11px', borderRadius: '6px', border: '1px solid var(--line)', background: '#fff' }}
-                >
-                  <option value="WPA3-Enterprise">WPA3-Enterprise</option>
-                  <option value="WPA2-Enterprise">WPA2-Enterprise</option>
-                  <option value="WPA3-Personal">WPA3-Personal</option>
-                  <option value="WPA2-Personal">WPA2-Personal</option>
-                </select>
-              </div>
-
-              <div>
-                <label style={{ fontSize: '10px', color: 'var(--muted)', display: 'block', marginBottom: '2px' }}>Assign to Branch</label>
-                <select
-                  value={wifiBranch}
-                  onChange={(e) => setWifiBranch(e.target.value)}
-                  style={{ width: '100%', padding: '6px 8px', fontSize: '11px', borderRadius: '6px', border: '1px solid var(--line)', background: '#fff' }}
-                >
-                  {locations.map((loc) => (
-                    <option key={loc.id} value={loc.name}>
-                      {loc.name} ({loc.city})
-                    </option>
-                  ))}
-                  <option value="All Company Branches">All Company Branches (Global)</option>
-                </select>
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '2px' }}>
-              <Button type="submit">
-                <Check size={13} /> Register & Activate for All
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', alignItems: 'center' }}>
+              <Button type="submit" disabled={shiftSaving}>
+                <Check size={13} /> {shiftSaving ? 'Saving Shift...' : 'Save Shift Settings'}
               </Button>
             </div>
           </form>
-        </div>
+        </section>
+      )}
 
-        {/* OFFICE BRANCH LOCATIONS */}
-        <div className="panel">
+      {/* 4. HELP DESK & SUPPORT ROUTING SECTION */}
+      {(activeConfigTab === 'all' || activeConfigTab === 'helpdesk') && (
+        <section className="panel" style={{ borderLeft: '4px solid #0284c7' }}>
           <div className="panel-heading">
             <div>
-              <p className="section-kicker">Real Estate</p>
-              <h2>Office Branches & Locations</h2>
+              <p className="section-kicker">Support Infrastructure</p>
+              <h2>Help Desk Configuration &amp; Ticket Routing</h2>
             </div>
+            <span className="role-badge" style={{ fontSize: '10px', background: '#e0f2fe', color: '#0369a1', border: '1px solid #bae6fd' }}>
+              Multi-Tier SLA Engine
+            </span>
           </div>
-          <p style={{ fontSize: '12px', color: 'var(--muted)', margin: '8px 0 14px' }}>
-            Registered office locations and campus centers.
+          <p style={{ fontSize: '12px', color: 'var(--muted)', margin: '8px 0 16px' }}>
+            Configure enterprise support ticket routing emails, manager escalation protocols, and automated notification triggers for employee IT, HR, Payroll, and Facilities requests.
           </p>
 
-          <div style={{ display: 'grid', gap: '8px', marginBottom: '16px' }}>
-            {locations.map((loc) => (
-              <div key={loc.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', background: '#faf9f5', border: '1px solid var(--line)', borderRadius: '6px' }}>
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <MapPin size={13} color="var(--teal)" />
-                    <strong style={{ fontSize: '12px' }}>{loc.name}</strong>
+          <form onSubmit={handleSaveHelpDeskSettings}>
+            <div style={{ maxWidth: '720px', marginBottom: '16px' }}>
+              <div style={{ background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: '8px', padding: '16px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                  <strong style={{ fontSize: '13.5px', color: '#0369a1' }}>Department Support Routing Emails</strong>
+                  <a href="#/admin/helpdesk" style={{ fontSize: '11px', color: '#0284c7', textDecoration: 'none', fontWeight: 600 }}>
+                    View Help Desk Queue →
+                  </a>
+                </div>
+
+                <div style={{ display: 'grid', gap: '16px' }}>
+                  {/* 1. IT Support Dedicated Assignment */}
+                  <div style={{ background: '#fff', border: '1px solid #bfdbfe', borderRadius: '8px', padding: '14px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                      <span style={{ background: '#0284c7', color: '#fff', fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '4px' }}>IT CHANNEL</span>
+                      <strong style={{ fontSize: '13px', color: '#0f172a' }}>Dedicated IT Support Assignment</strong>
+                    </div>
+
+                    <label style={{ fontSize: '11.5px', display: 'block', color: 'var(--muted)', marginBottom: '5px', fontWeight: 600 }}>
+                      Select Support Employee for IT Issues (All hardware &amp; IT tickets route to this person):
+                    </label>
+                    <select
+                      className="select-control"
+                      value={itSupportEmployeeId}
+                      onChange={(e) => {
+                        const selId = e.target.value
+                        setItSupportEmployeeId(selId)
+                        const emp = (storeState.employees || []).find((x) => String(x.id || x._id || x.employeeId) === selId)
+                        if (emp) {
+                          setItSupportEmployeeName(emp.name || emp.displayName || '')
+                          setItSupportEmployeeEmail(emp.email || '')
+                        } else {
+                          setItSupportEmployeeName('')
+                          setItSupportEmployeeEmail('')
+                        }
+                      }}
+                      style={{ width: '100%', padding: '8px 10px', fontSize: '12.5px', borderRadius: '6px', border: '1px solid #cbd5e1', marginBottom: '8px' }}
+                    >
+                      <option value="">-- Choose Dedicated IT Support Employee from Staff List --</option>
+                      {(storeState.employees || []).map((emp) => (
+                        <option key={emp.id || emp._id} value={String(emp.id || emp._id || emp.employeeId)}>
+                          {emp.name} ({emp.employeeId || 'STAFF'}) — {emp.designation || emp.department || 'General'}
+                        </option>
+                      ))}
+                    </select>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', fontSize: '11px', background: '#f8fafc', padding: '8px 12px', borderRadius: '6px' }}>
+                      <div>
+                        <span style={{ color: 'var(--muted)' }}>Assigned Employee:</span>{' '}
+                        <strong>{itSupportEmployeeName ? `${itSupportEmployeeName} (${itSupportEmployeeEmail || 'No email'})` : 'None selected'}</strong>
+                      </div>
+                      <div>
+                        <span style={{ color: 'var(--muted)' }}>Dispatch SMTP Address:</span>{' '}
+                        <strong style={{ color: '#0284c7' }}>{itSupportEmail || 'itsupport@edufyitech.in'}</strong>
+                      </div>
+                    </div>
+                    <span style={{ fontSize: '10.5px', color: 'var(--muted)', marginTop: '6px', display: 'block' }}>
+                      When an employee submits an IT inquiry, it arrives on <strong>itsupport@edufyitech.in</strong> and directly in this employee&apos;s portal queue. When resolved, an email response is sent from <strong>itsupport@edufyitech.in</strong> to the requester.
+                    </span>
                   </div>
-                  <small style={{ color: 'var(--muted)', fontSize: '10px' }}>{loc.city} • Radius: {loc.radiusMeters}m • Coords: {loc.lat ?? '—'}, {loc.lng ?? '—'}</small>
+
+                  {/* 2. General Support Assignment (HR, Payroll, Facilities) */}
+                  <div style={{ background: '#fff', border: '1px solid #bbf7d0', borderRadius: '8px', padding: '14px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                      <span style={{ background: '#16a34a', color: '#fff', fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '4px' }}>GENERAL SUPPORT</span>
+                      <strong style={{ fontSize: '13px', color: '#0f172a' }}>HR, Payroll &amp; Facilities Assignment</strong>
+                    </div>
+
+                    <label style={{ fontSize: '11.5px', display: 'block', color: 'var(--muted)', marginBottom: '5px', fontWeight: 600 }}>
+                      Select Support Employee for HR, Payroll &amp; Facilities:
+                    </label>
+                    <select
+                      className="select-control"
+                      value={generalSupportEmployeeId}
+                      onChange={(e) => {
+                        const selId = e.target.value
+                        setGeneralSupportEmployeeId(selId)
+                        const emp = (storeState.employees || []).find((x) => String(x.id || x._id || x.employeeId) === selId)
+                        if (emp) {
+                          setGeneralSupportEmployeeName(emp.name || emp.displayName || '')
+                          setGeneralSupportEmployeeEmail(emp.email || '')
+                        } else {
+                          setGeneralSupportEmployeeName('')
+                          setGeneralSupportEmployeeEmail('')
+                        }
+                      }}
+                      style={{ width: '100%', padding: '8px 10px', fontSize: '12.5px', borderRadius: '6px', border: '1px solid #cbd5e1', marginBottom: '8px' }}
+                    >
+                      <option value="">-- Choose Dedicated General Support Employee from Staff List --</option>
+                      {(storeState.employees || []).map((emp) => (
+                        <option key={emp.id || emp._id} value={String(emp.id || emp._id || emp.employeeId)}>
+                          {emp.name} ({emp.employeeId || 'STAFF'}) — {emp.designation || emp.department || 'General'}
+                        </option>
+                      ))}
+                    </select>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', fontSize: '11px', background: '#f8fafc', padding: '8px 12px', borderRadius: '6px' }}>
+                      <div>
+                        <span style={{ color: 'var(--muted)' }}>Assigned Employee:</span>{' '}
+                        <strong>{generalSupportEmployeeName ? `${generalSupportEmployeeName} (${generalSupportEmployeeEmail || 'No email'})` : 'None selected'}</strong>
+                      </div>
+                      <div>
+                        <span style={{ color: 'var(--muted)' }}>Unified Gateway Address:</span>{' '}
+                        <strong style={{ color: '#16a34a' }}>{generalSupportEmail || 'helpsupport@edufyitechsolution.in'}</strong>
+                      </div>
+                    </div>
+                    <span style={{ fontSize: '10.5px', color: 'var(--muted)', marginTop: '6px', display: 'block' }}>
+                      All HR Policies, Payroll, and Facilities tickets are routed to this employee and dispatched via the unified <strong>helpsupport@edufyitechsolution.in</strong> gateway.
+                    </span>
+                  </div>
+
+                  <div style={{ borderTop: '1px solid #e0f2fe', paddingTop: '12px', marginTop: '4px' }}>
+                    <strong style={{ fontSize: '12.5px', color: '#0369a1', display: 'block', marginBottom: '10px' }}>
+                      Ticket Workflow &amp; Automation Rules
+                    </strong>
+                    <div style={{ display: 'grid', gap: '10px' }}>
+                      <div>
+                        <label style={{ fontSize: '11px', display: 'block', color: 'var(--muted)', marginBottom: '3px' }}>
+                          Default Ticket Priority
+                        </label>
+                        <select
+                          className="text-input"
+                          value={defaultPriority}
+                          onChange={(e) => setDefaultPriority(e.target.value)}
+                          style={{ width: '100%', padding: '6px 10px', fontSize: '12px', background: '#fff' }}
+                        >
+                          <option value="Low">Low — Non-urgent query</option>
+                          <option value="Medium">Medium — Standard SLA (24 hrs)</option>
+                          <option value="High">High — Critical blocker</option>
+                          <option value="Urgent">Urgent — Immediate intervention</option>
+                        </select>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <input
+                          type="checkbox"
+                          id="autoAssignManager"
+                          checked={autoAssignToManager}
+                          onChange={(e) => setAutoAssignToManager(e.target.checked)}
+                          style={{ cursor: 'pointer' }}
+                        />
+                        <label htmlFor="autoAssignManager" style={{ fontSize: '12px', cursor: 'pointer' }}>
+                          Auto-assign &amp; notify direct reporting manager when employee raises a ticket
+                        </label>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <input
+                          type="checkbox"
+                          id="emailNotifs"
+                          checked={emailNotificationsEnabled}
+                          onChange={(e) => setEmailNotificationsEnabled(e.target.checked)}
+                          style={{ cursor: 'pointer' }}
+                        />
+                        <label htmlFor="emailNotifs" style={{ fontSize: '12px', cursor: 'pointer' }}>
+                          Enable automatic email notifications for ticket status transitions and replies
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', alignItems: 'center' }}>
+              <Button type="submit" disabled={helpDeskSaving}>
+                <Check size={13} /> {helpDeskSaving ? 'Saving Help Desk...' : 'Save Help Desk Settings'}
+              </Button>
+            </div>
+          </form>
+        </section>
+      )}
+
+      {/* 5. LEAVE POLICIES & HOLIDAYS SECTION */}
+      {(activeConfigTab === 'all' || activeConfigTab === 'policies') && (
+        <>
+          {/* ANNUAL LEAVE ALLOWANCES & APPROVAL RULES */}
+          <section className="panel" style={{ borderLeft: '4px solid var(--teal)' }}>
+            <div className="panel-heading">
+              <div>
+                <p className="section-kicker">Operating Policies</p>
+                <h2>Annual Leave Quotas &amp; Approval Rules</h2>
+              </div>
+              <span className="role-badge" style={{ fontSize: '10px' }}>Global Defaults</span>
+            </div>
+            <p style={{ fontSize: '12px', color: 'var(--muted)', margin: '8px 0 16px' }}>
+              Define enterprise-wide annual employee paid leave entitlements and multi-tier approval workflows.
+            </p>
+
+            <form onSubmit={handleSavePolicies}>
+              <div style={{ maxWidth: '720px', marginBottom: '16px' }}>
+                <div style={{ background: '#faf9f5', border: '1px solid var(--line)', borderRadius: '8px', padding: '16px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                    <strong style={{ fontSize: '13.5px' }}>Annual Leave Quotas &amp; Approval Rules</strong>
+                    <a href="#/admin/leave" style={{ fontSize: '11px', color: 'var(--teal)', textDecoration: 'none', fontWeight: 600 }}>
+                      Advanced Leave Engine →
+                    </a>
+                  </div>
+                  <div style={{ display: 'grid', gap: '10px' }}>
+                    <div>
+                      <label style={{ fontSize: '11px', display: 'block', color: 'var(--muted)', marginBottom: '3px' }}>Casual Leave (CL) Quota / Year</label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="60"
+                        className="text-input"
+                        value={casualQuota}
+                        onChange={(e) => setCasualQuota(e.target.value)}
+                        style={{ width: '100%', padding: '5px 8px', fontSize: '12px' }}
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '11px', display: 'block', color: 'var(--muted)', marginBottom: '3px' }}>Sick Leave (SL) Quota / Year</label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="60"
+                        className="text-input"
+                        value={sickQuota}
+                        onChange={(e) => setSickQuota(e.target.value)}
+                        style={{ width: '100%', padding: '5px 8px', fontSize: '12px' }}
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '11px', display: 'block', color: 'var(--muted)', marginBottom: '3px' }}>Earned / Paid Leave (EL/PL) Quota / Year</label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="60"
+                        className="text-input"
+                        value={earnedQuota}
+                        onChange={(e) => setEarnedQuota(e.target.value)}
+                        style={{ width: '100%', padding: '5px 8px', fontSize: '12px' }}
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '11px', display: 'block', color: 'var(--muted)', marginBottom: '3px' }}>Max Carry-Forward Days to Next Year</label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="30"
+                        className="text-input"
+                        value={maxCarry}
+                        onChange={(e) => setMaxCarry(e.target.value)}
+                        style={{ width: '100%', padding: '5px 8px', fontSize: '12px' }}
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '11px', display: 'block', color: 'var(--muted)', marginBottom: '3px' }}>Leave Approval Workflow</label>
+                      <select
+                        className="text-input"
+                        value={approvalWorkflow}
+                        onChange={(e) => setApprovalWorkflow(e.target.value)}
+                        style={{ width: '100%', padding: '5px 8px', fontSize: '12px', background: '#fff' }}
+                      >
+                        <option value="manager_hr">Assigned Manager then HR Review</option>
+                        <option value="manager">Assigned Manager Review Only</option>
+                        <option value="hr">HR Operations Review Only</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', alignItems: 'center' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  disabled={recalculating}
+                  onClick={handleRecalculateAttendance}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '8px 14px',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    background: '#fef3c7',
+                    border: '1px solid #fde68a',
+                    color: '#92400e',
+                    borderRadius: '8px',
+                    cursor: recalculating ? 'wait' : 'pointer',
+                  }}
+                >
+                  <span>⚡</span> {recalculating ? "Recalculating Roster..." : "Recalculate Today's Attendance"}
+                </button>
+                <Button type="submit">
+                  <Check size={13} /> Save Organization Policies
+                </Button>
+              </div>
+            </form>
+          </section>
+
+          {/* HOLIDAY CALENDAR SHOWCASE & EDITOR */}
+          <HolidayCalendarShowcase canManage={true} user={user} />
+        </>
+      )}
+
+      {/* EDIT CAMPUS & GEOFENCE MODAL */}
+      {editingCampus && (
+        <AdminModalPortal>
+          <div className="modal-backdrop" onClick={() => setEditingCampus(null)}>
+            <div
+              className="modal-content"
+              onClick={(e) => e.stopPropagation()}
+              style={{ maxWidth: '580px', width: '92%', borderRadius: '14px', padding: '24px' }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Building size={18} color="var(--teal)" />
+                  <h3 style={{ margin: 0, fontSize: '17px', fontWeight: 700, color: 'var(--ink)' }}>
+                    Configure Campus: {editingCampus.name}
+                  </h3>
                 </div>
                 <button
                   type="button"
-                  className="icon-button"
-                  onClick={() => handleDeleteBranch(loc)}
-                  title="Remove Branch"
-                  style={{ color: '#cb3a31' }}
+                  onClick={() => setEditingCampus(null)}
+                  style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--muted)' }}
                 >
-                  <Trash2 size={13} />
+                  <X size={18} />
                 </button>
               </div>
-            ))}
+
+              <form onSubmit={handleSaveCampusEdit} style={{ display: 'grid', gap: '16px' }}>
+                {/* Campus Name & City */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <div>
+                    <label style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--ink)', display: 'block', marginBottom: '4px' }}>
+                      Campus Name
+                    </label>
+                    <input
+                      type="text"
+                      className="text-input"
+                      value={editingName}
+                      onChange={(e) => setEditingName(e.target.value)}
+                      style={{ width: '100%', padding: '8px 10px', fontSize: '13px' }}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--ink)', display: 'block', marginBottom: '4px' }}>
+                      City / Region
+                    </label>
+                    <input
+                      type="text"
+                      className="text-input"
+                      value={editingCity}
+                      onChange={(e) => setEditingCity(e.target.value)}
+                      style={{ width: '100%', padding: '8px 10px', fontSize: '13px' }}
+                      required
+                    />
+                  </div>
+                </div>
+
+                {/* Individual Campus Geofencing Radius */}
+                <div style={{ background: '#f0fdfa', border: '1px solid #99f6e4', borderRadius: '10px', padding: '14px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                    <label style={{ fontSize: '12px', fontWeight: 700, color: '#134e4a', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <MapPin size={14} color="#0d9488" /> Campus Geofence Radius (meters)
+                    </label>
+                    <span style={{ fontSize: '11px', fontWeight: 700, color: '#0d9488', background: '#ccfbf1', padding: '2px 8px', borderRadius: '10px' }}>
+                      {editingRadius}m Radius
+                    </span>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px' }}>
+                    <input
+                      type="number"
+                      min="1"
+                      max="1000"
+                      className="text-input"
+                      value={editingRadius}
+                      onChange={(e) => setEditingRadius(e.target.value)}
+                      style={{ width: '120px', padding: '7px 10px', fontSize: '13px', fontWeight: 700 }}
+                      required
+                    />
+                    <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
+                      {[30, 50, 100, 200, 500].map((preset) => (
+                        <button
+                          key={preset}
+                          type="button"
+                          onClick={() => setEditingRadius(preset)}
+                          style={{
+                            padding: '4px 10px',
+                            fontSize: '11px',
+                            borderRadius: '6px',
+                            border: '1px solid #99f6e4',
+                            background: Number(editingRadius) === preset ? '#0d9488' : '#fff',
+                            color: Number(editingRadius) === preset ? '#fff' : '#0d9488',
+                            cursor: 'pointer',
+                            fontWeight: 600,
+                          }}
+                        >
+                          {preset}m
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <small style={{ fontSize: '10.5px', color: '#115e59', display: 'block', lineHeight: 1.3 }}>
+                    Employees within {editingRadius}m of this campus center will be verified as <strong>ON-SITE</strong>.
+                  </small>
+                </div>
+
+                {/* GPS Coordinates & Live Capture */}
+                <div style={{ background: '#faf9f5', border: '1px solid var(--line)', borderRadius: '10px', padding: '14px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                    <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--ink)' }}>
+                      Campus Center GPS Coordinates
+                    </label>
+                    <button
+                      type="button"
+                      onClick={handleDetectEditCoords}
+                      disabled={detectingEditGps}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        padding: '4px 10px',
+                        fontSize: '11px',
+                        fontWeight: 600,
+                        borderRadius: '6px',
+                        border: '1px solid var(--teal)',
+                        background: '#eaf4f1',
+                        color: 'var(--teal)',
+                        cursor: detectingEditGps ? 'wait' : 'pointer',
+                      }}
+                    >
+                      <MapPin size={11} /> {detectingEditGps ? 'Capturing GPS…' : 'Capture Live GPS'}
+                    </button>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                    <div>
+                      <label style={{ fontSize: '10.5px', color: 'var(--muted)', display: 'block', marginBottom: '2px' }}>Latitude</label>
+                      <input
+                        type="number"
+                        step="any"
+                        min="-90"
+                        max="90"
+                        className="text-input"
+                        placeholder="e.g. 12.909980"
+                        value={editingLat}
+                        onChange={(e) => setEditingLat(e.target.value)}
+                        style={{ width: '100%', padding: '7px 10px', fontSize: '12.5px', fontFamily: 'monospace' }}
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '10.5px', color: 'var(--muted)', display: 'block', marginBottom: '2px' }}>Longitude</label>
+                      <input
+                        type="number"
+                        step="any"
+                        min="-180"
+                        max="180"
+                        className="text-input"
+                        placeholder="e.g. 77.651740"
+                        value={editingLng}
+                        onChange={(e) => setEditingLng(e.target.value)}
+                        style={{ width: '100%', padding: '7px 10px', fontSize: '12.5px', fontFamily: 'monospace' }}
+                        required
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Optional: Link New Wi-Fi Router */}
+                <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '14px' }}>
+                  <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
+                    <Wifi size={14} color="var(--teal)" /> Link Office Wi-Fi Router (Optional)
+                  </label>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                    <div>
+                      <input
+                        type="text"
+                        className="text-input"
+                        placeholder="Wi-Fi SSID (e.g. Edufyi-Campus-5G)"
+                        value={editingWifiSSID}
+                        onChange={(e) => setEditingWifiSSID(e.target.value)}
+                        style={{ width: '100%', padding: '7px 10px', fontSize: '12px' }}
+                      />
+                    </div>
+                    <div>
+                      <input
+                        type="text"
+                        className="text-input"
+                        placeholder="Router BSSID / MAC (Optional)"
+                        value={editingWifiBSSID}
+                        onChange={(e) => setEditingWifiBSSID(e.target.value)}
+                        style={{ width: '100%', padding: '7px 10px', fontSize: '12px', fontFamily: 'monospace' }}
+                      />
+                    </div>
+                  </div>
+                  <small style={{ fontSize: '10px', color: 'var(--muted)', marginTop: '4px', display: 'block' }}>
+                    Leaving this blank will preserve already linked Wi-Fi networks.
+                  </small>
+                </div>
+
+                {/* Footer Buttons */}
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '6px' }}>
+                  <button
+                    type="button"
+                    className="ui-button secondary"
+                    onClick={() => setEditingCampus(null)}
+                    style={{ padding: '8px 16px', fontSize: '12px' }}
+                  >
+                    Cancel
+                  </button>
+                  <Button type="submit" disabled={campusSaving} style={{ padding: '8px 18px', fontSize: '12px' }}>
+                    <Check size={13} /> {campusSaving ? 'Saving Campus...' : 'Save Campus Settings'}
+                  </Button>
+                </div>
+              </form>
+            </div>
           </div>
-
-          <form onSubmit={handleAddBranch} style={{ display: 'grid', gap: '8px' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '8px' }}>
-              <input
-                type="text"
-                className="text-input"
-                placeholder="Branch Name (e.g. Main Office Campus)"
-                value={branchName}
-                onChange={(e) => setBranchName(e.target.value)}
-                style={{ padding: '6px 8px', fontSize: '11px' }}
-                required
-              />
-              <input
-                type="text"
-                className="text-input"
-                placeholder="City (e.g. Bengaluru)"
-                value={branchCity}
-                onChange={(e) => setBranchCity(e.target.value)}
-                style={{ padding: '6px 8px', fontSize: '11px' }}
-                required
-              />
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto auto', gap: '8px', alignItems: 'center' }}>
-              <input
-                type="number"
-                aria-label="Office latitude"
-                placeholder="Latitude (e.g. 12.909980)"
-                min="-90"
-                max="90"
-                step="any"
-                required
-                value={branchLatitude}
-                onChange={(event) => setBranchLatitude(event.target.value)}
-                style={{ padding: '6px 8px', fontSize: '11px' }}
-              />
-              <input
-                type="number"
-                aria-label="Office longitude"
-                placeholder="Longitude (e.g. 77.651740)"
-                min="-180"
-                max="180"
-                step="any"
-                required
-                value={branchLongitude}
-                onChange={(event) => setBranchLongitude(event.target.value)}
-                style={{ padding: '6px 8px', fontSize: '11px' }}
-              />
-              <button
-                type="button"
-                className="ui-button secondary"
-                onClick={handleAutoDetectOfficeCoords}
-                disabled={detectingOfficeGps}
-                title="Detect current location and autofill latitude and longitude"
-                style={{ height: '32px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}
-              >
-                <MapPin size={12} /> {detectingOfficeGps ? 'Detecting…' : 'Use My GPS'}
-              </button>
-              <Button type="submit" style={{ height: '32px' }}>
-                <Plus size={13} /> Add Branch
-              </Button>
-            </div>
-          </form>
-        </div>
-      </section>
-
-      {/* HOLIDAY CALENDAR SHOWCASE & EDITOR */}
-      <HolidayCalendarShowcase canManage={true} user={user} />
+        </AdminModalPortal>
+      )}
     </div>
   )
 }

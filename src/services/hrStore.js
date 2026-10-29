@@ -4088,6 +4088,29 @@ const localStore = {
     notifyListeners()
     return newLoc
   },
+  updateBranchLocation(id, updates) {
+    if (!id) return
+    storeState.companySettings.locations = (storeState.companySettings.locations || []).map((loc) => {
+      if (loc.id === id || loc._id === id || loc.name === id) {
+        return {
+          ...loc,
+          ...updates,
+          lat: updates.lat !== undefined && updates.lat !== null && updates.lat !== '' ? Number(updates.lat) : loc.lat,
+          lng: updates.lng !== undefined && updates.lng !== null && updates.lng !== '' ? Number(updates.lng) : loc.lng,
+          radiusMeters: updates.radiusMeters !== undefined && updates.radiusMeters !== null && updates.radiusMeters !== '' ? Number(updates.radiusMeters) : loc.radiusMeters,
+        }
+      }
+      return loc
+    })
+    storeState.companySettings = {
+      ...storeState.companySettings,
+      locations: [...storeState.companySettings.locations],
+    }
+    storeState = { ...storeState, companySettings: { ...storeState.companySettings } }
+    this.addAuditLog('Admin', 'BRANCH_UPDATE', `Updated office branch: ${updates.name || id}`)
+    notifyListeners()
+    return storeState.companySettings.locations.find((l) => l.id === id || l._id === id || l.name === id)
+  },
   removeBranchLocation(id) {
     if (!id) return
     storeState.companySettings.locations = (storeState.companySettings.locations || []).filter((l) =>
