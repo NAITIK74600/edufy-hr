@@ -6,7 +6,8 @@ import { AttendanceSettings } from '../../models/AttendanceSettings.js'
 import { Shift } from '../../models/Shift.js'
 import { ShiftAssignment } from '../../models/ShiftAssignment.js'
 import { AuditLog } from '../../models/AuditLog.js'
-import { STANDARD_SHIFT_DEF, normalizeShiftConfig } from './policyEngine.js'
+import { STANDARD_SHIFT_DEF, normalizeShiftConfig, parseTimeToMinutes, formatMinutesToTime } from './policyEngine.js'
+import { getTodayString } from './attendance.service.js'
 import { LeavePolicy } from '../../models/LeavePolicy.js'
 import { ensureConnected } from '../leave/leave.repository.js'
 import { isIP } from 'node:net'
@@ -112,6 +113,38 @@ export function createAttendanceRouter({ auth, service, useDatabase = false, per
         ).lean()
         await AttendanceSettings.deleteMany({ key: { $ne: 'office' } }).catch(() => {})
         service.updateConfig(saved || values)
+
+        // Synchronize default Shift collection with admin configured work shift timings
+        if (values.attendanceRules?.workStartTime && values.attendanceRules?.workEndTime) {
+          const sMins = parseTimeToMinutes(values.attendanceRules.workStartTime)
+          const eMins = parseTimeToMinutes(values.attendanceRules.workEndTime)
+          const gMins = Number(values.attendanceRules.gracePeriodMinutes) ?? 15
+          if (sMins !== null && eMins !== null) {
+            const shiftName = `General (${formatMinutesToTime(sMins)} – ${formatMinutesToTime(eMins)})`
+            await Shift.updateMany({}, { $set: { isDefault: false } }).catch(() => {})
+            await Shift.findOneAndUpdate(
+              { shiftId: 'GENERAL' },
+              {
+                $set: {
+                  shiftId: 'GENERAL',
+                  name: shiftName,
+                  startTime: formatMinutesToTime(sMins),
+                  endTime: formatMinutesToTime(eMins),
+                  startMinutes: sMins,
+                  endMinutes: eMins,
+                  isOvernight: eMins < sMins,
+                  gracePeriodMinutes: gMins,
+                  graceCutoffMinutes: sMins + gMins,
+                  isDefault: true,
+                  isActive: true,
+                },
+              },
+              { upsert: true }
+            ).catch(() => {})
+            // Automatically recalculate today's attendance so changes take effect immediately
+            await service.recalculateAttendance(getTodayString()).catch(() => {})
+          }
+        }
         if (values.leavePolicies) {
           const lp = values.leavePolicies
           const defaultApproval = lp.approvalWorkflow || (lp.requireManagerApproval && lp.requireHrApproval ? 'manager_hr' : lp.requireManagerApproval ? 'manager' : 'hr')

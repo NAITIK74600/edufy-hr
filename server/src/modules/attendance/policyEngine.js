@@ -1,5 +1,6 @@
 import { Shift } from '../../models/Shift.js'
 import { ShiftAssignment } from '../../models/ShiftAssignment.js'
+import { AttendanceSettings } from '../../models/AttendanceSettings.js'
 
 /**
  * Standard Default Shift Specification
@@ -151,7 +152,46 @@ export async function resolveEmployeeShift(employeeId, dateStr) {
     }
   }
 
-  // 2. Query system default shift
+  // 2. Query authoritative attendance settings configured by admin
+  try {
+    const settings = (await AttendanceSettings.findOne({ key: 'office' }).lean()) ||
+      (await AttendanceSettings.findOne({}).sort({ updatedAt: -1 }).lean())
+    const rules = settings?.attendanceRules
+    if (rules?.workStartTime && rules?.workEndTime) {
+      const startMins = parseTimeToMinutes(rules.workStartTime)
+      const endMins = parseTimeToMinutes(rules.workEndTime)
+      const graceMins = Number(rules.gracePeriodMinutes) ?? 15
+      if (startMins !== null && endMins !== null) {
+        const customShift = {
+          shiftId: 'GENERAL',
+          name: `General (${formatMinutesToTime(startMins)} – ${formatMinutesToTime(endMins)})`,
+          startTime: formatMinutesToTime(startMins),
+          endTime: formatMinutesToTime(endMins),
+          startMinutes: startMins,
+          endMinutes: endMins,
+          isOvernight: endMins < startMins,
+          gracePeriodMinutes: graceMins,
+          graceCutoffMinutes: startMins + graceMins,
+          halfDayCutoffMinutes: startMins + 60,
+          earlyLogoutWindow: {
+            startMinutes: Math.max(0, endMins - 90),
+            endMinutes: Math.max(0, endMins - 20),
+            startTime: formatMinutesToTime(Math.max(0, endMins - 90)),
+            endTime: formatMinutesToTime(Math.max(0, endMins - 20)),
+          },
+          requiredCampusHours: 4,
+          requiredCampusMinutes: 240,
+          timezone: 'Asia/Kolkata',
+        }
+        return {
+          shift: normalizeShiftConfig(customShift),
+          source: 'attendance_settings',
+        }
+      }
+    }
+  } catch {}
+
+  // 3. Query system default shift from Shift collection
   try {
     const defaultShift = await Shift.findOne({ isDefault: true, isActive: true }).lean()
     if (defaultShift) {
@@ -162,7 +202,7 @@ export async function resolveEmployeeShift(employeeId, dateStr) {
     }
   } catch {}
 
-  // 3. Fallback to standard in-memory policy definition
+  // 4. Fallback to standard in-memory policy definition
   return {
     shift: { ...STANDARD_SHIFT_DEF },
     source: 'standard_policy',

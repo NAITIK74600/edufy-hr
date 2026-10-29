@@ -867,7 +867,7 @@ export function HRLayout({ route, children }) {
                             }
                             return `General (${f12(r.workStartTime, r.workEndTime, false)} – ${f12(r.workEndTime, r.workStartTime, true)})`
                           }
-                          return 'General (09:30 AM – 06:30 PM)'
+                          return 'General (11:00 AM – 08:00 PM)'
                         })()}</strong>
                       </div>
 

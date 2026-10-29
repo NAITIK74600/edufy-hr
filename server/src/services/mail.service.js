@@ -65,7 +65,7 @@ function isPlaceholder(val) {
   )
 }
 
-function getMailConfig() {
+export function getMailConfig() {
   const host = (process.env.SMTP_HOST || 'smtp.gmail.com').trim()
   const port = parseInt(process.env.SMTP_PORT || '587', 10)
   const secure = process.env.SMTP_SECURE === 'true' || port === 465

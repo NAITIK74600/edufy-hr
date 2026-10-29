@@ -64,8 +64,29 @@ import { useAuth } from '../auth/AuthContext'
 import { formatINR, formatINRRaw, amountInWordsINR } from '../utils/currency'
 const workspaceHandler = (handler) => workspaceAction(hrStore, handler)
 
-function formatShiftDisplay(shiftStr) {
-  return shiftStr || '—'
+function formatShiftDisplay(shiftStr, shiftCode, attendanceRules) {
+  if (attendanceRules?.workStartTime && attendanceRules?.workEndTime) {
+    const f12 = (t, isEnd = false) => {
+      if (!t) return ''
+      const clean = String(t).trim().replace(/[\u202F\u00A0]/g, ' ')
+      const m = clean.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/i)
+      if (!m) return t
+      let h = parseInt(m[1], 10)
+      const min = m[2]
+      const meridiem = m[3]?.toUpperCase()
+      if (meridiem === 'PM' && h < 12) h += 12
+      if (meridiem === 'AM' && h === 12) h = 0
+      if (!meridiem && isEnd && h >= 1 && h <= 11) h += 12
+      const ampm = h >= 12 ? 'PM' : 'AM'
+      h = h % 12 || 12
+      return `${String(h).padStart(2, '0')}:${min} ${ampm}`
+    }
+    return `General (${f12(attendanceRules.workStartTime, false)} – ${f12(attendanceRules.workEndTime, true)})`
+  }
+  if (!shiftStr || shiftStr.includes('09:30')) {
+    return 'General (11:00 AM – 08:00 PM)'
+  }
+  return shiftStr
 }
 
 // ==========================================
@@ -673,18 +694,25 @@ function AttendanceModule() {
                 {
                   key: 'totalHours',
                   label: 'Work Duration / Breaks',
-                  render: (r) => (
-                    <div>
-                      <strong style={{ color: r.isOnBreak ? '#b45309' : 'var(--teal)' }}>
-                        {r.isOnBreak ? `⏸️ On ${r.currentBreak?.type === 'tea' ? 'Tea Break' : 'Lunch Break'}` : (r.totalHours || '—')}
-                      </strong>
-                      {r.totalBreakMinutes > 0 && (
-                        <div style={{ fontSize: '10px', color: '#b45309' }}>
-                          ☕ {r.totalBreakMinutes}m Break Taken
-                        </div>
-                      )}
-                    </div>
-                  ),
+                  render: (r) => {
+                    const isLateRecord = Boolean(r.isLate || r.status === 'late')
+                    let displayHours = r.totalHours || '—'
+                    if (!r.checkOut && displayHours.includes('Active')) {
+                      displayHours = isLateRecord ? 'Active (Late)' : 'Active (Live)'
+                    }
+                    return (
+                      <div>
+                        <strong style={{ color: r.isOnBreak ? '#b45309' : (isLateRecord ? '#dc2626' : 'var(--teal)') }}>
+                          {r.isOnBreak ? `⏸️ On ${r.currentBreak?.type === 'tea' ? 'Tea Break' : 'Lunch Break'}` : displayHours}
+                        </strong>
+                        {r.totalBreakMinutes > 0 && (
+                          <div style={{ fontSize: '10px', color: '#b45309' }}>
+                            ☕ {r.totalBreakMinutes}m Break Taken
+                          </div>
+                        )}
+                      </div>
+                    )
+                  },
                 },
                 {
                   key: 'wifi',
@@ -1269,13 +1297,17 @@ function AttendanceModule() {
                   </Field>
                 </div>
 
-                <Field label="Shift Display">
+                <Field label="Shift Timings">
                   <input
                     type="text"
-                    value={formatShiftDisplay(editingAttendance.shift, editingAttendance.shiftCode, storeState.companySettings?.attendanceRules)}
-                    disabled
-                    style={{ background: 'var(--surface-sunken)', color: 'var(--ink)' }}
+                    value={editingAttendance.shift || ''}
+                    placeholder={formatShiftDisplay(null, null, storeState.companySettings?.attendanceRules)}
+                    onChange={(e) => setEditingAttendance({ ...editingAttendance, shift: e.target.value })}
+                    style={{ background: '#fff', color: 'var(--ink)' }}
                   />
+                  <small style={{ color: 'var(--muted)', fontSize: '10px', marginTop: '2px', display: 'block' }}>
+                    Active Org Shift: {formatShiftDisplay(null, null, storeState.companySettings?.attendanceRules)} (configured in System Configuration)
+                  </small>
                 </Field>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>

@@ -1388,7 +1388,7 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
                 }
                 return `General (${f12(attRules.workStartTime, attRules.workEndTime, false)} – ${f12(attRules.workEndTime, attRules.workStartTime, true)})`
               }
-              return 'General (09:30 AM – 06:30 PM)'
+              return 'General (11:00 AM – 08:00 PM)'
             })(),
             shiftCode: shiftCode || 'general',
           }

@@ -24,8 +24,8 @@ const attendanceRecordSchema = new mongoose.Schema({
   offCampusDurationMinutes: { type: Number, default: 0 },
   verifiedCampusMinutes: { type: Number, default: 0 },
   policyEvaluation: { type: mongoose.Schema.Types.Mixed, default: null },
-  shift: { type: String, trim: true, default: 'General (09:30 AM – 06:30 PM)' },
-  shiftCode: { type: String, trim: true, default: 'general' },
+  shift: { type: String, trim: true, default: null },
+  shiftCode: { type: String, trim: true, default: null },
   isOnBreak: { type: Boolean, default: false },
   currentBreak: {
     type: { type: String, default: null }, // 'lunch', 'tea', 'other'

@@ -182,7 +182,7 @@ export function formatTime12(timeStr, referenceTime = null, isEndTime = false) {
 }
 
 export function formatTime24(timeStr, referenceTime = null, isEndTime = false) {
-  if (!timeStr && timeStr !== 0) return isEndTime ? '18:30' : '09:30'
+  if (!timeStr && timeStr !== 0) return isEndTime ? '20:00' : '11:00'
   let mins = typeof timeStr === 'number' ? timeStr : parseTimeToMinutes(timeStr)
   if (mins === null) return String(timeStr)
 
@@ -320,31 +320,8 @@ export async function evaluateShiftLateness(checkInTime, employeeId = null, work
     notes: evalResult.notes,
   };
 }
-  // Resolve the employee's shift if not explicitly provided.
-  let resolvedShift = null;
-  if (employeeId && workDate) {
-    try {
-      const { shift } = await resolveEmployeeShift(employeeId, workDate);
-      resolvedShift = shift;
-    } catch {
-      // fallback to standard definition on error
-    }
-  }
-  const evalResult = evaluatePunchIn({
-    checkInTime,
-    shift: resolvedShift || STANDARD_SHIFT_DEF,
-  });
-  return {
-    isLate: evalResult.isLate,
-    isHalfDay: evalResult.isHalfDay,
-    lateMinutes: evalResult.lateMinutes,
-    status: evalResult.status,
-    occurrence: evalResult.occurrence,
-    notes: evalResult.notes,
-  };
-}
 
-function getTodayString() {
+export function getTodayString() {
   const formatter = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' })
   return formatter.format(new Date())
 }
@@ -719,15 +696,21 @@ export function createAttendanceService({ repository, companySettings = {} }) {
       const checkInTime = formatCurrentTime()
 
       // Authoritative policy punch-in: resolves employee shift & evaluates late login / half-day
-      let resolvedShiftConfig = null
-      if (shift && typeof shift === 'object' && shift.startMinutes) {
-        resolvedShiftConfig = normalizeShiftConfig(shift)
-      } else if (shift && typeof shift === 'string') {
-        const extracted = extractShiftTimes(shift)
-        resolvedShiftConfig = normalizeShiftConfig({ shiftId: shiftCode, name: shift, ...extracted })
-      } else {
-        const resShift = await resolveEmployeeShift(employeeId, workDate)
-        resolvedShiftConfig = resShift.shift
+      const resShift = await resolveEmployeeShift(employeeId, workDate)
+      let resolvedShiftConfig = resShift?.shift
+
+      if (!resolvedShiftConfig) {
+        if (shift && typeof shift === 'object' && shift.startMinutes) {
+          resolvedShiftConfig = normalizeShiftConfig(shift)
+        } else if (shift && typeof shift === 'string') {
+          const extracted = extractShiftTimes(shift)
+          if (extracted.hasExplicitTimes) {
+            resolvedShiftConfig = normalizeShiftConfig({ shiftId: shiftCode, name: shift, ...extracted })
+          }
+        }
+      }
+      if (!resolvedShiftConfig) {
+        resolvedShiftConfig = { ...STANDARD_SHIFT_DEF }
       }
 
       const punchEval = evaluatePunchIn({ checkInTime, shift: resolvedShiftConfig })
@@ -774,8 +757,8 @@ export function createAttendanceService({ repository, companySettings = {} }) {
         gpsVerified: verification.isGpsVerified,
         locationName: verification.nearestLocation,
         verificationMethod: verification.method,
-        totalHours: 'Active (Live)',
-        notes: shift ? `Verified Attendance (${shift})` : 'Verified Attendance',
+        totalHours: punchEval.isLate ? 'Active (Late)' : 'Active (Live)',
+        notes: punchEval.isLate ? punchEval.notes : `Verified Attendance (${resolvedShiftConfig.name})`,
       }
 
       return repository.punchIn(record)
@@ -1136,15 +1119,30 @@ export function createAttendanceService({ repository, companySettings = {} }) {
           isAbsent: rec.status === 'absent',
         })
 
+        const isStillActive = !rec.checkOut
+        const finalStatus = punchEval.status === 'half-day'
+          ? 'half-day'
+          : checkoutEval?.isCampusShortfall
+          ? 'half-day'
+          : punchEval.isLate
+          ? 'late'
+          : 'present'
+
         const updated = {
           ...rec,
           shift: shiftConfig.name,
           shiftCode: shiftConfig.shiftId.toLowerCase(),
           isLate: punchEval.isLate,
           isHalfDay: punchEval.isHalfDay || (checkoutEval ? checkoutEval.isCampusShortfall : false),
-          status: punchEval.status === 'half-day' ? 'half-day' : (checkoutEval?.isCampusShortfall ? 'half-day' : (rec.status || punchEval.status)),
+          status: finalStatus,
           isEarlyLogout: checkoutEval ? checkoutEval.isEarlyLogout : false,
-          doubleLopStatus: doubleLopEval.applies ? (rec.doubleLopStatus === 'approved' ? 'approved' : 'pending_approval') : 'none',
+          totalHours: isStillActive
+            ? (punchEval.isLate ? 'Active (Late)' : 'Active (Live)')
+            : (typeof rec.totalHours === 'string' && rec.totalHours.includes('Active') ? '8.0 hrs' : rec.totalHours),
+          notes: punchEval.isLate
+            ? punchEval.notes
+            : `Verified Attendance (${shiftConfig.name})`,
+          doubleLopStatus: doubleLopEval.applies ? (rec.doubleLopStatus === 'approved' ? 'approved' : 'none') : 'none',
           isDoubleLop: rec.doubleLopStatus === 'approved',
           policyEvaluation: { punch: punchEval, checkout: checkoutEval },
         }
