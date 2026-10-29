@@ -31,24 +31,28 @@ run.bat
 run.ps1
 start.bat
 
-# Documentation (not needed for hosting)
+# Documentation & audits (not needed for hosting)
 AUTHENTICATION.md
 HR_PANEL_AUDIT.md
 HR_PANEL_DEPLOYMENT_CHECKLIST.md
 HR_PANEL_FIX_LOG.md
 HR_PANEL_TEST_PLAN.md
+HRMS_*.md
 
-# Images at root (not needed)
-1.jpeg
-2.jpeg
-*.pub
-WhatsApp*.jpeg
-
-# GitHub workflows
-.github/
-
-# Test files
+# Scripts & Test files (not needed for hosting)
+/scripts/
+/server/scripts/
+/server/test/
 /test/
+
+# Raw loose document folders & root images (bundled in public/ and dist/)
+comapny document/
+company policy/
+verification form/
+edufyi logo.jpg.jpeg
+*.jpeg
+*.jpg
+.github/
 
 # Build reports
 dist/stats.html
