@@ -99,15 +99,12 @@ copyDir(
 )
 
 // ─── Step 4: Copy dist (built frontend) ──────────────────
-console.log('🎨 Copying frontend dist...')
-if (!fs.existsSync(path.join(ROOT, 'dist', 'index.html'))) {
-  console.log('  ⚠️  dist/index.html not found. Building frontend...')
-  try {
-    execSync('npm run build', { cwd: ROOT, stdio: 'inherit' })
-  } catch (e) {
-    console.error('  ❌ Frontend build failed! Make sure vite is installed.')
-    process.exit(1)
-  }
+console.log('🎨 Building and packaging latest frontend dist...')
+try {
+  execSync('npm run build', { cwd: ROOT, stdio: 'inherit' })
+} catch (e) {
+  console.error('  ❌ Frontend build failed! Make sure vite is installed.')
+  process.exit(1)
 }
 copyDir(path.join(ROOT, 'dist'), path.join(BUILD_DIR, 'dist'))
 

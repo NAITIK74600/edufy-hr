@@ -4903,7 +4903,11 @@ function AdminSettingsModule({ user: propUser }) {
           requireHrApproval: approvalWorkflow === 'hr' || approvalWorkflow === 'manager_hr',
         },
       })
-      await hrStore.recalculateTodayAttendance()
+      try {
+        await hrStore.recalculateTodayAttendance()
+      } catch (recalcErr) {
+        console.warn('[LeavePoliciesSave] Recalculate notice:', recalcErr?.message || recalcErr)
+      }
       setNotice(`✓ Saved policies! Annual leave quotas and approval rules updated.`)
       setTimeout(() => setNotice(''), 5500)
     } catch (err) {
