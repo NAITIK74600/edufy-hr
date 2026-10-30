@@ -59,3 +59,4 @@ export function compressImageFile(file, maxWidth = 512, maxHeight = 512, quality
     reader.readAsDataURL(file)
   })
 }
+

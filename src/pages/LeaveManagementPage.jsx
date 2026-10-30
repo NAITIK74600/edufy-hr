@@ -1338,6 +1338,9 @@ export function LeaveManagementPage({ mode = 'self' }) {
   const isSelf = mode === 'self'
 
   useEffect(() => {
+    if (!storeState.employees?.length) {
+      hrStore.refresh().catch(() => {})
+    }
     return hrStore.subscribe((state) => {
       setStoreState(state)
     })

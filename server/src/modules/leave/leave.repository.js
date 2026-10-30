@@ -101,15 +101,29 @@ export function createMongoLeaveRepository() {
     async getBalance(employeeId, leaveType) { ensureConnected(); return LeaveBalance.findOne({ employeeId: objectId(employeeId), leaveType: String(leaveType).toLowerCase() }).lean() },
     async listBalances(filters = {}) {
       ensureConnected()
+
+      // Automatically prune orphaned balance documents with null or deleted employee refs
+      try {
+        await LeaveBalance.deleteMany({
+          $or: [{ employeeId: null }, { employeeId: { $exists: false } }]
+        })
+      } catch (pruneErr) {
+        console.warn('[leave.repository] Cleanup orphaned balances warning:', pruneErr?.message || pruneErr)
+      }
+
       const query = {}
       if (filters.employeeId) query.employeeId = objectId(filters.employeeId)
       if (filters.leaveType) query.leaveType = String(filters.leaveType).toLowerCase()
-      const records = await LeaveBalance.find(query).populate('employeeId', 'employeeId name department employmentType designation role').sort({ leaveType: 1 }).lean()
+      const rawRecords = await LeaveBalance.find(query).populate('employeeId', 'employeeId name department employmentType designation role').sort({ leaveType: 1 }).lean()
+
+      // Exclude any balances where employeeId failed to populate (unresolved employee)
+      const records = rawRecords.filter((b) => b && b.employeeId && typeof b.employeeId === 'object' && b.employeeId._id)
 
       const currentMonthKey = new Date().toISOString().slice(0, 7)
       for (const b of records) {
         if (!b.month || b.month !== currentMonthKey) {
           const emp = b.employeeId
+          if (!emp) continue
           const empType = String(emp?.employmentType || '').toLowerCase().replace(/[-\s]/g, '_')
           const isIntern = empType === 'intern' || String(emp?.designation || '').toLowerCase().includes('intern') || String(emp?.role || '').toLowerCase().includes('intern')
           let defaultAllowance = 0

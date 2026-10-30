@@ -1086,10 +1086,12 @@ export function AllInOneQuotaModal({ open, onClose, targetEmployee, employees = 
     setErrorMsg('')
     try {
       const types = ['casual', 'sick', 'earned', 'comp_off', 'maternity', 'lop']
+      const targetEmpRecord = employees.find((e) => (e.id || e._id || e.employeeId) === empId) || targetEmployee
+      const finalEmpId = String(targetEmpRecord?._id || targetEmpRecord?.employeeId || targetEmpRecord?.id || empId)
       for (const type of types) {
         const raw = quotas[type]
         const val = Math.max(0, Number(raw === '' || raw === undefined ? 0 : raw))
-        await apiClient.put(`/leave/hr/balances/${empId}/${type}`, { allowance: val })
+        await apiClient.put(`/leave/hr/balances/${finalEmpId}/${type}`, { allowance: val })
       }
       await hrStore.refresh()
       if (onSuccess) {
@@ -1519,8 +1521,9 @@ export function LeaveBalanceTable({ balances = [], employees = [], onSwitchTab }
   const [noticeType, setNoticeType] = useState('success')
   const [busy, setBusy] = useState(false)
 
-  // Resolve employees from prop or store
-  const rawEmployees = employees.length > 0 ? employees : (hrStore.getState().employees || [])
+  const [liveStoreState, setLiveStoreState] = useState(() => hrStore.getState())
+  useEffect(() => hrStore.subscribe(setLiveStoreState), [])
+  const rawEmployees = employees.length > 0 ? employees : (liveStoreState.employees || hrStore.getState().employees || [])
 
   // Helper to match a balance record to an employee
   const matchBalance = (b, emp) => {
@@ -1575,21 +1578,25 @@ export function LeaveBalanceTable({ balances = [], employees = [], onSwitchTab }
     }
 
     if (!matchedKey) {
+      // If balance does not contain a valid populated employee object, SKIP IT! Never create ghost "Employee" rows or fake emp-* IDs!
       const empObj = typeof b.employeeId === 'object' && b.employeeId !== null ? b.employeeId : null
-      const key = empObj?._id || empObj?.id || empObj?.employeeId || b.employeeId || `emp-${employeeMap.size}`
+      if (!empObj) continue
+      const realId = String(empObj._id || empObj.id || empObj.employeeId || '')
+      if (!realId) continue
+
       const empEntry = {
-        id: key,
-        _id: empObj?._id || key,
-        name: empObj?.name || 'Employee',
-        employeeId: empObj?.employeeId || (typeof b.employeeId === 'string' ? b.employeeId : ''),
-        department: empObj?.department || 'General',
-        designation: 'Team Member',
-        employmentType: empObj?.employmentType || '',
-        avatar: '',
+        id: realId,
+        _id: String(empObj._id || empObj.id || realId),
+        name: empObj.name || empObj.displayName || 'Unnamed Staff',
+        employeeId: empObj.employeeId || '',
+        department: empObj.department || 'General',
+        designation: empObj.designation || empObj.role || 'Team Member',
+        employmentType: empObj.employmentType || '',
+        avatar: empObj.avatar || empObj.avatarUrl || '',
         balances: {},
       }
-      employeeMap.set(String(key), empEntry)
-      matchedKey = String(key)
+      employeeMap.set(realId, empEntry)
+      matchedKey = realId
     }
 
     const emp = employeeMap.get(matchedKey)
@@ -1744,7 +1751,7 @@ export function LeaveBalanceTable({ balances = [], employees = [], onSwitchTab }
   // Quick apply standard policy to a single employee
   const handleApplyPolicyToSingleEmployee = async (emp, e) => {
     if (e) e.stopPropagation()
-    const empId = emp.id || emp._id || emp.employeeId
+    const empId = String(emp._id || emp.employeeId || emp.id || '')
     const isIntern = isInternEmployee(emp)
     try {
       await apiClient.put(`/leave/hr/balances/${empId}/casual`, { allowance: isIntern ? 0 : 1 })

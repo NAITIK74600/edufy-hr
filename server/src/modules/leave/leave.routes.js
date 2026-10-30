@@ -29,13 +29,25 @@ export function createLeaveRouter({ auth, service }) {
         throw Object.assign(new Error('Enter a valid leave type and non-negative allowance.'), { statusCode: 400, code: 'VALIDATION_ERROR' })
       }
       let emp = null
-      if (mongoose.isValidObjectId(request.params.employeeId)) {
-        emp = await Employee.findById(request.params.employeeId).lean()
+      const targetParam = String(request.params.employeeId || '').trim()
+      if (mongoose.isValidObjectId(targetParam)) {
+        emp = await Employee.findById(targetParam).lean()
       }
-      if (!emp && typeof request.params.employeeId === 'string') {
-        emp = await Employee.findOne({ employeeId: request.params.employeeId.trim().toUpperCase() }).lean()
+      if (!emp && targetParam) {
+        const upper = targetParam.toUpperCase()
+        const strippedNum = targetParam.replace(/^[^0-9]*/, '')
+        const queryOr = [
+          { employeeId: upper },
+          { employeeId: targetParam },
+          { username: targetParam.toLowerCase() },
+          { email: targetParam.toLowerCase() }
+        ]
+        if (strippedNum) {
+          queryOr.push({ employeeId: new RegExp(strippedNum, 'i') })
+        }
+        emp = await Employee.findOne({ $or: queryOr }).lean()
       }
-      if (!emp) throw Object.assign(new Error('Employee not found.'), { statusCode: 404, code: 'EMPLOYEE_NOT_FOUND' })
+      if (!emp) throw Object.assign(new Error('Employee "' + targetParam + '" not found.'), { statusCode: 404, code: 'EMPLOYEE_NOT_FOUND' })
       const empObjectId = emp._id
 
       const current = await LeaveBalance.findOne({ employeeId: empObjectId, leaveType: request.params.leaveType }).lean()
