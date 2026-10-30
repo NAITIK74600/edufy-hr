@@ -401,6 +401,7 @@ export function AdminUsersModule() {
   const [storeState, setStoreState] = useState(() => hrStore.getState())
   const [search, setSearch] = useState('')
   const [roleFilter, setRoleFilter] = useState('all')
+  const [campusFilter, setCampusFilter] = useState('all')
   const [modalOpen, setModalOpen] = useState(false)
   const [editUser, setEditUser] = useState(null)
   const [resetUser, setResetUser] = useState(null)
@@ -543,13 +544,37 @@ export function AdminUsersModule() {
     setFormDesignation(employee?.designation ?? '')
   }
 
+  const empMap = useMemo(() => {
+    const map = new Map()
+    ;(storeState.employees || []).forEach((e) => {
+      if (e.employeeId) map.set(e.employeeId.toUpperCase(), e)
+      if (e.email) map.set(e.email.toLowerCase(), e)
+      if (e.id) map.set(String(e.id), e)
+      if (e._id) map.set(String(e._id), e)
+    })
+    return map
+  }, [storeState.employees])
+
+  const availableCampuses = useMemo(() => {
+    const set = new Set(['Ignite Campus', 'Velocity Hub'])
+    ;(storeState.companySettings?.locations || []).forEach((l) => { if (l.name) set.add(l.name) })
+    ;(storeState.employees || []).forEach((e) => {
+      const loc = e.campus || e.location || e.branch
+      if (loc) set.add(loc)
+    })
+    return Array.from(set).filter(Boolean)
+  }, [storeState.companySettings?.locations, storeState.employees])
+
   const filteredUsers = users.filter((u) => {
     const matchesSearch =
       u.name?.toLowerCase().includes(search.toLowerCase()) ||
       u.email?.toLowerCase().includes(search.toLowerCase()) ||
       u.employeeId?.toLowerCase().includes(search.toLowerCase())
     const matchesRole = roleFilter === 'all' || u.role === roleFilter
-    return matchesSearch && matchesRole
+    const emp = empMap.get(u.employeeId?.toUpperCase()) || empMap.get(u.email?.toLowerCase())
+    const userCamp = u.campus || emp?.campus || emp?.location || emp?.branch || 'Ignite Campus'
+    const matchesCampus = campusFilter === 'all' || userCamp.toLowerCase() === campusFilter.toLowerCase()
+    return matchesSearch && matchesRole && matchesCampus
   })
 
   async function handleCreateUser(e) {
@@ -730,8 +755,20 @@ export function AdminUsersModule() {
           placeholder="Search by name, email, or employee ID..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          style={{ width: '280px', padding: '6px 10px', fontSize: '11px' }}
+          style={{ width: '260px', padding: '6px 10px', fontSize: '11px' }}
         />
+        <select
+          className="select-control"
+          value={campusFilter}
+          onChange={(e) => setCampusFilter(e.target.value)}
+          style={{ padding: '6px 10px', fontSize: '11px', minWidth: '130px' }}
+          aria-label="Filter by campus"
+        >
+          <option value="all">All Campuses</option>
+          {availableCampuses.map((c) => (
+            <option key={c} value={c}>{c}</option>
+          ))}
+        </select>
         <select
           className="select-control"
           value={roleFilter}
@@ -786,7 +823,8 @@ export function AdminUsersModule() {
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', fontSize: '11px', background: 'var(--surface-sunken)', padding: '8px 10px', borderRadius: '6px' }}>
                   <div><span style={{ color: 'var(--muted)' }}>ID: </span><strong>{u.employeeId}</strong></div>
                   <div><span style={{ color: 'var(--muted)' }}>Role: </span><span className={`role-badge role-${u.role}`} style={{ fontSize: '9px' }}>{getRoleBadgeLabel(u.role)}</span></div>
-                  <div style={{ gridColumn: '1 / -1' }}><span style={{ color: 'var(--muted)' }}>Dept: </span><strong>{u.department}</strong></div>
+                  <div><span style={{ color: 'var(--muted)' }}>Campus: </span><strong style={{ color: '#047857' }}>{u.campus || empMap.get(u.employeeId?.toUpperCase())?.campus || empMap.get(u.email?.toLowerCase())?.campus || empMap.get(u.employeeId?.toUpperCase())?.location || 'Ignite Campus'}</strong></div>
+                  <div><span style={{ color: 'var(--muted)' }}>Dept: </span><strong>{u.department}</strong></div>
                 </div>
 
                 <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', borderTop: '1px solid var(--line)', paddingTop: '8px' }}>
@@ -830,6 +868,7 @@ export function AdminUsersModule() {
               <tr>
                 <th>User</th>
                 <th>Employee Code</th>
+                <th>Campus</th>
                 <th>Department</th>
                 <th>Assigned Role</th>
                 <th>Status</th>
@@ -851,6 +890,11 @@ export function AdminUsersModule() {
                     </div>
                   </td>
                   <td><strong>{u.employeeId}</strong></td>
+                  <td>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', background: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0', padding: '2px 8px', borderRadius: '5px', fontSize: '11px', fontWeight: 600 }}>
+                      <MapPin size={10} style={{ color: '#16a34a' }} /> {u.campus || empMap.get(u.employeeId?.toUpperCase())?.campus || empMap.get(u.email?.toLowerCase())?.campus || empMap.get(u.employeeId?.toUpperCase())?.location || 'Ignite Campus'}
+                    </span>
+                  </td>
                   <td>{u.department}</td>
                   <td>
                     <span className={`role-badge role-${u.role}`}>

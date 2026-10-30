@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import {
   AlertCircle,
@@ -103,6 +103,7 @@ function AttendanceModule() {
   const [selectedDate, setSelectedDate] = useState(todayKey)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
+  const [campusFilter, setCampusFilter] = useState('all')
 
   const [showMarkModal, setShowMarkModal] = useState(false)
   const [markForm, setMarkForm] = useState({
@@ -146,7 +147,27 @@ function AttendanceModule() {
   const monthlyAttendance = allAttendance.filter((record) => record.date.startsWith(selectedDate.slice(0, 7)))
   const calendarDays = new Date(Number(selectedDate.slice(0, 4)), Number(selectedDate.slice(5, 7)), 0).getDate()
 
-  // Filtered by selected date and search/status
+  const empMap = useMemo(() => {
+    const map = new Map()
+    ;(storeState.employees || []).forEach((e) => {
+      if (e.employeeId) map.set(e.employeeId.toUpperCase(), e)
+      if (e.id) map.set(String(e.id), e)
+      if (e._id) map.set(String(e._id), e)
+    })
+    return map
+  }, [storeState.employees])
+
+  const availableCampuses = useMemo(() => {
+    const set = new Set(['Ignite Campus', 'Velocity Hub'])
+    ;(storeState.companySettings?.locations || []).forEach((l) => { if (l.name) set.add(l.name) })
+    ;(storeState.employees || []).forEach((e) => {
+      const loc = e.campus || e.location || e.branch
+      if (loc) set.add(loc)
+    })
+    return Array.from(set).filter(Boolean)
+  }, [storeState.companySettings?.locations, storeState.employees])
+
+  // Filtered by selected date, search, status, and campus
   const dailyAttendance = allAttendance.filter((item) => {
     if (item.date !== selectedDate) return false
     if (search) {
@@ -159,6 +180,19 @@ function AttendanceModule() {
       }
     }
     if (statusFilter !== 'all' && item.status !== statusFilter) return false
+    if (campusFilter !== 'all') {
+      const emp = empMap.get(String(item.employeeId || '').toUpperCase())
+      const itemCampus = item.campus || item.location || item.branch || emp?.campus || emp?.location || emp?.branch || 'Ignite Campus'
+      if (itemCampus.toLowerCase() !== campusFilter.toLowerCase()) return false
+    }
+    return true
+  })
+
+  const summaryEmployees = allEmployees.filter((emp) => {
+    if (campusFilter !== 'all') {
+      const empCampus = emp.campus || emp.location || emp.branch || 'Ignite Campus'
+      if (empCampus.toLowerCase() !== campusFilter.toLowerCase()) return false
+    }
     return true
   })
 
@@ -293,6 +327,7 @@ function AttendanceModule() {
     const headers = [
       'Employee ID',
       'Employee Name',
+      'Campus',
       'Date',
       'Check-In',
       'Check-Out',
@@ -302,18 +337,23 @@ function AttendanceModule() {
       'Hours',
       'Notes',
     ]
-    const rows = dailyAttendance.map((a) => [
-      a.employeeId,
-      a.employeeName,
-      a.date,
-      a.checkIn || 'N/A',
-      a.checkOut || (a.status === 'present' || a.status === 'late' ? 'Active (Live)' : 'N/A'),
-      a.status,
-      a.wifiSSID || 'None',
-      a.wifiVerified ? 'YES' : 'NO',
-      a.totalHours || '0.0',
-      a.notes || '',
-    ])
+    const rows = dailyAttendance.map((a) => {
+      const emp = empMap.get(String(a.employeeId || '').toUpperCase())
+      const cName = a.campus || a.location || a.branch || emp?.campus || emp?.location || emp?.branch || 'Ignite Campus'
+      return [
+        a.employeeId,
+        a.employeeName,
+        cName,
+        a.date,
+        a.checkIn || 'N/A',
+        a.checkOut || (a.status === 'present' || a.status === 'late' ? 'Active (Live)' : 'N/A'),
+        a.status,
+        a.wifiSSID || 'None',
+        a.wifiVerified ? 'YES' : 'NO',
+        a.totalHours || '0.0',
+        a.notes || '',
+      ]
+    })
     const csvContent =
       'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\n')
     const encodedUri = encodeURI(csvContent)
@@ -469,6 +509,19 @@ function AttendanceModule() {
 
               <select
                 className="leave-filter"
+                value={campusFilter}
+                onChange={(e) => setCampusFilter(e.target.value)}
+                style={{ height: '36px' }}
+                aria-label="Filter attendance by campus"
+              >
+                <option value="all">All Campuses</option>
+                {availableCampuses.map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+
+              <select
+                className="leave-filter"
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
                 style={{ height: '36px' }}
@@ -522,7 +575,13 @@ function AttendanceModule() {
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
                       <div>
                         <strong style={{ fontSize: '13px' }}>{r.employeeName}</strong>
-                        <span style={{ fontSize: '11px', color: 'var(--muted)', marginLeft: '6px' }}>({r.employeeId})</span>
+                        <div style={{ fontSize: '10px', color: 'var(--muted)', display: 'flex', gap: '5px', alignItems: 'center', marginTop: '2px' }}>
+                          <span>{r.employeeId}</span>
+                          <span>•</span>
+                          <span style={{ color: '#047857', fontWeight: 600, background: '#f0fdf4', padding: '1px 5px', borderRadius: '4px', border: '1px solid #bbf7d0' }}>
+                            {r.campus || empMap.get(String(r.employeeId || '').toUpperCase())?.campus || empMap.get(String(r.employeeId || '').toUpperCase())?.location || 'Ignite Campus'}
+                          </span>
+                        </div>
                       </div>
                       <div style={{ textAlign: 'right', display: 'flex', alignItems: 'center', gap: '6px' }}>
                         <StatusBadge tone={statusInfo.tone}>
@@ -642,13 +701,23 @@ function AttendanceModule() {
               columns={[
                 {
                   key: 'employeeName',
-                  label: 'Employee',
-                  render: (r) => (
-                    <div>
-                      <strong>{r.employeeName}</strong>
-                      <div style={{ fontSize: '9px', color: 'var(--muted)' }}>{r.employeeId}</div>
-                    </div>
-                  ),
+                  label: 'Employee & Campus',
+                  render: (r) => {
+                    const emp = empMap.get(String(r.employeeId || '').toUpperCase())
+                    const cName = r.campus || r.location || r.branch || emp?.campus || emp?.location || emp?.branch || 'Ignite Campus'
+                    return (
+                      <div>
+                        <strong>{r.employeeName}</strong>
+                        <div style={{ fontSize: '9px', color: 'var(--muted)', display: 'flex', gap: '5px', alignItems: 'center', marginTop: '2px' }}>
+                          <span>{r.employeeId}</span>
+                          <span>•</span>
+                          <span style={{ color: '#047857', fontWeight: 600, background: '#f0fdf4', padding: '1px 5px', borderRadius: '4px', border: '1px solid #bbf7d0' }}>
+                            {cName}
+                          </span>
+                        </div>
+                      </div>
+                    )
+                  },
                 },
                 {
                   key: 'shift',
@@ -863,7 +932,19 @@ function AttendanceModule() {
               <p className="section-kicker">Payroll Impact</p>
               <h2>Attendance & Payroll Review ({selectedDate.slice(0, 7)})</h2>
             </div>
-            <div style={{ display: 'flex', gap: '10px' }}>
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+              <select
+                className="leave-filter"
+                value={campusFilter}
+                onChange={(e) => setCampusFilter(e.target.value)}
+                style={{ height: '36px' }}
+                aria-label="Filter monthly summary by campus"
+              >
+                <option value="all">All Campuses</option>
+                {availableCampuses.map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
               <Button onClick={handleSyncPayrollAttendance}>
                 <RefreshCw size={14} /> Review linked payroll
               </Button>
@@ -878,15 +959,22 @@ function AttendanceModule() {
             columns={[
               {
                 key: 'employee',
-                label: 'Employee',
-                render: (emp) => (
-                  <div>
-                    <strong>{emp.name}</strong>
-                    <div style={{ fontSize: '9px', color: 'var(--muted)' }}>
-                      {emp.employeeId} · {emp.department}
+                label: 'Employee & Campus',
+                render: (emp) => {
+                  const cName = emp.campus || emp.location || emp.branch || 'Ignite Campus'
+                  return (
+                    <div>
+                      <strong>{emp.name}</strong>
+                      <div style={{ fontSize: '9px', color: 'var(--muted)', display: 'flex', gap: '4px', alignItems: 'center', marginTop: '2px' }}>
+                        <span>{emp.employeeId}</span>
+                        <span>·</span>
+                        <span>{emp.department}</span>
+                        <span>•</span>
+                        <span style={{ color: '#047857', fontWeight: 600 }}>{cName}</span>
+                      </div>
                     </div>
-                  </div>
-                ),
+                  )
+                },
               },
               { key: 'totalDays', label: 'Calendar Days', render: () => calendarDays },
               {
@@ -944,7 +1032,7 @@ function AttendanceModule() {
                 render: () => <StatusBadge tone="info">Eligible for Full Salary</StatusBadge>,
               },
             ]}
-            rows={allEmployees}
+            rows={summaryEmployees}
             emptyMessage="No employees registered."
           />
         </section>
