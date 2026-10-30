@@ -632,12 +632,14 @@ label.form-label {
   position: relative;
 }
 .topbar {
-  height: 76px;
+  height: calc(72px + env(safe-area-inset-top, 0px));
+  padding-top: env(safe-area-inset-top, 0px);
   border-bottom: 1px solid var(--line);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 42px;
+  padding-left: calc(42px + env(safe-area-inset-left, 0px));
+  padding-right: calc(42px + env(safe-area-inset-right, 0px));
   background: rgba(255, 255, 255, 0.98);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
@@ -669,7 +671,7 @@ label.form-label {
 /* Allow nested grid/flex content (cards, panels, scrollable tables) to shrink instead of forcing horizontal page overflow on small screens */
 .route-motion > div, .main-content .panel { min-width: 0; }
 .route-motion > div > *, .main-content :is(.dashboard-grid, .lower-grid) > * { min-width: 0; }
-@media (max-width: 560px) { .topbar { height: 64px; padding: 0 17px; }.breadcrumbs { font-size: 11px; }.search-box { display: none; }.page-content { padding: 29px 17px 20px; }.page-heading { display: block; margin-bottom: 26px; }.page-heading h1 { font-size: 26px; }.heading-actions { margin-top: 20px; }.select-control { flex: 1; justify-content: center; }.primary-button { flex: 1; justify-content: center; }.metric-grid { gap: 9px; }.metric-card { min-height: 117px; padding: 13px; gap: 8px; }.metric-copy strong { font-size: 24px; }.metric-copy > span { font-size: 10px; }.metric-copy small { font-size: 9px; }.metric-icon { width: 30px; height: 30px; }.panel { padding: 18px 15px; }.attendance-summary { align-items: flex-start; display: block; }.attendance-legend { margin-top: 15px; }.chart-wrap { height: 148px; }.chart-footer { display: block; line-height: 2; }.dashboard-grid, .lower-grid { gap: 12px; }.page-footer { display: grid; gap: 7px; }.announcement-feature h3 { font-size: 11px; } }
+@media (max-width: 560px) { .topbar { height: calc(56px + env(safe-area-inset-top, 0px)); padding-top: env(safe-area-inset-top, 0px); padding-left: calc(14px + env(safe-area-inset-left, 0px)); padding-right: calc(14px + env(safe-area-inset-right, 0px)); }.breadcrumbs { font-size: 11px; }.search-box { display: none; }.page-content { padding: 29px 17px 20px; }.page-heading { display: block; margin-bottom: 26px; }.page-heading h1 { font-size: 26px; }.heading-actions { margin-top: 20px; }.select-control { flex: 1; justify-content: center; }.primary-button { flex: 1; justify-content: center; }.metric-grid { gap: 9px; }.metric-card { min-height: 117px; padding: 13px; gap: 8px; }.metric-copy strong { font-size: 24px; }.metric-copy > span { font-size: 10px; }.metric-copy small { font-size: 9px; }.metric-icon { width: 30px; height: 30px; }.panel { padding: 18px 15px; }.attendance-summary { align-items: flex-start; display: block; }.attendance-legend { margin-top: 15px; }.chart-wrap { height: 148px; }.chart-footer { display: block; line-height: 2; }.dashboard-grid, .lower-grid { gap: 12px; }.page-footer { display: grid; gap: 7px; }.announcement-feature h3 { font-size: 11px; } }
 
 @keyframes fadeUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes pulseGlow { 0%, 100% { box-shadow: 0 0 0 0 rgba(29, 138, 122, .12); } 50% { box-shadow: 0 0 0 10px rgba(29, 138, 122, 0); } }
@@ -3010,8 +3012,10 @@ html, body {
     display: none;
   }
   .topbar {
-    height: 60px;
-    padding: 0 16px;
+    height: calc(58px + env(safe-area-inset-top, 0px));
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-left: calc(16px + env(safe-area-inset-left, 0px));
+    padding-right: calc(16px + env(safe-area-inset-right, 0px));
   }
   .topbar-actions {
     gap: 8px;
@@ -3045,7 +3049,13 @@ html, body {
   .attendance-table-desktop {
     display: none !important;
   }
-  .topbar { padding: 0 12px; gap: 6px; }
+  .topbar {
+    height: calc(56px + env(safe-area-inset-top, 0px));
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-left: calc(12px + env(safe-area-inset-left, 0px));
+    padding-right: calc(12px + env(safe-area-inset-right, 0px));
+    gap: 6px;
+  }
   .topbar-actions { gap: 6px; flex-wrap: nowrap; align-items: center; }
   .ai-copilot-btn span { display: none; }
   .ai-copilot-btn { padding: 8px; min-width: 38px; min-height: 38px; }
@@ -4237,6 +4247,93 @@ html, body {
   word-break: break-word;
   overflow-wrap: break-word;
   white-space: normal;
+}
+
+/* ==============================================================
+   iOS & IPHONE 14 / 15 PRO MAX RESPONSIVE & DYNAMIC ISLAND ENGINE
+   ============================================================== */
+
+/* Native Safe Area & Viewport containment */
+html {
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+}
+
+/* Prevent unwanted automatic zoom in on iOS Safari when focusing form inputs */
+@media screen and (max-width: 820px) {
+  input, select, textarea {
+    font-size: 16px !important;
+  }
+}
+
+/* iPhone 14 Pro, 14 Pro Max, 15, 15 Plus, 15 Pro, 15 Pro Max Dynamic Island & Notch optimizations */
+@supports (padding-top: env(safe-area-inset-top)) {
+  .topbar {
+    padding-top: env(safe-area-inset-top, 0px) !important;
+    height: calc(58px + env(safe-area-inset-top, 0px)) !important;
+  }
+  .sidebar {
+    padding-top: calc(18px + env(safe-area-inset-top, 0px)) !important;
+    padding-bottom: calc(18px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+  .mobile-bottom-nav {
+    height: calc(58px + env(safe-area-inset-bottom, 0px)) !important;
+    padding-bottom: env(safe-area-inset-bottom, 0px) !important;
+    padding-left: calc(6px + env(safe-area-inset-left, 0px)) !important;
+    padding-right: calc(6px + env(safe-area-inset-right, 0px)) !important;
+  }
+  .page-content {
+    padding-bottom: calc(88px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+}
+
+/* iPhone Pro Max / Plus Screen Range (390px - 430px) responsive layout */
+@media screen and (max-width: 440px) {
+  .page-header h1, .page-heading h1 {
+    font-size: 22px !important;
+    line-height: 1.25 !important;
+  }
+  .page-header-actions, .heading-actions {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .page-header-actions .ui-button,
+  .heading-actions .ui-button {
+    width: 100%;
+    justify-content: center;
+  }
+  .punch-time-display {
+    font-size: 32px !important;
+  }
+  .live-clock-card {
+    padding: 18px 14px !important;
+  }
+  .metric-copy strong {
+    font-size: 22px !important;
+  }
+  .module-kpi strong {
+    font-size: 20px !important;
+  }
+  .panel {
+    padding: 16px 14px !important;
+    border-radius: 12px !important;
+  }
+  .hr-modal, .dialog, .payslip-voucher, .payroll-editor-modal, .reject-modal {
+    max-height: calc(90dvh - env(safe-area-inset-top, 0px)) !important;
+    padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+  /* Ensure punch stations on iPhone fit neatly */
+  .punch-station-grid {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
 }
 
 

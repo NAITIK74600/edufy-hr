@@ -24,6 +24,7 @@ export function GpsBackgroundManager({ user }) {
   const [gpsErrorMsg, setGpsErrorMsg] = useState('')
   const [showInstallModal, setShowInstallModal] = useState(false)
   const [installedNotice, setInstalledNotice] = useState(false)
+  const isIOS = typeof navigator !== 'undefined' && (/iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1))
 
   // 1. Check Geolocation Permission & Setup Warm Watcher
   useEffect(() => {
@@ -106,6 +107,12 @@ export function GpsBackgroundManager({ user }) {
       if (canShowBanner) {
         setShowInstallBanner(true)
       }
+    }
+
+    // On iOS Safari, beforeinstallprompt never triggers; detect iOS and display install banner
+    const isIOSDevice = typeof navigator !== 'undefined' && (/iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1))
+    if (isIOSDevice && !checkStandalone && canShowBanner) {
+      setShowInstallBanner(true)
     }
 
     window.addEventListener('beforeinstallprompt', handleBeforeInstall)
@@ -213,6 +220,12 @@ export function GpsBackgroundManager({ user }) {
   }
 
   const triggerInstallFlow = async () => {
+    if (isIOS) {
+      // On iOS Safari, WebKit requires user action via Share -> Add to Home Screen
+      setShowInstallModal(true)
+      return
+    }
+
     const promptEvent = deferredPrompt || window.__edufyi_install_prompt
     if (promptEvent) {
       try {
@@ -249,15 +262,17 @@ export function GpsBackgroundManager({ user }) {
         <div
           style={{
             position: 'fixed',
-            bottom: '20px',
-            right: '20px',
-            maxWidth: '360px',
-            width: 'calc(100% - 40px)',
+            bottom: 'calc(75px + env(safe-area-inset-bottom, 0px))',
+            left: '14px',
+            right: '14px',
+            margin: '0 auto',
+            maxWidth: '380px',
+            width: 'calc(100% - 28px)',
             background: '#0A2328',
             color: '#fff',
-            borderRadius: '12px',
+            borderRadius: '14px',
             padding: '12px 14px',
-            boxShadow: '0 10px 25px rgba(0,0,0,0.3)',
+            boxShadow: '0 12px 32px rgba(0,0,0,0.4)',
             border: '1px solid rgba(0, 110, 111, 0.45)',
             zIndex: 9999,
             display: 'flex',
@@ -276,7 +291,9 @@ export function GpsBackgroundManager({ user }) {
                 <strong style={{ fontSize: '13px', color: '#fff', display: 'block', lineHeight: 1.2 }}>
                   Install Edufyi HR App
                 </strong>
-                <span style={{ fontSize: '11px', color: '#94a3b8' }}>Fast access &amp; instant attendance</span>
+                <span style={{ fontSize: '11px', color: '#94a3b8' }}>
+                  {isIOS ? 'Safari: Tap Share [⎋] then Add to Home Screen' : 'Fast access & instant attendance'}
+                </span>
               </div>
             </div>
             <button
@@ -337,17 +354,17 @@ export function GpsBackgroundManager({ user }) {
                 color: '#fff',
                 border: 0,
                 borderRadius: '6px',
-                padding: '4px 14px',
+                padding: '5px 14px',
                 fontSize: '11px',
                 fontWeight: 700,
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '4px',
+                gap: '5px',
               }}
             >
-              <Download size={12} />
-              <span>Install</span>
+              {isIOS ? <Share size={12} /> : <Download size={12} />}
+              <span>{isIOS ? 'How to Install' : 'Install'}</span>
             </button>
           </div>
         </div>
@@ -455,70 +472,93 @@ export function GpsBackgroundManager({ user }) {
 
             {/* Direct Action */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              <button
-                type="button"
-                onClick={async () => {
-                  const promptEvent = deferredPrompt || window.__edufyi_install_prompt
-                  if (promptEvent) {
-                    try {
-                      promptEvent.prompt()
-                      const { outcome } = await promptEvent.userChoice
-                      if (outcome === 'accepted') {
-                        setShowInstallModal(false)
-                        setShowInstallBanner(false)
-                        setIsStandalone(true)
-                        setInstalledNotice(true)
-                        setTimeout(() => setInstalledNotice(false), 5000)
+              {isIOS ? (
+                <div style={{ background: 'rgba(2, 132, 199, 0.15)', border: '1px solid rgba(2, 132, 199, 0.4)', borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#38bdf8', fontWeight: 700, fontSize: '14px' }}>
+                    <Share size={18} />
+                    <span>How to Install on Safari (iPhone / iPad)</span>
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '13px', color: '#f1f5f9' }}>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+                      <span style={{ width: '24px', height: '24px', borderRadius: '50%', background: '#0284c7', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '12px', flexShrink: 0, marginTop: '2px' }}>1</span>
+                      <div>
+                        Tap the Safari <strong>Share button</strong> <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', background: 'rgba(255,255,255,0.15)', borderRadius: '6px', fontWeight: 700, color: '#38bdf8' }}><Share size={13} /> Share</span> in the toolbar at the bottom of Safari.
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+                      <span style={{ width: '24px', height: '24px', borderRadius: '50%', background: '#0284c7', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '12px', flexShrink: 0, marginTop: '2px' }}>2</span>
+                      <div>
+                        Scroll down and tap <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', background: 'rgba(255,255,255,0.15)', borderRadius: '6px', fontWeight: 700, color: '#34d399' }}><PlusSquare size={13} /> Add to Home Screen</span>.
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+                      <span style={{ width: '24px', height: '24px', borderRadius: '50%', background: '#0284c7', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '12px', flexShrink: 0, marginTop: '2px' }}>3</span>
+                      <div>
+                        Tap <strong>Add</strong> at the top right. Edufyi HR will now be on your Home Screen!
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '10px', textAlign: 'center', fontSize: '11.5px', color: '#94a3b8' }}>
+                    👇 Look at the bottom toolbar of Safari for the <strong>Share</strong> icon
+                  </div>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const promptEvent = deferredPrompt || window.__edufyi_install_prompt
+                    if (promptEvent) {
+                      try {
+                        promptEvent.prompt()
+                        const { outcome } = await promptEvent.userChoice
+                        if (outcome === 'accepted') {
+                          setShowInstallModal(false)
+                          setShowInstallBanner(false)
+                          setIsStandalone(true)
+                          setInstalledNotice(true)
+                          setTimeout(() => setInstalledNotice(false), 5000)
+                        }
+                      } catch (err) {
+                        console.warn('Install error:', err)
                       }
-                    } catch (err) {
-                      console.warn('Install error:', err)
-                    }
-                  } else {
-                    const isIOS = typeof navigator !== 'undefined' && /iPad|iPhone|iPod/.test(navigator.userAgent)
-                    if (isIOS) {
-                      alert('On iPhone/iPad Safari: Tap the Share button [↑] at the bottom, then choose "Add to Home Screen" [+]')
                     } else {
                       alert('Click the Install icon (⊕ or 💻) on the right side of your browser address bar at the top!')
                     }
-                  }
-                }}
-                style={{
-                  background: 'linear-gradient(135deg, #008788, #0d9488)',
-                  color: '#fff',
-                  border: 0,
-                  borderRadius: '10px',
-                  padding: '12px 18px',
-                  fontSize: '14px',
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '8px',
-                  boxShadow: '0 4px 14px rgba(0, 110, 111, 0.4)',
-                }}
-              >
-                <Download size={18} />
-                <span>⚡ Direct Install App Now</span>
-              </button>
+                  }}
+                  style={{
+                    background: 'linear-gradient(135deg, #008788, #0d9488)',
+                    color: '#fff',
+                    border: 0,
+                    borderRadius: '10px',
+                    padding: '12px 18px',
+                    fontSize: '14px',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                    boxShadow: '0 4px 14px rgba(0, 110, 111, 0.4)',
+                  }}
+                >
+                  <Download size={18} />
+                  <span>⚡ Direct Install App Now</span>
+                </button>
+              )}
 
-              {/* Platform-Specific Quick Instructions */}
-              <div style={{ fontSize: '11.5px', color: '#cbd5e1', lineHeight: 1.5, background: 'rgba(0,0,0,0.25)', padding: '10px 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.08)' }}>
-                {typeof navigator !== 'undefined' && /iPad|iPhone|iPod/.test(navigator.userAgent) ? (
-                  <div>
-                    <strong style={{ color: '#2dd4bf' }}>iPhone / iPad Installation:</strong>
-                    <div style={{ marginTop: '4px' }}>1. Tap <strong>Share [↑]</strong> in the bottom bar of Safari.</div>
-                    <div>2. Scroll down and tap <strong>Add to Home Screen [+]</strong>.</div>
-                    <div>3. Tap <strong>Add</strong> in the top-right.</div>
-                  </div>
-                ) : (
+              {!isIOS && (
+                <div style={{ fontSize: '11.5px', color: '#cbd5e1', lineHeight: 1.5, background: 'rgba(0,0,0,0.25)', padding: '10px 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.08)' }}>
                   <div>
                     <strong style={{ color: '#2dd4bf' }}>Direct Browser Install:</strong>
                     <div style={{ marginTop: '4px' }}>• <strong>Chrome / Edge:</strong> Look at your URL address bar at the top-right and click the <strong>Install (⊕ or 💻)</strong> icon.</div>
                     <div>• <strong>Android:</strong> Tap the button above, or tap <strong>Add to Home screen</strong> in the prompt.</div>
                   </div>
-                )}
-              </div>
+                </div>
+              )}
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
