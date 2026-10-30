@@ -21,7 +21,7 @@ export const STANDARD_SHIFT_DEF = Object.freeze({
   isOvernight: false,
   gracePeriodMinutes: 30,
   graceCutoffMinutes: 690, // 11:30 AM
-  halfDayCutoffMinutes: 750, // 12:30 PM
+  halfDayCutoffMinutes: 720, // 12:00 PM (1 hour late cutoff)
   earlyLogoutWindow: Object.freeze({
     startMinutes: 1110, // 18:30 (06:30 PM)
     endMinutes: 1180,   // 19:40 (07:40 PM)
@@ -81,8 +81,8 @@ export function normalizeShiftConfig(raw) {
   const graceMins = Number.isFinite(rawGrace) && rawGrace >= 0 ? rawGrace : 30
   const graceCutoff = startMins + graceMins
 
-  // Half day cutoff: explicitly configured, or at least 60 minutes after start time and after grace cutoff
-  const halfDayCutoff = raw.halfDayCutoffMinutes ?? (startMins + Math.max(60, graceMins + 15))
+  // Half day cutoff: 1 hour late (60 minutes past shift start time)
+  const halfDayCutoff = raw.halfDayCutoffMinutes ?? (startMins + 60)
 
   // Early logout window:
   let earlyStart = raw.earlyLogoutWindow?.startMinutes
@@ -151,7 +151,7 @@ export async function resolveEmployeeShift(employeeId, dateStr) {
           isOvernight: endMins < startMins,
           gracePeriodMinutes: graceMins,
           graceCutoffMinutes: startMins + graceMins,
-          halfDayCutoffMinutes: startMins + Math.max(60, graceMins + 15),
+          halfDayCutoffMinutes: startMins + 60,
           earlyLogoutWindow: {
             startMinutes: Math.max(0, endMins - 90),
             endMinutes: Math.max(0, endMins - 20),
@@ -265,11 +265,14 @@ export function evaluatePunchIn({ checkInTime, shift = STANDARD_SHIFT_DEF }) {
     }
   }
 
-  if (inMins <= halfDayCutoffMinutes) {
-    // After grace period but before / at half-day cutoff (e.g. 11:16 AM to 12:00 PM)
+  // 1-hour late cutoff for Half Day (e.g. 60 minutes past shift start)
+  const effectiveHalfDayCutoff = Math.min(halfDayCutoffMinutes || (startMinutes + 60), startMinutes + 60)
+
+  if (inMins < effectiveHalfDayCutoff) {
+    // After grace period but less than 1 hour late
     const lateMins = inMins - startMinutes
     return {
-      status: 'present',
+      status: 'late',
       isLate: true,
       isHalfDay: false,
       lateMinutes: Math.max(1, lateMins),
@@ -278,7 +281,7 @@ export function evaluatePunchIn({ checkInTime, shift = STANDARD_SHIFT_DEF }) {
     }
   }
 
-  // After half-day cutoff (e.g. > 12:00 PM)
+  // 1 hour or more late (>= 60 minutes past shift start) -> Half Day!
   const lateMins = inMins - startMinutes
   return {
     status: 'half-day',
@@ -286,7 +289,7 @@ export function evaluatePunchIn({ checkInTime, shift = STANDARD_SHIFT_DEF }) {
     isHalfDay: true,
     lateMinutes: Math.max(1, lateMins),
     occurrence: 'half_day_late',
-    notes: `Half Day applied: Login at ${checkInTime} exceeds ${formatMinutesToTime(halfDayCutoffMinutes)} cutoff`,
+    notes: `Half Day applied: Punch-in at ${checkInTime} is 1 hour late (${lateMins}m past ${normShift.startTime} start)`,
   }
 }
 

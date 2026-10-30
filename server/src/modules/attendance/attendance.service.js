@@ -693,7 +693,7 @@ export function createAttendanceService({ repository, companySettings = {} }) {
             isOvernight: eMins < sMins,
             gracePeriodMinutes: gMins,
             graceCutoffMinutes: sMins + gMins,
-            halfDayCutoffMinutes: sMins + Math.max(60, gMins + 15),
+            halfDayCutoffMinutes: sMins + 60, // 1 hour late triggers half-day
             requiredCampusHours: 4,
             requiredCampusMinutes: 240,
           })

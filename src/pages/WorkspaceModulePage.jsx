@@ -477,7 +477,7 @@ function AttendanceModule() {
                 <option value="present">Present (On-Time)</option>
                 <option value="early-logout">Early Logout (6:30–7:30 PM)</option>
                 <option value="lop">Loss of Pay (LOP)</option>
-                <option value="half-day">Half Day</option>
+                <option value="half-day">Half Day (Late &gt;1h / Min 4h)</option>
                 <option value="on-leave">On Leave</option>
                 <option value="absent">Absent</option>
               </select>
@@ -1181,7 +1181,7 @@ function AttendanceModule() {
                       <option value="present">Present (On-Time)</option>
                       <option value="early-logout">Early Logout (6:30–7:30 PM)</option>
                       <option value="lop">Loss of Pay (LOP)</option>
-                      <option value="half-day">Half Day</option>
+                      <option value="half-day">Half Day (Late &gt;1h / Min 4h)</option>
                       <option value="on-leave">On Leave</option>
                       <option value="absent">Absent / Unpaid</option>
                     </select>
@@ -1296,7 +1296,7 @@ function AttendanceModule() {
                       <option value="present">Present (On-Time)</option>
                       <option value="early-logout">Early Logout (6:30–7:30 PM)</option>
                       <option value="lop">Loss of Pay (LOP)</option>
-                      <option value="half-day">Half Day</option>
+                      <option value="half-day">Half Day (Late &gt;1h / Min 4h)</option>
                       <option value="on-leave">On Leave</option>
                       <option value="absent">Absent</option>
                     </select>

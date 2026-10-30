@@ -80,6 +80,7 @@ export function getDailyAttendanceStatus(r, attendanceRules = null) {
 
   // DYNAMIC CHECK: Evaluate punch-in against active shift rules
   let isPunchLate = Boolean(r.isLate || r.status === 'late')
+  let isPunchHalfDay = Boolean(r.isHalfDay || r.status === 'half-day')
   if (r.checkIn) {
     const checkInM = parseTimeToMinutes(r.checkIn)
     const startM = attendanceRules?.workStartTime ? parseTimeToMinutes(attendanceRules.workStartTime) : 660 // default 11:00 AM
@@ -88,6 +89,10 @@ export function getDailyAttendanceStatus(r, attendanceRules = null) {
       : 30
     if (checkInM !== null && startM !== null) {
       isPunchLate = checkInM > (startM + grace)
+      // When punch-in is 1 hour (60 mins) or more late -> marked as Half Day!
+      if (checkInM >= (startM + 60)) {
+        isPunchHalfDay = true
+      }
     }
   }
 
@@ -105,14 +110,14 @@ export function getDailyAttendanceStatus(r, attendanceRules = null) {
     }
   }
 
-  // If employee has checked out, status is determined by worked duration
+  // If employee has checked out, status is determined by worked duration or 1-hour late punch
   if (hasCheckedOut && workedHours !== null) {
     // 1. Absent: worked less than 4 hours (< 4 hrs)
     if (workedHours < 4) {
       return { label: 'Absent', tone: 'danger' }
     }
-    // 2. Half Day: minimum 4 hrs (4 <= workedHours < 6.5)
-    if (workedHours < 6.5) {
+    // 2. Half Day: 1hr late punch OR minimum 4 hrs worked (4 <= workedHours < 6.5)
+    if (isPunchHalfDay || workedHours < 6.5) {
       return { label: 'Half Day', tone: 'warning' }
     }
     // 3. Early Logout: 6 hr 30 min (6.5 <= workedHours < 8)
@@ -125,6 +130,9 @@ export function getDailyAttendanceStatus(r, attendanceRules = null) {
 
   // If employee is actively working (no checkout yet) or check-in only
   if (r.checkIn) {
+    if (isPunchHalfDay) {
+      return { label: 'Half Day', tone: 'warning' }
+    }
     return isPunchLate ? { label: 'Late', tone: 'warning' } : { label: 'On-Time', tone: 'info' }
   }
 

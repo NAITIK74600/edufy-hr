@@ -6285,6 +6285,41 @@ const localStore = {
     let isEarlyLogout = record.isEarlyLogout || (record.status === 'early-logout')
     let isLop = record.isLop || (record.status === 'lop')
 
+    if (record.checkIn && !['on-leave', 'lop'].includes(finalStatus)) {
+      const matchIn = /(\d+):(\d+)(?::(\d+))?\s*(AM|PM)?/i.exec(record.checkIn)
+      if (matchIn) {
+        let ih = parseInt(matchIn[1], 10)
+        const im = parseInt(matchIn[2], 10)
+        const imeridiem = matchIn[4]?.toUpperCase()
+        if (imeridiem === 'PM' && ih < 12) ih += 12
+        if (imeridiem === 'AM' && ih === 12) ih = 0
+        const inTotalMins = ih * 60 + im
+
+        let shiftStartTimeStr = storeState.companySettings?.attendanceRules?.workStartTime || '11:00 AM'
+        if (record.shift && typeof record.shift === 'string') {
+          const sm = record.shift.match(/\((.+?)\s*[-–—]\s*(?:.+?)\)/)
+          if (sm) shiftStartTimeStr = sm[1].trim()
+        }
+        const shiftStartMins = (() => {
+          const clean = String(shiftStartTimeStr).trim().replace(/[\u202F\u00A0]/g, ' ')
+          const match = clean.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/i)
+          if (!match) return 660 // default 11:00 AM
+          let sh = parseInt(match[1], 10)
+          const smin = parseInt(match[2], 10)
+          const smeridiem = match[3]?.toUpperCase()
+          if (smeridiem === 'PM' && sh < 12) sh += 12
+          if (smeridiem === 'AM' && sh === 12) sh = 0
+          return sh * 60 + smin
+        })()
+
+        // 1 hour (60 minutes) or more late -> mark as half-day!
+        if (inTotalMins >= (shiftStartMins + 60)) {
+          finalStatus = 'half-day'
+          record.isHalfDay = true
+        }
+      }
+    }
+
     if (!finalStatus && record.checkOut) {
       const match = /(\d+):(\d+)(?::(\d+))?\s*(AM|PM)?/i.exec(record.checkOut)
       if (match) {
