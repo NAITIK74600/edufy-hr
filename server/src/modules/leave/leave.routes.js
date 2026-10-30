@@ -49,6 +49,55 @@ export function createLeaveRouter({ auth, service }) {
     } catch (error) { if (error.code === 11000) { error.statusCode = 409; error.message = 'Leave balance changed; refresh and retry.' } return next(error) }
   })
 
+  router.post('/hr/balances/bulk-apply', ...protectedRoute(PERMISSIONS.LEAVE_POLICY_ADMIN), async (request, response, next) => {
+    try {
+      ensureConnected()
+      const { defaults = {}, employeeIds } = request.body || {}
+      const types = ['casual', 'sick', 'earned', 'comp_off', 'maternity', 'lop']
+
+      const query = { status: { $ne: 'terminated' } }
+      if (Array.isArray(employeeIds) && employeeIds.length > 0) {
+        query._id = { $in: employeeIds.map((id) => (mongoose.isValidObjectId(id) ? new mongoose.Types.ObjectId(id) : id)) }
+      }
+      const employees = await Employee.find(query).select('_id name employeeId').lean()
+      if (!employees.length) {
+        return response.json({ success: true, message: 'No employees found to update.', data: { updatedCount: 0 } })
+      }
+
+      const currentMonthKey = new Date().toISOString().slice(0, 7)
+      const ops = []
+      for (const emp of employees) {
+        for (const t of types) {
+          const allowanceVal = Number(defaults[t] ?? 0)
+          if (Number.isFinite(allowanceVal) && allowanceVal >= 0) {
+            ops.push({
+              updateOne: {
+                filter: { employeeId: emp._id, leaveType: t },
+                update: {
+                  $set: { allowance: allowanceVal, month: currentMonthKey, updatedAt: new Date() },
+                  $setOnInsert: { used: 0, reserved: 0, createdAt: new Date() },
+                },
+                upsert: true,
+              },
+            })
+          }
+        }
+      }
+
+      if (ops.length > 0) {
+        await LeaveBalance.bulkWrite(ops, { ordered: false })
+      }
+
+      return response.json({
+        success: true,
+        message: `Successfully applied default quotas to ${employees.length} employees!`,
+        data: { updatedCount: employees.length },
+      })
+    } catch (error) {
+      return next(error)
+    }
+  })
+
   router.post('/hr/balances/auto-fill-policies', ...protectedRoute(PERMISSIONS.LEAVE_POLICY_ADMIN), async (request, response, next) => {
     try {
       ensureConnected()

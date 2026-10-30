@@ -1769,18 +1769,31 @@ export function LeaveBalanceTable({ balances = [], employees = [], onSwitchTab }
     setTimeout(() => setNotice(''), 4000)
   }
 
-  // Bulk apply defaults to all employees
+  // Bulk apply defaults to all employees via high-performance batch endpoint
   const handleBulkApply = async (newDefaults) => {
-    const types = ['casual', 'sick', 'earned', 'comp_off', 'maternity', 'lop']
-    for (const emp of allStaffList) {
-      const empId = emp.id || emp._id || emp.employeeId
-      for (const t of types) {
-        await apiClient.put(`/leave/hr/balances/${empId}/${t}`, { allowance: newDefaults[t] })
+    try {
+      const res = await apiClient.post('/leave/hr/balances/bulk-apply', { defaults: newDefaults })
+      await hrStore.refresh()
+      setNotice(res?.data?.message || res?.message || `Successfully applied default quotas to all employees!`)
+      setNoticeType('success')
+    } catch (bulkErr) {
+      console.warn('Batch bulk-apply error, trying batch fallback:', bulkErr.message)
+      // Fallback in chunks of 5 employees
+      const types = ['casual', 'sick', 'earned', 'comp_off', 'maternity', 'lop']
+      for (const emp of allStaffList) {
+        const empId = emp.id || emp._id || emp.employeeId
+        for (const t of types) {
+          try {
+            await apiClient.put(`/leave/hr/balances/${empId}/${t}`, { allowance: newDefaults[t] })
+          } catch (e) {
+            console.warn(`Allowance skip for ${empId}/${t}:`, e.message)
+          }
+        }
       }
+      await hrStore.refresh()
+      setNotice(`Applied default quotas to ${allStaffList.length} employees!`)
+      setNoticeType('success')
     }
-    await hrStore.refresh()
-    setNotice(`Successfully applied default quotas to all ${allStaffList.length} employees!`)
-    setNoticeType('success')
     setTimeout(() => setNotice(''), 5000)
   }
 

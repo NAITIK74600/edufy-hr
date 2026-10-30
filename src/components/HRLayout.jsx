@@ -64,6 +64,7 @@ import {
   subscribeToPushNotifications,
   sendTestPushNotification,
 } from '../services/pushNotificationClient'
+import { compressImageFile } from '../utils/imageCompressor'
 
 
 class RouteErrorBoundary extends React.Component {
@@ -464,28 +465,28 @@ export function HRLayout({ route, children }) {
     }
   }
 
-  function handlePhotoUpload(e) {
+  async function handlePhotoUpload(e) {
     const file = e.target.files?.[0]
     if (!file) return
-    const reader = new FileReader()
-    reader.onload = async (event) => {
-      const dataUrl = event.target.result
+    try {
+      // Compress client-side to max 512x512 JPEG (~50KB) to prevent MongoDB 16MB document size limit
+      const dataUrl = await compressImageFile(file, 512, 512, 0.82)
       if (dataUrl) {
-        try {
-          if (hrStore.updateMyAvatar) {
-            await hrStore.updateMyAvatar(dataUrl)
-          } else {
-            await apiClient.patch('/employees/me/avatar', { avatarUrl: dataUrl })
-          }
-        } catch (err) {
-          console.warn('Failed to persist profile picture to database:', err.message)
+        if (hrStore.updateMyAvatar) {
+          await hrStore.updateMyAvatar(dataUrl)
+        } else {
+          await apiClient.patch('/employees/me/avatar', { avatarUrl: dataUrl })
         }
         if (updateUser) updateUser({ avatarUrl: dataUrl })
         setPhotoNotice(true)
         setTimeout(() => setPhotoNotice(false), 3500)
       }
+    } catch (err) {
+      console.warn('Failed to compress and persist profile picture:', err.message)
+      alert('Failed to save profile picture: ' + (err.message || 'Please try again.'))
+    } finally {
+      if (e.target) e.target.value = ''
     }
-    reader.readAsDataURL(file)
   }
 
   const unreadCount = notifications.filter((n) => !n.read).length

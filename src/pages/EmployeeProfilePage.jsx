@@ -9,6 +9,7 @@ import { User, Mail, Phone, Building2, Calendar, ShieldCheck, Briefcase, Camera,
 import { apiClient } from '../services/apiClient'
 import { ChangePasswordModal } from '../components/ChangePasswordModal'
 import { PasskeyModal } from '../components/PasskeyModal'
+import { compressImageFile } from '../utils/imageCompressor'
 
 export function EmployeeProfilePage() {
   const { user, updateUser } = useAuth()
@@ -25,32 +26,30 @@ export function EmployeeProfilePage() {
 
   const avatarUrl = user?.avatarUrl || employee?.avatarUrl || employee?.onboardingDocs?.passportPhoto?.url
 
-  function handlePhotoUpload(e) {
+  async function handlePhotoUpload(e) {
     const file = e.target.files?.[0]
     if (!file) return
     setUploadingPhoto(true)
-    const reader = new FileReader()
-    reader.onload = async (event) => {
-      const dataUrl = event.target.result
+    try {
+      // Compress client-side to max 512x512 JPEG (~50KB) to prevent MongoDB 16MB document size limit
+      const dataUrl = await compressImageFile(file, 512, 512, 0.82)
       if (dataUrl) {
-        try {
-          if (hrStore.updateMyAvatar) {
-            await hrStore.updateMyAvatar(dataUrl)
-          } else {
-            await apiClient.patch('/employees/me/avatar', { avatarUrl: dataUrl })
-          }
-          if (updateUser) updateUser({ avatarUrl: dataUrl })
-          setPhotoNotice(true)
-          setTimeout(() => setPhotoNotice(false), 4000)
-        } catch (err) {
-          console.error('Failed to persist profile picture:', err.message)
-          alert('Failed to save profile picture: ' + (err.message || 'Please try again.'))
+        if (hrStore.updateMyAvatar) {
+          await hrStore.updateMyAvatar(dataUrl)
+        } else {
+          await apiClient.patch('/employees/me/avatar', { avatarUrl: dataUrl })
         }
+        if (updateUser) updateUser({ avatarUrl: dataUrl })
+        setPhotoNotice(true)
+        setTimeout(() => setPhotoNotice(false), 4000)
       }
+    } catch (err) {
+      console.error('Failed to persist profile picture:', err.message)
+      alert('Failed to save profile picture: ' + (err.message || 'Please try again.'))
+    } finally {
       setUploadingPhoto(false)
+      if (e.target) e.target.value = ''
     }
-    reader.onerror = () => setUploadingPhoto(false)
-    reader.readAsDataURL(file)
   }
 
   return (

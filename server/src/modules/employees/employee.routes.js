@@ -118,6 +118,15 @@ export function createEmployeeRouter({ auth, service, userStore, employeeReposit
       if (typeof avatarUrl !== 'string' || !avatarUrl.trim()) {
         return response.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'Valid avatarUrl string is required.' } })
       }
+      if (avatarUrl.length > 2 * 1024 * 1024) {
+        return response.status(400).json({
+          success: false,
+          error: {
+            code: 'PAYLOAD_TOO_LARGE',
+            message: 'Image size is too large (exceeds 2MB limit). Please select an image under 2MB.'
+          }
+        })
+      }
       const user = request.auth.user
       const cleanAvatar = avatarUrl.trim()
 

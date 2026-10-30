@@ -185,7 +185,25 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
   async function list(actor, resource, people) {
     if (!access(actor, resource)) return []
     let query = filter(actor, resource)
-    if (resource === 'announcements' && !management(actor)) query.targetAudience = { $in: ['All Employees', actor.department].filter(Boolean) }
+    if (resource === 'announcements' && !management(actor)) {
+      const isMgr = actor.isManager || ['manager', 'team_lead', 'lead', 'director', 'managing_director', 'co_founder', 'vertical_head', 'admin', 'hr', 'hr_executive'].includes(String(actor.role || '').toLowerCase())
+      const validAudiences = ['All Employees', 'all', '', null]
+      if (actor.department) {
+        const d = String(actor.department).trim()
+        validAudiences.push(d)
+        validAudiences.push(`${d} Department`)
+        validAudiences.push(d.replace(/\s*department$/i, '').trim())
+      }
+      if (isMgr) {
+        validAudiences.push('Managers', 'People Managers & Team Leads')
+      }
+      query.$or = [
+        { targetAudience: { $in: validAudiences } },
+        { targetAudience: { $exists: false } },
+        { targetAudience: null },
+        { targetAudience: '' }
+      ]
+    }
     if (resource === 'tickets' && !management(actor)) {
       try {
         const settingsDoc = (await AttendanceSettings.findOne({ key: 'office' }).lean()) || (await AttendanceSettings.findOne().sort({ updatedAt: -1 }).lean())
@@ -622,10 +640,13 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
 
       if (resource === 'announcements' || resource === 'documents' || resource === 'courses') {
         const audience = { status: { $ne: 'terminated' } }
+        let isSpecificAudience = false
+
         if (resource === 'announcements' && values.targetAudience) {
           const audienceStr = String(values.targetAudience).trim().toLowerCase()
-          const isAll = audienceStr === 'all' || audienceStr.includes('all employee') || audienceStr.includes('company-wide') || audienceStr.includes('everyone') || audienceStr === ''
+          const isAll = audienceStr === 'all' || audienceStr === 'all employees' || audienceStr.includes('all employee') || audienceStr.includes('company-wide') || audienceStr.includes('everyone') || audienceStr === ''
           if (!isAll) {
+            isSpecificAudience = true
             if (audienceStr.includes('manager') || audienceStr.includes('lead')) {
               audience.$or = [
                 { role: { $in: ['manager', 'team_lead', 'lead', 'director', 'managing_director', 'co_founder', 'vertical_head', 'admin', 'hr', 'hr_executive'] } },
@@ -634,14 +655,23 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
               ]
             } else {
               const deptClean = values.targetAudience.replace(/\s*department$/i, '').trim()
-              audience.department = new RegExp(`^${deptClean}$`, 'i')
+              const escapedDept = deptClean.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+              audience.department = { $regex: new RegExp(`^${escapedDept}`, 'i') }
             }
           }
         }
-        let recipients = await Employee.find(audience).select('_id email name displayName department').lean()
-        if (!recipients.length && resource === 'announcements') {
-          recipients = await Employee.find({ status: { $ne: 'terminated' } }).select('_id email name displayName department').lean()
+        let recipients = await Employee.find(audience).select('_id email name displayName department role designation isManager').lean()
+
+        // CRITICAL FIX: Only fallback to all employees if NO specific audience was requested!
+        // If an explicit department or Managers was chosen, NEVER fall back to broadcasting company-wide!
+        if (!recipients.length && !isSpecificAudience && resource === 'announcements') {
+          recipients = await Employee.find({ status: { $ne: 'terminated' } }).select('_id email name displayName department role designation isManager').lean()
         }
+
+        if (isSpecificAudience && !recipients.length) {
+          console.warn(`[workspace.routes] Target audience "${values.targetAudience}" had 0 matching active employees. Company-wide fallback prevented.`)
+        }
+
         if (recipients.length) {
           await models.notifications.insertMany(recipients.map((person) => ({
             ownerId: String(person._id),
@@ -822,7 +852,16 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
           if (req.body.liked !== undefined) {
             allowedBody(req.body, ['liked'])
             if (typeof req.body.liked !== 'boolean') throw fail('liked must be a boolean.')
-            if (!management(actor)) query.targetAudience = { $in: ['All Employees', actor.department].filter(Boolean) }
+            if (!management(actor)) {
+              const isMgr = actor.isManager || ['manager', 'team_lead', 'lead', 'director', 'managing_director', 'co_founder', 'vertical_head', 'admin', 'hr', 'hr_executive'].includes(String(actor.role || '').toLowerCase())
+              const validAudiences = ['All Employees', 'all', '', null]
+              if (actor.department) {
+                const d = String(actor.department).trim()
+                validAudiences.push(d, `${d} Department`, d.replace(/\s*department$/i, '').trim())
+              }
+              if (isMgr) validAudiences.push('Managers', 'People Managers & Team Leads')
+              query.$or = [{ targetAudience: { $in: validAudiences } }, { targetAudience: { $exists: false } }, { targetAudience: null }, { targetAudience: '' }]
+            }
             update = req.body.liked ? { $addToSet: { likedBy: id(actor) } } : { $pull: { likedBy: id(actor) } }
           } else {
             if (!management(actor)) throw fail('HR or administrator access is required to update announcements.', 403)
