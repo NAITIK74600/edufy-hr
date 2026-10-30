@@ -53,6 +53,7 @@ export async function loginWithPasskey({ email = '', portal = '' } = {}) {
     rpId: rpId || window.location.hostname,
     timeout: timeout || 60000,
     userVerification: 'preferred',
+    hints: ['client-device'],
   }
 
   if (Array.isArray(allowCredentials) && allowCredentials.length > 0) {
@@ -133,6 +134,7 @@ export async function registerPasskey({ email = '', password = '', deviceName = 
       residentKey: 'preferred',
       ...(authenticatorSelection || {}),
     },
+    hints: ['client-device'],
     timeout: timeout || 60000,
   }
 
