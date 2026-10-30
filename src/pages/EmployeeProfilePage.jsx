@@ -5,9 +5,10 @@ import { PageHeader } from '../components/ui'
 import { formatINR } from '../utils/currency'
 import { OnboardingDossierView } from '../components/OnboardingDossierView'
 import { EmployeeComplianceStatusCard } from '../components/EmployeeComplianceStatusCard'
-import { User, Mail, Phone, Building2, Calendar, ShieldCheck, Briefcase, Camera, Check, KeyRound } from 'lucide-react'
+import { User, Mail, Phone, Building2, Calendar, ShieldCheck, Briefcase, Camera, Check, KeyRound, Fingerprint } from 'lucide-react'
 import { apiClient } from '../services/apiClient'
 import { ChangePasswordModal } from '../components/ChangePasswordModal'
+import { PasskeyModal } from '../components/PasskeyModal'
 
 export function EmployeeProfilePage() {
   const { user, updateUser } = useAuth()
@@ -15,6 +16,7 @@ export function EmployeeProfilePage() {
   const [photoNotice, setPhotoNotice] = useState(false)
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
   const [passwordModalOpen, setPasswordModalOpen] = useState(false)
+  const [passkeyModalOpen, setPasskeyModalOpen] = useState(false)
   const fileInputRef = useRef(null)
   useEffect(() => hrStore.subscribe(setState), [])
 
@@ -179,14 +181,24 @@ export function EmployeeProfilePage() {
             </p>
           </div>
 
-          <button
-            type="button"
-            className="ui-button primary"
-            onClick={() => setPasswordModalOpen(true)}
-            style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px' }}
-          >
-            <KeyRound size={14} /> Change Password
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              className="ui-button secondary"
+              onClick={() => setPasskeyModalOpen(true)}
+              style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px' }}
+            >
+              <Fingerprint size={14} style={{ color: 'var(--teal)' }} /> Passkeys & Biometrics
+            </button>
+            <button
+              type="button"
+              className="ui-button primary"
+              onClick={() => setPasswordModalOpen(true)}
+              style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px' }}
+            >
+              <KeyRound size={14} /> Change Password
+            </button>
+          </div>
         </div>
       </section>
 
@@ -206,6 +218,12 @@ export function EmployeeProfilePage() {
           onClose={() => setPasswordModalOpen(false)}
         />
       )}
+
+      {/* Passkeys & Biometrics Modal */}
+      <PasskeyModal
+        isOpen={passkeyModalOpen}
+        onClose={() => setPasskeyModalOpen(false)}
+      />
     </div>
   )
 }

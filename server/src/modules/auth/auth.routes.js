@@ -285,6 +285,52 @@ export function createAuthRouter({ authService, auth, userStore }) {
     } catch (error) { next(error) }
   })
 
+  // 5. List Registered Passkeys for Current User
+  router.get('/passkey/list', auth.authenticate, async (request, response, next) => {
+    try {
+      const user = await userStore.findById(request.auth.user.id)
+      let passkeys = Array.isArray(user?.passkeys) ? user.passkeys : []
+      if (passkeys.length === 0 && Employee) {
+        try {
+          const emp = await Employee.findById(request.auth.user.id).lean()
+          if (Array.isArray(emp?.passkeys)) passkeys = emp.passkeys
+        } catch {}
+      }
+      return response.json({
+        success: true,
+        data: passkeys.map((k) => ({
+          credentialId: k.credentialId,
+          deviceName: k.deviceName || 'Biometric / Passkey Device',
+          createdAt: k.createdAt || new Date(),
+        })),
+      })
+    } catch (error) { next(error) }
+  })
+
+  // 6. Delete a Registered Passkey
+  router.delete('/passkey/:credentialId', auth.authenticate, async (request, response, next) => {
+    try {
+      const { credentialId } = request.params
+      const user = await userStore.findById(request.auth.user.id)
+      if (user) {
+        const updated = (user.passkeys || []).filter((k) => k.credentialId !== credentialId)
+        await userStore.updateUser(user.id, { passkeys: updated })
+      }
+      if (Employee) {
+        try {
+          await Employee.updateOne(
+            { _id: request.auth.user.id },
+            { $pull: { passkeys: { credentialId } } }
+          )
+        } catch {}
+      }
+      return response.json({
+        success: true,
+        message: 'Passkey removed successfully.',
+      })
+    } catch (error) { next(error) }
+  })
+
   router.delete('/users/:id', auth.authenticate, async (request, response, next) => {
     try {
       if (!['admin', 'hr'].includes(request.auth.user.role)) {

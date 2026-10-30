@@ -10,9 +10,11 @@ import {
   Fingerprint,
   ArrowRight,
   AlertCircle,
+  Plus,
 } from 'lucide-react'
 import { useAuth } from '../auth/AuthContext'
 import { isPasskeySupported, loginWithPasskey, registerPasskey } from '../services/passkeyAuth'
+import { PasskeyModal } from '../components/PasskeyModal'
 
 /**
  * Premium Card Layout & Pixel-Perfect Theme:
@@ -461,6 +463,7 @@ export function EmployeeLoginPage() {
   const [remember, setRemember] = useState(true)
   const [loading, setLoading] = useState(false)
   const [passkeyLoading, setPasskeyLoading] = useState(false)
+  const [passkeyModalOpen, setPasskeyModalOpen] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [mustSetNewPassword, setMustSetNewPassword] = useState(false)
@@ -734,8 +737,36 @@ export function EmployeeLoginPage() {
               <Fingerprint size={17} style={{ color: '#00d2ff' }} />
               {passkeyLoading ? 'VERIFYING PASSKEY...' : 'Sign in with Passkey / Biometrics'}
             </button>
+
+            <button
+              type="button"
+              onClick={() => setPasskeyModalOpen(true)}
+              style={{
+                background: 'transparent',
+                border: 0,
+                color: '#00d2ff',
+                fontSize: '12px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                padding: '4px 0 0',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '5px',
+                margin: '0 auto',
+              }}
+            >
+              <Plus size={13} />
+              <span>First time on this device? Add / Register Passkey</span>
+            </button>
           </form>
         )}
+        <PasskeyModal
+          isOpen={passkeyModalOpen}
+          onClose={() => setPasskeyModalOpen(false)}
+          initialEmail={email}
+          initialPassword={password}
+        />
       </div>
     </div>
   )
@@ -1100,8 +1131,36 @@ export function ManagementLoginPage({ defaultRole = 'hr' }) {
             <Fingerprint size={16} style={{ color: '#00b4d8' }} />
             {passkeyLoading ? 'VERIFYING PASSKEY...' : 'Sign in with Passkey / Biometrics'}
           </button>
+
+          <button
+            type="button"
+            onClick={() => setPasskeyModalOpen(true)}
+            style={{
+              background: 'transparent',
+              border: 0,
+              color: '#00b4d8',
+              fontSize: '12px',
+              fontWeight: 600,
+              cursor: 'pointer',
+              padding: '4px 0 0',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '5px',
+              margin: '0 auto',
+            }}
+          >
+            <Plus size={13} />
+            <span>First time on this device? Add / Register Passkey</span>
+          </button>
         </form>
         )}
+        <PasskeyModal
+          isOpen={passkeyModalOpen}
+          onClose={() => setPasskeyModalOpen(false)}
+          initialEmail={email}
+          initialPassword={password}
+        />
       </div>
     </div>
   )

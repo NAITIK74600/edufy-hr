@@ -56,6 +56,7 @@ import { apiClient } from '../services/apiClient'
 import { AIHRAssistant } from './AIHRAssistant'
 import { isSoundMuted, toggleSoundMuted, playNotificationSound } from '../utils/soundHelper'
 import { ChangePasswordModal } from './ChangePasswordModal'
+import { PasskeyModal } from './PasskeyModal'
 
 
 class RouteErrorBoundary extends React.Component {
@@ -173,6 +174,7 @@ export function HRLayout({ route, children }) {
   const [notifOpen, setNotifOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
   const [changePasswordOpen, setChangePasswordOpen] = useState(false)
+  const [passkeyModalOpen, setPasskeyModalOpen] = useState(false)
   const [photoNotice, setPhotoNotice] = useState(false)
   const [aiAssistantOpen, setAiAssistantOpen] = useState(false)
   const [soundMuted, setSoundMutedState] = useState(() => isSoundMuted())
@@ -926,6 +928,19 @@ export function HRLayout({ route, children }) {
                         <KeyRound size={13} style={{ color: 'var(--teal)' }} />
                         <span>Change Password</span>
                       </button>
+
+                      <button
+                        type="button"
+                        className="profile-photo-change-btn"
+                        style={{ width: '100%', justifyContent: 'center', marginTop: '6px', padding: '7px 10px', background: '#ffffff', border: '1px solid var(--border)' }}
+                        onClick={() => {
+                          setProfileOpen(false)
+                          setPasskeyModalOpen(true)
+                        }}
+                      >
+                        <Fingerprint size={13} style={{ color: 'var(--teal)' }} />
+                        <span>Passkeys & Biometrics</span>
+                      </button>
                     </div>
 
                     <div className="profile-popover-footer">
@@ -953,6 +968,12 @@ export function HRLayout({ route, children }) {
             onClose={() => setChangePasswordOpen(false)}
           />
         )}
+
+        {/* Passkeys & Biometrics Management Modal */}
+        <PasskeyModal
+          isOpen={passkeyModalOpen}
+          onClose={() => setPasskeyModalOpen(false)}
+        />
 
         {/* Real-time Floating Notification Alert Toast */}
         <AnimatePresence>

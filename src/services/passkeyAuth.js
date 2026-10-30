@@ -167,3 +167,19 @@ export async function registerPasskey({ email = '', password = '', deviceName = 
   const verifyRes = await apiClient.post('/auth/passkey/register-verify', payload)
   return verifyRes.data
 }
+
+/**
+ * List registered passkeys for the currently authenticated user
+ */
+export async function listPasskeys() {
+  const res = await apiClient.get('/auth/passkey/list')
+  return res.data?.data || []
+}
+
+/**
+ * Remove a registered passkey by its credentialId
+ */
+export async function deletePasskey(credentialId) {
+  const res = await apiClient.delete(`/auth/passkey/${encodeURIComponent(credentialId)}`)
+  return res.data
+}
