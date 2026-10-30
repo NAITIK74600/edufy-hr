@@ -361,10 +361,10 @@ if (container) {
 }
 
 // Register PWA Service Worker for Offline, Mobile App & Background Execution
-if (typeof window !== 'undefined' && 'serviceWorker' in navigator && window.location.protocol.startsWith('http')) {
-  window.addEventListener('load', () => {
+function registerServiceWorker() {
+  if (typeof window !== 'undefined' && 'serviceWorker' in navigator && window.location.protocol.startsWith('http')) {
     navigator.serviceWorker
-      .register('/sw.js')
+      .register('/sw.js', { scope: '/' })
       .then((reg) => {
         console.log('[PWA] Service Worker registered with scope:', reg.scope)
         if ('sync' in reg) {
@@ -374,5 +374,13 @@ if (typeof window !== 'undefined' && 'serviceWorker' in navigator && window.loca
       .catch((err) => {
         console.warn('[PWA] Service Worker registration failed:', err)
       })
-  })
+  }
+}
+
+if (typeof document !== 'undefined') {
+  if (document.readyState === 'complete') {
+    registerServiceWorker()
+  } else {
+    window.addEventListener('load', registerServiceWorker)
+  }
 }

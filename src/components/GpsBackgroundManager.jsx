@@ -5,6 +5,12 @@ import {
   AlertCircle,
   X,
   Download,
+  CheckCircle2,
+  Sparkles,
+  Smartphone,
+  Monitor,
+  Share,
+  PlusSquare,
 } from 'lucide-react'
 
 export function GpsBackgroundManager({ user }) {
@@ -16,6 +22,8 @@ export function GpsBackgroundManager({ user }) {
   const [inlineTip, setInlineTip] = useState('')
   const [isStandalone, setIsStandalone] = useState(false)
   const [gpsErrorMsg, setGpsErrorMsg] = useState('')
+  const [showInstallModal, setShowInstallModal] = useState(false)
+  const [installedNotice, setInstalledNotice] = useState(false)
 
   // 1. Check Geolocation Permission & Setup Warm Watcher
   useEffect(() => {
@@ -90,15 +98,31 @@ export function GpsBackgroundManager({ user }) {
       }
     }
 
+    const handlePromptAvailable = (e) => {
+      if (e.detail) {
+        setDeferredPrompt(e.detail)
+        window.__edufyi_install_prompt = e.detail
+      }
+    }
+
     if (window.__edufyi_install_prompt) {
       setDeferredPrompt(window.__edufyi_install_prompt)
     }
 
     window.addEventListener('beforeinstallprompt', handleBeforeInstall)
+    window.addEventListener('edufyi-prompt-available', handlePromptAvailable)
 
-    // Listen for custom trigger from sidebar button
+    // Listen for custom trigger from sidebar or topbar button
     const handleCustomTrigger = () => {
-      setShowInstallBanner(true)
+      const isRunningStandalone =
+        window.matchMedia?.('(display-mode: standalone)').matches ||
+        window.navigator.standalone === true ||
+        document.referrer.includes('android-app://')
+      if (isRunningStandalone) {
+        setInstalledNotice(true)
+        setTimeout(() => setInstalledNotice(false), 4000)
+        return
+      }
       triggerInstallFlow()
     }
     window.addEventListener('edufyi-trigger-install', handleCustomTrigger)
@@ -106,14 +130,18 @@ export function GpsBackgroundManager({ user }) {
     // Listen for successful install
     window.addEventListener('appinstalled', () => {
       setShowInstallBanner(false)
+      setShowInstallModal(false)
       setDeferredPrompt(null)
       setIsStandalone(true)
+      setInstalledNotice(true)
+      setTimeout(() => setInstalledNotice(false), 5000)
       window.__edufyi_install_prompt = null
     })
 
     return () => {
       clearInterval(heartbeatInterval)
       window.removeEventListener('beforeinstallprompt', handleBeforeInstall)
+      window.removeEventListener('edufyi-prompt-available', handlePromptAvailable)
       window.removeEventListener('edufyi-trigger-install', handleCustomTrigger)
       if (window.__edufyi_watch_id !== undefined) {
         navigator.geolocation.clearWatch(window.__edufyi_watch_id)
@@ -193,8 +221,12 @@ export function GpsBackgroundManager({ user }) {
         const { outcome } = await promptEvent.userChoice
         if (outcome === 'accepted') {
           setShowInstallBanner(false)
+          setShowInstallModal(false)
           setDeferredPrompt(null)
           window.__edufyi_install_prompt = null
+          setIsStandalone(true)
+          setInstalledNotice(true)
+          setTimeout(() => setInstalledNotice(false), 5000)
           return
         }
       } catch (err) {
@@ -202,17 +234,8 @@ export function GpsBackgroundManager({ user }) {
       }
     }
 
-    // Instead of a full-screen popup, show a compact inline tip inside the notification banner
-    const isIOS = typeof navigator !== 'undefined' && /iPad|iPhone|iPod/.test(navigator.userAgent)
-    const isAndroid = typeof navigator !== 'undefined' && /Android/.test(navigator.userAgent)
-
-    if (isIOS) {
-      setInlineTip('In Safari, tap Share [⎙] at bottom and choose "Add to Home Screen".')
-    } else if (isAndroid) {
-      setInlineTip('Tap Chrome menu (⋮) at top-right and choose "Install app".')
-    } else {
-      setInlineTip('Click the install icon ⊕ in your browser address bar or menu.')
-    }
+    // Open Direct Install Dialog with 1-click and platform instructions
+    setShowInstallModal(true)
   }
 
   const handleDismissInstallBanner = () => {
@@ -332,6 +355,194 @@ export function GpsBackgroundManager({ user }) {
       )}
 
       {/* 2. GPS Location Permission Modal */}
+            {/* Installed Toast Notification */}
+      {installedNotice && (
+        <div
+          style={{
+            position: 'fixed',
+            top: '20px',
+            right: '20px',
+            background: 'linear-gradient(135deg, #064e3b, #047857)',
+            color: '#fff',
+            padding: '12px 18px',
+            borderRadius: '10px',
+            boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
+            zIndex: 100002,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            fontSize: '13px',
+            fontWeight: 600,
+          }}
+        >
+          <CheckCircle2 size={18} color="#a7f3d0" />
+          <span>Edufyi HR App is installed on this device!</span>
+        </div>
+      )}
+
+      {/* Direct Install Modal (Zero 3-dot menu needed) */}
+      {showInstallModal && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(5, 15, 20, 0.75)',
+            backdropFilter: 'blur(5px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 100001,
+            padding: '16px',
+          }}
+          onClick={() => setShowInstallModal(false)}
+        >
+          <div
+            style={{
+              background: '#0a2328',
+              color: '#fff',
+              border: '1px solid rgba(0, 180, 160, 0.35)',
+              borderRadius: '16px',
+              maxWidth: '460px',
+              width: '100%',
+              padding: '24px',
+              boxShadow: '0 20px 40px rgba(0,0,0,0.45)',
+              position: 'relative',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '18px',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div style={{ display: 'flex', gap: '14px', alignItems: 'center' }}>
+                <img
+                  src="/icon-192.png"
+                  alt="Edufyi HR"
+                  style={{ width: '48px', height: '48px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)' }}
+                />
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <h3 style={{ margin: 0, fontSize: '17px', color: '#fff', fontWeight: 700 }}>Edufyi HR App</h3>
+                    <span style={{ fontSize: '10px', background: 'rgba(0, 210, 255, 0.2)', color: '#00d2ff', padding: '2px 6px', borderRadius: '4px', fontWeight: 700 }}>PWA</span>
+                  </div>
+                  <span style={{ fontSize: '12px', color: '#94a3b8' }}>Official Enterprise Management App</span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowInstallModal(false)}
+                style={{ background: 'transparent', border: 0, color: '#94a3b8', cursor: 'pointer', padding: '4px' }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Benefits */}
+            <div style={{ background: 'rgba(0, 110, 111, 0.2)', border: '1px solid rgba(0, 110, 111, 0.4)', borderRadius: '10px', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12.5px', color: '#e2e8f0' }}>
+                <Sparkles size={14} color="#2dd4bf" style={{ flexShrink: 0 }} />
+                <span><strong>Instant 1-Click Launch</strong> from your Desktop or Home Screen</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12.5px', color: '#e2e8f0' }}>
+                <ShieldCheck size={14} color="#2dd4bf" style={{ flexShrink: 0 }} />
+                <span><strong>Seamless Attendance</strong> with automatic GPS and Geofencing</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12.5px', color: '#e2e8f0' }}>
+                <CheckCircle2 size={14} color="#2dd4bf" style={{ flexShrink: 0 }} />
+                <span><strong>Clean Fullscreen Window</strong> without browser tabs or clutter</span>
+              </div>
+            </div>
+
+            {/* Direct Action */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <button
+                type="button"
+                onClick={async () => {
+                  const promptEvent = deferredPrompt || window.__edufyi_install_prompt
+                  if (promptEvent) {
+                    try {
+                      promptEvent.prompt()
+                      const { outcome } = await promptEvent.userChoice
+                      if (outcome === 'accepted') {
+                        setShowInstallModal(false)
+                        setShowInstallBanner(false)
+                        setIsStandalone(true)
+                        setInstalledNotice(true)
+                        setTimeout(() => setInstalledNotice(false), 5000)
+                      }
+                    } catch (err) {
+                      console.warn('Install error:', err)
+                    }
+                  } else {
+                    const isIOS = typeof navigator !== 'undefined' && /iPad|iPhone|iPod/.test(navigator.userAgent)
+                    if (isIOS) {
+                      alert('On iPhone/iPad Safari: Tap the Share button [↑] at the bottom, then choose "Add to Home Screen" [+]')
+                    } else {
+                      alert('Click the Install icon (⊕ or 💻) on the right side of your browser address bar at the top!')
+                    }
+                  }
+                }}
+                style={{
+                  background: 'linear-gradient(135deg, #008788, #0d9488)',
+                  color: '#fff',
+                  border: 0,
+                  borderRadius: '10px',
+                  padding: '12px 18px',
+                  fontSize: '14px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  boxShadow: '0 4px 14px rgba(0, 110, 111, 0.4)',
+                }}
+              >
+                <Download size={18} />
+                <span>⚡ Direct Install App Now</span>
+              </button>
+
+              {/* Platform-Specific Quick Instructions */}
+              <div style={{ fontSize: '11.5px', color: '#cbd5e1', lineHeight: 1.5, background: 'rgba(0,0,0,0.25)', padding: '10px 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.08)' }}>
+                {typeof navigator !== 'undefined' && /iPad|iPhone|iPod/.test(navigator.userAgent) ? (
+                  <div>
+                    <strong style={{ color: '#2dd4bf' }}>iPhone / iPad Installation:</strong>
+                    <div style={{ marginTop: '4px' }}>1. Tap <strong>Share [↑]</strong> in the bottom bar of Safari.</div>
+                    <div>2. Scroll down and tap <strong>Add to Home Screen [+]</strong>.</div>
+                    <div>3. Tap <strong>Add</strong> in the top-right.</div>
+                  </div>
+                ) : (
+                  <div>
+                    <strong style={{ color: '#2dd4bf' }}>Direct Browser Install:</strong>
+                    <div style={{ marginTop: '4px' }}>• <strong>Chrome / Edge:</strong> Look at your URL address bar at the top-right and click the <strong>Install (⊕ or 💻)</strong> icon.</div>
+                    <div>• <strong>Android:</strong> Tap the button above, or tap <strong>Add to Home screen</strong> in the prompt.</div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <button
+                type="button"
+                onClick={() => setShowInstallModal(false)}
+                style={{
+                  background: 'transparent',
+                  border: '1px solid rgba(255,255,255,0.2)',
+                  color: '#94a3b8',
+                  padding: '6px 14px',
+                  borderRadius: '6px',
+                  fontSize: '12px',
+                  cursor: 'pointer',
+                }}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showGpsModal && (
         <div
           style={{

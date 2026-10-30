@@ -21,6 +21,20 @@
 
     <!-- Hero branding logo preload (eliminates LCP delay on login/entry view) -->
     <link rel="preload" href="/elythra-edufyitech-logo.png" as="image" type="image/png" fetchpriority="high" />
+      <!-- Immediate PWA Install Prompt Interceptor -->
+    <script>
+      window.__edufyi_install_prompt = null;
+      window.addEventListener('beforeinstallprompt', function (e) {
+        e.preventDefault();
+        window.__edufyi_install_prompt = e;
+        window.dispatchEvent(new CustomEvent('edufyi-prompt-available', { detail: e }));
+        console.log('[Edufyi PWA] Direct install prompt captured');
+      });
+      window.addEventListener('appinstalled', function () {
+        window.__edufyi_install_prompt = null;
+        console.log('[Edufyi PWA] App installed successfully');
+      });
+    </script>
   </head>
   <body>
     <div id="root">
