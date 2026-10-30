@@ -9,6 +9,7 @@ import {
   evaluatePost25thDoubleLop,
 } from './policyEngine.js'
 import { BlockList, isIP } from 'node:net'
+import { dispatchAttendanceNotification } from '../../services/unifiedNotification.service.js'
 
 export const DEFAULT_LOCATIONS = [
   {
@@ -1023,28 +1024,73 @@ export function createAttendanceService({ repository, companySettings = {} }) {
       const verification = verifyLocation(latitude, longitude, wifiSSID, clientIp, bssid, accuracy)
       const isConnected = Boolean(verification.isGpsVerified || verification.isWifiVerified || verification.isIpVerified)
       const workDate = getTodayString()
+
+      const existingBefore = await repository.findByEmployeeAndDate(employeeId, workDate)
+      const wasDisconnected = existingBefore && existingBefore.disconnectedSince
+
       if (repository.updatePresence) {
         await repository.updatePresence(employeeId, workDate, isConnected)
       }
       let autoPunchedOut = false
       if (!isConnected) {
-        const existing = await repository.findByEmployeeAndDate(employeeId, workDate)
-        if (existing && existing.checkIn && !existing.checkOut) {
-          const checkInTimeMs = existing.checkInAt ? new Date(existing.checkInAt).getTime() : null
+        if (existingBefore && existingBefore.checkIn && !existingBefore.checkOut) {
+          const checkInTimeMs = existingBefore.checkInAt ? new Date(existingBefore.checkInAt).getTime() : null
           const TWO_HOURS_MS = 2 * 60 * 60 * 1000
           if (checkInTimeMs && (Date.now() - checkInTimeMs) >= TWO_HOURS_MS) {
-            const disconnectedSince = existing.disconnectedSince ? new Date(existing.disconnectedSince).getTime() : null
-            if (disconnectedSince && disconnectedSince >= checkInTimeMs && (Date.now() - disconnectedSince) >= TWO_HOURS_MS) {
-              await this.checkOut({
-                employeeId,
-                employeeName: existing.employeeName,
-                date: workDate,
-                autoPunchOut: true,
-                punchOutReason: 'Auto Punch Out (GPS & WiFi disconnected for 2 hrs)',
-              })
-              autoPunchedOut = true
+            const disconnectedSince = existingBefore.disconnectedSince ? new Date(existingBefore.disconnectedSince).getTime() : null
+            if (disconnectedSince && disconnectedSince >= checkInTimeMs) {
+              const elapsedMins = (Date.now() - disconnectedSince) / (60 * 1000)
+
+              if (elapsedMins >= 15 && elapsedMins < 25) {
+                dispatchAttendanceNotification({
+                  employeeId,
+                  eventType: 'ATTENDANCE_WARNING_15',
+                  minutesDisconnected: Math.round(elapsedMins),
+                  record: existingBefore,
+                }).catch(() => {})
+              }
+              if (elapsedMins >= 60 && elapsedMins < 75) {
+                dispatchAttendanceNotification({
+                  employeeId,
+                  eventType: 'ATTENDANCE_WARNING_60',
+                  minutesDisconnected: Math.round(elapsedMins),
+                  record: existingBefore,
+                }).catch(() => {})
+              }
+              if (elapsedMins >= 110 && elapsedMins < 120) {
+                dispatchAttendanceNotification({
+                  employeeId,
+                  eventType: 'ATTENDANCE_WARNING_110',
+                  minutesDisconnected: Math.round(elapsedMins),
+                  record: existingBefore,
+                }).catch(() => {})
+              }
+              if (elapsedMins >= 120) {
+                await this.checkOut({
+                  employeeId,
+                  employeeName: existingBefore.employeeName,
+                  date: workDate,
+                  autoPunchOut: true,
+                  punchOutReason: 'Auto Punch Out completed due to 2 hours of inactive office presence.',
+                })
+                autoPunchedOut = true
+                dispatchAttendanceNotification({
+                  employeeId,
+                  eventType: 'AUTO_PUNCH_OUT_COMPLETED',
+                  minutesDisconnected: Math.round(elapsedMins),
+                  record: existingBefore,
+                }).catch(() => {})
+              }
             }
           }
+        }
+      } else {
+        if (wasDisconnected) {
+          dispatchAttendanceNotification({
+            employeeId,
+            eventType: 'ATTENDANCE_RESTORED',
+            record: existingBefore,
+          }).catch(() => {})
         }
       }
       return {
@@ -1068,12 +1114,25 @@ export function createAttendanceService({ repository, companySettings = {} }) {
         if (!checkInTimeMs || (now - checkInTimeMs) < TWO_HOURS_MS) continue
 
         let shouldAutoPunch = false
-        const reason = 'Auto Punch Out (GPS & WiFi disconnected for 2 hrs)'
+        const reason = 'Auto Punch Out completed due to 2 hours of inactive office presence.'
 
         if (record.disconnectedSince) {
           const discMs = new Date(record.disconnectedSince).getTime()
-          if (discMs >= checkInTimeMs && (now - discMs) >= TWO_HOURS_MS) {
-            shouldAutoPunch = true
+          if (discMs >= checkInTimeMs) {
+            const elapsedMins = (now - discMs) / (60 * 1000)
+
+            if (elapsedMins >= 110 && elapsedMins < 120) {
+              dispatchAttendanceNotification({
+                employeeId: record.employeeId,
+                eventType: 'ATTENDANCE_WARNING_110',
+                minutesDisconnected: Math.round(elapsedMins),
+                record,
+              }).catch(() => {})
+            }
+
+            if (elapsedMins >= 120) {
+              shouldAutoPunch = true
+            }
           }
         }
 
@@ -1087,6 +1146,12 @@ export function createAttendanceService({ repository, companySettings = {} }) {
               punchOutReason: reason,
             })
             punchedOut.push(res)
+            dispatchAttendanceNotification({
+              employeeId: record.employeeId,
+              eventType: 'AUTO_PUNCH_OUT_COMPLETED',
+              minutesDisconnected: 120,
+              record,
+            }).catch(() => {})
           } catch (err) {
             // continue
           }

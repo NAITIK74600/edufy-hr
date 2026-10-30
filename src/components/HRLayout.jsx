@@ -58,6 +58,12 @@ import { AIHRAssistant } from './AIHRAssistant'
 import { isSoundMuted, toggleSoundMuted, playNotificationSound } from '../utils/soundHelper'
 import { ChangePasswordModal } from './ChangePasswordModal'
 import { PasskeyModal } from './PasskeyModal'
+import {
+  isPushNotificationSupported,
+  getPushPermissionStatus,
+  subscribeToPushNotifications,
+  sendTestPushNotification,
+} from '../services/pushNotificationClient'
 
 
 class RouteErrorBoundary extends React.Component {
@@ -179,9 +185,12 @@ export function HRLayout({ route, children }) {
   const [photoNotice, setPhotoNotice] = useState(false)
   const [aiAssistantOpen, setAiAssistantOpen] = useState(false)
   const [soundMuted, setSoundMutedState] = useState(() => isSoundMuted())
-  const [incomingAlert, setIncomingAlert] = useState(null)
   const [storeState, setStoreState] = useState(() => hrStore.getState())
   const [notifications, setNotifications] = useState(() => (hrStore.getUserNotifications ? hrStore.getUserNotifications(user) : hrStore.getNotifications()))
+  const [notifCategory, setNotifCategory] = useState('all')
+  const [pushStatus, setPushStatus] = useState(() => (typeof window !== 'undefined' ? getPushPermissionStatus() : 'unsupported'))
+  const [pushLoading, setPushLoading] = useState(false)
+  const [pushNotice, setPushNotice] = useState('')
   const [isStandalone, setIsStandalone] = useState(() => {
     if (typeof window === 'undefined') return false
     return Boolean(
@@ -237,38 +246,109 @@ export function HRLayout({ route, children }) {
     setProfileOpen(false)
   }, [route.path])
 
-  useEffect(() => {
-    if (!incomingAlert) return
-    const timer = setTimeout(() => setIncomingAlert(null), 6000)
-    return () => clearTimeout(timer)
-  }, [incomingAlert])
-
-  useEffect(() => {
-    const initialList = hrStore.getUserNotifications ? hrStore.getUserNotifications(user) : hrStore.getNotifications()
-    setNotifications(initialList)
-    const initialUnread = (initialList || []).filter((n) => !n.read)
-    prevNotifIdsRef.current = new Set(initialUnread.map((n) => n.id))
-
-    return hrStore.subscribe(() => {
-      const fresh = hrStore.getUserNotifications ? hrStore.getUserNotifications(user) : hrStore.getNotifications()
-      setNotifications(fresh)
-      const freshUnread = (fresh || []).filter((n) => !n.read)
-      const newArrivals = freshUnread.filter((n) => !prevNotifIdsRef.current.has(n.id))
-
-      if (newArrivals.length > 0 && !isFirstLoadRef.current) {
-        // Trigger notification bell chime sound
-        try {
-          playNotificationSound('notification')
-        } catch (err) {
-          console.debug('Sound error:', err)
+  // Fetch unified notifications from server MongoDB with hrStore fallback
+  const syncUnifiedNotifications = React.useCallback(async (silent = false) => {
+    try {
+      const res = await apiClient.get('/notifications?limit=60')
+      if (res?.data && Array.isArray(res.data)) {
+        setNotifications(res.data)
+        const unread = res.data.filter((n) => !n.read)
+        const newArrivals = unread.filter((n) => !prevNotifIdsRef.current.has(n.id))
+        if (newArrivals.length > 0 && !isFirstLoadRef.current && !silent) {
+          try {
+            playNotificationSound('notification')
+          } catch {}
         }
-        // Trigger visual floating banner alert
-        setIncomingAlert(newArrivals[0])
+        isFirstLoadRef.current = false
+        prevNotifIdsRef.current = new Set(unread.map((n) => n.id))
+        return
       }
-      isFirstLoadRef.current = false
-      prevNotifIdsRef.current = new Set(freshUnread.map((n) => n.id))
-    })
+    } catch {
+      // Graceful local store fallback
+    }
+    const local = hrStore.getUserNotifications ? hrStore.getUserNotifications(user) : hrStore.getNotifications()
+    setNotifications(local)
   }, [user])
+
+  useEffect(() => {
+    syncUnifiedNotifications(true)
+    const interval = setInterval(() => syncUnifiedNotifications(false), 25000)
+    const onFocus = () => syncUnifiedNotifications(true)
+    window.addEventListener('focus', onFocus)
+
+    const unsubscribeStore = hrStore.subscribe(() => {
+      const fresh = hrStore.getUserNotifications ? hrStore.getUserNotifications(user) : hrStore.getNotifications()
+      if (fresh && fresh.length > 0) {
+        setNotifications((prev) => {
+          const map = new Map()
+          fresh.forEach((item) => map.set(item.id, item))
+          prev.forEach((item) => map.set(item.id, item))
+          return Array.from(map.values()).sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
+        })
+      }
+    })
+
+    return () => {
+      clearInterval(interval)
+      window.removeEventListener('focus', onFocus)
+      unsubscribeStore()
+    }
+  }, [syncUnifiedNotifications, user])
+
+  const handleEnablePush = async () => {
+    setPushLoading(true)
+    setPushNotice('')
+    const result = await subscribeToPushNotifications()
+    setPushLoading(false)
+    setPushStatus(getPushPermissionStatus())
+    if (result.success) {
+      setPushNotice('✓ Push enabled! Notifications will now appear on your device.')
+      setTimeout(() => setPushNotice(''), 5000)
+    } else {
+      setPushNotice(result.error || 'Push permission was denied.')
+      setTimeout(() => setPushNotice(''), 6000)
+    }
+  }
+
+  const handleTestPush = async () => {
+    setPushLoading(true)
+    setPushNotice('')
+    try {
+      await sendTestPushNotification()
+      setPushNotice('✓ Test push notification sent to your device!')
+      setTimeout(() => setPushNotice(''), 5000)
+    } catch {
+      setPushNotice('Could not send test push. Please check subscription.')
+      setTimeout(() => setPushNotice(''), 5000)
+    } finally {
+      setPushLoading(false)
+    }
+  }
+
+  const handleMarkOneRead = async (item) => {
+    const id = item.id || item._id
+    try {
+      await apiClient.patch(`/notifications/${id}/read`, {})
+    } catch {}
+    setNotifications((prev) => prev.map((n) => ((n.id === id || n._id === id) ? { ...n, read: true } : n)))
+    hrStore.markNotificationRead(id)
+  }
+
+  const handleMarkAllRead = async () => {
+    try {
+      await apiClient.patch('/notifications/read-all', {})
+    } catch {}
+    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })))
+    hrStore.markAllNotificationsRead()
+  }
+
+  const handleClearAll = async () => {
+    try {
+      await apiClient.delete('/notifications/clear-all')
+    } catch {}
+    setNotifications([])
+    hrStore.clearAllNotifications()
+  }
 
   function resolveNotificationRoute(n) {
     if (!n) return `#/${isAdmin ? 'admin' : (isHR ? 'hr' : 'employee')}`
@@ -638,14 +718,44 @@ export function HRLayout({ route, children }) {
 
               {/* Notifications Popover */}
               {notifOpen && (
-                <div className="notif-popover" style={{ width: '360px', maxHeight: '480px', display: 'flex', flexDirection: 'column' }}>
-                  <div className="notif-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 14px', borderBottom: '1px solid var(--border)' }}>
-                    <strong style={{ fontSize: '13px' }}>Notifications ({unreadCount} new)</strong>
-                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <div
+                  className="notif-popover"
+                  style={{
+                    width: '380px',
+                    maxWidth: 'calc(100vw - 20px)',
+                    maxHeight: '520px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    boxShadow: '0 20px 50px rgba(15, 23, 42, 0.18)',
+                    borderRadius: '14px',
+                    border: '1px solid #cbd5e1',
+                    background: '#ffffff',
+                    overflow: 'hidden',
+                  }}
+                >
+                  {/* Popover Header */}
+                  <div
+                    className="notif-header"
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      padding: '12px 14px',
+                      borderBottom: '1px solid #e2e8f0',
+                      background: '#f8fafc',
+                    }}
+                  >
+                    <div>
+                      <strong style={{ fontSize: '13.5px', color: '#0f172a' }}>
+                        Notifications {unreadCount > 0 && <span style={{ color: '#0d9488', fontWeight: 700 }}>({unreadCount} new)</span>}
+                      </strong>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
                       <button
                         type="button"
                         style={{
-                          border: '1px solid var(--border, #e2e8f0)',
+                          border: '1px solid #cbd5e1',
                           background: soundMuted ? '#f1f5f9' : '#ecfdf5',
                           color: soundMuted ? '#64748b' : '#047857',
                           fontSize: '10.5px',
@@ -653,7 +763,7 @@ export function HRLayout({ route, children }) {
                           fontWeight: 600,
                           display: 'flex',
                           alignItems: 'center',
-                          gap: '4px',
+                          gap: '3px',
                           padding: '3px 7px',
                           borderRadius: '6px',
                         }}
@@ -671,75 +781,333 @@ export function HRLayout({ route, children }) {
                       {unreadCount > 0 && (
                         <button
                           type="button"
-                          style={{ border: 0, background: 'transparent', color: 'var(--teal)', fontSize: '11px', cursor: 'pointer', fontWeight: 600 }}
-                          onClick={workspaceAction(hrStore, () => hrStore.markAllNotificationsRead())}
+                          style={{
+                            border: 0,
+                            background: 'transparent',
+                            color: '#0d9488',
+                            fontSize: '11px',
+                            cursor: 'pointer',
+                            fontWeight: 600,
+                            padding: '3px 6px',
+                          }}
+                          onClick={handleMarkAllRead}
                         >
-                          Mark read
+                          Mark all read
                         </button>
                       )}
+
                       {notifications.length > 0 && (
                         <button
                           type="button"
-                          style={{ border: 0, background: 'transparent', color: '#ef4444', fontSize: '11px', cursor: 'pointer' }}
-                          onClick={workspaceAction(hrStore, () => hrStore.clearAllNotifications())}
+                          style={{
+                            border: 0,
+                            background: 'transparent',
+                            color: '#ef4444',
+                            fontSize: '11px',
+                            cursor: 'pointer',
+                            padding: '3px 6px',
+                          }}
+                          onClick={handleClearAll}
                         >
-                          Clear all
+                          Clear
                         </button>
                       )}
                     </div>
                   </div>
-                  <div className="notif-list" style={{ flex: 1, overflowY: 'auto' }}>
-                    {notifications.length === 0 ? (
-                      <p style={{ padding: '24px 16px', color: 'var(--muted)', textAlign: 'center', fontSize: '12px' }}>
-                        No notifications right now.
-                      </p>
-                    ) : (
-                      notifications.map((n) => (
-                        <div
-                          key={n.id}
-                          className={`notif-item ${!n.read ? 'unread' : ''}`}
-                          style={{ cursor: 'pointer', position: 'relative' }}
-                          onClick={() => {
-                            hrStore.markNotificationRead(n.id)
-                            handleNotificationNavigation(n)
-                            setNotifOpen(false)
+
+                  {/* Device Push Notification Channel Banner */}
+                  <div
+                    style={{
+                      padding: '8px 12px',
+                      background: pushStatus === 'granted' ? '#f0fdf4' : '#f8fafc',
+                      borderBottom: '1px solid #e2e8f0',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      fontSize: '11px',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: pushStatus === 'granted' ? '#166534' : '#475569' }}>
+                      <span style={{ fontSize: '13px' }}>{pushStatus === 'granted' ? '📱' : '🔔'}</span>
+                      <span>
+                        {pushStatus === 'granted'
+                          ? 'Device Push: Active'
+                          : pushStatus === 'denied'
+                          ? 'Device Push: Blocked in browser'
+                          : 'Receive instant device push alerts'}
+                      </span>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '6px' }}>
+                      {pushStatus !== 'granted' && (
+                        <button
+                          type="button"
+                          onClick={handleEnablePush}
+                          disabled={pushLoading}
+                          style={{
+                            border: '1px solid #0d9488',
+                            background: '#0d9488',
+                            color: '#ffffff',
+                            borderRadius: '6px',
+                            fontSize: '10.5px',
+                            fontWeight: 600,
+                            padding: '3px 8px',
+                            cursor: 'pointer',
                           }}
                         >
-                          <div className={`notif-item-icon ${n.type || 'leave'}`}>
-                            {n.type === 'salary' ? <WalletCards size={14} /> :
-                             n.type === 'announcement' ? <Megaphone size={14} /> :
-                             n.type?.startsWith('onboarding') ? <ShieldCheck size={14} /> :
-                             (n.type === 'expense' || n.type === 'expenses') ? <Receipt size={14} /> :
-                             (n.type === 'ticket' || n.type === 'tickets' || n.type === 'helpdesk') ? <CircleHelp size={14} /> :
-                             <CalendarDays size={14} />}
-                          </div>
-                          <div className="notif-item-copy" style={{ flex: 1 }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                              <strong>{n.title}</strong>
-                              <button
-                                type="button"
-                                title="Dismiss notification"
-                                style={{ border: 0, background: 'transparent', color: '#94a3b8', fontSize: '12px', cursor: 'pointer', padding: '2px 4px' }}
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  hrStore.deleteNotification(n.id)
-                                }}
-                              >
-                                ✕
-                              </button>
-                            </div>
-                            <p>{n.message}</p>
-                            <small>{n.time}</small>
-                          </div>
-                        </div>
-                      ))
-                    )}
+                          {pushLoading ? 'Enabling...' : 'Enable Push'}
+                        </button>
+                      )}
+
+                      {pushStatus === 'granted' && (
+                        <button
+                          type="button"
+                          onClick={handleTestPush}
+                          disabled={pushLoading}
+                          style={{
+                            border: '1px solid #cbd5e1',
+                            background: '#ffffff',
+                            color: '#0f766e',
+                            borderRadius: '6px',
+                            fontSize: '10px',
+                            fontWeight: 600,
+                            padding: '2px 6px',
+                            cursor: 'pointer',
+                          }}
+                          title="Send a sample notification to your device lock screen"
+                        >
+                          {pushLoading ? 'Testing...' : 'Test Push'}
+                        </button>
+                      )}
+                    </div>
                   </div>
-                  <div style={{ padding: '8px 14px', borderTop: '1px solid var(--border)', textAlign: 'center', background: '#f8fafc' }}>
+
+                  {pushNotice && (
+                    <div style={{ padding: '4px 12px', background: '#ecfdf5', color: '#047857', fontSize: '10.5px', fontWeight: 500, textAlign: 'center' }}>
+                      {pushNotice}
+                    </div>
+                  )}
+
+                  {/* Category Filter Tabs */}
+                  <div
+                    style={{
+                      display: 'flex',
+                      background: '#f1f5f9',
+                      padding: '4px 6px',
+                      gap: '4px',
+                      overflowX: 'auto',
+                      borderBottom: '1px solid #e2e8f0',
+                      scrollbarWidth: 'none',
+                    }}
+                  >
+                    {[
+                      { key: 'all', label: 'All' },
+                      { key: 'attendance', label: 'Attendance' },
+                      { key: 'location', label: 'GPS / Wi-Fi' },
+                      { key: 'leave', label: 'Leaves' },
+                      { key: 'task', label: 'Tasks' },
+                      { key: 'announcement', label: 'Announcements' },
+                      { key: 'payroll', label: 'Payroll' },
+                    ].map((tab) => {
+                      const count = notifications.filter((n) => {
+                        if (tab.key === 'all') return true
+                        const c = (n.category || n.type || '').toLowerCase()
+                        if (tab.key === 'attendance') return c.includes('attendance') || c.includes('punch') || c.includes('shift')
+                        if (tab.key === 'location') return c.includes('gps') || c.includes('network') || c.includes('wifi') || c.includes('geofence')
+                        if (tab.key === 'leave') return c.includes('leave')
+                        if (tab.key === 'task') return c.includes('task')
+                        if (tab.key === 'announcement') return c.includes('announcement') || c.includes('broadcast') || c.includes('bulletin')
+                        if (tab.key === 'payroll') return c.includes('payroll') || c.includes('salary') || c.includes('payslip')
+                        return false
+                      }).length
+
+                      const isActive = notifCategory === tab.key
+                      return (
+                        <button
+                          key={tab.key}
+                          type="button"
+                          onClick={() => setNotifCategory(tab.key)}
+                          style={{
+                            border: 0,
+                            borderRadius: '6px',
+                            padding: '4px 8px',
+                            fontSize: '10.5px',
+                            fontWeight: isActive ? 700 : 500,
+                            background: isActive ? '#ffffff' : 'transparent',
+                            color: isActive ? '#0f172a' : '#64748b',
+                            boxShadow: isActive ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                            cursor: 'pointer',
+                            whiteSpace: 'nowrap',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                          }}
+                        >
+                          <span>{tab.label}</span>
+                          {count > 0 && (
+                            <span
+                              style={{
+                                fontSize: '9px',
+                                background: isActive ? '#0d9488' : '#e2e8f0',
+                                color: isActive ? '#ffffff' : '#64748b',
+                                padding: '0 4px',
+                                borderRadius: '10px',
+                                fontWeight: 700,
+                              }}
+                            >
+                              {count}
+                            </span>
+                          )}
+                        </button>
+                      )
+                    })}
+                  </div>
+
+                  {/* Filtered Notifications List */}
+                  <div className="notif-list" style={{ flex: 1, overflowY: 'auto', maxHeight: '350px' }}>
+                    {(() => {
+                      const list = notifications.filter((n) => {
+                        if (notifCategory === 'all') return true
+                        const c = (n.category || n.type || '').toLowerCase()
+                        if (notifCategory === 'attendance') return c.includes('attendance') || c.includes('punch') || c.includes('shift')
+                        if (notifCategory === 'location') return c.includes('gps') || c.includes('network') || c.includes('wifi') || c.includes('geofence')
+                        if (notifCategory === 'leave') return c.includes('leave')
+                        if (notifCategory === 'task') return c.includes('task')
+                        if (notifCategory === 'announcement') return c.includes('announcement') || c.includes('broadcast') || c.includes('bulletin')
+                        if (notifCategory === 'payroll') return c.includes('payroll') || c.includes('salary') || c.includes('payslip')
+                        return true
+                      })
+
+                      if (list.length === 0) {
+                        return (
+                          <div style={{ padding: '36px 16px', textAlign: 'center', color: '#94a3b8' }}>
+                            <Bell size={24} style={{ opacity: 0.4, marginBottom: '6px' }} />
+                            <p style={{ margin: 0, fontSize: '12px' }}>No notifications in this category.</p>
+                          </div>
+                        )
+                      }
+
+                      return list.map((n) => {
+                        const isRead = Boolean(n.read || n.readAt)
+                        const categoryStr = (n.category || n.type || 'system').toLowerCase()
+                        const isUrgent = n.priority === 'urgent' || n.priority === 'high'
+
+                        return (
+                          <div
+                            key={n.id || n._id}
+                            className={`notif-item ${!isRead ? 'unread' : ''}`}
+                            style={{
+                              cursor: 'pointer',
+                              position: 'relative',
+                              padding: '10px 12px',
+                              borderBottom: '1px solid #f1f5f9',
+                              background: !isRead ? '#f8fafc' : '#ffffff',
+                              borderLeft: !isRead ? '3.5px solid #0d9488' : '3.5px solid transparent',
+                              display: 'flex',
+                              gap: '10px',
+                              alignItems: 'flex-start',
+                              transition: 'background 0.15s ease',
+                            }}
+                            onClick={() => {
+                              handleMarkOneRead(n)
+                              handleNotificationNavigation(n)
+                              setNotifOpen(false)
+                            }}
+                          >
+                            {/* Category Icon */}
+                            <div
+                              style={{
+                                width: '32px',
+                                height: '32px',
+                                borderRadius: '8px',
+                                display: 'grid',
+                                placeItems: 'center',
+                                flex: '0 0 auto',
+                                marginTop: '2px',
+                                background: categoryStr.includes('attendance') ? '#ecfdf5' :
+                                            categoryStr.includes('gps') || categoryStr.includes('network') || categoryStr.includes('wifi') ? '#eff6ff' :
+                                            categoryStr.includes('leave') ? '#f0fdf4' :
+                                            categoryStr.includes('task') ? '#faf5ff' :
+                                            categoryStr.includes('announcement') ? '#fefce8' :
+                                            categoryStr.includes('salary') || categoryStr.includes('payroll') ? '#f0f9ff' : '#f1f5f9',
+                                color: categoryStr.includes('attendance') ? '#047857' :
+                                       categoryStr.includes('gps') || categoryStr.includes('network') || categoryStr.includes('wifi') ? '#1d4ed8' :
+                                       categoryStr.includes('leave') ? '#15803d' :
+                                       categoryStr.includes('task') ? '#7e22ce' :
+                                       categoryStr.includes('announcement') ? '#854d0e' :
+                                       categoryStr.includes('salary') || categoryStr.includes('payroll') ? '#0369a1' : '#475569',
+                              }}
+                            >
+                              {categoryStr.includes('attendance') ? <Clock3 size={15} /> :
+                               categoryStr.includes('gps') || categoryStr.includes('geofence') ? <Target size={15} /> :
+                               categoryStr.includes('network') || categoryStr.includes('wifi') ? <Network size={15} /> :
+                               categoryStr.includes('leave') ? <CalendarDays size={15} /> :
+                               categoryStr.includes('task') ? <BriefcaseBusiness size={15} /> :
+                               categoryStr.includes('announcement') ? <Megaphone size={15} /> :
+                               categoryStr.includes('salary') || categoryStr.includes('payroll') ? <WalletCards size={15} /> :
+                               <Bell size={15} />}
+                            </div>
+
+                            {/* Content */}
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '6px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                  <span
+                                    style={{
+                                      fontSize: '9px',
+                                      fontWeight: 700,
+                                      textTransform: 'uppercase',
+                                      padding: '1px 5px',
+                                      borderRadius: '4px',
+                                      background: isUrgent ? '#fee2e2' : '#f1f5f9',
+                                      color: isUrgent ? '#b91c1c' : '#475569',
+                                    }}
+                                  >
+                                    {isUrgent ? 'URGENT' : (n.category || n.type || 'SYSTEM')}
+                                  </span>
+                                  <strong style={{ fontSize: '12px', color: '#0f172a', fontWeight: !isRead ? 700 : 600 }}>
+                                    {n.title}
+                                  </strong>
+                                </div>
+
+                                <button
+                                  type="button"
+                                  title="Dismiss notification"
+                                  style={{ border: 0, background: 'transparent', color: '#94a3b8', fontSize: '12px', cursor: 'pointer', padding: '1px 4px' }}
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    handleMarkOneRead(n)
+                                  }}
+                                >
+                                  ✕
+                                </button>
+                              </div>
+
+                              <p style={{ margin: '3px 0 4px', fontSize: '11px', color: '#475569', lineHeight: 1.35, wordBreak: 'break-word' }}>
+                                {n.message}
+                              </p>
+
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <small style={{ fontSize: '9.5px', color: '#94a3b8' }}>
+                                  {n.time || (n.createdAt ? new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Recently')}
+                                </small>
+                                <span style={{ fontSize: '10px', color: '#0d9488', fontWeight: 600 }}>
+                                  Open →
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })
+                    })()}
+                  </div>
+
+                  {/* Popover Footer */}
+                  <div style={{ padding: '8px 14px', borderTop: '1px solid #e2e8f0', textAlign: 'center', background: '#f8fafc' }}>
                     <a
                       href={`#/${isAdmin ? 'admin' : (isHR ? 'hr' : 'employee')}/notifications`}
                       onClick={() => setNotifOpen(false)}
-                      style={{ fontSize: '11px', fontWeight: 600, color: 'var(--teal)', textDecoration: 'none' }}
+                      style={{ fontSize: '11px', fontWeight: 600, color: '#0d9488', textDecoration: 'none' }}
                     >
                       View All in Notifications Center →
                     </a>
@@ -976,50 +1344,7 @@ export function HRLayout({ route, children }) {
           onClose={() => setPasskeyModalOpen(false)}
         />
 
-        {/* Real-time Floating Notification Alert Toast */}
-        <AnimatePresence>
-          {incomingAlert && (
-            <motion.div
-              className="incoming-notif-toast"
-              initial={{ opacity: 0, y: -20, scale: 0.95 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -15, scale: 0.95 }}
-              transition={{ duration: 0.25 }}
-              onClick={() => {
-                hrStore.markNotificationRead(incomingAlert.id)
-                handleNotificationNavigation(incomingAlert)
-                setIncomingAlert(null)
-              }}
-              role="alert"
-            >
-              <div className="incoming-notif-bell-icon">
-                <BellRing size={18} />
-              </div>
-              <div className="incoming-notif-body">
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span className={`role-badge notif-badge-${incomingAlert.type || 'info'}`} style={{ fontSize: '9px', textTransform: 'uppercase', padding: '1px 5px' }}>
-                    {incomingAlert.type || 'Alert'}
-                  </span>
-                  <strong style={{ fontSize: '12px', color: '#0f172a' }}>{incomingAlert.title}</strong>
-                </div>
-                <p style={{ margin: '3px 0 0', fontSize: '11px', color: '#475569', lineHeight: 1.35 }}>{incomingAlert.message}</p>
-                <span style={{ fontSize: '10px', color: 'var(--teal)', fontWeight: 600, display: 'inline-block', marginTop: '3px' }}>Click to view details →</span>
-              </div>
-              <button
-                type="button"
-                className="incoming-notif-close"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  setIncomingAlert(null)
-                }}
-                aria-label="Close alert"
-                title="Dismiss"
-              >
-                <X size={14} />
-              </button>
-            </motion.div>
-          )}
-        </AnimatePresence>
+{/* All notifications are strictly routed to Device Push and the Topbar Bell */}
 
         <div className="page-content">
           <RouteErrorBoundary resetKey={route?.path || 'default-route'}>

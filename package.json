@@ -34,8 +34,8 @@
     "nodemailer": "^10.2.1",
     "react": "latest",
     "react-dom": "latest",
+    "rollup-plugin-visualizer": "^7.1.1",
     "vite": "latest",
-    "rollup-plugin-visualizer": "^7.1.1"
-  },
-  "devDependencies": {}
+    "web-push": "^3.6.7"
+  }
 }

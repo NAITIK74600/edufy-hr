@@ -1,5 +1,5 @@
 // Edufyi HR Progressive Web App (PWA) Service Worker
-const CACHE_NAME = 'edufyi-hr-pwa-v4'
+const CACHE_NAME = 'edufyi-hr-pwa-v5'
 const PRECACHE_ASSETS = [
   '/',
   '/index.html',
@@ -8,7 +8,7 @@ const PRECACHE_ASSETS = [
   '/icon-512.png',
   '/icon-maskable-512.png',
   '/elythra-edufyitech-logo.png',
-  '/fonts/dm-sans-normal-400700.woff2'
+  '/fonts/dm-sans-normal-400700.woff2',
 ]
 
 // 1. Install Event: Cache essential app shell
@@ -84,4 +84,52 @@ self.addEventListener('sync', (event) => {
         .catch((err) => console.warn('[PWA SW] Background sync attendance heartbeat notice:', err))
     )
   }
+})
+
+// 5. Push Event: Handle incoming Web Push notifications from server
+self.addEventListener('push', (event) => {
+  let data = {}
+  try {
+    data = event.data ? event.data.json() : {}
+  } catch (err) {
+    data = { title: 'Edufyi HR', body: event.data ? event.data.text() : '' }
+  }
+
+  const title = data.title || 'Edufyi HR'
+  const options = {
+    body: data.body || '',
+    icon: data.icon || '/icon-192.png',
+    badge: data.badge || '/icon-192.png',
+    tag: data.tag || 'edufyi-notification',
+    data: data.data || {},
+    vibrate: [100, 50, 100],
+    renotify: true,
+  }
+
+  event.waitUntil(self.registration.showNotification(title, options))
+})
+
+// 6. Notification Click Event: Navigate to relevant HR page
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close()
+  const targetUrl = event.notification.data?.targetUrl || '/'
+  const fullTargetUrl = new URL(targetUrl, self.location.origin).href
+
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
+      // Focus existing window if available
+      for (const client of windowClients) {
+        if (client.url.includes(self.location.origin) && 'focus' in client) {
+          if ('navigate' in client) {
+            client.navigate(fullTargetUrl)
+          }
+          return client.focus()
+        }
+      }
+      // If no window is open, open a new window
+      if (clients.openWindow) {
+        return clients.openWindow(fullTargetUrl)
+      }
+    })
+  )
 })

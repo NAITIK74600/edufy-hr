@@ -5036,3 +5036,16 @@ body {
 
 
 
+
+/* Mobile adjustments for Notification Popover */
+@media (max-width: 640px) {
+  .notif-popover {
+    position: fixed !important;
+    top: 56px !important;
+    left: 8px !important;
+    right: 8px !important;
+    width: auto !important;
+    max-height: calc(100vh - 120px) !important;
+    z-index: 1050 !important;
+  }
+}

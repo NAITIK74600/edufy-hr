@@ -32,6 +32,7 @@ import { createLeaveRouter } from './modules/leave/leave.routes.js'
 import { seedLeavePolicies } from './modules/leave/leave.seed.js'
 import { createHierarchyRouter } from './modules/hierarchy/hierarchy.routes.js'
 import { createMailRouter } from './modules/mail/mail.routes.js'
+import { createNotificationRouter } from './modules/notifications/notification.routes.js'
 import { createMongoAttendanceRepository } from './modules/attendance/attendance.repository.js'
 import { createMemoryAttendanceRepository } from './modules/attendance/memoryAttendanceRepository.js'
 import { createAttendanceService } from './modules/attendance/attendance.service.js'
@@ -246,6 +247,7 @@ export function createApp(options = {}) {
   app.use('/api/v1/workspace', createWorkspaceRouter({ auth, useDatabase }))
   app.use('/api/v1/hierarchy', createHierarchyRouter({ auth, repository: employeeRepository }))
   app.use('/api/v1/mail', createMailRouter({ auth }))
+  app.use('/api/v1/notifications', createNotificationRouter({ auth }))
   app.use('/api/v1', createAccessRouter(auth))
   const isCacheableStatic = (filePath) => {
     return /\.(woff2|woff|ttf|eot|png|jpe?g|gif|webp|svg|ico)$/i.test(filePath)
