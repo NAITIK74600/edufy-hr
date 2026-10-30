@@ -6053,7 +6053,7 @@ const localStore = {
       const p = args[0]
       employeeId = p.employeeId
       employeeName = p.employeeName
-      customWifi = (p.wifiSSID && !/airtel|dji/i.test(p.wifiSSID)) ? p.wifiSSID : 'edufyi'
+      customWifi = (p.wifiSSID && !/airtel|dji|3052/i.test(p.wifiSSID)) ? p.wifiSSID : 'Edufyi'
       date = p.date || '2026-09-30'
       gpsData = {
         latitude: p.latitude ?? p.gpsData?.latitude ?? null,
@@ -6270,6 +6270,10 @@ const localStore = {
     })
     this.addAuditLog(employeeName, 'ATTENDANCE_CHECKOUT', `Check-out recorded: ${timeStr} (${date})`)
     notifyListeners()
+    const targetRecord = (storeState.attendance || []).find((att) => att.employeeId === employeeId && att.date === date)
+    if (targetRecord) {
+      apiClient.post('/attendance/records', targetRecord).catch((err) => console.warn('checkOut sync notice:', err.message))
+    }
   },
   markAttendance(record) {
     const date = record.date || '2026-09-30'
@@ -6372,6 +6376,7 @@ const localStore = {
     }
     this.addAuditLog('HR', 'ATTENDANCE_MARK', `Attendance logged for ${updated.employeeName} (${updated.employeeId}) on ${date} as ${updated.status}`)
     notifyListeners()
+    apiClient.post('/attendance/records', updated).catch((err) => console.warn('markAttendance sync notice:', err.message))
     return updated
   },
   async deleteAttendance(id, extra = {}) {
@@ -6388,6 +6393,12 @@ const localStore = {
     })
     if (existing) {
       this.addAuditLog('HR', 'ATTENDANCE_DELETE', `Removed attendance entry for ${existing.employeeName} on ${existing.date}`)
+      const recordId = cleanId || existing._id || existing.id
+      if (recordId) {
+        apiClient.delete(`/attendance/records/${recordId}`, {
+          params: { employeeId: extra?.employeeId || existing.employeeId, date: extra?.date || existing.date }
+        }).catch((err) => console.warn('deleteAttendance sync notice:', err.message))
+      }
     }
     notifyListeners()
     return true

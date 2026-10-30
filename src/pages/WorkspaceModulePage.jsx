@@ -595,7 +595,7 @@ function AttendanceModule() {
 
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center', fontSize: '10px' }}>
                       <span className={`wifi-badge ${r.wifiVerified ? 'verified' : 'remote'}`}>
-                        <Wifi size={10} /> {r.wifiVerified ? 'Office Wi-Fi' : 'Remote'} ({/airtel|dji/i.test(r.wifiSSID || '') ? 'edufyi' : (r.wifiSSID || (r.wifiVerified ? 'edufyi' : 'External Network'))})
+                        <Wifi size={10} /> {r.wifiVerified ? 'Office Wi-Fi' : 'Remote'} ({/airtel|dji|3052/i.test(r.wifiSSID || '') ? 'Edufyi' : (/^edufyi$/i.test(r.wifiSSID || '') ? 'Edufyi' : (r.wifiSSID || (r.wifiVerified ? 'Edufyi' : 'External Network')))})
                       </span>
                       <span className={`gps-verified-badge ${isInside ? 'in-range' : 'out-range'}`}>
                         <MapPin size={10} /> {isInside ? `GPS ≤${maxGeofenceRadius}m (${distText})` : `GPS Out (${distText})`}
@@ -719,7 +719,7 @@ function AttendanceModule() {
                   key: 'wifi',
                   label: 'Network Verification',
                   render: (r) => {
-                    const displaySsid = /airtel|dji/i.test(r.wifiSSID || '') ? 'edufyi' : (r.wifiSSID || (r.wifiVerified ? 'edufyi' : ''))
+                    const displaySsid = /airtel|dji|3052/i.test(r.wifiSSID || '') ? 'Edufyi' : (/^edufyi$/i.test(r.wifiSSID || '') ? 'Edufyi' : (r.wifiSSID || (r.wifiVerified ? 'Edufyi' : '')))
                     return (
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                         <Wifi size={13} style={{ color: r.wifiVerified ? 'var(--teal)' : 'var(--muted)' }} />

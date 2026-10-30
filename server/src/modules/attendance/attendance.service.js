@@ -564,7 +564,7 @@ export function createAttendanceService({ repository, companySettings = {} }) {
       nearestLocation: nearestLocation ? nearestLocation.name : (locations.find((l) => /ignite/i.test(l.name))?.name || locations[0]?.name || 'IGNITE CAMPUS'),
       matchedNetworkLabel: (() => {
         const found = officeNetworkIPs.find((entry) => isIpMatching(clientIp, [entry.ip]))?.label || null
-        if (/airtel|dji/i.test(found || '')) return 'edufyi (IGNITE CAMPUS)'
+        if (/airtel|dji|3052/i.test(found || '')) return 'Edufyi (IGNITE CAMPUS)'
         return found
       })(),
       isEligible,
@@ -755,7 +755,7 @@ export function createAttendanceService({ repository, companySettings = {} }) {
         currentBreak: null,
         breaks: [],
         totalBreakMinutes: 0,
-        wifiSSID: /airtel|dji/i.test(wifiSSID || '') ? 'edufyi' : (wifiSSID || 'edufyi'),
+        wifiSSID: /airtel|dji|3052/i.test(wifiSSID || '') ? 'Edufyi' : (wifiSSID || 'Edufyi'),
         bssid: verification.bssid || '',
         wifiVerified: verification.isWifiVerified,
         clientIp: clientIp || '',

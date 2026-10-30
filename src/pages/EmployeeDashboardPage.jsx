@@ -246,7 +246,7 @@ function GPSAttendanceStation({ user, todayRecord, onPunch, onStartBreak, onEndB
   }, [isCheckedIn, isCompleted])
 
   const assignedCampus = user?.campus || user?.location || 'IGNITE CAMPUS'
-  const primaryWifiSSID = (settings?.allowedWifiSSIDs || []).find((w) => !/airtel|dji/i.test(w) && /edufyi/i.test(w)) || 'edufyi'
+  const primaryWifiSSID = (settings?.allowedWifiSSIDs || []).find((w) => !/airtel|dji|3052/i.test(w) && /edufyi/i.test(w)) || 'Edufyi'
   const matchedNetwork = (settings?.wifiNetworks || []).find((n) => n.ssid?.toLowerCase() === primaryWifiSSID.toLowerCase() && !/san francisco|austin|london/i.test(n.branchName || ''))
   const targetBranch = assignedCampus || matchedNetwork?.branchName || 'IGNITE CAMPUS'
 
@@ -1288,7 +1288,7 @@ function ESSOverview({ user }) {
   const isCompleted = !!todayAttendance?.checkIn && !!todayAttendance?.checkOut
 
   async function handlePunch(opts = {}) {
-    const wifi = opts.wifiSSID && !/airtel|dji/i.test(opts.wifiSSID) ? opts.wifiSSID : 'edufyi'
+    const wifi = opts.wifiSSID && !/airtel|dji|3052/i.test(opts.wifiSSID) ? opts.wifiSSID : 'Edufyi'
     const bssid = opts.bssid || null
     const publicIp = opts.publicIp || null
     const gps = opts.gpsData

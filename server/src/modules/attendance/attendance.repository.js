@@ -127,7 +127,7 @@ export function createMongoAttendanceRepository() {
       return {
         id: String(doc._id),
         ...doc,
-        wifiSSID: /airtel|dji/i.test(doc.wifiSSID || '') ? 'edufyi' : (doc.wifiSSID || 'edufyi'),
+        wifiSSID: /airtel|dji|3052/i.test(doc.wifiSSID || '') ? 'Edufyi' : (doc.wifiSSID || 'Edufyi'),
       }
     },
     async findById(id) {
@@ -136,7 +136,7 @@ export function createMongoAttendanceRepository() {
       return {
         id: String(doc._id),
         ...doc,
-        wifiSSID: /airtel|dji/i.test(doc.wifiSSID || '') ? 'edufyi' : (doc.wifiSSID || 'edufyi'),
+        wifiSSID: /airtel|dji|3052/i.test(doc.wifiSSID || '') ? 'Edufyi' : (doc.wifiSSID || 'Edufyi'),
       }
     },
     async list(filters = {}) {
@@ -174,7 +174,7 @@ export function createMongoAttendanceRepository() {
         userId: record.userId ? String(record.userId._id ?? record.userId) : null,
         employeeName: record.userId?.displayName || record.userId?.name || record.employeeName,
         department: record.userId?.department,
-        wifiSSID: /airtel|dji/i.test(record.wifiSSID || '') ? 'edufyi' : (record.wifiSSID || 'edufyi'),
+        wifiSSID: /airtel|dji|3052/i.test(record.wifiSSID || '') ? 'Edufyi' : (record.wifiSSID || 'Edufyi'),
       }))
     },
     async save(record) {

@@ -59,15 +59,15 @@ export function createApp(options = {}) {
         const { AttendanceSettings } = await import('./models/AttendanceSettings.js')
         // Clean up any historical airtel/dji wifiSSID in attendancerecords
         await AttendanceRecord.updateMany(
-          { wifiSSID: { $regex: /airtel|dji/i } },
-          { $set: { wifiSSID: 'edufyi' } }
+          { $or: [{ wifiSSID: { $regex: /airtel|dji|3052/i } }, { wifiSSID: /^edufyi$/i }] },
+          { $set: { wifiSSID: 'Edufyi' } }
         )
         // Clean up AttendanceSettings
         const settings = await AttendanceSettings.findOne({ key: 'office' }) || await AttendanceSettings.findOne().sort({ updatedAt: -1 })
         if (settings) {
           let dirty = false
           if (Array.isArray(settings.allowedWifiSSIDs)) {
-            const cleaned = [...new Set(settings.allowedWifiSSIDs.map((s) => /airtel|dji/i.test(s) ? 'edufyi' : s).filter(Boolean))]
+            const cleaned = [...new Set(settings.allowedWifiSSIDs.map((s) => /airtel|dji|3052/i.test(s) ? 'Edufyi' : s).filter(Boolean))]
             if (!cleaned.includes('edufyi')) cleaned.unshift('edufyi')
             settings.allowedWifiSSIDs = cleaned
             dirty = true
@@ -75,7 +75,7 @@ export function createApp(options = {}) {
           if (Array.isArray(settings.officeNetworkIPs)) {
             settings.officeNetworkIPs.forEach((entry) => {
               if (/airtel|dji/i.test(entry.label || '')) {
-                entry.label = 'edufyi (IGNITE CAMPUS)'
+                entry.label = 'Edufyi (IGNITE CAMPUS)'
                 dirty = true
               }
             })
@@ -83,7 +83,7 @@ export function createApp(options = {}) {
           if (Array.isArray(settings.wifiNetworks)) {
             settings.wifiNetworks.forEach((n) => {
               if (/airtel|dji/i.test(n.ssid || '')) {
-                n.ssid = 'edufyi'
+                n.ssid = 'Edufyi'
                 dirty = true
               }
             })

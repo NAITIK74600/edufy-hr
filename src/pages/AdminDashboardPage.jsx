@@ -80,7 +80,7 @@ function AdminOverviewModule({ onNavigate }) {
   const users = storeState.users || []
   const employees = storeState.employees || []
   const audits = (storeState.auditLogs || []).slice(0, 8)
-  const wifiList = [...new Set((storeState.companySettings?.allowedWifiSSIDs || []).map((s) => /airtel|dji/i.test(s) ? 'edufyi' : s))].filter(Boolean)
+  const wifiList = [...new Set((storeState.companySettings?.allowedWifiSSIDs || []).map((s) => /airtel|dji|3052/i.test(s) ? 'Edufyi' : s))].filter(Boolean)
   const locations = storeState.companySettings?.locations || []
   const roles = hrStore.getRoles()
   const departments = hrStore.getDepartments()
@@ -4642,16 +4642,16 @@ function AdminSettingsModule({ user: propUser }) {
 
   const settings = storeState.companySettings || {}
   const rawWifiList = settings.allowedWifiSSIDs || []
-  const wifiList = [...new Set(rawWifiList.map((s) => /airtel|dji/i.test(s) ? 'edufyi' : s))].filter(Boolean)
+  const wifiList = [...new Set(rawWifiList.map((s) => /airtel|dji|3052/i.test(s) ? 'Edufyi' : s))].filter(Boolean)
   const wifiNetworks = (settings.wifiNetworks || []).map((n) => ({
     ...n,
-    ssid: /airtel|dji/i.test(n.ssid || '') ? 'edufyi' : n.ssid,
+    ssid: /airtel|dji|3052/i.test(n.ssid || '') ? 'Edufyi' : n.ssid,
   }))
   const locations = settings.locations || []
   const holidays = storeState.holidays || []
   const officeNetworkIPs = (settings.officeNetworkIPs || []).map((entry) => ({
     ...entry,
-    label: /airtel|dji/i.test(entry.label || '') ? 'edufyi (IGNITE CAMPUS)' : entry.label,
+    label: /airtel|dji|3052/i.test(entry.label || '') ? 'Edufyi (IGNITE CAMPUS)' : entry.label,
   }))
 
   async function handleRefreshMyIP() {

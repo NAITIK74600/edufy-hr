@@ -1393,7 +1393,7 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
           payload = {
             employeeId: employeeId || user?.employeeId || user?.id,
             employeeName: employeeName || user?.displayName || user?.name || 'Employee',
-            wifiSSID: (wifiSSID && !/airtel|dji/i.test(wifiSSID)) ? wifiSSID : 'edufyi',
+            wifiSSID: (wifiSSID && !/airtel|dji|3052/i.test(wifiSSID)) ? wifiSSID : 'Edufyi',
             bssid: bssid || null,
             publicIp: publicIp || null,
             date: date || todayKey(),
