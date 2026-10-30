@@ -43,6 +43,7 @@ import {
   BellRing,
   KeyRound,
   Download,
+  Fingerprint,
 } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
 import { adminRoutes, hrRoutes, employeeRoutes } from '../app/routes'
