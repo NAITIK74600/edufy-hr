@@ -8,6 +8,8 @@ import {
   CalendarDays,
   Check,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
   Clock,
   Clock3,
   Coffee,
@@ -40,6 +42,7 @@ import {
   RefreshCw,
   Search,
   Send,
+  Shield,
   ShieldAlert,
   ShieldCheck,
   Sparkles,
@@ -155,6 +158,7 @@ function GPSAttendanceStation({ user, todayRecord, onPunch, onStartBreak, onEndB
   const [serverVerification, setServerVerification] = useState(null)
   const [disconnectedMinutes, setDisconnectedMinutes] = useState(0)
   const [isAutoPunchedOut, setIsAutoPunchedOut] = useState(false)
+  const [diagnosticsOpen, setDiagnosticsOpen] = useState(false)
 
   const isCheckedIn = !!todayRecord?.checkIn && !todayRecord?.checkOut
   const isCompleted = !!todayRecord?.checkIn && !!todayRecord?.checkOut
@@ -786,454 +790,375 @@ function GPSAttendanceStation({ user, todayRecord, onPunch, onStartBreak, onEndB
   }
 
   return (
-    <section className="panel punch-station-card">
-      <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'flex-start', gap: '16px' }}>
-        <div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-            <span className={`pulse-indicator ${isOnBreak ? 'warning' : 'online'}`} />
-            <span style={{ fontSize: '11px', fontWeight: 700, color: isOnBreak ? '#b45309' : 'var(--teal)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-              {isOnBreak ? 'On Break' : 'GPS & Wi-Fi Attendance Station'}
+    <section className="ess-attendance-card" aria-label="GPS & Wi-Fi Attendance Station">
+      {/* 1. ATTENDANCE STATUS INDICATORS STRIP */}
+      <div className="ess-station-status-strip">
+        <div className="ess-station-title-group">
+          <span className={`ess-live-pulse-dot ${isOnBreak ? 'warning' : isCheckedIn ? '' : 'neutral'}`} />
+          <h2 className="ess-station-heading">
+            {isOnBreak ? 'On Break' : isCheckedIn ? 'Active Work Shift' : 'Attendance Station'}
+          </h2>
+        </div>
+
+        <div className="ess-status-chips-wrap">
+          {/* Wi-Fi Verification Chip */}
+          <span className={`ess-chip ${isWifiVerified ? 'ess-chip-success' : 'ess-chip-neutral'}`} title={publicIp ? `Public IP: ${publicIp}` : 'Detecting network…'}>
+            <Wifi size={11} /> {networkLabel}
+          </span>
+
+          {/* GPS Geofence Chip */}
+          <span className={`ess-chip ${isGpsInside ? 'ess-chip-success' : 'ess-chip-warning'}`}>
+            <MapPin size={11} /> GPS: {hasGps ? `${distanceLabel} (${isGpsInside ? `≤${maxGeofenceRadius}m Verified` : 'Outside Geofence'})` : 'Not detected'}
+          </span>
+
+          {/* Browser Geolocation Permission Chip */}
+          <span
+            className={`ess-chip ${permissionStatus === 'granted' ? 'ess-chip-success' : permissionStatus === 'denied' ? 'ess-chip-danger' : 'ess-chip-neutral'}`}
+            title="Browser Geolocation Permission Status"
+          >
+            GPS: {permissionStatus.toUpperCase()}
+          </span>
+
+          {hasAutoPunchedOut && (
+            <span className="ess-chip ess-chip-warning">
+              Auto Punched Out
             </span>
-            <span className={`wifi-verified-badge ${isWifiVerified ? '' : 'remote'}`} title={publicIp ? `Public IP: ${publicIp}` : 'Detecting network…'}>
-              <Wifi size={11} /> {networkLabel}
-            </span>
-            <span className={`gps-verified-badge ${isGpsInside ? 'in-range' : 'out-range'}`}>
-              <MapPin size={11} /> GPS: {hasGps ? `${distanceLabel} (${isGpsInside ? `≤${maxGeofenceRadius}m Verified` : 'Outside Geofence'})` : 'Not detected'}
-            </span>
-            <span
-              style={{
-                fontSize: '10px',
-                fontWeight: 600,
-                padding: '2px 8px',
-                borderRadius: '4px',
-                background: permissionStatus === 'granted' ? 'rgba(29, 138, 122, 0.12)' : permissionStatus === 'denied' ? 'rgba(203, 58, 49, 0.12)' : 'rgba(84, 123, 179, 0.12)',
-                color: permissionStatus === 'granted' ? 'var(--teal)' : permissionStatus === 'denied' ? 'var(--coral)' : 'var(--blue)',
-              }}
-              title="Browser Geolocation Permission Status"
-            >
-              GPS: {permissionStatus.toUpperCase()}
-            </span>
-            {hasAutoPunchedOut && (
+          )}
+        </div>
+      </div>
+
+      {/* 2. LIVE ATTENDANCE & SHIFT QUALIFICATION MAIN GRID */}
+      <div className="ess-live-grid">
+        {/* Left Column: Clock & Shift Info */}
+        <div className="ess-live-left">
+          <div className="ess-clock-block">
+            <span className="ess-block-label">Current Time</span>
+            <div className="ess-clock-digits">
+              {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+            </div>
+            <div className="ess-location-row">
+              <CalendarDays size={12} />
+              <span>
+                {currentTime.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })} • Office: <strong>{nearestOfficeName}</strong>
+              </span>
+            </div>
+          </div>
+
+          <div className="ess-punch-summary-row">
+            <div className="ess-punch-time-tag">
+              <span style={{ color: 'var(--muted)' }}>Punch In:</span>
+              <strong>{todayRecord?.checkIn || '–'}</strong>
+            </div>
+            <div className="ess-punch-time-tag">
+              <span style={{ color: 'var(--muted)' }}>Punch Out:</span>
+              <strong>{todayRecord?.checkOut || '–'}</strong>
+              {hasAutoPunchedOut && (
+                <span className="ess-chip ess-chip-warning" style={{ fontSize: '9px', padding: '1px 5px' }}>Auto Out</span>
+              )}
+            </div>
+            {todayRecord?.totalBreakMinutes ? (
+              <div className="ess-punch-time-tag" style={{ color: '#b45309' }}>
+                <span>Breaks:</span>
+                <strong>{todayRecord.totalBreakMinutes}m</strong>
+              </div>
+            ) : null}
+          </div>
+        </div>
+
+        {/* Right Column: Working Time Display & Shift Qualification */}
+        <div className="ess-live-right">
+          {isCheckedIn ? (
+            <div className={`ess-timer-box ${isOnBreak ? 'paused-break' : isOutsideCampus ? 'paused-offcampus' : 'active'}`}>
+              <div className="ess-timer-header">
+                {isOnBreak ? <Pause size={13} /> : isOutsideCampus ? <Pause size={13} /> : <Play size={13} />}
+                <span>
+                  {isOnBreak
+                    ? 'Active Work (Paused — Break)'
+                    : isOutsideCampus
+                      ? 'Active Work (Paused — Outside Campus)'
+                      : 'Active Net Work Time'}
+                </span>
+              </div>
+              <div className="ess-timer-digits">
+                {formatTimerSeconds(netWorkSeconds)}
+              </div>
+            </div>
+          ) : (
+            <div className="ess-timer-box idle">
+              <div className="ess-timer-header">
+                <Clock3 size={13} />
+                <span>Shift Ready</span>
+              </div>
+              <div className="ess-timer-digits">
+                00h 00m 00s
+              </div>
+            </div>
+          )}
+
+          {/* Shift Qualification Progress */}
+          <div className="ess-qualification-box">
+            <div className="ess-qualification-header">
+              <span style={{ color: 'var(--muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                Shift Qualification
+              </span>
               <span
                 style={{
                   fontSize: '10px',
                   fontWeight: 700,
                   padding: '2px 8px',
-                  borderRadius: '4px',
-                  background: '#fef3e2',
-                  color: '#b45309',
-                  border: '1px solid #fbd38d',
+                  borderRadius: '6px',
+                  background: isFullDayQualified ? '#dcfce7' : isHalfDayQualified ? '#fef3c7' : '#fee2e2',
+                  color: isFullDayQualified ? '#15803d' : isHalfDayQualified ? '#b45309' : '#b91c1c',
+                  border: `1px solid ${isFullDayQualified ? '#86efac' : isHalfDayQualified ? '#fde68a' : '#fca5a5'}`,
                 }}
               >
-                Auto Punched Out
+                {isFullDayQualified
+                  ? 'Full Day Qualified (8+ hrs)'
+                  : isHalfDayQualified
+                    ? 'Half Day Qualified (4+ hrs)'
+                    : 'Below Min Half Day (<4 hrs)'}
               </span>
-            )}
-          </div>
-
-          {/* DUAL DISPLAY: LIVE WALL CLOCK + LIVE WORK / BREAK TIMER */}
-          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: '16px', marginTop: '4px' }}>
-            <div>
-              <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Current Time</div>
-              <div className="live-clock-digits" style={{ fontSize: '28px', lineHeight: 1.1 }}>
-                {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-              </div>
             </div>
 
-            {isCheckedIn && (
+            <div className="ess-qualification-track">
               <div
+                className="ess-qualification-fill"
                 style={{
-                  padding: '6px 12px',
-                  background: isOnBreak ? '#fffbeb' : isOutsideCampus ? '#fff7ed' : '#eaf4f1',
-                  border: `1px solid ${isOnBreak ? '#fde68a' : isOutsideCampus ? '#fed7aa' : '#c7ded7'}`,
-                  borderRadius: '8px',
+                  width: `${Math.min(100, Math.round((netWorkSeconds / FULL_DAY_SECS) * 100))}%`,
+                  background: isFullDayQualified ? '#16a34a' : isHalfDayQualified ? '#f59e0b' : '#ef4444',
                 }}
-              >
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    fontSize: '11px',
-                    fontWeight: 700,
-                    color: isOnBreak ? '#92400e' : isOutsideCampus ? '#c2410c' : 'var(--teal)',
-                  }}
-                >
-                  {isOnBreak ? <Pause size={12} /> : isOutsideCampus ? <Pause size={12} /> : <Play size={12} />}
-                  <span>
-                    {isOnBreak
-                      ? 'Active Work (Paused — Break)'
-                      : isOutsideCampus
-                        ? 'Active Work (Paused — Outside Campus / Off Wi-Fi)'
-                        : 'Active Net Work Time'}
-                  </span>
-                </div>
-                <div
-                  style={{
-                    fontFamily: 'monospace',
-                    fontSize: '20px',
-                    fontWeight: 800,
-                    color: isOnBreak ? '#b45309' : isOutsideCampus ? '#c2410c' : 'var(--teal)',
-                    marginTop: '2px',
-                  }}
-                >
-                  {formatTimerSeconds(netWorkSeconds)}
-                </div>
-              </div>
-            )}
-
-            {/* ATTENDANCE TARGET QUALIFICATION CARD */}
-            {isCheckedIn && (
-              <div
-                style={{
-                  padding: '6px 12px',
-                  background: '#f8fafc',
-                  border: '1px solid #e2e8f0',
-                  borderRadius: '8px',
-                  minWidth: '220px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '3px',
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '10.5px' }}>
-                  <span style={{ color: 'var(--muted)', fontWeight: 600 }}>Shift Qualification</span>
-                  <span
-                    style={{
-                      fontSize: '9.5px',
-                      fontWeight: 700,
-                      padding: '1px 6px',
-                      borderRadius: '4px',
-                      background: isFullDayQualified ? '#dcfce7' : isHalfDayQualified ? '#fef3c7' : '#fee2e2',
-                      color: isFullDayQualified ? '#15803d' : isHalfDayQualified ? '#b45309' : '#b91c1c',
-                      border: `1px solid ${isFullDayQualified ? '#86efac' : isHalfDayQualified ? '#fde68a' : '#fca5a5'}`,
-                    }}
-                  >
-                    {isFullDayQualified
-                      ? 'Full Day Qualified (8+ hrs)'
-                      : isHalfDayQualified
-                        ? 'Half Day Qualified (4+ hrs)'
-                        : 'Below Min Half Day (<4 hrs)'}
-                  </span>
-                </div>
-                <div style={{ width: '100%', height: '5px', background: '#e2e8f0', borderRadius: '3px', overflow: 'hidden', marginTop: '2px' }}>
-                  <div
-                    style={{
-                      height: '100%',
-                      width: `${Math.min(100, Math.round((netWorkSeconds / FULL_DAY_SECS) * 100))}%`,
-                      background: isFullDayQualified ? '#16a34a' : isHalfDayQualified ? '#f59e0b' : '#ef4444',
-                      transition: 'width 0.4s ease',
-                    }}
-                  />
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9.5px', color: 'var(--muted)' }}>
-                  <span>Min Half Day: <strong>4h</strong></span>
-                  <span>Full Day: <strong>8h</strong></span>
-                </div>
-              </div>
-            )}
-
-            {isOnBreak && (
-              <div style={{ padding: '6px 12px', background: '#fef3c7', border: '1px solid #f59e0b', borderRadius: '8px', animation: 'pulse 2s infinite' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: 700, color: '#92400e' }}>
-                  <Coffee size={12} />
-                  <span>On Break</span>
-                </div>
-                <div style={{ fontFamily: 'monospace', fontSize: '20px', fontWeight: 800, color: '#b45309', marginTop: '2px' }}>
-                  {formatTimerSeconds(currentBreakSeconds)}
-                </div>
-              </div>
-            )}
-          </div>
-
-          <p style={{ margin: '8px 0 0', color: 'var(--muted)', fontSize: '12px' }}>
-            {currentTime.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })} • Office: <strong>{nearestOfficeName}</strong>
-          </p>
-        </div>
-
-        {/* PUNCH & BREAK ACTION BUTTONS */}
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px' }}>
-          <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-            <div style={{ textAlign: 'right', fontSize: '11px', color: 'var(--muted)', paddingRight: '4px' }}>
-              <div>In: <strong>{todayRecord?.checkIn || '–'}</strong></div>
-              <div>
-                Out: <strong>{todayRecord?.checkOut || '–'}</strong>
-                {hasAutoPunchedOut && (
-                  <span
-                    style={{
-                      display: 'inline-block',
-                      marginLeft: '4px',
-                      fontSize: '8.5px',
-                      fontWeight: 700,
-                      textTransform: 'uppercase',
-                      padding: '1px 4px',
-                      borderRadius: '3px',
-                      background: '#fef3e2',
-                      color: '#b45309',
-                      border: '1px solid #fbd38d',
-                    }}
-                  >
-                    Auto Out
-                  </span>
-                )}
-              </div>
-              {todayRecord?.totalBreakMinutes ? (
-                <div style={{ color: '#b45309' }}>Breaks: <strong>{todayRecord.totalBreakMinutes}m</strong></div>
-              ) : null}
+              />
             </div>
 
-            {/* BREAK CONTROLS (ACTIVE WHEN CHECKED IN) */}
-            {isCheckedIn && !isCompleted && (
-              <div style={{ display: 'flex', gap: '6px' }}>
-                {isOnBreak ? (
-                  <button
-                    type="button"
-                    className="ui-button primary"
-                    onClick={handleResumeFromBreak}
-                    disabled={isBreaking}
-                    style={{ background: '#059669', borderColor: '#059669', minWidth: '150px', height: '44px', fontSize: '12px', fontWeight: 700 }}
-                  >
-                    <Play size={15} /> Resume Work (End Break)
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    className="ui-button secondary"
-                    onClick={() => handleTakeBreak('break')}
-                    disabled={isBreaking}
-                    title="Take a Break. Work timer will pause until resumed."
-                    style={{ height: '44px', fontSize: '13px', fontWeight: 600, color: '#b45309', borderColor: '#fde68a', background: '#fffbeb', minWidth: '120px' }}
-                  >
-                    <Coffee size={15} /> Take Break
-                  </button>
-                )}
-              </div>
-            )}
-
-            {/* MAIN PUNCH BUTTON */}
-            <button
-              type="button"
-              className={`ui-button ${isCheckedIn ? 'secondary' : 'primary'}`}
-              onClick={handlePunchClick}
-              disabled={isCompleted || isPunching || detectingGps}
-              style={{
-                minWidth: '150px',
-                height: '44px',
-                fontSize: '13px',
-                fontWeight: 700,
-                ...(isCheckedIn ? { background: '#fef2f2', color: '#dc2626', borderColor: '#fca5a5' } : {}),
-              }}
-            >
-              {isCompleted ? (
-                <>
-                  <CheckCircle2 size={16} /> Punched Out Today
-                </>
-              ) : isPunching ? (
-                <>
-                  <RefreshCw size={16} className="animate-spin" /> Verifying...
-                </>
-              ) : isCheckedIn ? (
-                <>
-                  <Clock3 size={16} /> Punch Out
-                </>
-              ) : (
-                <>
-                  <Clock3 size={16} /> Punch In
-                </>
-              )}
-            </button>
+            <div className="ess-qualification-footer">
+              <span>Min Half Day: <strong>4h</strong></span>
+              <span>Progress: <strong>{Math.min(100, Math.round((netWorkSeconds / FULL_DAY_SECS) * 100))}%</strong></span>
+              <span>Full Day: <strong>8h</strong></span>
+            </div>
           </div>
+
+          {isOnBreak && (
+            <div style={{ padding: '8px 12px', background: '#fef3c7', border: '1px solid #f59e0b', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: 700, color: '#92400e' }}>
+                <Coffee size={13} />
+                <span>Current Break:</span>
+              </div>
+              <div style={{ fontFamily: 'monospace', fontSize: '16px', fontWeight: 800, color: '#b45309' }}>
+                {formatTimerSeconds(currentBreakSeconds)}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* ACTIVE BREAK STATUS BANNER */}
+      {/* Warning Banners (Auto punch out, Outside campus, Disconnected) */}
       {isOnBreak && (
-        <div style={{ marginTop: '12px', background: '#fffbeb', border: '1px solid #fde68a', color: '#92400e', padding: '8px 12px', borderRadius: '8px', fontSize: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
+        <div style={{ background: '#fffbeb', border: '1px solid #fde68a', color: '#92400e', padding: '10px 14px', borderRadius: '10px', fontSize: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Pause size={16} />
-            <span>
-              <strong>Break in Progress:</strong> Work timer is currently paused. When you return, click <strong>Resume Work</strong> or punch out.
-            </span>
+            <span><strong>Break in Progress:</strong> Work timer is paused. Click <strong>Resume Work</strong> when you return.</span>
           </div>
           <button
             type="button"
             onClick={handleResumeFromBreak}
             disabled={isBreaking}
-            style={{ padding: '4px 10px', borderRadius: '6px', background: '#059669', color: '#fff', border: 0, fontWeight: 700, fontSize: '11px', cursor: 'pointer' }}
+            style={{ padding: '6px 12px', borderRadius: '8px', background: '#059669', color: '#fff', border: 0, fontWeight: 700, fontSize: '11px', cursor: 'pointer', flexShrink: 0 }}
           >
             Resume Work
           </button>
         </div>
       )}
 
-      {/* AUTO PUNCHED OUT NOTICE BANNER */}
       {hasAutoPunchedOut && (
-        <div style={{ marginTop: '12px', background: '#fef3e2', border: '1px solid #fbd38d', color: '#92400e', padding: '9px 13px', borderRadius: '8px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <div style={{ background: '#fef3e2', border: '1px solid #fbd38d', color: '#92400e', padding: '10px 14px', borderRadius: '10px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
           <AlertCircle size={16} style={{ flexShrink: 0, color: '#b45309' }} />
-          <div>
-            <strong>Auto Punched Out:</strong> Device GPS and Office Wi-Fi were disconnected for 2 hours, so attendance was automatically closed.
-          </div>
+          <div><strong>Auto Punched Out:</strong> Device GPS and Office Wi-Fi were disconnected for 2 hours, so attendance was automatically closed.</div>
         </div>
       )}
 
-      {/* OUTSIDE CAMPUS / DISCONNECTED TIMER PAUSED BANNER */}
       {isCheckedIn && !isCompleted && isOutsideCampus && (
-        <div style={{ marginTop: '12px', background: '#fff7ed', border: '1px solid #fed7aa', color: '#9a3412', padding: '9px 13px', borderRadius: '8px', fontSize: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
+        <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', color: '#9a3412', padding: '10px 14px', borderRadius: '10px', fontSize: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Pause size={16} style={{ flexShrink: 0, color: '#ea580c' }} />
-            <div>
-              <strong>Work Timer Paused (Outside Campus / Off-Network):</strong> You are outside the office geofence and not connected to verified office Wi-Fi. The active work counter timer has stopped and will automatically resume once you return within campus (≤{maxGeofenceRadius}m) or reconnect to office Wi-Fi.
-            </div>
+            <div><strong>Work Timer Paused (Outside Campus):</strong> Outside geofence and off office Wi-Fi. Returning to campus (≤{maxGeofenceRadius}m) will automatically resume work.</div>
           </div>
           <button
             type="button"
             onClick={handleDetectRealGPS}
             disabled={detectingGps}
-            style={{ flexShrink: 0, padding: '5px 11px', borderRadius: '6px', background: '#ea580c', color: '#fff', border: 0, fontWeight: 700, fontSize: '11px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
+            style={{ flexShrink: 0, padding: '6px 12px', borderRadius: '8px', background: '#ea580c', color: '#fff', border: 0, fontWeight: 700, fontSize: '11px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
           >
-            <LocateFixed size={12} className={detectingGps ? 'animate-spin' : ''} /> {detectingGps ? 'Detecting…' : 'Re-detect GPS to Resume'}
+            <LocateFixed size={12} className={detectingGps ? 'animate-spin' : ''} /> {detectingGps ? 'Detecting…' : 'Re-detect GPS'}
           </button>
         </div>
       )}
 
-      {/* DISCONNECTED WARNING BANNER (WHEN ACTIVE) */}
       {isCheckedIn && !isCompleted && disconnectedMinutes > 0 && (
-        <div style={{ marginTop: '12px', background: '#fffbeb', border: '1px solid #fde68a', color: '#92400e', padding: '9px 13px', borderRadius: '8px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <div style={{ background: '#fffbeb', border: '1px solid #fde68a', color: '#92400e', padding: '10px 14px', borderRadius: '10px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
           <AlertCircle size={16} style={{ flexShrink: 0, color: '#b45309' }} />
-          <div>
-            <strong>Office GPS & Wi-Fi Disconnected:</strong> Disconnected for <strong>{disconnectedMinutes} min{disconnectedMinutes === 1 ? '' : 's'}</strong>. If not reconnected within <strong>{Math.max(0, 120 - disconnectedMinutes)} mins</strong> (2 hours total), the system will automatically punch you out.
-          </div>
+          <div><strong>Office GPS & Wi-Fi Disconnected:</strong> Disconnected for <strong>{disconnectedMinutes} min{disconnectedMinutes === 1 ? '' : 's'}</strong>. Reconnect within <strong>{Math.max(0, 120 - disconnectedMinutes)} mins</strong> to avoid automatic punch out.</div>
         </div>
       )}
 
-      {/* DUAL GEOFENCE & WI-FI VERIFICATION RADAR */}
-      <div style={{ marginTop: '16px', paddingTop: '14px', borderTop: '1px solid rgba(29, 138, 122, 0.15)', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '12px' }}>
-        {/* OFFICE NETWORK (PUBLIC IP) — REAL, AUTO-DETECTED VERIFICATION */}
-        <div style={{ background: '#faf9f5', border: '1px solid var(--line)', borderRadius: '8px', padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: '5px' }}>
-              <Wifi size={13} color={isOnOfficeNetwork ? 'var(--teal)' : 'var(--coral)'} /> Office Network Security
-            </span>
-            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-              <button
-                type="button"
-                onClick={() => handleRefreshNetwork()}
-                disabled={ipLoading}
-                title="Re-check the current network"
-                style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '10px', fontWeight: 600, color: 'var(--teal)', background: 'transparent', border: 0, cursor: 'pointer' }}
-              >
-                <RefreshCw size={11} className={ipLoading ? 'animate-spin' : ''} /> {ipLoading ? 'Checking…' : 'Re-check'}
-              </button>
-            </div>
-          </div>
-
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px' }}>
-            <span style={{ color: 'var(--muted)' }}>Device IP</span>
-            <strong style={{ fontFamily: 'monospace' }}>{ipLoading ? 'Detecting…' : (publicIp || 'Unavailable')}</strong>
-          </div>
-          {publicIp && (
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px' }}>
-              <span style={{ color: 'var(--muted)' }}>Office Gateway Subnet</span>
-              <strong style={{ fontFamily: 'monospace', color: isOnOfficeNetwork ? 'var(--teal)' : 'var(--muted)' }}>
-                {serverVerification?.gatewaySubnet || (publicIp.includes('.') ? `${publicIp.split('.').slice(0, 3).join('.')}.* (/24)` : '—')}
-              </strong>
-            </div>
-          )}
-
-          <div style={{
-            fontSize: '10px', fontWeight: 600, padding: '4px 6px', borderRadius: '4px',
-            background: isOnOfficeNetwork ? 'rgba(29, 138, 122, 0.1)' : '#fef2f2',
-            color: isOnOfficeNetwork ? 'var(--teal)' : '#991b1b',
-            border: isOnOfficeNetwork ? '1px solid rgba(29, 138, 122, 0.2)' : '1px solid #fecaca',
-          }}>
-            {isOnOfficeNetwork
-              ? `✓ Authenticated Office Network: ${networkLabel}`
-              : `✕ Office Network Verification Failed: Connect to registered office Wi-Fi.`}
-          </div>
-          <span style={{ fontSize: '9px', color: '#6b7280' }}>
-            Each device on Wi-Fi receives a unique device IP (last digits vary), authenticated via the shared office gateway subnet.
-          </span>
-        </div>
-
-        {/* GPS GEOFENCE RADAR */}
-        <div style={{ background: '#faf9f5', border: '1px solid var(--line)', borderRadius: '8px', padding: '10px 12px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-            <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: '5px' }}>
-              <Radio size={13} color={isGpsInside ? 'var(--teal)' : '#c25e00'} /> GPS Geofence (Max {maxGeofenceRadius}m)
-            </span>
-            <span style={{ fontSize: '10px', color: isGpsInside ? 'var(--teal)' : '#c25e00', fontWeight: 600 }}>
-              {!hasGps
-                ? 'Not detected'
-                : isGpsInside
-                  ? `✓ Verified (${distanceLabel})`
-                  : distance != null && distance <= maxGeofenceRadius
-                    ? `✓ Within Zone (${distanceLabel})`
-                    : `✕ ${distanceLabel} (Outside ${maxGeofenceRadius}m)`}
-            </span>
-          </div>
-
-          <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-            <div style={{ flex: 1, padding: '6px 8px', fontSize: '11px', borderRadius: '6px', border: '1px solid var(--line)', background: '#fff', color: 'var(--muted)' }}>
-              {gpsLive && customCoords
-                ? <>📍 Live: <strong style={{ color: 'var(--ink)' }}>{customCoords.latitude.toFixed(5)}°, {customCoords.longitude.toFixed(5)}°</strong> (±{customCoords.accuracy || 10}m)</>
-                : <>Tap “GPS Detect” to acquire real device coordinates.</>}
-            </div>
-
+      {/* 3. ATTENDANCE ACTION BUTTONS */}
+      <div className="ess-actions-row">
+        {/* Break Button (if checked in and not completed) */}
+        {isCheckedIn && !isCompleted && (
+          isOnBreak ? (
             <button
               type="button"
-              onClick={handleDetectRealGPS}
-              disabled={detectingGps || isPunching}
-              title="Detect real device GPS coordinates"
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '4px',
-                padding: '6px 12px',
-                fontSize: '11px',
-                fontWeight: 600,
-                borderRadius: '6px',
-                border: '1px solid var(--line)',
-                background: '#fff',
-                color: 'var(--teal)',
-                cursor: 'pointer',
-                whiteSpace: 'nowrap',
-              }}
+              className="ess-action-btn resume"
+              onClick={handleResumeFromBreak}
+              disabled={isBreaking}
             >
-              <LocateFixed size={12} className={detectingGps ? 'animate-spin' : ''} />
-              {detectingGps ? 'Locating...' : 'GPS Detect'}
+              <Play size={16} /> Resume Work
             </button>
-          </div>
-          {gpsError && (
-            <div style={{ fontSize: '10px', color: '#b91c1c', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <AlertCircle size={12} />
-              <span>{gpsError}</span>
-            </div>
+          ) : (
+            <button
+              type="button"
+              className="ess-action-btn break"
+              onClick={() => handleTakeBreak('break')}
+              disabled={isBreaking}
+            >
+              <Coffee size={16} /> Take Break
+            </button>
+          )
+        )}
+
+        {/* Main Punch Button */}
+        <button
+          type="button"
+          className={`ess-action-btn ${isCompleted ? 'neutral' : isCheckedIn ? 'danger' : 'primary'}`}
+          onClick={handlePunchClick}
+          disabled={isCompleted || isPunching || detectingGps}
+        >
+          {isCompleted ? (
+            <>
+              <CheckCircle2 size={16} /> Punched Out Today
+            </>
+          ) : isPunching ? (
+            <>
+              <RefreshCw size={16} className="animate-spin" /> Verifying...
+            </>
+          ) : isCheckedIn ? (
+            <>
+              <Clock3 size={16} /> Punch Out
+            </>
+          ) : (
+            <>
+              <Clock3 size={16} /> Punch In
+            </>
           )}
-        </div>
+        </button>
       </div>
 
-      {/* VERIFICATION SUMMARY CHIP */}
-      <div style={{ marginTop: '10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '11px', color: 'var(--muted)', background: (isGpsInside && isWifiVerified) ? 'rgba(29, 138, 122, 0.08)' : '#fef2f2', padding: '6px 12px', borderRadius: '6px', border: (isGpsInside && isWifiVerified) ? '1px solid rgba(29, 138, 122, 0.2)' : '1px solid #fecaca' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          {(isGpsInside && isWifiVerified) ? (
-            <ShieldCheck size={14} color="var(--teal)" />
-          ) : (
-            <AlertCircle size={14} color="#b91c1c" />
-          )}
-          <span>
-            <strong>Punch-In Verification:</strong>{' '}
-            {isGpsInside && isWifiVerified
-              ? `✓ Ready to Punch In — Dual Verified (Office Network: ${publicIp || 'Verified'} & GPS: ${distanceLabel} within ${maxGeofenceRadius}m)`
-              : !isWifiVerified && !isGpsInside
-                ? `✕ Blocked: Both Office Network and GPS Geofence checks failed`
-                : !isWifiVerified
-                  ? `✕ Blocked: Office Network verification failed (Must connect to registered office Wi-Fi)`
-                  : `✕ Blocked: GPS Geofence verification failed (${distanceLabel} away, max permitted: ${maxGeofenceRadius}m)`}
+      {/* 4. COLLAPSIBLE NETWORK & GEOFENCE DIAGNOSTICS */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '4px' }}>
+        <button
+          type="button"
+          className="ess-diagnostics-toggle"
+          onClick={() => setDiagnosticsOpen(!diagnosticsOpen)}
+          aria-expanded={diagnosticsOpen}
+        >
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+            <ShieldCheck size={14} color={isGpsInside && isWifiVerified ? 'var(--teal)' : 'var(--muted)'} />
+            <span>Office Network & Geofence Diagnostics</span>
           </span>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '10px' }}>
-          <span>Accuracy: <strong>{customCoords ? `±${customCoords.accuracy || 8}m` : '—'}</strong></span>
-          <span>Coords: {customCoords ? `${customCoords.latitude.toFixed(4)}°, ${customCoords.longitude.toFixed(4)}°` : 'Not detected'}</span>
-        </div>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+            <span
+              className={`ess-chip ${isGpsInside && isWifiVerified ? 'ess-chip-success' : 'ess-chip-warning'}`}
+              style={{ fontSize: '10px', padding: '2px 7px' }}
+            >
+              {isGpsInside && isWifiVerified ? 'Dual Verified' : 'Check Required'}
+            </span>
+            {diagnosticsOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+          </span>
+        </button>
+
+        {diagnosticsOpen && (
+          <div className="ess-diagnostics-body">
+            {/* Office Network Security */}
+            <div style={{ background: 'var(--surface-sunken)', border: '1px solid var(--line)', borderRadius: '10px', padding: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  <Wifi size={13} color={isOnOfficeNetwork ? 'var(--teal)' : 'var(--coral)'} /> Office Network Security
+                </span>
+                <button
+                  type="button"
+                  onClick={() => handleRefreshNetwork()}
+                  disabled={ipLoading}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '10px', fontWeight: 600, color: 'var(--teal)', background: 'transparent', border: 0, cursor: 'pointer' }}
+                >
+                  <RefreshCw size={11} className={ipLoading ? 'animate-spin' : ''} /> {ipLoading ? 'Checking…' : 'Re-check'}
+                </button>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px' }}>
+                <span style={{ color: 'var(--muted)' }}>Device IP</span>
+                <strong style={{ fontFamily: 'monospace' }}>{ipLoading ? 'Detecting…' : (publicIp || 'Unavailable')}</strong>
+              </div>
+              {publicIp && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px' }}>
+                  <span style={{ color: 'var(--muted)' }}>Office Gateway Subnet</span>
+                  <strong style={{ fontFamily: 'monospace', color: isOnOfficeNetwork ? 'var(--teal)' : 'var(--muted)' }}>
+                    {serverVerification?.gatewaySubnet || (publicIp.includes('.') ? `${publicIp.split('.').slice(0, 3).join('.')}.* (/24)` : '—')}
+                  </strong>
+                </div>
+              )}
+              <div style={{
+                fontSize: '10px', fontWeight: 600, padding: '4px 8px', borderRadius: '6px',
+                background: isOnOfficeNetwork ? 'rgba(0, 110, 111, 0.08)' : '#fef2f2',
+                color: isOnOfficeNetwork ? 'var(--teal)' : '#991b1b',
+                border: isOnOfficeNetwork ? '1px solid rgba(0, 110, 111, 0.2)' : '1px solid #fecaca',
+              }}>
+                {isOnOfficeNetwork
+                  ? `✓ Authenticated Office Network: ${networkLabel}`
+                  : `✕ Office Network Verification Failed: Connect to registered office Wi-Fi.`}
+              </div>
+            </div>
+
+            {/* GPS Geofence Radar */}
+            <div style={{ background: 'var(--surface-sunken)', border: '1px solid var(--line)', borderRadius: '10px', padding: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  <Radio size={13} color={isGpsInside ? 'var(--teal)' : '#c25e00'} /> GPS Geofence (Max {maxGeofenceRadius}m)
+                </span>
+                <button
+                  type="button"
+                  onClick={handleDetectRealGPS}
+                  disabled={detectingGps || isPunching}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '10px', fontWeight: 600, color: 'var(--teal)', background: 'transparent', border: 0, cursor: 'pointer' }}
+                >
+                  <LocateFixed size={11} className={detectingGps ? 'animate-spin' : ''} /> {detectingGps ? 'Locating...' : 'GPS Detect'}
+                </button>
+              </div>
+
+              <div style={{ padding: '6px 8px', fontSize: '11px', borderRadius: '6px', border: '1px solid var(--line)', background: '#fff', color: 'var(--muted)' }}>
+                {gpsLive && customCoords
+                  ? <>📍 <strong style={{ color: 'var(--ink)' }}>{customCoords.latitude.toFixed(5)}°, {customCoords.longitude.toFixed(5)}°</strong> (±{customCoords.accuracy || 10}m)</>
+                  : <>Tap “GPS Detect” to acquire real device coordinates.</>}
+              </div>
+
+              <div style={{
+                fontSize: '10px', fontWeight: 600, padding: '4px 8px', borderRadius: '6px',
+                background: isGpsInside ? 'rgba(0, 110, 111, 0.08)' : '#fff7ed',
+                color: isGpsInside ? 'var(--teal)' : '#c2410c',
+                border: isGpsInside ? '1px solid rgba(0, 110, 111, 0.2)' : '1px solid #fed7aa',
+              }}>
+                {isGpsInside
+                  ? `✓ GPS Geofence Verified: ${distanceLabel} (Within ${maxGeofenceRadius}m limit)`
+                  : `✕ GPS Geofence: ${distanceLabel} (Outside ${maxGeofenceRadius}m zone)`}
+              </div>
+
+              {gpsError && (
+                <div style={{ fontSize: '10px', color: '#b91c1c', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <AlertCircle size={12} />
+                  <span>{gpsError}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </section>
   )
@@ -1502,23 +1427,40 @@ function ESSOverview({ user }) {
   }
 
   return (
-    <div style={{ display: 'grid', gap: '22px' }}>
-      <PageHeader
-        eyebrow="Employee Self-Service (ESS)"
-        title={`${getTimeOfDayGreeting()}, ${resolveUserDisplayName(user, storeState.employees)} 👋`}
-        description="Welcome to your personal work portal. Track daily attendance, view salary breakdown, request leaves, and review company bulletins."
-      >
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-          <span className="role-badge" style={{ background: '#eaf4f1', color: 'var(--teal)', border: '1px solid #c7ded7' }}>
-            {getRoleBadgeLabel(user?.role)}
+    <div className="ess-overview-root">
+      {/* 1. EMPLOYEE WELCOME HEADER */}
+      <div className="ess-header-card">
+        <div className="ess-header-left">
+          <div className="ess-header-meta">
+            <span className="ess-badge-pill">
+              <Sparkles size={11} /> Employee Self-Service (ESS)
+            </span>
+            <span className="ess-date-indicator">
+              <CalendarDays size={12} /> {currentTime.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })} • {user?.campus || user?.location || 'Ignite Campus'}
+            </span>
+          </div>
+          <h1 className="ess-header-title">
+            {getTimeOfDayGreeting()}, {resolveUserDisplayName(user, storeState.employees)} 👋
+          </h1>
+          <p className="ess-header-subtitle">
+            Welcome to your personal work portal. Track daily attendance, shift qualification, salary breakdown, and pending tasks.
+          </p>
+        </div>
+
+        <div className="ess-header-actions">
+          <span className="ess-role-badge">
+            <Shield size={12} />
+            <span>{getRoleBadgeLabel(user?.role)}</span>
           </span>
-          <a href="#/employee/profile" className="ui-button secondary">
-            <User size={13} /> My Profile
+          <a href="#/employee/profile" className="ess-profile-button" title="View & Edit Profile">
+            <User size={13} />
+            <span>My Profile</span>
+            <ArrowRight size={12} />
           </a>
         </div>
-      </PageHeader>
+      </div>
 
-      {/* QUICK PUNCH STATION HERO WITH GPS & WI-FI DUAL VERIFICATION */}
+      {/* 2. ATTENDANCE STATION HERO */}
       <GPSAttendanceStation
         user={user}
         todayRecord={todayAttendance}
@@ -1528,106 +1470,118 @@ function ESSOverview({ user }) {
         currentTime={currentTime}
       />
       {punchNotice && (
-        <div style={{ background: '#eaf4f1', border: '1px solid #c7ded7', color: 'var(--teal)', padding: '10px 14px', borderRadius: '8px', fontSize: '12px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <CheckCircle2 size={15} />
+        <div style={{ background: '#eaf4f1', border: '1px solid #c7ded7', color: 'var(--teal)', padding: '12px 16px', borderRadius: '10px', fontSize: '12px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <CheckCircle2 size={16} />
           <span>{punchNotice}</span>
         </div>
       )}
 
-      {/* METRIC GRID */}
-      <section className="metric-grid">
-        <a href="#/employee/attendance" className="metric-card metric-link">
-          <div className="metric-icon" style={{ background: '#eaf4f1', color: 'var(--teal)' }}>
-            <Clock3 size={20} />
+      {/* 3. QUICK STATS METRIC GRID */}
+      <section className="ess-metrics-grid" aria-label="Employee Quick Metrics">
+        <a href="#/employee/attendance" className="ess-metric-card">
+          <div className="ess-metric-top">
+            <div className="ess-metric-icon" style={{ background: '#E1F1F0', color: 'var(--teal)' }}>
+              <Clock3 size={18} />
+            </div>
+            <ArrowRight size={14} className="ess-metric-arrow" />
           </div>
-          <div className="metric-copy">
-            <span>Attendance Rate</span>
-            <strong>{myAttendance.length ? `${Math.round(presentDays / myAttendance.length * 100)}%` : '-'}</strong>
-            <small>{presentDays} / {myAttendance.length} recorded days this month</small>
+          <div className="ess-metric-body">
+            <span className="ess-metric-label">Attendance Rate</span>
+            <strong className="ess-metric-value">{myAttendance.length ? `${Math.round(presentDays / myAttendance.length * 100)}%` : '–'}</strong>
+            <span className="ess-metric-caption">{presentDays} / {myAttendance.length} days recorded this month</span>
           </div>
-          <ArrowRight size={14} className="metric-link-icon" />
         </a>
 
-        <a href="#/employee/leave" className="metric-card metric-link">
-          <div className="metric-icon" style={{ background: '#eef2f6', color: 'var(--blue)' }}>
-            <CalendarDays size={20} />
+        <a href="#/employee/leave" className="ess-metric-card">
+          <div className="ess-metric-top">
+            <div className="ess-metric-icon" style={{ background: '#EEF2F6', color: 'var(--blue)' }}>
+              <CalendarDays size={18} />
+            </div>
+            <ArrowRight size={14} className="ess-metric-arrow" />
           </div>
-          <div className="metric-copy">
-            <span>Leave Balance</span>
-            <strong>{availableLeave} Days</strong>
-            <small>Saved allowance minus used and reserved leave</small>
+          <div className="ess-metric-body">
+            <span className="ess-metric-label">Leave Balance</span>
+            <strong className="ess-metric-value">{availableLeave} Days</strong>
+            <span className="ess-metric-caption">Available leave balance</span>
           </div>
-          <ArrowRight size={14} className="metric-link-icon" />
         </a>
 
-        <a href="#/employee/tasks" className="metric-card metric-link">
-          <div className="metric-icon" style={{ background: '#fbf3e6', color: '#b97926' }}>
-            <FileText size={20} />
+        <a href="#/employee/tasks" className="ess-metric-card">
+          <div className="ess-metric-top">
+            <div className="ess-metric-icon" style={{ background: '#FEF3E2', color: '#B45309' }}>
+              <FileText size={18} />
+            </div>
+            <ArrowRight size={14} className="ess-metric-arrow" />
           </div>
-          <div className="metric-copy">
-            <span>Active Tasks</span>
-            <strong>{pendingTasks.length} Pending</strong>
-            <small>{completedTasks.length} completed • {myTasks.length} total assigned</small>
+          <div className="ess-metric-body">
+            <span className="ess-metric-label">Active Tasks</span>
+            <strong className="ess-metric-value">{pendingTasks.length} Pending</strong>
+            <span className="ess-metric-caption">{completedTasks.length} done • {myTasks.length} total assigned</span>
           </div>
-          <ArrowRight size={14} className="metric-link-icon" />
         </a>
 
-        <a href="#/employee/salary" className="metric-card metric-link">
-          <div className="metric-icon" style={{ background: '#f6eff7', color: '#88438e' }}>
-            <WalletCards size={20} />
+        <a href="#/employee/salary" className="ess-metric-card">
+          <div className="ess-metric-top">
+            <div className="ess-metric-icon" style={{ background: '#F6EFF7', color: '#88438E' }}>
+              <WalletCards size={18} />
+            </div>
+            <ArrowRight size={14} className="ess-metric-arrow" />
           </div>
-          <div className="metric-copy">
-            <span>Net Monthly Salary</span>
-            <strong>{netSalary === null ? 'Pending Setup' : formatINR(netSalary)}</strong>
-            <small>{salarySubtitle}</small>
+          <div className="ess-metric-body">
+            <span className="ess-metric-label">Net Monthly Salary</span>
+            <strong className="ess-metric-value">{netSalary === null ? 'Pending' : formatINR(netSalary)}</strong>
+            <span className="ess-metric-caption">{salarySubtitle}</span>
           </div>
-          <ArrowRight size={14} className="metric-link-icon" />
         </a>
 
-        <a href="#/employee/helpdesk" className="metric-card metric-link" style={assignedOpenCount > 0 ? { border: '1.5px solid #60a5fa', background: '#eff6ff' } : {}}>
-          <div className="metric-icon" style={{ background: assignedOpenCount > 0 ? '#dbeafe' : '#eaf4f1', color: assignedOpenCount > 0 ? '#1d4ed8' : 'var(--teal)' }}>
-            <HelpCircle size={20} />
+        <a href="#/employee/helpdesk" className="ess-metric-card" style={assignedOpenCount > 0 ? { borderColor: '#60A5FA', background: '#F8FAFC' } : {}}>
+          <div className="ess-metric-top">
+            <div className="ess-metric-icon" style={{ background: assignedOpenCount > 0 ? '#DBEAFE' : '#E1F1F0', color: assignedOpenCount > 0 ? '#1D4ED8' : 'var(--teal)' }}>
+              <HelpCircle size={18} />
+            </div>
+            <ArrowRight size={14} className="ess-metric-arrow" />
           </div>
-          <div className="metric-copy">
-            <span>Help Desk {assignedOpenCount > 0 ? `(${assignedOpenCount} Assigned to You)` : ''}</span>
-            <strong style={assignedOpenCount > 0 ? { color: '#1d4ed8' } : {}}>{openTickets.length} Open Tickets</strong>
-            <small>
+          <div className="ess-metric-body">
+            <span className="ess-metric-label">Help Desk {assignedOpenCount > 0 ? `(${assignedOpenCount} Assigned)` : ''}</span>
+            <strong className="ess-metric-value" style={assignedOpenCount > 0 ? { color: '#1D4ED8' } : {}}>{openTickets.length} Open</strong>
+            <span className="ess-metric-caption">
               {assignedOpenCount > 0 ? `${assignedOpenCount} assigned to you • ` : ''}
-              {myTickets.length - openTickets.length} resolved • {myTickets.length} total logged
-            </small>
+              {myTickets.length - openTickets.length} resolved
+            </span>
           </div>
-          <ArrowRight size={14} className="metric-link-icon" />
         </a>
 
-        <a href="#/employee/expenses" className="metric-card metric-link">
-          <div className="metric-icon" style={{ background: '#fef3e7', color: '#c25e00' }}>
-            <Receipt size={20} />
+        <a href="#/employee/expenses" className="ess-metric-card">
+          <div className="ess-metric-top">
+            <div className="ess-metric-icon" style={{ background: '#FEF3E7', color: '#C25E00' }}>
+              <Receipt size={18} />
+            </div>
+            <ArrowRight size={14} className="ess-metric-arrow" />
           </div>
-          <div className="metric-copy">
-            <span>Expense Claims</span>
-            <strong>{pendingExpenses.length} Pending</strong>
-            <small>{totalPendingExpense > 0 ? `₹${totalPendingExpense.toLocaleString('en-IN')} under review` : `${myExpenses.length} claims submitted`}</small>
+          <div className="ess-metric-body">
+            <span className="ess-metric-label">Expense Claims</span>
+            <strong className="ess-metric-value">{pendingExpenses.length} Pending</strong>
+            <span className="ess-metric-caption">{totalPendingExpense > 0 ? `₹${totalPendingExpense.toLocaleString('en-IN')} review` : `${myExpenses.length} submitted`}</span>
           </div>
-          <ArrowRight size={14} className="metric-link-icon" />
         </a>
       </section>
 
-      {/* QUICK ACTIONS ROW */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
-        <a href="#/employee/leave" className="ui-button secondary" style={{ fontSize: '11px' }}>
-          <CalendarDays size={13} /> Apply for Leave
+      {/* 4. QUICK ACTIONS ROW */}
+      <div className="ess-shortcuts-bar" aria-label="Quick Action Shortcuts">
+        <a href="#/employee/leave" className="ess-shortcut-chip">
+          <CalendarDays size={13} style={{ color: 'var(--teal)' }} /> Apply for Leave
         </a>
-        <a href="#/employee/expenses" className="ui-button secondary" style={{ fontSize: '11px' }}>
-          <Receipt size={13} /> Submit Expense Claim
+        <a href="#/employee/expenses" className="ess-shortcut-chip">
+          <Receipt size={13} style={{ color: '#C25E00' }} /> Submit Expense
         </a>
-        <a href="#/employee/helpdesk" className="ui-button secondary" style={{ fontSize: '11px' }}>
-          <Ticket size={13} /> Raise Support Ticket
+        <a href="#/employee/helpdesk" className="ess-shortcut-chip">
+          <Ticket size={13} style={{ color: 'var(--teal)' }} /> Support Ticket
         </a>
-        <a href="#/employee/salary" className="ui-button secondary" style={{ fontSize: '11px' }}>
-          <Download size={13} /> View Latest Payslip
+        <a href="#/employee/salary" className="ess-shortcut-chip">
+          <Download size={13} style={{ color: '#88438E' }} /> View Latest Payslip
         </a>
-        <a href="#/employee/documents" className="ui-button secondary" style={{ fontSize: '11px' }}>
-          <FileCheck size={13} /> Company Policies & NDA
+        <a href="#/employee/documents" className="ess-shortcut-chip">
+          <FileCheck size={13} style={{ color: '#30A06A' }} /> Company Policies & NDA
         </a>
       </div>
 

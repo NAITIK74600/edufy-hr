@@ -4336,5 +4336,703 @@ body {
   }
 }
 
+/* ========================================================= */
+/* EMPLOYEE SELF-SERVICE (ESS) OVERVIEW REDESIGN */
+/* ========================================================= */
+
+@media (max-width: 768px) {
+  .topbar-greeting-pill {
+    display: none !important;
+  }
+}
+
+.ess-overview-root {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  width: 100%;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+/* 1. EMPLOYEE WELCOME HEADER */
+.ess-header-card {
+  background: var(--paper, #ffffff);
+  border: 1px solid var(--line, #D6E2E3);
+  border-radius: 16px;
+  padding: 20px 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03), 0 4px 12px rgba(0, 110, 111, 0.03);
+  position: relative;
+  overflow: hidden;
+}
+
+.ess-header-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 4px;
+  height: 100%;
+  background: linear-gradient(180deg, var(--teal, #006E6F) 0%, #30A06A 100%);
+}
+
+.ess-header-left {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.ess-header-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ess-badge-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  background: var(--soft-teal, #E1F1F0);
+  color: var(--teal, #006E6F);
+  border-radius: 9999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.ess-date-indicator {
+  font-size: 12px;
+  color: var(--muted, #586D72);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.ess-header-title {
+  font-family: 'Space Grotesk', -apple-system, sans-serif;
+  font-size: clamp(20px, 4vw, 26px);
+  font-weight: 700;
+  color: var(--ink, #0A2328);
+  margin: 0;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+
+.ess-header-subtitle {
+  font-size: 13px;
+  color: var(--muted, #586D72);
+  margin: 0;
+  line-height: 1.4;
+}
+
+.ess-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.ess-role-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: var(--surface-sunken, #E9F2F3);
+  color: var(--teal, #006E6F);
+  border: 1px solid rgba(0, 110, 111, 0.2);
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.ess-profile-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: var(--paper, #ffffff);
+  color: var(--ink, #0A2328);
+  border: 1px solid var(--line, #D6E2E3);
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: all 0.2s ease;
+}
+
+.ess-profile-button:hover {
+  border-color: var(--teal, #006E6F);
+  background: var(--soft-teal, #E1F1F0);
+  color: var(--teal, #006E6F);
+}
+
+/* 2. MAIN ATTENDANCE CARD */
+.ess-attendance-card {
+  background: var(--paper, #ffffff);
+  border: 1px solid var(--line, #D6E2E3);
+  border-radius: 18px;
+  padding: 22px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03), 0 8px 24px rgba(0, 110, 111, 0.04);
+}
+
+/* Section A: Attendance Status Indicators Bar */
+.ess-station-status-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--line, #D6E2E3);
+}
+
+.ess-station-title-group {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.ess-live-pulse-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #30A06A;
+  box-shadow: 0 0 0 4px rgba(48, 160, 106, 0.2);
+  animation: ess-pulse 2s infinite ease-in-out;
+}
+
+.ess-live-pulse-dot.warning {
+  background: #F0A13E;
+  box-shadow: 0 0 0 4px rgba(240, 161, 62, 0.2);
+}
+
+.ess-live-pulse-dot.neutral {
+  background: #94A3B8;
+  box-shadow: 0 0 0 4px rgba(148, 163, 184, 0.15);
+}
+
+@keyframes ess-pulse {
+  0% { transform: scale(0.95); opacity: 0.8; }
+  50% { transform: scale(1.15); opacity: 1; }
+  100% { transform: scale(0.95); opacity: 0.8; }
+}
+
+.ess-station-heading {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink, #0A2328);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 0;
+}
+
+.ess-status-chips-wrap {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.ess-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 9px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid transparent;
+}
+
+.ess-chip-success {
+  background: var(--soft-teal, #E1F1F0);
+  color: var(--teal, #006E6F);
+  border-color: rgba(0, 110, 111, 0.2);
+}
+
+.ess-chip-warning {
+  background: var(--soft-gold, #FEF3E2);
+  color: #B45309;
+  border-color: #FDE68A;
+}
+
+.ess-chip-danger {
+  background: #FEE2E2;
+  color: #B91C1C;
+  border-color: #FCA5A5;
+}
+
+.ess-chip-neutral {
+  background: var(--surface-sunken, #E9F2F3);
+  color: var(--muted, #586D72);
+  border-color: var(--line, #D6E2E3);
+}
+
+/* Section B: Live Attendance Main Grid */
+.ess-live-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+.ess-live-left {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.ess-clock-block {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ess-block-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted, #586D72);
+}
+
+.ess-clock-digits {
+  font-family: 'Space Grotesk', -apple-system, sans-serif;
+  font-size: clamp(26px, 5vw, 36px);
+  font-weight: 700;
+  color: var(--ink, #0A2328);
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+}
+
+.ess-location-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted, #586D72);
+}
+
+.ess-punch-summary-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--surface-sunken, #E9F2F3);
+  border: 1px solid var(--line, #D6E2E3);
+  border-radius: 10px;
+  font-size: 12px;
+}
+
+.ess-punch-time-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.ess-punch-time-tag strong {
+  color: var(--ink, #0A2328);
+  font-weight: 700;
+}
+
+/* Section B (Right Column): Timer & Shift Qualification */
+.ess-live-right {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ess-timer-box {
+  padding: 14px 16px;
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: all 0.3s ease;
+}
+
+.ess-timer-box.active {
+  background: linear-gradient(135deg, #E1F1F0 0%, #E8F6EF 100%);
+  border: 1px solid rgba(0, 110, 111, 0.25);
+  color: var(--teal, #006E6F);
+}
+
+.ess-timer-box.paused-break {
+  background: var(--soft-gold, #FEF3E2);
+  border: 1px solid #FDE68A;
+  color: #B45309;
+}
+
+.ess-timer-box.paused-offcampus {
+  background: #FFF7ED;
+  border: 1px solid #FED7AA;
+  color: #C2410C;
+}
+
+.ess-timer-box.idle {
+  background: var(--surface-sunken, #E9F2F3);
+  border: 1px solid var(--line, #D6E2E3);
+  color: var(--muted, #586D72);
+}
+
+.ess-timer-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.ess-timer-digits {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: clamp(22px, 4vw, 28px);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+/* Section B: Shift Qualification Card */
+.ess-qualification-box {
+  padding: 12px 14px;
+  background: var(--paper, #ffffff);
+  border: 1px solid var(--line, #D6E2E3);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ess-qualification-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+}
+
+.ess-qualification-track {
+  width: 100%;
+  height: 8px;
+  background: var(--surface-sunken, #E9F2F3);
+  border-radius: 9999px;
+  overflow: hidden;
+  position: relative;
+}
+
+.ess-qualification-fill {
+  height: 100%;
+  border-radius: 9999px;
+  transition: width 0.4s ease, background 0.3s ease;
+}
+
+.ess-qualification-footer {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10.5px;
+  color: var(--muted, #586D72);
+}
+
+/* Section C: Action Buttons Row */
+.ess-actions-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+}
+
+.ess-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 10px 18px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.ess-action-btn:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.ess-action-btn.primary {
+  background: var(--teal, #006E6F);
+  color: #ffffff;
+  box-shadow: 0 4px 14px rgba(0, 110, 111, 0.25);
+}
+
+.ess-action-btn.primary:hover:not(:disabled) {
+  background: #005657;
+}
+
+.ess-action-btn.break {
+  background: var(--soft-gold, #FEF3E2);
+  color: #B45309;
+  border-color: #FDE68A;
+}
+
+.ess-action-btn.break:hover:not(:disabled) {
+  background: #FDE68A;
+}
+
+.ess-action-btn.resume {
+  background: #30A06A;
+  color: #ffffff;
+  box-shadow: 0 4px 14px rgba(48, 160, 106, 0.25);
+}
+
+.ess-action-btn.resume:hover:not(:disabled) {
+  background: #278557;
+}
+
+.ess-action-btn.danger {
+  background: #FEF2F2;
+  color: #DC2626;
+  border-color: #FCA5A5;
+}
+
+.ess-action-btn.danger:hover:not(:disabled) {
+  background: #FEE2E2;
+}
+
+.ess-action-btn.neutral {
+  background: var(--surface-sunken, #E9F2F3);
+  color: var(--muted, #586D72);
+  border-color: var(--line, #D6E2E3);
+}
+
+.ess-action-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+/* Section D: Collapsible Diagnostics */
+.ess-diagnostics-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 10px 14px;
+  background: var(--surface-sunken, #E9F2F3);
+  border: 1px solid var(--line, #D6E2E3);
+  border-radius: 10px;
+  color: var(--muted, #586D72);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.ess-diagnostics-toggle:hover {
+  background: #DFECEB;
+  color: var(--ink, #0A2328);
+}
+
+.ess-diagnostics-body {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  padding-top: 6px;
+}
+
+/* 3. QUICK STATS METRIC GRID */
+.ess-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 14px;
+}
+
+.ess-metric-card {
+  background: var(--paper, #ffffff);
+  border: 1px solid var(--line, #D6E2E3);
+  border-radius: 14px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  text-decoration: none;
+  color: inherit;
+  transition: all 0.2s ease;
+  position: relative;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+}
+
+.ess-metric-card:hover {
+  border-color: var(--teal, #006E6F);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 110, 111, 0.08);
+}
+
+.ess-metric-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ess-metric-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ess-metric-arrow {
+  color: var(--muted, #586D72);
+  transition: transform 0.2s ease, color 0.2s ease;
+}
+
+.ess-metric-card:hover .ess-metric-arrow {
+  color: var(--teal, #006E6F);
+  transform: translateX(3px);
+}
+
+.ess-metric-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ess-metric-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted, #586D72);
+}
+
+.ess-metric-value {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--ink, #0A2328);
+}
+
+.ess-metric-caption {
+  font-size: 11px;
+  color: var(--muted, #586D72);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 4. QUICK SHORTCUTS ROW */
+.ess-shortcuts-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ess-shortcut-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: var(--paper, #ffffff);
+  border: 1px solid var(--line, #D6E2E3);
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink, #0A2328);
+  text-decoration: none;
+  transition: all 0.2s ease;
+}
+
+.ess-shortcut-chip:hover {
+  border-color: var(--teal, #006E6F);
+  color: var(--teal, #006E6F);
+  background: var(--soft-teal, #E1F1F0);
+}
+
+/* 5. RESPONSIVE MEDIA QUERIES */
+@media (max-width: 768px) {
+  .ess-header-card {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 16px 18px;
+    gap: 14px;
+  }
+  .ess-header-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+  .ess-live-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  .ess-diagnostics-body {
+    grid-template-columns: 1fr;
+  }
+  .ess-metrics-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+  .page-content {
+    padding-bottom: calc(84px + env(safe-area-inset-bottom, 20px)) !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .ess-overview-root {
+    gap: 14px;
+  }
+  .ess-attendance-card {
+    padding: 16px 14px;
+    border-radius: 14px;
+  }
+  .ess-actions-row {
+    grid-template-columns: 1fr;
+  }
+  .ess-metrics-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .ess-metric-card {
+    padding: 12px 10px;
+    border-radius: 12px;
+  }
+  .ess-metric-value {
+    font-size: 16px;
+  }
+  .ess-metric-caption {
+    font-size: 10px;
+  }
+  .ess-shortcuts-bar {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    padding-bottom: 4px;
+    -webkit-overflow-scrolling: touch;
+  }
+  .ess-shortcut-chip {
+    flex-shrink: 0;
+  }
+}
+
+@media (max-width: 360px) {
+  .ess-metrics-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 
 
