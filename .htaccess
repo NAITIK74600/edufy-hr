@@ -87,8 +87,8 @@ SetEnvIf Request_URI "^/api/v1/events" is_sse=1
   AddOutputFilterByType DEFLATE image/svg+xml font/woff2 application/font-woff2
 </IfModule>
 
-# 6. Proxy all requests to local Node.js application (Port 30005)
+# 6. Proxy all requests to local Node.js application (Port 3000)
 <IfModule mod_proxy.c>
-  RewriteRule ^(.*)$ http://localhost:30005/$1 [P,L]
-  ProxyPassReverse / http://localhost:30005/
+  RewriteRule ^(.*)$ http://127.0.0.1:3000/$1 [P,L]
+  ProxyPassReverse / http://127.0.0.1:3000/
 </IfModule>

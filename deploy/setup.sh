@@ -131,3 +131,4 @@ echo "Domain: https://edufyione.edufyitech.in"
 echo "To issue SSL (HTTPS), run:"
 echo "certbot --nginx -d edufyione.edufyitech.in --non-interactive --agree-tos -m admin@edufyitech.in --redirect"
 echo "============================================================"
+

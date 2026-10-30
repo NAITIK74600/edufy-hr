@@ -595,7 +595,7 @@ function AttendanceModule() {
 
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center', fontSize: '10px' }}>
                       <span className={`wifi-badge ${r.wifiVerified ? 'verified' : 'remote'}`}>
-                        <Wifi size={10} /> {r.wifiVerified ? 'Office Wi-Fi' : 'Remote'} {r.wifiSSID && `(${r.wifiSSID})`}
+                        <Wifi size={10} /> {r.wifiVerified ? 'Office Wi-Fi' : 'Remote'} ({/airtel|dji/i.test(r.wifiSSID || '') ? 'edufyi' : (r.wifiSSID || (r.wifiVerified ? 'edufyi' : 'External Network'))})
                       </span>
                       <span className={`gps-verified-badge ${isInside ? 'in-range' : 'out-range'}`}>
                         <MapPin size={10} /> {isInside ? `GPS ≤${maxGeofenceRadius}m (${distText})` : `GPS Out (${distText})`}
@@ -718,17 +718,20 @@ function AttendanceModule() {
                 {
                   key: 'wifi',
                   label: 'Network Verification',
-                  render: (r) => (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <Wifi size={13} style={{ color: r.wifiVerified ? 'var(--teal)' : 'var(--muted)' }} />
-                      <span className={`wifi-badge ${r.wifiVerified ? 'verified' : 'remote'}`}>
-                        {r.wifiVerified ? 'Office Wi-Fi' : 'Remote / Hotspot'}
-                      </span>
-                      {r.wifiSSID && (
-                        <small style={{ color: 'var(--muted)', fontSize: '9px' }}>({r.wifiSSID})</small>
-                      )}
-                    </div>
-                  ),
+                  render: (r) => {
+                    const displaySsid = /airtel|dji/i.test(r.wifiSSID || '') ? 'edufyi' : (r.wifiSSID || (r.wifiVerified ? 'edufyi' : ''))
+                    return (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <Wifi size={13} style={{ color: r.wifiVerified ? 'var(--teal)' : 'var(--muted)' }} />
+                        <span className={`wifi-badge ${r.wifiVerified ? 'verified' : 'remote'}`}>
+                          {r.wifiVerified ? 'Office Wi-Fi' : 'Remote / Hotspot'}
+                        </span>
+                        {displaySsid && (
+                          <small style={{ color: 'var(--muted)', fontSize: '9px' }}>({displaySsid})</small>
+                        )}
+                      </div>
+                    )
+                  },
                 },
                 {
                   key: 'geofence',
@@ -3345,6 +3348,9 @@ function HelpDeskModule() {
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [feedback, setFeedback] = useState('')
   const [activeTab, setActiveTab] = useState('queue') // 'queue' | 'config'
+  const [resolvingTicket, setResolvingTicket] = useState(null)
+  const [resolutionNotes, setResolutionNotes] = useState('')
+  const [isResolving, setIsResolving] = useState(false)
 
   // Help Desk Configuration Form State
   const initialHelpDesk = storeState.companySettings?.helpDeskSettings || {}
@@ -3476,6 +3482,37 @@ function HelpDeskModule() {
     setFeedback(`Ticket status updated to ${nextStatus.replace('_', ' ').toUpperCase()}.`)
     setTimeout(() => setFeedback(''), 3500)
   })
+
+  const handleResolveSubmit = async (e) => {
+    e?.preventDefault?.()
+    if (!resolvingTicket) return
+    setIsResolving(true)
+    try {
+      const ticketId = resolvingTicket.id || resolvingTicket._id
+      await hrStore.updateTicketStatus(ticketId, 'resolved', resolutionNotes.trim())
+      setFeedback('Ticket successfully resolved and resolution notes dispatched to requester!')
+      setTimeout(() => setFeedback(''), 4500)
+      setResolvingTicket(null)
+      setResolutionNotes('')
+    } catch (err) {
+      setFeedback('Error resolving ticket: ' + (err.message || 'Unknown error'))
+    } finally {
+      setIsResolving(false)
+    }
+  }
+
+  const handleAssignToMe = async (ticket) => {
+    if (!ticket) return
+    const ticketId = ticket.id || ticket._id
+    const payload = {
+      assignedToId: user?.employeeId || user?.id || user?._id || '',
+      assignedToName: user?.displayName || user?.name || 'Support Specialist',
+      assignedToEmail: user?.email || '',
+    }
+    await hrStore.assignTicket(ticketId, payload)
+    setFeedback(`Ticket assigned to you (${payload.assignedToName}).`)
+    setTimeout(() => setFeedback(''), 3500)
+  }
 
   const handleCreateTicketSubmit = workspaceHandler(async (e) => {
     e.preventDefault()
@@ -3946,19 +3983,31 @@ function HelpDeskModule() {
               {/* Status Action Bar */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#f8fafc', padding: '8px 12px', borderRadius: '8px', marginBottom: '14px', border: '1px solid var(--line)', flexWrap: 'wrap', gap: '8px' }}>
                 <span style={{ fontSize: '11px', color: 'var(--muted)', fontWeight: 600 }}>Triage & Status Actions:</span>
-                <div style={{ display: 'flex', gap: '6px' }}>
+                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
+                  {selectedTicket.assignedToId !== (user?.employeeId || user?.id || user?._id) && (
+                    <Button variant="secondary" onClick={() => handleAssignToMe(selectedTicket)} style={{ padding: '4px 10px', fontSize: '11px', background: '#eff6ff', borderColor: '#bfdbfe', color: '#1d4ed8' }}>
+                      🙋 Assign to Me
+                    </Button>
+                  )}
                   {selectedTicket.status !== 'in_progress' && selectedTicket.status !== 'resolved' && (
-                    <Button variant="secondary" onClick={() => updateStatus(selectedTicket.id, 'in_progress')} style={{ padding: '4px 10px', fontSize: '11px' }}>
+                    <Button variant="secondary" onClick={() => updateStatus(selectedTicket.id || selectedTicket._id, 'in_progress')} style={{ padding: '4px 10px', fontSize: '11px' }}>
                       <RefreshCw size={12} /> Mark In Progress
                     </Button>
                   )}
                   {selectedTicket.status !== 'resolved' && (
-                    <Button variant="primary" onClick={() => updateStatus(selectedTicket.id, 'resolved')} style={{ padding: '4px 10px', fontSize: '11px', background: '#10b981', borderColor: '#10b981' }}>
+                    <Button
+                      variant="primary"
+                      onClick={() => {
+                        setResolvingTicket(selectedTicket)
+                        setResolutionNotes('')
+                      }}
+                      style={{ padding: '4px 10px', fontSize: '11px', background: '#10b981', borderColor: '#10b981' }}
+                    >
                       <Check size={12} /> Resolve Ticket
                     </Button>
                   )}
                   {selectedTicket.status === 'resolved' && (
-                    <Button variant="secondary" onClick={() => updateStatus(selectedTicket.id, 'open')} style={{ padding: '4px 10px', fontSize: '11px' }}>
+                    <Button variant="secondary" onClick={() => updateStatus(selectedTicket.id || selectedTicket._id, 'open')} style={{ padding: '4px 10px', fontSize: '11px' }}>
                       <RefreshCw size={12} /> Reopen Ticket
                     </Button>
                   )}
@@ -3987,9 +4036,10 @@ function HelpDeskModule() {
                         assignedToName: emp ? emp.name : 'General Queue',
                         assignedToEmail: emp ? (emp.email || '') : '',
                       }
-                      setSelectedTicket({ ...selectedTicket, ...payload })
-                      await hrStore.assignTicket(selectedTicket.id, payload)
-                      showFeedback(`Ticket assigned to ${payload.assignedToName}.`)
+                      const tId = selectedTicket.id || selectedTicket._id
+                      await hrStore.assignTicket(tId, payload)
+                      setFeedback(`Ticket assigned to ${payload.assignedToName}.`)
+                      setTimeout(() => setFeedback(''), 3500)
                     }}
                     style={{
                       fontSize: '11px',
@@ -4246,6 +4296,83 @@ function HelpDeskModule() {
                 </Button>
                 <Button type="submit" disabled={!newTicket.subject.trim() || !newTicket.description.trim()}>
                   <Send size={13} /> Submit Ticket
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* TICKET RESOLUTION MODAL */}
+      {resolvingTicket && (
+        <div className="payslip-voucher-overlay" onClick={() => !isResolving && setResolvingTicket(null)}>
+          <div className="payslip-voucher" style={{ maxWidth: '520px', width: '92%' }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header-premium" style={{ background: 'linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)', borderBottom: '1px solid #bbf7d0' }}>
+              <div className="modal-title-group">
+                <span className="section-kicker" style={{ color: '#16a34a' }}>Help Desk Resolution</span>
+                <h3 className="modal-title-text" style={{ fontSize: '16px', color: '#14532d', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Check size={18} style={{ color: '#16a34a' }} />
+                  Resolve Ticket #{resolvingTicket.id || resolvingTicket._id}
+                </h3>
+              </div>
+              <button type="button" className="icon-button" onClick={() => !isResolving && setResolvingTicket(null)} aria-label="Close">
+                <X size={16} />
+              </button>
+            </div>
+
+            <form onSubmit={handleResolveSubmit}>
+              <div className="modal-body-premium">
+                <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '10px 12px', marginBottom: '14px' }}>
+                  <strong style={{ fontSize: '13px', color: 'var(--ink)', display: 'block', marginBottom: '3px' }}>
+                    {resolvingTicket.subject}
+                  </strong>
+                  <span style={{ fontSize: '11px', color: 'var(--muted)' }}>
+                    Requester: <strong>{resolvingTicket.employeeName || 'Staff'}</strong> • Category: <strong>{resolvingTicket.category || 'Support'}</strong>
+                  </span>
+                </div>
+
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                    <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--ink)' }}>
+                      Resolution Notes / Solution Steps
+                    </label>
+                    <span style={{ fontSize: '10.5px', color: '#16a34a', fontWeight: 600 }}>Sent via Email to Employee</span>
+                  </div>
+                  <textarea
+                    className="text-input"
+                    rows={4}
+                    placeholder="Describe how the problem was resolved (e.g. Configured WiFi profile, replaced faulty adapter, reset credentials)..."
+                    value={resolutionNotes}
+                    onChange={(e) => setResolutionNotes(e.target.value)}
+                    style={{
+                      width: '100%',
+                      minHeight: '100px',
+                      resize: 'vertical',
+                      fontSize: '12.5px',
+                      lineHeight: '1.45',
+                    }}
+                  />
+                  <span style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '4px', display: 'block' }}>
+                    💡 Marking this resolved updates the ticket status and sends an automated completion email to <strong>{resolvingTicket.employeeName || 'the requester'}</strong> with these notes.
+                  </span>
+                </div>
+              </div>
+
+              <div className="modal-footer-premium">
+                <Button type="button" variant="secondary" onClick={() => setResolvingTicket(null)} disabled={isResolving}>
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={isResolving}
+                  style={{ background: '#16a34a', borderColor: '#16a34a', color: '#fff' }}
+                >
+                  {isResolving ? (
+                    <RefreshCw size={13} className="spin" />
+                  ) : (
+                    <Check size={13} />
+                  )}
+                  {isResolving ? 'Resolving...' : 'Confirm Resolution'}
                 </Button>
               </div>
             </form>

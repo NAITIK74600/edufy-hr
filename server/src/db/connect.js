@@ -15,19 +15,6 @@ export async function connectDatabase(uri = process.env.MONGODB_URI) {
     await mongoose.connect(uri, options)
     return true
   } catch (error) {
-    if ((uri.includes('127.0.0.1') || uri.includes('localhost')) && uri.includes('@')) {
-      const candidates = [
-        'mongodb://127.0.0.1:27017/edufyi_hr',
-        uri.replace(/\/\/[^@]+@/, '//').split('?')[0],
-      ]
-      for (const fallback of candidates) {
-        try {
-          await mongoose.connect(fallback, options)
-          console.log(`[DB] Connected to local MongoDB via fallback (${fallback})`)
-          return true
-        } catch {}
-      }
-    }
     throw error
   }
 }

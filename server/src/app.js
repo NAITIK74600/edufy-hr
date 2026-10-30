@@ -54,6 +54,45 @@ export function createApp(options = {}) {
     if (databaseStore) {
       await seedLeavePolicies()
       await seedAllEmployees()
+      try {
+        const { AttendanceRecord } = await import('./models/AttendanceRecord.js')
+        const { AttendanceSettings } = await import('./models/AttendanceSettings.js')
+        // Clean up any historical airtel/dji wifiSSID in attendancerecords
+        await AttendanceRecord.updateMany(
+          { wifiSSID: { $regex: /airtel|dji/i } },
+          { $set: { wifiSSID: 'edufyi' } }
+        )
+        // Clean up AttendanceSettings
+        const settings = await AttendanceSettings.findOne({ key: 'office' }) || await AttendanceSettings.findOne().sort({ updatedAt: -1 })
+        if (settings) {
+          let dirty = false
+          if (Array.isArray(settings.allowedWifiSSIDs)) {
+            const cleaned = [...new Set(settings.allowedWifiSSIDs.map((s) => /airtel|dji/i.test(s) ? 'edufyi' : s).filter(Boolean))]
+            if (!cleaned.includes('edufyi')) cleaned.unshift('edufyi')
+            settings.allowedWifiSSIDs = cleaned
+            dirty = true
+          }
+          if (Array.isArray(settings.officeNetworkIPs)) {
+            settings.officeNetworkIPs.forEach((entry) => {
+              if (/airtel|dji/i.test(entry.label || '')) {
+                entry.label = 'edufyi (IGNITE CAMPUS)'
+                dirty = true
+              }
+            })
+          }
+          if (Array.isArray(settings.wifiNetworks)) {
+            settings.wifiNetworks.forEach((n) => {
+              if (/airtel|dji/i.test(n.ssid || '')) {
+                n.ssid = 'edufyi'
+                dirty = true
+              }
+            })
+          }
+          if (dirty) await settings.save()
+        }
+      } catch (err) {
+        console.warn('Attendance Wi-Fi cleanup notice:', err.message)
+      }
     }
   }
   const userStore = options.userStore ?? {

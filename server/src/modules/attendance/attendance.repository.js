@@ -124,12 +124,20 @@ export function createMongoAttendanceRepository() {
         date,
       }).lean()
       if (!doc) return null
-      return { id: String(doc._id), ...doc }
+      return {
+        id: String(doc._id),
+        ...doc,
+        wifiSSID: /airtel|dji/i.test(doc.wifiSSID || '') ? 'edufyi' : (doc.wifiSSID || 'edufyi'),
+      }
     },
     async findById(id) {
       const doc = await AttendanceRecord.findById(id).lean()
       if (!doc) return null
-      return { id: String(doc._id), ...doc }
+      return {
+        id: String(doc._id),
+        ...doc,
+        wifiSSID: /airtel|dji/i.test(doc.wifiSSID || '') ? 'edufyi' : (doc.wifiSSID || 'edufyi'),
+      }
     },
     async list(filters = {}) {
       const query = {}
@@ -166,6 +174,7 @@ export function createMongoAttendanceRepository() {
         userId: record.userId ? String(record.userId._id ?? record.userId) : null,
         employeeName: record.userId?.displayName || record.userId?.name || record.employeeName,
         department: record.userId?.department,
+        wifiSSID: /airtel|dji/i.test(record.wifiSSID || '') ? 'edufyi' : (record.wifiSSID || 'edufyi'),
       }))
     },
     async save(record) {

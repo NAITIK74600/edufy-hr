@@ -50,7 +50,7 @@ export function createMongoUserStore({ managementUsers = [] } = {}) {
         if (existing && existing.role !== user.role && existing.employeeId !== user.employeeId) {
           throw Object.assign(new Error(`Configured ${user.role} email conflicts with an existing employee. Resolve the duplicate before starting.`), { statusCode: 409, code: 'MANAGEMENT_ACCOUNT_CONFLICT' })
         }
-        const { passwordHash, permissions, role, username, ...profile } = user
+        const { passwordHash, permissions, role, username, status, ...profile } = user
         if (existing) {
           await Employee.updateOne(
             { _id: existing._id },

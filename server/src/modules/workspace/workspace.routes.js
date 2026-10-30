@@ -580,7 +580,7 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
               ticket: record,
               employee: emp,
               recipientEmail: emp.email,
-            })
+            }).catch((e) => console.warn('[workspace.routes] Ticket employee confirmation email error:', e?.message || e))
           }
           // 2. Dispatch alert to dedicated support mailbox (IT or Unified Helpdesk)
           if (supportMail) {
@@ -589,7 +589,7 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
               ticket: record,
               employee: emp,
               recipientEmail: supportMail,
-            })
+            }).catch((e) => console.warn('[workspace.routes] Ticket support mailbox alert error:', e?.message || e))
           }
           // 3. Dispatch alert to the assigned specialist if their personal email is distinct from the support mailbox
           if (record.assignedToEmail && record.assignedToEmail.toLowerCase() !== supportMail.toLowerCase()) {
@@ -598,7 +598,7 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
               ticket: record,
               employee: emp,
               recipientEmail: record.assignedToEmail,
-            })
+            }).catch((e) => console.warn('[workspace.routes] Ticket assigned specialist alert error:', e?.message || e))
           }
         } catch (emailErr) {
           console.error('[workspace.routes] Ticket email dispatch error:', emailErr?.message || emailErr)
@@ -609,12 +609,16 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
       }
 
       if (resource === 'announcements' || resource === 'documents' || resource === 'courses') {
-        const audience = { status: 'active' }
+        const audience = { status: { $ne: 'terminated' } }
         if (resource === 'announcements' && values.targetAudience && values.targetAudience !== 'All Employees') {
-          if (values.targetAudience === 'Managers') {
-            audience.$or = [{ role: { $in: ['manager', 'lead', 'admin', 'hr'] } }, { isManager: true }]
+          if (values.targetAudience.toLowerCase().includes('manager')) {
+            audience.$or = [
+              { role: { $in: ['manager', 'team_lead', 'lead', 'director', 'managing_director', 'co_founder', 'vertical_head', 'admin', 'hr', 'hr_executive'] } },
+              { designation: { $regex: /manager|lead|director|head|founder/i } },
+              { isManager: true },
+            ]
           } else {
-            audience.department = values.targetAudience
+            audience.department = new RegExp(`^${values.targetAudience}$`, 'i')
           }
         }
         const recipients = await Employee.find(audience).select('_id email name displayName department').lean()
@@ -629,7 +633,7 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
         }
 
         // Live Email Broadcast via Admin channel (admin@edufyitech.in)
-        if (resource === 'announcements' && (body.sendEmailBroadcast || body.sendEmail)) {
+        if (resource === 'announcements' && body.sendEmailBroadcast !== false && body.sendEmail !== false) {
           const publicUrl = (process.env.APP_PUBLIC_URL || 'https://edufyione.edufyitech.in').replace(/\/+$/, '')
           sendAnnouncementEmailBroadcast({
             announcement: {
@@ -740,13 +744,27 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
         query = { ...filter(actor, resource), _id: recordId }
         if (resource === 'tickets' && !management(actor)) {
           try {
-            const settingsDoc = (await AttendanceSettings.findOne({ key: 'office' }).lean()) || (await AttendanceSettings.findOne().sort({ updatedAt: -1 }).lean())
-            const hd = settingsDoc?.helpDeskSettings || {}
+            const targetTicket = await models.tickets.findById(recordId).lean()
+            if (!targetTicket) throw fail('Ticket not found.', 404)
+
             const actorIdStr = id(actor)
             const actorEmpId = String(actor.employeeId || '').toUpperCase()
             const actorEmail = String(actor.email || '').trim().toLowerCase()
             const actorRole = String(actor.role || '').toLowerCase()
             const actorDept = String(actor.department || '').toLowerCase()
+
+            const isAssigned = Boolean(
+              (targetTicket.assignedToId && [actorIdStr, actorEmpId].includes(String(targetTicket.assignedToId).toUpperCase())) ||
+              (targetTicket.assignedToEmail && actorEmail && targetTicket.assignedToEmail.toLowerCase() === actorEmail) ||
+              (targetTicket.assignedTo && [actorIdStr, actorEmpId].includes(String(targetTicket.assignedTo).toUpperCase()))
+            )
+            const isRequester = Boolean(
+              (targetTicket.ownerId && String(targetTicket.ownerId) === actorIdStr) ||
+              (targetTicket.employeeId && actorEmpId && String(targetTicket.employeeId).toUpperCase() === actorEmpId)
+            )
+
+            const settingsDoc = (await AttendanceSettings.findOne({ key: 'office' }).lean()) || (await AttendanceSettings.findOne().sort({ updatedAt: -1 }).lean())
+            const hd = settingsDoc?.helpDeskSettings || {}
             const itEmailEnv = String(process.env.IT_EMAIL || 'itsupport@edufyitech.in').trim().toLowerCase()
 
             const isItSpecialist = Boolean(
@@ -768,10 +786,12 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
               (hd.generalSupportEmployeeEmail && actorEmail === String(hd.generalSupportEmployeeEmail).trim().toLowerCase()) ||
               (hd.generalSupportEmail && actorEmail === String(hd.generalSupportEmail).trim().toLowerCase())
             )
-            if (isItSpecialist || isGeneralSpecialist) {
+            if (isAssigned || isItSpecialist || isGeneralSpecialist || isRequester) {
               query = { _id: recordId }
             }
-          } catch {}
+          } catch (e) {
+            if (e.statusCode) throw e
+          }
         }
         if (resource === 'announcements') {
           if (req.body.liked !== undefined) {
@@ -794,25 +814,31 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
             }
           }
         } else if (resource === 'tasks' || resource === 'tickets') {
-          allowedBody(req.body, resource === 'tickets' ? ['status', 'response', 'assignedToId', 'assignedToName', 'assignedToEmail'] : ['status'])
-          if (resource === 'tickets' && req.body.response !== undefined) {
-            if (req.body.status !== undefined) throw fail('Send a reply or change status separately.')
-            update = { $push: { responses: { sender: actor.name ?? actor.displayName, text: string(req.body, 'response'), time: new Date() } } }
-          } else {
-            update = { $set: {} }
-            if (req.body.status !== undefined) {
-              update.$set.status = choice(req.body, 'status', resource === 'tasks' ? ['todo', 'in_progress', 'completed'] : ['open', 'in_progress', 'resolved', 'closed'])
-            }
-            if (resource === 'tickets') {
-              if (req.body.assignedToId !== undefined) update.$set.assignedToId = req.body.assignedToId ? string(req.body, 'assignedToId', false, 100) : null
-              if (req.body.assignedToName !== undefined) {
-                const aName = req.body.assignedToName ? string(req.body, 'assignedToName', false, 100) : null
-                update.$set.assignedToName = aName
-                update.$set.assignedTo = aName || 'General Queue'
-              }
-              if (req.body.assignedToEmail !== undefined) update.$set.assignedToEmail = req.body.assignedToEmail ? string(req.body, 'assignedToEmail', false, 100) : null
-            }
+          allowedBody(req.body, resource === 'tickets' ? ['status', 'response', 'resolutionNotes', 'assignedToId', 'assignedToName', 'assignedToEmail'] : ['status'])
+          update = { $set: {} }
+          if (req.body.status !== undefined) {
+            update.$set.status = choice(req.body, 'status', resource === 'tasks' ? ['todo', 'in_progress', 'completed'] : ['open', 'in_progress', 'resolved', 'closed'])
           }
+          if (resource === 'tickets') {
+            const noteText = req.body.resolutionNotes || req.body.response
+            if (noteText && typeof noteText === 'string' && noteText.trim()) {
+              update.$push = {
+                responses: {
+                  sender: actor.name ?? actor.displayName ?? 'Support Specialist',
+                  text: noteText.trim(),
+                  time: new Date(),
+                },
+              }
+            }
+            if (req.body.assignedToId !== undefined) update.$set.assignedToId = req.body.assignedToId ? string(req.body, 'assignedToId', false, 100) : null
+            if (req.body.assignedToName !== undefined) {
+              const aName = req.body.assignedToName ? string(req.body, 'assignedToName', false, 100) : null
+              update.$set.assignedToName = aName
+              update.$set.assignedTo = aName || 'General Queue'
+            }
+            if (req.body.assignedToEmail !== undefined) update.$set.assignedToEmail = req.body.assignedToEmail ? string(req.body, 'assignedToEmail', false, 100) : null
+          }
+          if (Object.keys(update.$set).length === 0) delete update.$set
         } else if (resource === 'expenses') {
           if (!management(actor)) throw fail('HR or administrator access is required to review expenses.', 403)
           allowedBody(req.body, ['status', 'rejectionReason'])
@@ -962,11 +988,15 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
           }
         } else if (req.body.status !== undefined) {
           // Status updated -> notify employee requester
+          const isResolved = req.body.status === 'resolved' || req.body.status === 'closed'
+          const resNote = req.body.resolutionNotes || req.body.response || ''
           await models.notifications.create({
             ownerId: record.ownerId,
             recipientId: record.ownerId,
-            title: `Ticket Status Updated: ${String(record.status).toUpperCase()}`,
-            message: `Your support ticket "${record.subject}" is now marked as ${String(record.status).toUpperCase()}.`,
+            title: isResolved ? `Ticket Resolved: ${record.subject}` : `Ticket Status Updated: ${String(record.status).toUpperCase()}`,
+            message: isResolved
+              ? `Your support ticket "${record.subject}" was marked as RESOLVED by ${actor.name || actor.displayName || 'Support Specialist'}.${resNote ? ' Solution: ' + resNote : ''}`
+              : `Your support ticket "${record.subject}" is now marked as ${String(record.status).toUpperCase()}.`,
             type: 'ticket',
             read: false,
           })
@@ -980,7 +1010,22 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
           const supportMail = isIt ? mailConfig.itEmail : mailConfig.helpdeskEmail
           const sender = actor.displayName || actor.name || (isIt ? 'Edufyi IT Support' : 'Edufyi Help Support')
 
-          if (req.body.response !== undefined) {
+          if (req.body.status !== undefined) {
+            // Status changed (e.g. resolved, in_progress, open, closed) -> send status update email to requester
+            if (emp?.email) {
+              const isResolved = req.body.status === 'resolved' || req.body.status === 'closed'
+              const resNote = req.body.resolutionNotes || req.body.response || ''
+              await sendSupportTicketEmail({
+                type: isResolved ? 'resolved' : 'reply',
+                ticket: record,
+                employee: emp,
+                recipientEmail: emp.email,
+                senderName: sender,
+                replyText: resNote || (isResolved ? 'Your support ticket has been resolved by our support team. If you continue experiencing issues, you may reopen this ticket from your employee portal.' : `Your support ticket has been updated to status: ${String(record.status).toUpperCase()}.`),
+              }).catch((e) => console.warn('[workspace.routes] Ticket status update email error:', e?.message || e))
+            }
+          } else if (req.body.response !== undefined || req.body.resolutionNotes !== undefined) {
+            const replyMsg = req.body.resolutionNotes || req.body.response
             if (!isStaffAction) {
               // Requester replied -> send alert email to support mailbox AND to assigned specialist
               if (supportMail) {
@@ -990,8 +1035,8 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
                   employee: emp,
                   recipientEmail: supportMail,
                   senderName: emp?.name || sender,
-                  replyText: req.body.response,
-                })
+                  replyText: replyMsg,
+                }).catch((e) => console.warn('[workspace.routes] Ticket support mail alert error:', e?.message || e))
               }
               if (record.assignedToEmail && record.assignedToEmail.toLowerCase() !== supportMail.toLowerCase()) {
                 await sendSupportTicketEmail({
@@ -1000,8 +1045,8 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
                   employee: emp,
                   recipientEmail: record.assignedToEmail,
                   senderName: emp?.name || sender,
-                  replyText: req.body.response,
-                })
+                  replyText: replyMsg,
+                }).catch((e) => console.warn('[workspace.routes] Ticket specialist reply error:', e?.message || e))
               }
             } else {
               // Support specialist replied -> send email to requester
@@ -1012,25 +1057,14 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
                   employee: emp,
                   recipientEmail: emp.email,
                   senderName: sender,
-                  replyText: req.body.response,
-                })
+                  replyText: replyMsg,
+                }).catch((e) => console.warn('[workspace.routes] Ticket requester reply error:', e?.message || e))
               }
             }
-          } else if (req.body.status !== undefined) {
-            // Status changed (e.g. resolved, closed) -> send status update email to requester
-            if (emp?.email) {
-              const isResolved = req.body.status === 'resolved' || req.body.status === 'closed'
-              await sendSupportTicketEmail({
-                type: isResolved ? 'resolved' : 'reply',
-                ticket: record,
-                employee: emp,
-                recipientEmail: emp.email,
-                senderName: sender,
-                replyText: `Your support ticket has been updated to status: ${String(record.status).toUpperCase()}.`,
-              })
-            }
-          } else if (req.body.assignedToId !== undefined || req.body.assignedToEmail !== undefined) {
-            // Ticket assigned/reassigned -> notify assigned specialist via in-app notification & SMTP email
+          }
+
+          // Ticket assigned/reassigned -> notify assigned specialist via in-app notification & SMTP email
+          if (req.body.assignedToId !== undefined || req.body.assignedToEmail !== undefined) {
             const assigneeId = record.assignedToId
             const assigneeEmail = record.assignedToEmail
             const assigneeName = record.assignedToName || 'Specialist'

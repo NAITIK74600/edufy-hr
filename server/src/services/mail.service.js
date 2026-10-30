@@ -52,17 +52,28 @@ function cleanPassword(val) {
   return cleaned
 }
 
-function isPlaceholder(val) {
+function isPlaceholder(val, host = '', isPassword = false) {
   if (!val || typeof val !== 'string') return true
   const lower = val.trim().toLowerCase()
-  return (
+  if (
     !lower ||
     lower.includes('yourdomain.com') ||
     lower.includes('admin_app_password') ||
     lower.includes('hr_app_password') ||
     lower === 'changeme' ||
     lower === 'change-me'
-  )
+  ) {
+    return true
+  }
+  // When connecting to Google Workspace / Gmail SMTP, Google strictly enforces 16-character App Passwords.
+  // Standard webmail/portal passwords with special characters (e.g. "3CD<u&3S>rUQ6uD*") are rejected with 535 BadCredentials.
+  if (isPassword && host && host.includes('gmail.com')) {
+    const clean = val.replace(/\s+/g, '')
+    if (clean.length !== 16 || !/^[a-zA-Z0-9]+$/.test(clean)) {
+      return true
+    }
+  }
+  return false
 }
 
 export function getMailConfig() {
@@ -104,17 +115,17 @@ export function createTransporter(type = 'hr') {
     ? `${DEFAULT_COMPANY.brandName} HR Operations`
     : `${DEFAULT_COMPANY.brandName} Administration`
 
-  if (isPlaceholder(pass)) {
-    // If IT or Support pass is not yet provided, fall back to configured admin or hr credentials
-    const altPass = !isPlaceholder(config.adminPass) ? config.adminPass : config.hrPass
-    const altUser = !isPlaceholder(config.adminPass) ? config.adminEmail : config.hrEmail
-    if (!isPlaceholder(altPass)) {
+  if (isPlaceholder(pass, config.host, true)) {
+    // If IT or Support pass is not yet provided or invalid for Gmail, fall back to configured admin or hr credentials
+    const altPass = !isPlaceholder(config.adminPass, config.host, true) ? config.adminPass : config.hrPass
+    const altUser = !isPlaceholder(config.adminPass, config.host, true) ? config.adminEmail : config.hrEmail
+    if (!isPlaceholder(altPass, config.host, true)) {
       user = altUser
       pass = altPass
     }
   }
 
-  const configured = Boolean(nodemailer) && !isPlaceholder(user) && !isPlaceholder(pass)
+  const configured = Boolean(nodemailer) && !isPlaceholder(user, config.host, false) && !isPlaceholder(pass, config.host, true)
 
   if (!configured) {
     return {
@@ -164,6 +175,7 @@ export function createTransporter(type = 'hr') {
     async sendMail(mailOptions) {
       const fullOptions = {
         from: `"${fromName}" <${user}>`,
+        replyTo: mailOptions.replyTo || (isIt ? config.itEmail : isSupport ? config.helpdeskEmail : user),
         ...mailOptions,
       }
       console.log(`[MailService:DISPATCH] Attempting email via [${type.toUpperCase()}] from "${user}" to "${mailOptions.to}" | Subject: "${mailOptions.subject}"`)
@@ -181,6 +193,18 @@ export function createTransporter(type = 'hr') {
         }
       } catch (sendErr) {
         console.error(`[MailService:ERROR] Failed sending [${type.toUpperCase()}] to "${mailOptions.to}":`, sendErr?.message || sendErr)
+        if (type !== 'admin' && !isPlaceholder(config.adminPass, config.host)) {
+          console.warn(`[MailService] Primary transport failed for ${type.toUpperCase()}. Falling back to verified Admin channel (admin@edufyitech.in)...`)
+          try {
+            const adminT = createTransporter('admin')
+            return await adminT.sendMail({
+              replyTo: mailOptions.replyTo || (isIt ? config.itEmail : isSupport ? config.helpdeskEmail : user),
+              ...mailOptions,
+            })
+          } catch (fallbackErr) {
+            console.error('[MailService:ERROR] Admin fallback delivery also failed:', fallbackErr?.message || fallbackErr)
+          }
+        }
         if (sendErr?.code === 'EAUTH' || sendErr?.responseCode === 535) {
           console.error(`[MailService:AUTH_HINT] Authentication failed for ${user}. For Gmail/Workspace, ensure 2-Step Verification is ON and a 16-character App Password (not your portal password) is placed in ADMIN_EMAIL_PASS / HR_EMAIL_PASS in .env.`)
         }
@@ -1062,59 +1086,65 @@ export async function sendAnnouncementEmailBroadcast({ announcement, recipients 
     : '<span style="background:#e0f2fe;color:#0284c7;padding:3px 9px;border-radius:4px;font-weight:700;font-size:11px;letter-spacing:0.5px;">OFFICIAL ANNOUNCEMENT</span>'
 
   let sentCount = 0
-  for (const emp of validRecipients) {
-    const empName = emp.name || emp.displayName || 'Team Member'
-    const contentHtml = `
-      <div style="margin-bottom: 14px;">${priorityBadge}</div>
-      <h2 class="title-h2" style="margin-top: 4px; color: #0B3155;">${announcement.title}</h2>
-      <p>Hello <strong>${empName}</strong>,</p>
-      <p>An official corporate broadcast has been published by <strong>${announcement.author || 'Corporate Administration'}</strong> for <strong>${announcement.targetAudience || 'All Employees'}</strong>.</p>
+  const chunkSize = 5
+  for (let i = 0; i < validRecipients.length; i += chunkSize) {
+    const chunk = validRecipients.slice(i, i + chunkSize)
+    await Promise.all(
+      chunk.map(async (emp) => {
+        const empName = emp.name || emp.displayName || 'Team Member'
+        const contentHtml = `
+          <div style="margin-bottom: 14px;">${priorityBadge}</div>
+          <h2 class="title-h2" style="margin-top: 4px; color: #0B3155;">${announcement.title}</h2>
+          <p>Hello <strong>${empName}</strong>,</p>
+          <p>An official corporate broadcast has been published by <strong>${announcement.author || 'Corporate Administration'}</strong> for <strong>${announcement.targetAudience || 'All Employees'}</strong>.</p>
 
-      <div class="meta-box" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px 18px; margin: 18px 0;">
-        <div class="meta-row" style="display:flex; justify-content:space-between; padding:4px 0;">
-          <span class="meta-label" style="color:#64748b; font-size:12px;">Category:</span>
-          <span class="meta-val" style="font-weight:600; color:#0f172a; font-size:12.5px;">${announcement.category || 'Company News'}</span>
-        </div>
-        <div class="meta-row" style="display:flex; justify-content:space-between; padding:4px 0;">
-          <span class="meta-label" style="color:#64748b; font-size:12px;">Audience:</span>
-          <span class="meta-val" style="font-weight:600; color:#0f172a; font-size:12.5px;">${announcement.targetAudience || 'All Employees'}</span>
-        </div>
-        <div class="meta-row" style="display:flex; justify-content:space-between; padding:4px 0;">
-          <span class="meta-label" style="color:#64748b; font-size:12px;">Published By:</span>
-          <span class="meta-val" style="font-weight:600; color:#0f172a; font-size:12.5px;">${announcement.author || 'Corporate Administration'}</span>
-        </div>
-      </div>
+          <div class="meta-box" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px 18px; margin: 18px 0;">
+            <div class="meta-row" style="display:flex; justify-content:space-between; padding:4px 0;">
+              <span class="meta-label" style="color:#64748b; font-size:12px;">Category:</span>
+              <span class="meta-val" style="font-weight:600; color:#0f172a; font-size:12.5px;">${announcement.category || 'Company News'}</span>
+            </div>
+            <div class="meta-row" style="display:flex; justify-content:space-between; padding:4px 0;">
+              <span class="meta-label" style="color:#64748b; font-size:12px;">Audience:</span>
+              <span class="meta-val" style="font-weight:600; color:#0f172a; font-size:12.5px;">${announcement.targetAudience || 'All Employees'}</span>
+            </div>
+            <div class="meta-row" style="display:flex; justify-content:space-between; padding:4px 0;">
+              <span class="meta-label" style="color:#64748b; font-size:12px;">Published By:</span>
+              <span class="meta-val" style="font-weight:600; color:#0f172a; font-size:12.5px;">${announcement.author || 'Corporate Administration'}</span>
+            </div>
+          </div>
 
-      <div style="background: #ffffff; border: 1px solid #cbd5e1; border-left: 4px solid #087E9E; border-radius: 8px; padding: 18px 20px; margin: 20px 0; font-size: 14px; line-height: 1.6; color: #1e293b; white-space: pre-wrap;">
+          <div style="background: #ffffff; border: 1px solid #cbd5e1; border-left: 4px solid #087E9E; border-radius: 8px; padding: 18px 20px; margin: 20px 0; font-size: 14px; line-height: 1.6; color: #1e293b; white-space: pre-wrap;">
 ${announcement.content}
-      </div>
+          </div>
 
-      <p style="font-size: 13px; color: #64748b; margin-top: 20px;">
-        To view this broadcast, acknowledge receipts, or interact with team updates, click below to open your Employee Portal.
-      </p>
-    `
+          <p style="font-size: 13px; color: #64748b; margin-top: 20px;">
+            To view this broadcast, acknowledge receipts, or interact with team updates, click below to open your Employee Portal.
+          </p>
+        `
 
-    const html = wrapInEmailLayout({
-      title: subject,
-      preheader: `${announcement.title} - Official Announcement from ${DEFAULT_COMPANY.brandName}`,
-      contentHtml,
-      callToAction: {
-        label: 'View in Employee Portal',
-        url: `${baseAppUrl}/#/employee/announcements`,
-      },
-    })
+        const html = wrapInEmailLayout({
+          title: subject,
+          preheader: `${announcement.title} - Official Announcement from ${DEFAULT_COMPANY.brandName}`,
+          contentHtml,
+          callToAction: {
+            label: 'View in Employee Portal',
+            url: `${baseAppUrl}/#/employee/announcements`,
+          },
+        })
 
-    try {
-      await transporter.sendMail({
-        to: emp.email,
-        subject,
-        html,
-        attachments: getLogoAttachment(),
+        try {
+          await transporter.sendMail({
+            to: emp.email,
+            subject,
+            html,
+            attachments: getLogoAttachment(),
+          })
+          sentCount++
+        } catch (err) {
+          console.warn(`[MailService] Failed delivering announcement to ${emp.email}:`, err?.message || err)
+        }
       })
-      sentCount++
-    } catch (err) {
-      console.warn(`[MailService] Failed delivering announcement to ${emp.email}:`, err?.message || err)
-    }
+    )
   }
 
   return { success: true, sentCount, total: validRecipients.length }

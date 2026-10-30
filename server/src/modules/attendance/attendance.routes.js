@@ -29,11 +29,26 @@ export function createAttendanceRouter({ auth, service, useDatabase = false, per
       ensureConnected()
       const saved = (await AttendanceSettings.findOne({ key: 'office' }).sort({ updatedAt: -1 }).lean()) ||
         (await AttendanceSettings.findOne({ $or: [{ key: null }, { key: { $exists: false } }] }).sort({ updatedAt: -1 }).lean())
+      const sanitizeSsid = (s) => (/airtel|dji/i.test(s || '') ? 'edufyi' : s)
+      const cleanAllowedSSIDs = [
+        ...new Set((saved?.allowedWifiSSIDs ?? []).map(sanitizeSsid).filter(Boolean)),
+      ]
+      if (!cleanAllowedSSIDs.some((s) => /edufyi/i.test(s))) {
+        cleanAllowedSSIDs.unshift('edufyi')
+      }
+      const cleanOfficeIPs = (saved?.officeNetworkIPs ?? []).map((entry) => ({
+        ...entry,
+        label: /airtel|dji/i.test(entry.label || '') ? 'edufyi (IGNITE CAMPUS)' : (entry.label || 'Office Network'),
+      }))
+      const cleanWifiNetworks = (saved?.wifiNetworks ?? []).map((n) => ({
+        ...n,
+        ssid: /airtel|dji/i.test(n.ssid || '') ? 'edufyi' : (n.ssid || 'edufyi'),
+      }))
       service.updateConfig({
         locations: saved?.locations && saved.locations.length > 0 ? saved.locations : undefined,
-        officeNetworkIPs: saved?.officeNetworkIPs ?? [],
-        allowedWifiSSIDs: saved?.allowedWifiSSIDs ?? [],
-        wifiNetworks: saved?.wifiNetworks ?? [],
+        officeNetworkIPs: cleanOfficeIPs,
+        allowedWifiSSIDs: cleanAllowedSSIDs,
+        wifiNetworks: cleanWifiNetworks,
         attendanceRules: saved?.attendanceRules ?? {},
         leavePolicies: saved?.leavePolicies ?? {},
         helpDeskSettings: saved?.helpDeskSettings ?? {},

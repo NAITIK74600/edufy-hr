@@ -4266,12 +4266,16 @@ function ESSHelpDeskView({ user }) {
   const [statusTab, setStatusTab] = useState('all') // 'all' | 'open' | 'in_progress' | 'resolved'
   const [ticketViewTab, setTicketViewTab] = useState('all') // 'all' | 'assigned' | 'created'
   const [searchTerm, setSearchTerm] = useState('')
+  const [resolvingTicket, setResolvingTicket] = useState(null)
+  const [resolutionNotes, setResolutionNotes] = useState('')
+  const [isResolving, setIsResolving] = useState(false)
 
   useEffect(() => {
     return hrStore.subscribe((state) => {
       setStoreState(state)
       if (selectedTicket) {
-        const updated = (state.tickets || []).find((t) => t.id === selectedTicket.id)
+        const targetId = selectedTicket.id || selectedTicket._id
+        const updated = (state.tickets || []).find((t) => t.id === targetId || t._id === targetId)
         if (updated) setSelectedTicket(updated)
       }
     })
@@ -4378,8 +4382,9 @@ function ESSHelpDeskView({ user }) {
 
   const handleSendEmployeeReply = workspaceAction(hrStore, async () => {
     if (!employeeReply.trim() || !selectedTicket) return
+    const tId = selectedTicket.id || selectedTicket._id
     await hrStore.replyToTicket(
-      selectedTicket.id,
+      tId,
       employeeReply.trim(),
       user?.displayName || user?.name || 'Employee'
     )
@@ -4387,6 +4392,37 @@ function ESSHelpDeskView({ user }) {
     setNotice('Your message has been posted to the ticket thread.')
     setTimeout(() => setNotice(''), 4000)
   })
+
+  const handleResolveSubmit = async (e) => {
+    e?.preventDefault?.()
+    if (!resolvingTicket) return
+    setIsResolving(true)
+    try {
+      const ticketId = resolvingTicket.id || resolvingTicket._id
+      await hrStore.updateTicketStatus(ticketId, 'resolved', resolutionNotes.trim())
+      setNotice('Ticket resolved and resolution notes emailed to requester!')
+      setTimeout(() => setNotice(''), 4500)
+      setResolvingTicket(null)
+      setResolutionNotes('')
+    } catch (err) {
+      setNotice('Error resolving ticket: ' + (err.message || 'Unknown error'))
+    } finally {
+      setIsResolving(false)
+    }
+  }
+
+  const handleAssignToMe = async (ticket) => {
+    if (!ticket) return
+    const ticketId = ticket.id || ticket._id
+    const payload = {
+      assignedToId: user?.employeeId || user?.id || user?._id || '',
+      assignedToName: user?.displayName || user?.name || 'Support Specialist',
+      assignedToEmail: user?.email || '',
+    }
+    await hrStore.assignTicket(ticketId, payload)
+    setNotice(`Ticket assigned to you (${payload.assignedToName}).`)
+    setTimeout(() => setNotice(''), 3500)
+  }
 
   return (
     <div style={{ display: 'grid', gap: '22px' }}>
@@ -4713,13 +4749,24 @@ function ESSHelpDeskView({ user }) {
               ) && (
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#f0fdf4', border: '1px solid #bbf7d0', padding: '8px 12px', borderRadius: '8px', flexWrap: 'wrap', gap: '6px' }}>
                   <span style={{ fontSize: '11px', color: '#166534', fontWeight: 600 }}>Specialist Resolution Controls:</span>
-                  <div style={{ display: 'flex', gap: '6px' }}>
+                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
+                    {!isTicketAssignedToMe(selectedTicket) && (
+                      <button
+                        type="button"
+                        className="ui-button secondary"
+                        onClick={() => handleAssignToMe(selectedTicket)}
+                        style={{ padding: '3px 8px', fontSize: '11px', background: '#eff6ff', borderColor: '#bfdbfe', color: '#1d4ed8' }}
+                      >
+                        🙋 Assign to Me
+                      </button>
+                    )}
                     {selectedTicket.status !== 'in_progress' && selectedTicket.status !== 'resolved' && (
                       <button
                         type="button"
                         className="ui-button secondary"
                         onClick={async () => {
-                          await hrStore.updateTicketStatus(selectedTicket.id, 'in_progress')
+                          const tId = selectedTicket.id || selectedTicket._id
+                          await hrStore.updateTicketStatus(tId, 'in_progress')
                           setNotice('Ticket marked as In Progress.')
                           setTimeout(() => setNotice(''), 3000)
                         }}
@@ -4732,10 +4779,9 @@ function ESSHelpDeskView({ user }) {
                       <button
                         type="button"
                         className="ui-button primary"
-                        onClick={async () => {
-                          await hrStore.updateTicketStatus(selectedTicket.id, 'resolved')
-                          setNotice('Ticket resolved and response email dispatched!')
-                          setTimeout(() => setNotice(''), 4000)
+                        onClick={() => {
+                          setResolvingTicket(selectedTicket)
+                          setResolutionNotes('')
                         }}
                         style={{ padding: '3px 8px', fontSize: '11px', background: '#16a34a', borderColor: '#16a34a' }}
                       >
@@ -4747,7 +4793,8 @@ function ESSHelpDeskView({ user }) {
                         type="button"
                         className="ui-button secondary"
                         onClick={async () => {
-                          await hrStore.updateTicketStatus(selectedTicket.id, 'open')
+                          const tId = selectedTicket.id || selectedTicket._id
+                          await hrStore.updateTicketStatus(tId, 'open')
                           setNotice('Ticket reopened.')
                           setTimeout(() => setNotice(''), 3000)
                         }}
@@ -4847,6 +4894,83 @@ function ESSHelpDeskView({ user }) {
             <div className="modal-footer-premium">
               <Button variant="secondary" onClick={() => setSelectedTicket(null)}>Close</Button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* RESOLUTION MODAL */}
+      {resolvingTicket && (
+        <div className="payslip-voucher-overlay" onClick={() => !isResolving && setResolvingTicket(null)}>
+          <div className="payslip-voucher" style={{ maxWidth: '520px', width: '92%' }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header-premium" style={{ background: 'linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)', borderBottom: '1px solid #bbf7d0' }}>
+              <div className="modal-title-group">
+                <span className="section-kicker" style={{ color: '#16a34a' }}>Specialist Resolution</span>
+                <h3 className="modal-title-text" style={{ fontSize: '16px', color: '#14532d', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Check size={18} style={{ color: '#16a34a' }} />
+                  Resolve Ticket #{resolvingTicket.id || resolvingTicket._id}
+                </h3>
+              </div>
+              <button type="button" className="icon-button" onClick={() => !isResolving && setResolvingTicket(null)} aria-label="Close">
+                <X size={16} />
+              </button>
+            </div>
+
+            <form onSubmit={handleResolveSubmit}>
+              <div className="modal-body-premium">
+                <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '10px 12px', marginBottom: '14px' }}>
+                  <strong style={{ fontSize: '13px', color: 'var(--ink)', display: 'block', marginBottom: '3px' }}>
+                    {resolvingTicket.subject}
+                  </strong>
+                  <span style={{ fontSize: '11px', color: 'var(--muted)' }}>
+                    Requester: <strong>{resolvingTicket.employeeName || 'Staff'}</strong> • Category: <strong>{resolvingTicket.category || 'Support'}</strong>
+                  </span>
+                </div>
+
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                    <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--ink)' }}>
+                      Resolution Notes / Solution Steps
+                    </label>
+                    <span style={{ fontSize: '10.5px', color: '#16a34a', fontWeight: 600 }}>Sent via Email to Employee</span>
+                  </div>
+                  <textarea
+                    className="text-input"
+                    rows={4}
+                    placeholder="Describe how the problem was resolved (e.g. Configured WiFi profile, replaced faulty adapter, reset credentials)..."
+                    value={resolutionNotes}
+                    onChange={(e) => setResolutionNotes(e.target.value)}
+                    style={{
+                      width: '100%',
+                      minHeight: '100px',
+                      resize: 'vertical',
+                      fontSize: '12.5px',
+                      lineHeight: '1.45',
+                    }}
+                  />
+                  <span style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '4px', display: 'block' }}>
+                    💡 Marking this resolved updates the ticket status and sends an automated completion email to <strong>{resolvingTicket.employeeName || 'the requester'}</strong> with these notes.
+                  </span>
+                </div>
+              </div>
+
+              <div className="modal-footer-premium">
+                <Button type="button" variant="secondary" onClick={() => setResolvingTicket(null)} disabled={isResolving}>
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={isResolving}
+                  style={{ background: '#16a34a', borderColor: '#16a34a', color: '#fff' }}
+                >
+                  {isResolving ? (
+                    <RefreshCw size={13} className="spin" />
+                  ) : (
+                    <Check size={13} />
+                  )}
+                  {isResolving ? 'Resolving...' : 'Confirm Resolution'}
+                </Button>
+              </div>
+            </form>
           </div>
         </div>
       )}
