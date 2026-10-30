@@ -532,51 +532,18 @@ export function HRLayout({ route, children }) {
         </nav>
 
         <div className="sidebar-bottom">
-          {!isStandalone && (
-            <button
-              type="button"
-              className="nav-item direct-install-sidebar-btn"
-              style={{
-                border: 0,
-                background: 'rgba(0, 110, 111, 0.12)',
-                textAlign: 'left',
-                width: '100%',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                padding: '9px 12px',
-                borderRadius: '8px',
-                marginBottom: '6px',
-                color: 'var(--teal)',
-                fontWeight: 600,
-              }}
-              onClick={() => {
-                setMobileOpen(false)
-                window.dispatchEvent(new CustomEvent('edufyi-trigger-install'))
-              }}
-              title="Direct Install Edufyi HR App (No 3-dots menu needed)"
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Download size={15} />
-                <span>Install Web App</span>
-              </div>
-              <span
-                style={{
-                  fontSize: '9px',
-                  background: 'var(--teal)',
-                  color: '#fff',
-                  padding: '2px 6px',
-                  borderRadius: '10px',
-                  fontWeight: 700,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.04em',
-                }}
-              >
-                Direct
-              </span>
-            </button>
-          )}
+          <button
+            type="button"
+            className="nav-item"
+            style={{ border: 0, background: 'transparent', textAlign: 'left', width: '100%', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px' }}
+            onClick={() => {
+              setMobileOpen(false)
+              window.dispatchEvent(new CustomEvent('edufyi-trigger-install'))
+            }}
+          >
+            <Download size={16} />
+            <span>Install Web App</span>
+          </button>
           {!isAdmin && (
             <a
               className="nav-item"
@@ -647,34 +614,7 @@ export function HRLayout({ route, children }) {
               <span>{isAdmin ? 'AI Admin Copilot' : (isHR ? 'AI HR Copilot' : 'AI Copilot')}</span>
             </button>
 
-            {/* Direct Web App Install Button (PWA) */}
-            {!isStandalone && (
-              <button
-                className="topbar-direct-install-btn"
-                type="button"
-                onClick={() => window.dispatchEvent(new CustomEvent('edufyi-trigger-install'))}
-                title="Directly install Edufyi HR App to your Desktop or Phone (No 3-dots menu needed)"
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  background: 'linear-gradient(135deg, #006e6f, #0d9488)',
-                  color: '#ffffff',
-                  border: 'none',
-                  borderRadius: '20px',
-                  padding: '6px 14px',
-                  fontSize: '12px',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  boxShadow: '0 2px 8px rgba(0, 110, 111, 0.28)',
-                  transition: 'all 0.2s ease',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                <Download size={13} />
-                <span>Direct Install</span>
-              </button>
-            )}
+
 
             {/* Notifications Button with Badge */}
             <div ref={notifRef} style={{ position: 'relative' }}>

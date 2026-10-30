@@ -39,47 +39,40 @@ export function GpsBackgroundManager({ user }) {
     // Check if install banner was dismissed recently (24 hrs)
     const bannerDismissedUntil = localStorage.getItem('edufyi_pwa_banner_dismissed')
     const now = Date.now()
-    if (!checkStandalone && (!bannerDismissedUntil || now > Number(bannerDismissedUntil))) {
-      // Delay showing banner slightly (3s) so it doesn't interrupt page load
-      const bannerTimer = setTimeout(() => {
-        setShowInstallBanner(true)
-      }, 3000)
-      return () => clearTimeout(bannerTimer)
-    }
+    const canShowBanner = !checkStandalone && (!bannerDismissedUntil || now > Number(bannerDismissedUntil))
 
     if (!navigator.geolocation) {
       setGpsStatus('unsupported')
-      return
-    }
-
-    const dismissedUntil = localStorage.getItem('edufyi_gps_prompt_dismissed')
-    const isGpsDismissed = dismissedUntil && now < Number(dismissedUntil)
-
-    if (navigator.permissions && navigator.permissions.query) {
-      navigator.permissions
-        .query({ name: 'geolocation' })
-        .then((perm) => {
-          setGpsStatus(perm.state)
-          if (perm.state === 'prompt' && !isGpsDismissed) {
-            setShowGpsModal(true)
-          }
-          perm.onchange = () => {
-            setGpsStatus(perm.state)
-            if (perm.state === 'granted') {
-              setShowGpsModal(false)
-              startWarmWatcher()
-            }
-          }
-        })
-        .catch(() => {
-          if (!isGpsDismissed) setShowGpsModal(true)
-        })
     } else {
-      if (!isGpsDismissed) setShowGpsModal(true)
-    }
+      const dismissedUntil = localStorage.getItem('edufyi_gps_prompt_dismissed')
+      const isGpsDismissed = dismissedUntil && now < Number(dismissedUntil)
 
-    // Start background watcher if already granted
-    startWarmWatcher()
+      if (navigator.permissions && navigator.permissions.query) {
+        navigator.permissions
+          .query({ name: 'geolocation' })
+          .then((perm) => {
+            setGpsStatus(perm.state)
+            if (perm.state === 'prompt' && !isGpsDismissed) {
+              setShowGpsModal(true)
+            }
+            perm.onchange = () => {
+              setGpsStatus(perm.state)
+              if (perm.state === 'granted') {
+                setShowGpsModal(false)
+                startWarmWatcher()
+              }
+            }
+          })
+          .catch(() => {
+            if (!isGpsDismissed) setShowGpsModal(true)
+          })
+      } else {
+        if (!isGpsDismissed) setShowGpsModal(true)
+      }
+
+      // Start background watcher if already granted
+      startWarmWatcher()
+    }
 
     // 2. Background Heartbeat & Keep-Alive Daemon (pings when minimized)
     const heartbeatInterval = setInterval(() => {
@@ -93,7 +86,7 @@ export function GpsBackgroundManager({ user }) {
       e.preventDefault()
       setDeferredPrompt(e)
       window.__edufyi_install_prompt = e
-      if (!checkStandalone) {
+      if (canShowBanner) {
         setShowInstallBanner(true)
       }
     }
@@ -102,11 +95,17 @@ export function GpsBackgroundManager({ user }) {
       if (e.detail) {
         setDeferredPrompt(e.detail)
         window.__edufyi_install_prompt = e.detail
+        if (canShowBanner) {
+          setShowInstallBanner(true)
+        }
       }
     }
 
     if (window.__edufyi_install_prompt) {
       setDeferredPrompt(window.__edufyi_install_prompt)
+      if (canShowBanner) {
+        setShowInstallBanner(true)
+      }
     }
 
     window.addEventListener('beforeinstallprompt', handleBeforeInstall)
