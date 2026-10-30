@@ -1585,174 +1585,169 @@ function ESSOverview({ user }) {
         </a>
       </div>
 
-      {/* TWO-COLUMN WORKSPACE GRID */}
-      <section className="dashboard-grid">
-        <div style={{ display: 'grid', gap: '18px' }}>
-          {/* ASSIGNED TASKS */}
-          <div className="panel">
-            <div className="panel-heading">
-              <div>
-                <p className="section-kicker">Deliverables</p>
-                <h2>My Active Tasks</h2>
-              </div>
-              <a href="#/employee/tasks" className="panel-footer-link">
-                View all tasks <ArrowRight size={12} />
-              </a>
+      {/* WORKSPACE GRID */}
+      <section className="ess-workspace-grid" aria-label="Employee Workspace Panels">
+        {/* 1. ASSIGNED TASKS */}
+        <div className="panel ess-panel-tasks">
+          <div className="panel-heading">
+            <div>
+              <p className="section-kicker">Deliverables</p>
+              <h2>My Active Tasks</h2>
             </div>
-            <div style={{ display: 'grid', gap: '8px', marginTop: '14px' }}>
-              {myTasks.length === 0 ? (
-                <div style={{ padding: '24px 16px', textAlign: 'center', background: '#faf9f5', borderRadius: '8px', color: 'var(--muted)', fontSize: '12px' }}>
-                  <CheckCircle2 size={24} style={{ color: 'var(--teal)', margin: '0 auto 8px', display: 'block' }} />
-                  <strong>No active tasks pending</strong>
-                  <p style={{ margin: '4px 0 0', fontSize: '11px' }}>You have no pending tasks assigned at this moment.</p>
-                </div>
-              ) : (
-                myTasks.slice(0, 5).map((t) => (
-                  <div key={t.id} className="task-row-card">
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      <button
-                        type="button"
-                        className={`task-check-circle ${t.status === 'completed' ? 'checked' : ''}`}
-                        onClick={workspaceAction(hrStore, () => hrStore.updateTaskStatus(t.id, t.status === 'completed' ? 'in_progress' : 'completed'))}
-                        title="Toggle task completion"
-                      >
-                        {t.status === 'completed' && <Check size={12} />}
-                      </button>
-                      <div>
-                        <strong style={{ fontSize: '13px', textDecoration: t.status === 'completed' ? 'line-through' : 'none', color: t.status === 'completed' ? 'var(--muted)' : 'var(--ink)' }}>
-                          {t.title}
-                        </strong>
-                        <div style={{ fontSize: '10px', color: 'var(--muted)', display: 'flex', gap: '8px', marginTop: '2px' }}>
-                          <span>Due: {t.dueDate || 'This week'}</span>
-                          <span>•</span>
-                          <span>Assigned by {t.assignedBy || 'Manager'}</span>
-                        </div>
+            <a href="#/employee/tasks" className="panel-footer-link">
+              View all tasks <ArrowRight size={12} />
+            </a>
+          </div>
+          <div className="ess-panel-content" style={{ display: 'grid', gap: '8px', marginTop: '14px' }}>
+            {myTasks.length === 0 ? (
+              <div style={{ padding: '24px 16px', textAlign: 'center', background: '#faf9f5', borderRadius: '8px', color: 'var(--muted)', fontSize: '12px' }}>
+                <CheckCircle2 size={24} style={{ color: 'var(--teal)', margin: '0 auto 8px', display: 'block' }} />
+                <strong>No active tasks pending</strong>
+                <p style={{ margin: '4px 0 0', fontSize: '11px' }}>You have no pending tasks assigned at this moment.</p>
+              </div>
+            ) : (
+              myTasks.slice(0, 5).map((t) => (
+                <div key={t.id} className="task-row-card">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0, flex: 1 }}>
+                    <button
+                      type="button"
+                      className={`task-check-circle ${t.status === 'completed' ? 'checked' : ''}`}
+                      onClick={workspaceAction(hrStore, () => hrStore.updateTaskStatus(t.id, t.status === 'completed' ? 'in_progress' : 'completed'))}
+                      title="Toggle task completion"
+                    >
+                      {t.status === 'completed' && <Check size={12} />}
+                    </button>
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <strong style={{ fontSize: '13px', textDecoration: t.status === 'completed' ? 'line-through' : 'none', color: t.status === 'completed' ? 'var(--muted)' : 'var(--ink)', display: 'block', overflowWrap: 'anywhere', wordBreak: 'break-word' }}>
+                        {t.title}
+                      </strong>
+                      <div style={{ fontSize: '10px', color: 'var(--muted)', display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '2px' }}>
+                        <span>Due: {t.dueDate || 'This week'}</span>
+                        <span>•</span>
+                        <span>Assigned by {t.assignedBy || 'Manager'}</span>
                       </div>
                     </div>
-                    <StatusBadge tone={t.priority === 'high' ? 'danger' : t.priority === 'medium' ? 'warning' : 'neutral'}>
-                      {t.priority || 'Normal'}
-                    </StatusBadge>
                   </div>
-                ))
-              )}
-            </div>
-          </div>
-
-          {/* ATTENDANCE RECENT LOG */}
-          <div className="panel">
-            <div className="panel-heading">
-              <div>
-                <p className="section-kicker">Log History</p>
-                <h2>Recent Attendance Records</h2>
-              </div>
-              <a href="#/employee/attendance" className="panel-footer-link">
-                Full attendance sheet <ArrowRight size={12} />
-              </a>
-            </div>
-            <div style={{ marginTop: '14px', overflowX: 'auto' }}>
-              <table className="ui-table compact">
-                <thead>
-                  <tr>
-                    <th>Date</th>
-                    <th>Punch In</th>
-                    <th>Punch Out</th>
-                    <th>Hours</th>
-                    <th>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {recentUserLogs.length === 0 ? (
-                    <tr>
-                      <td colSpan={5} style={{ textAlign: 'center', padding: '24px 12px', color: 'var(--muted)', fontSize: '12px' }}>
-                        No attendance records logged yet. Use the Punch In button above to record your attendance.
-                      </td>
-                    </tr>
-                  ) : (
-                    recentUserLogs.map((log) => {
-                      const statusInfo = getDailyAttendanceStatus(log, storeState.companySettings?.attendanceRules)
-                      return (
-                        <tr key={log.id || log._id || log.date}>
-                          <td><strong>{log.date}</strong></td>
-                          <td>{log.checkIn || '–'}</td>
-                          <td>{log.checkOut || '–'}</td>
-                          <td>{log.totalHours || '–'}</td>
-                          <td>
-                            <StatusBadge tone={statusInfo.tone}>
-                              {statusInfo.label}
-                            </StatusBadge>
-                          </td>
-                        </tr>
-                      )
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
+                  <StatusBadge tone={t.priority === 'high' ? 'danger' : t.priority === 'medium' ? 'warning' : 'neutral'}>
+                    {t.priority || 'Normal'}
+                  </StatusBadge>
+                </div>
+              ))
+            )}
           </div>
         </div>
 
-        {/* RIGHT COLUMN */}
-        <div style={{ display: 'grid', gap: '18px' }}>
-          {/* ANNOUNCEMENTS */}
-          <div className="panel">
-            <div className="panel-heading">
-              <div>
-                <p className="section-kicker">Company Pulse</p>
-                <h2>Announcements</h2>
-              </div>
-              <a href="#/employee/announcements" className="panel-footer-link">
-                All bulletins <ArrowRight size={12} />
-              </a>
+        {/* 2. ANNOUNCEMENTS */}
+        <div className="panel ess-panel-announcements">
+          <div className="panel-heading">
+            <div>
+              <p className="section-kicker">Company Pulse</p>
+              <h2>Announcements</h2>
             </div>
-            <div style={{ display: 'grid', gap: '12px', marginTop: '14px' }}>
-              {latestAnnouncements.map((a) => (
-                <div key={a.id} className="announcement-mini-card">
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
-                    <strong style={{ fontSize: '12px' }}>{a.title}</strong>
-                    <span style={{ fontSize: '9px', color: 'var(--muted)', whiteSpace: 'nowrap' }}>{a.date}</span>
-                  </div>
-                  <p style={{ fontSize: '11px', color: 'var(--muted)', margin: '4px 0 6px', lineHeight: 1.4 }}>
-                    {a.content?.slice(0, 100)}...
-                  </p>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span className="role-badge" style={{ fontSize: '9px', background: '#f5f8f7', color: 'var(--teal)' }}>
-                      {a.category || 'Company'}
-                    </span>
-                    <button
-                      type="button"
-                      className="announcement-like-btn"
-                      onClick={workspaceAction(hrStore, () => hrStore.likeAnnouncement(a.id))}
-                      title="Cheer this announcement"
-                    >
-                      <Heart size={11} fill={a.likes > 0 ? '#e05345' : 'none'} color={a.likes > 0 ? '#e05345' : 'currentColor'} />
-                      <span>{a.likes || 0}</span>
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
+            <a href="#/employee/announcements" className="panel-footer-link">
+              All bulletins <ArrowRight size={12} />
+            </a>
           </div>
-
-          {/* UPCOMING HOLIDAYS */}
-          <div className="panel">
-            <div className="panel-heading">
-              <div>
-                <p className="section-kicker">Calendar</p>
-                <h2>Upcoming Holidays</h2>
-              </div>
-              <span className="role-badge" style={{ fontSize: '10px' }}>2026 Schedule</span>
-            </div>
-            <div style={{ display: 'grid', gap: '8px', marginTop: '12px' }}>
-              {holidays.map((h, i) => (
-                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 10px', background: '#faf9f5', borderRadius: '6px', fontSize: '11px' }}>
-                  <div>
-                    <strong>{h.name || h.title}</strong>
-                    <div style={{ fontSize: '9px', color: 'var(--muted)' }}>{h.day || 'National Holiday'}</div>
-                  </div>
-                  <span style={{ fontWeight: 600, color: 'var(--teal)' }}>{h.date}</span>
+          <div className="ess-panel-content" style={{ display: 'grid', gap: '12px', marginTop: '14px' }}>
+            {latestAnnouncements.map((a) => (
+              <div key={a.id} className="announcement-mini-card">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
+                  <strong style={{ fontSize: '12px', overflowWrap: 'anywhere', wordBreak: 'break-word' }}>{a.title}</strong>
+                  <span style={{ fontSize: '9px', color: 'var(--muted)', whiteSpace: 'nowrap', flexShrink: 0 }}>{a.date}</span>
                 </div>
-              ))}
+                <p style={{ fontSize: '11px', color: 'var(--muted)', margin: '4px 0 6px', lineHeight: 1.4, overflowWrap: 'anywhere', wordBreak: 'break-word' }}>
+                  {a.content?.slice(0, 100)}...
+                </p>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span className="role-badge" style={{ fontSize: '9px', background: '#f5f8f7', color: 'var(--teal)' }}>
+                    {a.category || 'Company'}
+                  </span>
+                  <button
+                    type="button"
+                    className="announcement-like-btn"
+                    onClick={workspaceAction(hrStore, () => hrStore.likeAnnouncement(a.id))}
+                    title="Cheer this announcement"
+                  >
+                    <Heart size={11} fill={a.likes > 0 ? '#e05345' : 'none'} color={a.likes > 0 ? '#e05345' : 'currentColor'} />
+                    <span>{a.likes || 0}</span>
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* 3. ATTENDANCE RECENT LOG */}
+        <div className="panel ess-panel-attendance">
+          <div className="panel-heading">
+            <div>
+              <p className="section-kicker">Log History</p>
+              <h2>Recent Attendance Records</h2>
             </div>
+            <a href="#/employee/attendance" className="panel-footer-link">
+              Full attendance sheet <ArrowRight size={12} />
+            </a>
+          </div>
+          <div className="ess-table-container" style={{ marginTop: '14px', width: '100%', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+            <table className="ui-table compact" style={{ width: '100%', minWidth: '460px' }}>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Punch In</th>
+                  <th>Punch Out</th>
+                  <th>Hours</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentUserLogs.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} style={{ textAlign: 'center', padding: '24px 12px', color: 'var(--muted)', fontSize: '12px' }}>
+                      No attendance records logged yet. Use the Punch In button above to record your attendance.
+                    </td>
+                  </tr>
+                ) : (
+                  recentUserLogs.map((log) => {
+                    const statusInfo = getDailyAttendanceStatus(log, storeState.companySettings?.attendanceRules)
+                    return (
+                      <tr key={log.id || log._id || log.date}>
+                        <td><strong>{log.date}</strong></td>
+                        <td>{log.checkIn || '–'}</td>
+                        <td>{log.checkOut || '–'}</td>
+                        <td>{log.totalHours || '–'}</td>
+                        <td>
+                          <StatusBadge tone={statusInfo.tone}>
+                            {statusInfo.label}
+                          </StatusBadge>
+                        </td>
+                      </tr>
+                    )
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* 4. UPCOMING HOLIDAYS */}
+        <div className="panel ess-panel-holidays">
+          <div className="panel-heading">
+            <div>
+              <p className="section-kicker">Calendar</p>
+              <h2>Upcoming Holidays</h2>
+            </div>
+            <span className="role-badge" style={{ fontSize: '10px' }}>2026 Schedule</span>
+          </div>
+          <div className="ess-panel-content" style={{ display: 'grid', gap: '8px', marginTop: '12px' }}>
+            {holidays.map((h, i) => (
+              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 10px', background: '#faf9f5', borderRadius: '6px', fontSize: '11px', gap: '8px' }}>
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <strong style={{ display: 'block', overflowWrap: 'anywhere', wordBreak: 'break-word' }}>{h.name || h.title}</strong>
+                  <div style={{ fontSize: '9px', color: 'var(--muted)' }}>{h.day || 'National Holiday'}</div>
+                </div>
+                <span style={{ fontWeight: 600, color: 'var(--teal)', whiteSpace: 'nowrap', flexShrink: 0 }}>{h.date}</span>
+              </div>
+            ))}
           </div>
         </div>
       </section>

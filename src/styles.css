@@ -5083,6 +5083,106 @@ body {
   background: var(--soft-teal, #E1F1F0);
 }
 
+/* ========================================================= */
+/* ESS WORKSPACE PANELS & RESPONSIVE GRID */
+/* ========================================================= */
+
+.ess-overview-root {
+  box-sizing: border-box;
+}
+
+.ess-overview-root *,
+.ess-overview-root *::before,
+.ess-overview-root *::after {
+  box-sizing: border-box;
+}
+
+/* Ensure panel headings keep links neatly aligned */
+.panel-heading .panel-footer-link {
+  width: auto !important;
+  margin-top: 0 !important;
+  padding-top: 0 !important;
+  border-top: none !important;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* Desktop Layout (1025px+) */
+.ess-workspace-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.42fr) minmax(320px, 0.98fr);
+  gap: 18px;
+  align-items: start;
+  width: 100%;
+  max-width: 100%;
+  margin-bottom: 18px;
+}
+
+.ess-panel-tasks {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.ess-panel-attendance {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.ess-panel-announcements {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.ess-panel-holidays {
+  grid-column: 2;
+  grid-row: 2;
+}
+
+.ess-panel-tasks,
+.ess-panel-announcements,
+.ess-panel-attendance,
+.ess-panel-holidays {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.ess-table-container {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Tablet Layout (768px - 1024px) */
+@media screen and (min-width: 768px) and (max-width: 1024px) {
+  .ess-workspace-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 16px;
+    align-items: start;
+    width: 100%;
+    max-width: 100%;
+  }
+  .ess-panel-tasks {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .ess-panel-announcements {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .ess-panel-attendance {
+    grid-column: 1;
+    grid-row: 2;
+  }
+  .ess-panel-holidays {
+    grid-column: 2;
+    grid-row: 2;
+  }
+}
+
 /* 5. RESPONSIVE MEDIA QUERIES */
 @media (max-width: 768px) {
   .ess-header-card {
@@ -5108,6 +5208,86 @@ body {
   }
   .page-content {
     padding-bottom: calc(84px + env(safe-area-inset-bottom, 20px)) !important;
+  }
+}
+
+/* Mobile Screens (320px - 767px): Strictly single-column, strictly ordered */
+@media screen and (max-width: 767px) {
+  .ess-workspace-grid {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 16px !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin-bottom: 16px !important;
+  }
+
+  /* 1. My Active Tasks must occupy 100% available width */
+  .ess-panel-tasks {
+    order: 1 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  /* 2. Announcements must appear below My Active Tasks, not beside or overlapping */
+  .ess-panel-announcements {
+    order: 2 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  /* 3. Recent Attendance Records must appear below Announcements */
+  .ess-panel-attendance {
+    order: 3 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  /* 4. Upcoming Holidays must appear below the attendance section */
+  .ess-panel-holidays {
+    order: 4 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  /* Quick action buttons controlled horizontal scroll without expanding page */
+  .ess-shortcuts-bar {
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+    gap: 8px !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    padding-bottom: 6px !important;
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: thin;
+  }
+
+  .ess-shortcut-chip {
+    flex-shrink: 0 !important;
+    white-space: nowrap !important;
+  }
+
+  /* Header adjustments */
+  .panel-heading {
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+  }
+
+  .panel-heading h2 {
+    font-size: 15px !important;
+  }
+
+  /* Task row card responsiveness */
+  .task-row-card {
+    padding: 10px !important;
+    gap: 8px !important;
+  }
+
+  /* General fallback for any legacy dashboard-grid */
+  .dashboard-grid, .lower-grid {
+    grid-template-columns: 1fr !important;
+    gap: 16px !important;
   }
 }
 
