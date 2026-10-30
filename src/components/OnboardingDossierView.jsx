@@ -60,6 +60,7 @@ export function OnboardingDossierView({ employee, canEdit = false, canVerify = f
   const [savingFinance, setSavingFinance] = useState(false)
   const [feedback, setFeedback] = useState('')
   const [rejectModal, setRejectModal] = useState(null)
+  const [localDocOverrides, setLocalDocOverrides] = useState({})
   const [rejectionReason, setRejectionReason] = useState('')
   const [employeeRevisionModal, setEmployeeRevisionModal] = useState(false)
   const [revisionRequestNote, setRevisionRequestNote] = useState('')
@@ -294,7 +295,9 @@ export function OnboardingDossierView({ employee, canEdit = false, canVerify = f
       }
 
       const empId = employee?.id || employee?._id || employee?.employeeId
-      if (hrStore.updateOnboardingDocs) {
+      if (hrStore.approveOnboarding) {
+        await hrStore.approveOnboarding(empId, { verifiedBy: verifierName })
+      } else if (hrStore.updateOnboardingDocs) {
         await hrStore.updateOnboardingDocs(empId, payload)
       } else {
         await hrStore.updateEmployee(empId, payload)
@@ -505,29 +508,28 @@ export function OnboardingDossierView({ employee, canEdit = false, canVerify = f
     }
     setSaving(true)
     try {
-      const updatedDocs = { ...rawDocs, ...docs }
-      const currentDoc = updatedDocs[docKey] || {}
       const vAt = new Date().toISOString()
       const vBy = user?.displayName || user?.name || 'HR Management'
-
-      updatedDocs[docKey] = {
-        ...currentDoc,
+      const verifiedDocObj = {
+        ...(docs[docKey] || {}),
         status: 'verified',
         verifiedAt: vAt,
         verifiedBy: vBy,
       }
-      if (docKey === 'aadharCard') updatedDocs.aadharDoc = { ...updatedDocs[docKey] }
-      if (docKey === 'panCard') updatedDocs.panDoc = { ...updatedDocs[docKey] }
+
+      // Immediately record in local state so UI updates and subsequent verifies do not overwrite this
+      setLocalDocOverrides((prev) => ({
+        ...prev,
+        [docKey]: verifiedDocObj,
+        ...(docKey === 'aadharCard' ? { aadharDoc: verifiedDocObj } : {}),
+        ...(docKey === 'panCard' ? { panDoc: verifiedDocObj } : {}),
+      }))
 
       const empId = employee?.id || employee?._id || employee?.employeeId
-      const payload = {
-        onboardingDocs: updatedDocs,
-      }
-
-      if (hrStore.updateOnboardingDocs) {
-        await hrStore.updateOnboardingDocs(empId, payload)
-      } else {
-        await hrStore.updateEmployee(empId, payload)
+      if (hrStore.approveDocument) {
+        await hrStore.approveDocument(empId, docKey, { verifiedBy: vBy })
+      } else if (hrStore.updateOnboardingDocs) {
+        await hrStore.updateOnboardingDocs(empId, { onboardingDocs: { [docKey]: verifiedDocObj } })
       }
 
       hrStore.addNotification({

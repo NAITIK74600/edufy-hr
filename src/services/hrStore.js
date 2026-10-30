@@ -5499,6 +5499,15 @@ const localStore = {
 
     this.addAuditLog('System', 'ONBOARDING_UPDATE', `Updated onboarding documents, banking, and identity for ${emp.name}`)
     notifyListeners()
+    if (typeof apiClient !== 'undefined') {
+      const realId = emp.id || emp._id || emp.employeeId || id
+      apiClient.patch(`/employees/${encodeURIComponent(realId)}`, {
+        onboardingDocs: emp.onboardingDocs,
+        ...(payload.onboardingStatus ? { onboardingStatus: payload.onboardingStatus } : {}),
+        ...(payload.onboardingVerifiedAt ? { onboardingVerifiedAt: payload.onboardingVerifiedAt } : {}),
+        ...(payload.onboardingVerifiedBy ? { onboardingVerifiedBy: payload.onboardingVerifiedBy } : {}),
+      }).catch((err) => console.warn('Backend onboarding docs sync error:', err?.message || err))
+    }
     return emp
   },
   approveDocument(id, docKey, body = {}) {
@@ -5531,6 +5540,10 @@ const localStore = {
     }
     this.addAuditLog('HR', 'DOCUMENT_APPROVE', `Approved ${docKey} for ${emp.name}`)
     notifyListeners()
+    if (typeof apiClient !== 'undefined') {
+      const realId = emp.id || emp._id || emp.employeeId || id
+      apiClient.post(`/employees/${encodeURIComponent(realId)}/documents/${encodeURIComponent(docKey)}/approve`, body).catch((err) => console.warn('Backend document approval sync error:', err?.message || err))
+    }
     return emp
   },
   rejectDocument(id, docKey, reason = 'Document rejected', body = {}) {
@@ -5558,6 +5571,10 @@ const localStore = {
     }
     this.addAuditLog('HR', 'DOCUMENT_REJECT', `Rejected ${docKey} for ${emp.name}: ${reason}`)
     notifyListeners()
+    if (typeof apiClient !== 'undefined') {
+      const realId = emp.id || emp._id || emp.employeeId || id
+      apiClient.post(`/employees/${encodeURIComponent(realId)}/documents/${encodeURIComponent(docKey)}/reject`, { reason, ...body }).catch((err) => console.warn('Backend document rejection sync error:', err?.message || err))
+    }
     return emp
   },
   approveOnboarding(id, options = {}) {
@@ -5582,6 +5599,10 @@ const localStore = {
     }
     this.addAuditLog('HR', 'ONBOARDING_APPROVE', `Approved all onboarding documents for ${emp.name}`)
     notifyListeners()
+    if (typeof apiClient !== 'undefined') {
+      const realId = emp.id || emp._id || emp.employeeId || id
+      apiClient.post(`/employees/${encodeURIComponent(realId)}/onboarding/approve`).catch((err) => console.warn('Backend onboarding approval sync error:', err?.message || err))
+    }
     return emp
   },
   rejectOnboarding(id, reason = 'Onboarding revision requested') {

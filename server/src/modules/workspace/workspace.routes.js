@@ -14,7 +14,7 @@ const managementOnly = new Set([...shared, 'tasks', 'requisitions', 'performance
 function fail(message, statusCode = 400) {
   return Object.assign(new Error(message), { statusCode, code: statusCode === 403 ? 'FORBIDDEN' : 'WORKSPACE_VALIDATION_ERROR' })
 }
-const management = (user) => ['admin', 'hr', 'hr_executive', 'director', 'managing_director', 'co_founder', 'vertical_head'].includes(user.role)
+const management = (user) => ['admin', 'hr', 'hr_executive', 'director', 'managing_director', 'co_founder', 'vertical_head', 'manager', 'team_lead', 'lead'].includes(user?.role) || Boolean(user?.isManager)
 const id = (user) => String(user.id ?? user._id)
 function access(user, resource) {
   return hasPermission(user, permissions[resource]) || (!management(user) && resource !== 'requisitions' && hasPermission(user, 'dashboard.read'))
@@ -610,18 +610,26 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
 
       if (resource === 'announcements' || resource === 'documents' || resource === 'courses') {
         const audience = { status: { $ne: 'terminated' } }
-        if (resource === 'announcements' && values.targetAudience && values.targetAudience !== 'All Employees') {
-          if (values.targetAudience.toLowerCase().includes('manager')) {
-            audience.$or = [
-              { role: { $in: ['manager', 'team_lead', 'lead', 'director', 'managing_director', 'co_founder', 'vertical_head', 'admin', 'hr', 'hr_executive'] } },
-              { designation: { $regex: /manager|lead|director|head|founder/i } },
-              { isManager: true },
-            ]
-          } else {
-            audience.department = new RegExp(`^${values.targetAudience}$`, 'i')
+        if (resource === 'announcements' && values.targetAudience) {
+          const audienceStr = String(values.targetAudience).trim().toLowerCase()
+          const isAll = audienceStr === 'all' || audienceStr.includes('all employee') || audienceStr.includes('company-wide') || audienceStr.includes('everyone') || audienceStr === ''
+          if (!isAll) {
+            if (audienceStr.includes('manager') || audienceStr.includes('lead')) {
+              audience.$or = [
+                { role: { $in: ['manager', 'team_lead', 'lead', 'director', 'managing_director', 'co_founder', 'vertical_head', 'admin', 'hr', 'hr_executive'] } },
+                { designation: { $regex: /manager|lead|director|head|founder/i } },
+                { isManager: true },
+              ]
+            } else {
+              const deptClean = values.targetAudience.replace(/\s*department$/i, '').trim()
+              audience.department = new RegExp(`^${deptClean}$`, 'i')
+            }
           }
         }
-        const recipients = await Employee.find(audience).select('_id email name displayName department').lean()
+        let recipients = await Employee.find(audience).select('_id email name displayName department').lean()
+        if (!recipients.length && resource === 'announcements') {
+          recipients = await Employee.find({ status: { $ne: 'terminated' } }).select('_id email name displayName department').lean()
+        }
         if (recipients.length) {
           await models.notifications.insertMany(recipients.map((person) => ({
             ownerId: String(person._id),

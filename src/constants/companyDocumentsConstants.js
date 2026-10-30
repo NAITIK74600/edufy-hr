@@ -56,14 +56,13 @@ export const OFFICIAL_COMPANY_DOCUMENTS = [
   },
   {
     id: 'qms_framework',
-    key: 'complianceQms',
     title: 'Elythra Edufyi Tech Solutions QMS',
     fileName: 'Elythra_Edufyi_QMS.pdf',
     downloadUrl: '/company-documents/Elythra_Edufyi_QMS.pdf',
     fileType: 'PDF',
     sizeLabel: '226 KB',
     badge: 'Quality Assurance',
-    category: 'Quality Management System',
+    category: 'Company Certification',
     description:
       'Quality Management System (QMS) standard operating framework governing operational execution, documentation discipline, quality benchmarks, and enterprise delivery standards.',
   },

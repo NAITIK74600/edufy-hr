@@ -53,20 +53,9 @@ export function EmployeeComplianceStatusCard({ employee }) {
 
   // 2. Compliance & NDA Agreements Data
   const complianceDocs = employee.complianceDocs || employee.onboardingDocs?.complianceDocs || employee.onboardingDocs || {}
-  const qmsTemplate = OFFICIAL_COMPANY_DOCUMENTS.find((d) => d.id === 'qms_framework' || d.key === 'complianceQms')
-
+  // QMS is an official corporate quality certification, not an individual employee consent agreement.
   const ndaTemplatesCombined = [
     ...COMPLIANCE_AND_NDA_TEMPLATES,
-    ...(qmsTemplate ? [{
-      key: 'complianceQms',
-      id: 'compliance_qms',
-      title: qmsTemplate.title,
-      fileName: qmsTemplate.fileName,
-      downloadUrl: qmsTemplate.downloadUrl,
-      badge: 'Quality Assurance',
-      category: 'Quality Management System',
-      description: qmsTemplate.description,
-    }] : []),
   ]
 
   const ndaItems = ndaTemplatesCombined.map((t) => {
@@ -318,7 +307,7 @@ export function EmployeeComplianceStatusCard({ employee }) {
             {completedNda} / {totalNda}
           </div>
           <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>
-            Employee NDA, IP Assignment, Cybersecurity & QMS
+            Employee NDA, IP Assignment & Cybersecurity Code
           </div>
         </div>
 
