@@ -112,7 +112,6 @@ export function createApp(options = {}) {
             [{ $set: { assignedToEmail: { $cond: [{ $regexMatch: { input: '$category', regex: /it/i } }, 'itsupport@edufyitech.in', { $cond: [{ $regexMatch: { input: '$category', regex: /hr|payroll|leave/i } }, 'hr@edufyitech.in', 'admin@edufyitech.in'] }] } } }]
           )
         } catch {}
-        }
       } catch (err) {
         console.warn('Attendance Wi-Fi cleanup notice:', err.message)
       }

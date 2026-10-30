@@ -6706,13 +6706,13 @@ function AdminSystemModule() {
           </span>
         </div>
         <p style={{ fontSize: '12px', color: 'var(--muted)', margin: '8px 0 14px' }}>
-          Backend REST API on port 4001 connected to persistent store engine (MongoDB / Local JSON Database). Real-time synchronized across all admin and HR modules.
+          Backend REST API on port 30000 connected to persistent store engine (MongoDB / Local JSON Database). Real-time synchronized across all admin and HR modules.
         </p>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', marginBottom: '16px' }}>
           <div style={{ background: '#faf9f5', padding: '12px', borderRadius: '6px', border: '1px solid var(--line)' }}>
             <span style={{ fontSize: '9px', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 700 }}>Service URL</span>
-            <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--ink)', marginTop: '2px' }}>/api/v1 (Port 4001)</div>
+            <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--ink)', marginTop: '2px' }}>/api/v1 (Port 30000)</div>
           </div>
           <div style={{ background: '#faf9f5', padding: '12px', borderRadius: '6px', border: '1px solid var(--line)' }}>
             <span style={{ fontSize: '9px', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 700 }}>Database Engine</span>
@@ -6828,7 +6828,7 @@ function AdminSystemModule() {
           </div>
           <div style={{ background: '#faf9f5', padding: '12px', borderRadius: '6px' }}>
             <span style={{ color: 'var(--muted)', fontSize: '9px', textTransform: 'uppercase' }}>Vite Proxy Port</span>
-            <div style={{ fontSize: '14px', fontWeight: 600, marginTop: '2px' }}>4001 ➔ 5173</div>
+            <div style={{ fontSize: '14px', fontWeight: 600, marginTop: '2px' }}>30000 ➔ 5173</div>
           </div>
         </div>
       </section>

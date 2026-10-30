@@ -19,7 +19,7 @@ export default defineConfig({
     },
     proxy: {
       '/api': {
-        target: process.env.VITE_DEV_API_URL ?? 'http://127.0.0.1:4001',
+        target: process.env.VITE_DEV_API_URL ?? 'http://127.0.0.1:30000',
         changeOrigin: true,
         secure: false,
         xfwd: true,

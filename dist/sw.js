@@ -1,5 +1,5 @@
 // Edufyi HR Progressive Web App (PWA) Service Worker
-const CACHE_NAME = 'edufyi-hr-pwa-v2'
+const CACHE_NAME = 'edufyi-hr-pwa-v4'
 const PRECACHE_ASSETS = [
   '/',
   '/index.html',
@@ -42,6 +42,11 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url)
 
+  // Ignore non-HTTP / non-HTTPS requests (like chrome-extension://, moz-extension://)
+  if (!url.protocol.startsWith('http')) {
+    return
+  }
+
   // Never cache API, auth, or event streams
   if (url.pathname.startsWith('/api') || url.pathname.startsWith('/auth') || event.request.method !== 'GET') {
     return
@@ -54,8 +59,8 @@ self.addEventListener('fetch', (event) => {
         if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
           const responseToCache = networkResponse.clone()
           caches.open(CACHE_NAME).then((cache) => {
-            cache.put(event.request, responseToCache)
-          })
+            cache.put(event.request, responseToCache).catch(() => {})
+          }).catch(() => {})
         }
         return networkResponse
       })

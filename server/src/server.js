@@ -52,9 +52,9 @@ for (const envPath of envCandidatePaths) {
   }
 }
 
-const rawPort = process.env.PORT || 3000
+const rawPort = process.env.PORT || 30000
 const isUnixSocket = typeof rawPort === 'string' && (rawPort.startsWith('/') || rawPort.includes('.sock') || rawPort.startsWith('\\\\.\\pipe'))
-const port = isUnixSocket ? rawPort : Number(rawPort || 3000)
+const port = isUnixSocket ? rawPort : Number(rawPort || 30000)
 logStartup(`Configured Listen Target: ${port} (Type: ${isUnixSocket ? 'Unix Socket' : 'TCP Port'})`)
 
 if (!process.env.JWT_SECRET) {

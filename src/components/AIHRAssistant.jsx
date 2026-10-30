@@ -92,7 +92,7 @@ export function AIHRAssistant({ isOpen, onClose }) {
     if (currentUser?.role === 'admin') {
       if (q.includes('health') || q.includes('uptime') || q.includes('status') || q.includes('server')) {
         return `System Telemetry & Operational Health Status:
-• Backend Node API (Port 4001): Healthy (HTTP 200 OK, latency < 12ms)
+• Backend Node API (Port 30000): Healthy (HTTP 200 OK, latency < 12ms)
 • Frontend React App (Port 5173): Operational (Vite HMR sync active)
 • Database Engine: In-Memory / MongoDB operational
 • Security Engine: RBAC role isolation active across Admin, HR, and ESS
