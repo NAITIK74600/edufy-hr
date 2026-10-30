@@ -643,20 +643,23 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
         // Live Email Broadcast via Admin channel (admin@edufyitech.in)
         if (resource === 'announcements' && body.sendEmailBroadcast !== false && body.sendEmail !== false) {
           const publicUrl = (process.env.APP_PUBLIC_URL || 'https://edufyione.edufyitech.in').replace(/\/+$/, '')
-          sendAnnouncementEmailBroadcast({
-            announcement: {
-              title: values.title,
-              content: values.content,
-              category: values.category,
-              priority: values.priority,
-              targetAudience: values.targetAudience,
-              author: actorName || 'Corporate Administration',
-            },
-            recipients,
-            publicUrl,
-          })
-            .then((res) => console.log(`[workspace.routes] Announcement email broadcast dispatched to ${res.sentCount || 0} employees via ADMIN channel`))
-            .catch((err) => console.error('[workspace.routes] Failed delivering announcement broadcast:', err?.message || err))
+          try {
+            const broadcastRes = await sendAnnouncementEmailBroadcast({
+              announcement: {
+                title: values.title,
+                content: values.content,
+                category: values.category,
+                priority: values.priority,
+                targetAudience: values.targetAudience,
+                author: actorName || 'Corporate Administration',
+              },
+              recipients,
+              publicUrl,
+            })
+            console.log(`[workspace.routes] Announcement email broadcast dispatched to ${broadcastRes?.sentCount || 0} recipients via ADMIN channel`)
+          } catch (broadcastErr) {
+            console.error('[workspace.routes] Failed delivering announcement broadcast:', broadcastErr?.message || broadcastErr)
+          }
         }
       }
       res.status(201).json({ success: true, data: serialize(resource, record.toObject(), actor) })

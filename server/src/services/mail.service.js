@@ -1075,8 +1075,17 @@ export async function sendAnnouncementEmailBroadcast({ announcement, recipients 
   const config = getMailConfig()
   const baseAppUrl = (publicUrl || config.publicUrl || 'https://edufyione.edufyitech.in').replace(/\/+$/, '')
 
-  const validRecipients = recipients.filter((r) => r && r.email && r.email.includes('@'))
-  if (!validRecipients.length) return { success: false, reason: 'No valid recipient emails' }
+  let validRecipients = (recipients || []).filter((r) => r && r.email && r.email.includes('@'))
+
+  // Always ensure corporate admin receives a copy of every broadcast
+  if (config.adminEmail && !validRecipients.some((r) => r.email?.toLowerCase() === config.adminEmail.toLowerCase())) {
+    validRecipients.push({ email: config.adminEmail, name: 'Edufyi Administration' })
+  }
+
+  if (!validRecipients.length) {
+    console.warn('[MailService] No valid recipient emails found for announcement broadcast')
+    return { success: false, reason: 'No valid recipient emails' }
+  }
 
   const subject = `[Company Announcement] ${announcement.title}`
   const priorityBadge = announcement.priority === 'Urgent'
@@ -1085,66 +1094,67 @@ export async function sendAnnouncementEmailBroadcast({ announcement, recipients 
     ? '<span style="background:#ffedd5;color:#c2410c;padding:3px 9px;border-radius:4px;font-weight:700;font-size:11px;letter-spacing:0.5px;">HIGH PRIORITY</span>'
     : '<span style="background:#e0f2fe;color:#0284c7;padding:3px 9px;border-radius:4px;font-weight:700;font-size:11px;letter-spacing:0.5px;">OFFICIAL ANNOUNCEMENT</span>'
 
-  let sentCount = 0
-  const chunkSize = 5
-  for (let i = 0; i < validRecipients.length; i += chunkSize) {
-    const chunk = validRecipients.slice(i, i + chunkSize)
-    await Promise.all(
-      chunk.map(async (emp) => {
-        const empName = emp.name || emp.displayName || 'Team Member'
-        const contentHtml = `
-          <div style="margin-bottom: 14px;">${priorityBadge}</div>
-          <h2 class="title-h2" style="margin-top: 4px; color: #0B3155;">${announcement.title}</h2>
-          <p>Hello <strong>${empName}</strong>,</p>
-          <p>An official corporate broadcast has been published by <strong>${announcement.author || 'Corporate Administration'}</strong> for <strong>${announcement.targetAudience || 'All Employees'}</strong>.</p>
+  const contentHtml = `
+    <div style="margin-bottom: 14px;">${priorityBadge}</div>
+    <h2 class="title-h2" style="margin-top: 4px; color: #0B3155;">${announcement.title}</h2>
+    <p>Dear Team,</p>
+    <p>An official corporate broadcast has been published by <strong>${announcement.author || 'Corporate Administration'}</strong> for <strong>${announcement.targetAudience || 'All Employees'}</strong>.</p>
 
-          <div class="meta-box" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px 18px; margin: 18px 0;">
-            <div class="meta-row" style="display:flex; justify-content:space-between; padding:4px 0;">
-              <span class="meta-label" style="color:#64748b; font-size:12px;">Category:</span>
-              <span class="meta-val" style="font-weight:600; color:#0f172a; font-size:12.5px;">${announcement.category || 'Company News'}</span>
-            </div>
-            <div class="meta-row" style="display:flex; justify-content:space-between; padding:4px 0;">
-              <span class="meta-label" style="color:#64748b; font-size:12px;">Audience:</span>
-              <span class="meta-val" style="font-weight:600; color:#0f172a; font-size:12.5px;">${announcement.targetAudience || 'All Employees'}</span>
-            </div>
-            <div class="meta-row" style="display:flex; justify-content:space-between; padding:4px 0;">
-              <span class="meta-label" style="color:#64748b; font-size:12px;">Published By:</span>
-              <span class="meta-val" style="font-weight:600; color:#0f172a; font-size:12.5px;">${announcement.author || 'Corporate Administration'}</span>
-            </div>
-          </div>
+    <div class="meta-box" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px 18px; margin: 18px 0;">
+      <div class="meta-row" style="display:flex; justify-content:space-between; padding:4px 0;">
+        <span class="meta-label" style="color:#64748b; font-size:12px;">Category:</span>
+        <span class="meta-val" style="font-weight:600; color:#0f172a; font-size:12.5px;">${announcement.category || 'Company News'}</span>
+      </div>
+      <div class="meta-row" style="display:flex; justify-content:space-between; padding:4px 0;">
+        <span class="meta-label" style="color:#64748b; font-size:12px;">Audience:</span>
+        <span class="meta-val" style="font-weight:600; color:#0f172a; font-size:12.5px;">${announcement.targetAudience || 'All Employees'}</span>
+      </div>
+      <div class="meta-row" style="display:flex; justify-content:space-between; padding:4px 0;">
+        <span class="meta-label" style="color:#64748b; font-size:12px;">Published By:</span>
+        <span class="meta-val" style="font-weight:600; color:#0f172a; font-size:12.5px;">${announcement.author || 'Corporate Administration'}</span>
+      </div>
+    </div>
 
-          <div style="background: #ffffff; border: 1px solid #cbd5e1; border-left: 4px solid #087E9E; border-radius: 8px; padding: 18px 20px; margin: 20px 0; font-size: 14px; line-height: 1.6; color: #1e293b; white-space: pre-wrap;">
+    <div style="background: #ffffff; border: 1px solid #cbd5e1; border-left: 4px solid #087E9E; border-radius: 8px; padding: 18px 20px; margin: 20px 0; font-size: 14px; line-height: 1.6; color: #1e293b; white-space: pre-wrap;">
 ${announcement.content}
-          </div>
+    </div>
 
-          <p style="font-size: 13px; color: #64748b; margin-top: 20px;">
-            To view this broadcast, acknowledge receipts, or interact with team updates, click below to open your Employee Portal.
-          </p>
-        `
+    <p style="font-size: 13px; color: #64748b; margin-top: 20px;">
+      To view this broadcast, acknowledge receipts, or interact with team updates, click below to open your Employee Portal.
+    </p>
+  `
 
-        const html = wrapInEmailLayout({
-          title: subject,
-          preheader: `${announcement.title} - Official Announcement from ${DEFAULT_COMPANY.brandName}`,
-          contentHtml,
-          callToAction: {
-            label: 'View in Employee Portal',
-            url: `${baseAppUrl}/#/employee/announcements`,
-          },
-        })
+  const html = wrapInEmailLayout({
+    title: subject,
+    preheader: `${announcement.title} - Official Announcement from ${DEFAULT_COMPANY.brandName}`,
+    contentHtml,
+    callToAction: {
+      label: 'View in Employee Portal',
+      url: `${baseAppUrl}/#/employee/announcements`,
+    },
+  })
 
-        try {
-          await transporter.sendMail({
-            to: emp.email,
-            subject,
-            html,
-            attachments: getLogoAttachment(),
-          })
-          sentCount++
-        } catch (err) {
-          console.warn(`[MailService] Failed delivering announcement to ${emp.email}:`, err?.message || err)
-        }
+  // Fast, reliable batch dispatch via BCC to prevent Gmail SMTP connection exhaustion
+  const BATCH_SIZE = 40
+  let sentCount = 0
+
+  for (let i = 0; i < validRecipients.length; i += BATCH_SIZE) {
+    const batch = validRecipients.slice(i, i + BATCH_SIZE)
+    const bccList = batch.map((r) => r.email)
+
+    try {
+      await transporter.sendMail({
+        to: config.adminEmail || 'admin@edufyitech.in',
+        bcc: bccList,
+        subject,
+        html,
+        attachments: getLogoAttachment(),
       })
-    )
+      sentCount += batch.length
+      console.log(`[MailService:Announcement] Successfully broadcasted to batch of ${batch.length} recipients via BCC`)
+    } catch (err) {
+      console.error(`[MailService:Announcement] Batch broadcast error:`, err?.message || err)
+    }
   }
 
   return { success: true, sentCount, total: validRecipients.length }
