@@ -99,15 +99,47 @@ const BANKS = [
   'Bank of Baroda',
 ]
 
-function EmployeeAvatar({ name }) {
+function EmployeeAvatar({ name, avatarUrl, size = 32 }) {
+  const [imgError, setImgError] = useState(false)
+  const initial = String(name ?? '?')
+    .split(' ')
+    .map((part) => part[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase()
+
+  if (avatarUrl && !imgError) {
+    return (
+      <img
+        src={avatarUrl}
+        alt={name || 'Employee'}
+        style={{
+          width: `${size}px`,
+          height: `${size}px`,
+          borderRadius: '50%',
+          objectFit: 'cover',
+          border: '1.5px solid var(--teal, #006E6F)',
+          flexShrink: 0,
+          display: 'inline-block',
+        }}
+        onError={() => setImgError(true)}
+      />
+    )
+  }
+
   return (
-    <span className="avatar avatar-teal">
-      {String(name ?? '?')
-        .split(' ')
-        .map((part) => part[0])
-        .join('')
-        .slice(0, 2)
-        .toUpperCase()}
+    <span
+      className="avatar avatar-teal"
+      style={{
+        width: `${size}px`,
+        height: `${size}px`,
+        fontSize: `${Math.max(9, Math.round(size * 0.38))}px`,
+        display: 'grid',
+        placeItems: 'center',
+        flexShrink: 0,
+      }}
+    >
+      {initial}
     </span>
   )
 }
@@ -774,7 +806,7 @@ function EmployeeDirectory({ route } = {}) {
                   >
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <EmployeeAvatar name={emp.name} />
+                        <EmployeeAvatar name={emp.name} avatarUrl={emp.avatarUrl || emp.onboardingDocs?.passportPhoto?.url} />
                         <div>
                           <strong style={{ fontSize: '13px', display: 'block' }}>{emp.name}</strong>
                           <small style={{ color: 'var(--muted)', fontSize: '11px' }}>{emp.email}</small>
@@ -848,7 +880,7 @@ function EmployeeDirectory({ route } = {}) {
                     label: 'Employee',
                     render: (employee) => (
                       <a className="employee-link" href={workforcePath(`/people/${employee._id ?? employee.id}`)}>
-                        <EmployeeAvatar name={employee.name} />
+                        <EmployeeAvatar name={employee.name} avatarUrl={employee.avatarUrl || employee.onboardingDocs?.passportPhoto?.url} />
                         <span>
                           <strong>{employee.name}</strong>
                           <small>{employee.email}</small>
@@ -1155,7 +1187,7 @@ function EmployeeDirectory({ route } = {}) {
                   >
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-                        <EmployeeAvatar name={emp.name} />
+                        <EmployeeAvatar name={emp.name} avatarUrl={emp.avatarUrl || emp.onboardingDocs?.passportPhoto?.url} />
                         <div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                             <strong style={{ fontSize: '15px', color: '#0f172a' }}>{emp.name}</strong>
@@ -1418,7 +1450,7 @@ function EmployeeDirectory({ route } = {}) {
                   >
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <EmployeeAvatar name={emp.name} />
+                        <EmployeeAvatar name={emp.name} avatarUrl={emp.avatarUrl || emp.onboardingDocs?.passportPhoto?.url} />
                         <div>
                           <strong>{emp.name}</strong> •{' '}
                           <small style={{ color: 'var(--muted)' }}>
@@ -1510,7 +1542,7 @@ function EmployeeDirectory({ route } = {}) {
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      <EmployeeAvatar name={emp.name} />
+                      <EmployeeAvatar name={emp.name} avatarUrl={emp.avatarUrl || emp.onboardingDocs?.passportPhoto?.url} />
                       <div>
                         <strong>{emp.name}</strong> •{' '}
                         <small style={{ color: 'var(--muted)' }}>
@@ -2880,7 +2912,7 @@ function EmployeeDetail({ id }) {
       <section className="employee-detail-grid">
         <div className="panel profile-panel">
           <div className="profile-heading">
-            <EmployeeAvatar name={employee.name} />
+            <EmployeeAvatar name={employee.name} avatarUrl={employee.avatarUrl || employee.onboardingDocs?.passportPhoto?.url} size={54} />
             <div>
               <h2>{employee.name}</h2>
               <span>{employee.email}</span>

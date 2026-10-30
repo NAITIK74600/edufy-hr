@@ -807,7 +807,15 @@ export function AdminUsersModule() {
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <div className={`avatar avatar-${u.avatarTone || 'teal'}`} style={{ width: '32px', height: '32px', fontSize: '11px' }}>
+                    {u.avatarUrl ? (
+                      <img
+                        src={u.avatarUrl}
+                        alt={u.name || 'User'}
+                        style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover', border: '1.5px solid var(--teal)' }}
+                        onError={(e) => { e.currentTarget.style.display = 'none'; if (e.currentTarget.nextElementSibling) e.currentTarget.nextElementSibling.style.display = 'grid'; }}
+                      />
+                    ) : null}
+                    <div className={`avatar avatar-${u.avatarTone || 'teal'}`} style={{ display: u.avatarUrl ? 'none' : 'grid', width: '32px', height: '32px', fontSize: '11px' }}>
                       {u.name?.slice(0, 2).toUpperCase() || 'U'}
                     </div>
                     <div>
@@ -880,7 +888,15 @@ export function AdminUsersModule() {
                 <tr key={u.id}>
                   <td>
                     <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                      <div className={`avatar avatar-${u.avatarTone || 'teal'}`} style={{ width: '32px', height: '32px', fontSize: '11px' }}>
+                      {u.avatarUrl ? (
+                        <img
+                          src={u.avatarUrl}
+                          alt={u.name || 'User'}
+                          style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover', border: '1.5px solid var(--teal)' }}
+                          onError={(e) => { e.currentTarget.style.display = 'none'; if (e.currentTarget.nextElementSibling) e.currentTarget.nextElementSibling.style.display = 'grid'; }}
+                        />
+                      ) : null}
+                      <div className={`avatar avatar-${u.avatarTone || 'teal'}`} style={{ display: u.avatarUrl ? 'none' : 'grid', width: '32px', height: '32px', fontSize: '11px' }}>
                         {u.name?.slice(0, 2).toUpperCase() || 'U'}
                       </div>
                       <div>
@@ -2672,7 +2688,15 @@ function AdminRolesModule() {
                     <tr key={u.id}>
                       <td>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <div className={`avatar avatar-${u.avatarTone || 'teal'}`} style={{ width: '24px', height: '24px', fontSize: '10px' }}>
+                          {u.avatarUrl ? (
+                            <img
+                              src={u.avatarUrl}
+                              alt={u.name || 'User'}
+                              style={{ width: '24px', height: '24px', borderRadius: '50%', objectFit: 'cover', border: '1.5px solid var(--teal)' }}
+                              onError={(e) => { e.currentTarget.style.display = 'none'; if (e.currentTarget.nextElementSibling) e.currentTarget.nextElementSibling.style.display = 'grid'; }}
+                            />
+                          ) : null}
+                          <div className={`avatar avatar-${u.avatarTone || 'teal'}`} style={{ display: u.avatarUrl ? 'none' : 'grid', width: '24px', height: '24px', fontSize: '10px' }}>
                             {u.name?.slice(0, 2).toUpperCase() || 'U'}
                           </div>
                           <div>

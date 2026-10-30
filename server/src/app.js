@@ -230,7 +230,7 @@ export function createApp(options = {}) {
   app.use('/api/v1', events.changed, events.router)
   app.use('/api/v1', healthRouter)
   app.use('/api/v1/auth', createAuthRouter({ authService, auth, userStore }))
-  app.use('/api/v1/employees', createEmployeeRouter({ auth, service: employeeService }))
+  app.use('/api/v1/employees', createEmployeeRouter({ auth, service: employeeService, userStore, employeeRepository }))
   app.use('/api/v1/leave', createLeaveRouter({ auth, service: leaveService }))
   app.post(['/api/v1/attendance/recalculate', '/api/v1/attendance/recalculateToday'], auth.authenticate, auth.requirePermission(PERMISSIONS.ATTENDANCE_WRITE), async (request, response, next) => {
     try {

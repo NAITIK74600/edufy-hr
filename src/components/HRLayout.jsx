@@ -1168,26 +1168,28 @@ export function HRLayout({ route, children }) {
                   }}
                 >
                   <div className="profile-avatar-box" style={{ pointerEvents: 'none' }}>
-                    <img
-                      src={user?.avatarUrl || '/avatar.jpg'}
-                      alt={user?.displayName || 'User'}
-                      className="user-profile-img sm"
-                      style={{
-                        pointerEvents: 'none',
-                        WebkitTouchCallout: 'none',
-                        WebkitUserSelect: 'none',
-                        userSelect: 'none',
-                      }}
-                      onError={(e) => {
-                        e.currentTarget.style.display = 'none'
-                        if (e.currentTarget.nextElementSibling) {
-                          e.currentTarget.nextElementSibling.style.display = 'grid'
-                        }
-                      }}
-                    />
+                    {user?.avatarUrl ? (
+                      <img
+                        src={user.avatarUrl}
+                        alt={user?.displayName || 'User'}
+                        className="user-profile-img sm"
+                        style={{
+                          pointerEvents: 'none',
+                          WebkitTouchCallout: 'none',
+                          WebkitUserSelect: 'none',
+                          userSelect: 'none',
+                        }}
+                        onError={(e) => {
+                          e.currentTarget.style.display = 'none'
+                          if (e.currentTarget.nextElementSibling) {
+                            e.currentTarget.nextElementSibling.style.display = 'grid'
+                          }
+                        }}
+                      />
+                    ) : null}
                     <div
                       className={`avatar avatar-${user?.avatarTone ?? 'teal'}`}
-                      style={{ display: 'none', width: '28px', height: '28px', fontSize: '10px', pointerEvents: 'none' }}
+                      style={{ display: user?.avatarUrl ? 'none' : 'grid', width: '28px', height: '28px', fontSize: '10px', pointerEvents: 'none' }}
                     >
                       {user?.displayName?.slice(0, 2).toUpperCase() ?? 'HR'}
                     </div>
@@ -1200,20 +1202,22 @@ export function HRLayout({ route, children }) {
                   <div className="profile-menu-popover">
                     <div className="profile-popover-header">
                       <div className="profile-avatar-box" style={{ position: 'relative' }}>
-                        <img
-                          src={user?.avatarUrl || '/avatar.jpg'}
-                          alt={user?.displayName || 'User'}
-                          className="user-profile-img lg"
-                          onError={(e) => {
-                            e.currentTarget.style.display = 'none'
-                            if (e.currentTarget.nextElementSibling) {
-                              e.currentTarget.nextElementSibling.style.display = 'grid'
-                            }
-                          }}
-                        />
+                        {user?.avatarUrl ? (
+                          <img
+                            src={user.avatarUrl}
+                            alt={user?.displayName || 'User'}
+                            className="user-profile-img lg"
+                            onError={(e) => {
+                              e.currentTarget.style.display = 'none'
+                              if (e.currentTarget.nextElementSibling) {
+                                e.currentTarget.nextElementSibling.style.display = 'grid'
+                              }
+                            }}
+                          />
+                        ) : null}
                         <div
                           className={`avatar avatar-${user?.avatarTone ?? 'teal'}`}
-                          style={{ display: 'none', width: '64px', height: '64px', fontSize: '18px' }}
+                          style={{ display: user?.avatarUrl ? 'none' : 'grid', width: '64px', height: '64px', fontSize: '18px' }}
                         >
                           {user?.displayName?.slice(0, 2).toUpperCase() ?? 'HR'}
                         </div>

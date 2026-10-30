@@ -98,6 +98,9 @@ export async function seedAllEmployees() {
     updateDoc.authVersion = (existing?.authVersion ?? 0) + 1
 
     if (existing) {
+      if (existing.avatarUrl) {
+        updateDoc.avatarUrl = existing.avatarUrl
+      }
       await Employee.updateOne({ _id: existing._id }, { $set: updateDoc })
     } else {
       updateDoc.joiningDate = new Date('2023-01-01')

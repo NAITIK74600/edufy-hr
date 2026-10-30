@@ -1,5 +1,8 @@
 import express from 'express'
+import mongoose from 'mongoose'
 import { PERMISSIONS, hasPermission } from '../../auth/permissions.js'
+import { Employee } from '../../models/Employee.js'
+import { toPublicEmployee } from './employee.repository.js'
 
 function parseListQuery(query) {
   return {
@@ -15,7 +18,7 @@ function parseListQuery(query) {
   }
 }
 
-export function createEmployeeRouter({ auth, service }) {
+export function createEmployeeRouter({ auth, service, userStore, employeeRepository }) {
   const router = express.Router()
   // Shared short-TTL cache of list results (same for every HR/Admin); any write clears it.
   const listCache = new Map()
@@ -25,6 +28,7 @@ export function createEmployeeRouter({ auth, service }) {
       response.once('finish', () => {
         listCache.clear()
         service?.repository?.clearCache?.()
+        employeeRepository?.clearCache?.()
       })
     }
     next()
@@ -115,13 +119,46 @@ export function createEmployeeRouter({ auth, service }) {
         return response.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'Valid avatarUrl string is required.' } })
       }
       const user = request.auth.user
-      const targetId = user.id || user._id || user.employeeId
-      let currentEmployee = await service.get(targetId).catch(() => null)
-      if (!currentEmployee && user.employeeId) currentEmployee = await service.get(user.employeeId).catch(() => null)
-      if (!currentEmployee && user.email) currentEmployee = await service.get(user.email).catch(() => null)
-      const empId = currentEmployee?.id || currentEmployee?._id || targetId
-      const updated = await service.update(empId, { avatarUrl: avatarUrl.trim() }, request.auth.user)
-      return response.json({ success: true, data: updated })
+      const cleanAvatar = avatarUrl.trim()
+
+      const query = []
+      if (user.id && mongoose.isValidObjectId(user.id)) query.push({ _id: user.id })
+      if (user._id && mongoose.isValidObjectId(user._id)) query.push({ _id: user._id })
+      if (user.employeeId) query.push({ employeeId: String(user.employeeId).toUpperCase() })
+      if (user.email) query.push({ email: String(user.email).toLowerCase() })
+
+      const filter = query.length === 1 ? query[0] : { $or: query }
+
+      let updatedEmployee = null
+      if (mongoose.connection.readyState === 1) {
+        updatedEmployee = await Employee.findOneAndUpdate(
+          filter,
+          { $set: { avatarUrl: cleanAvatar } },
+          { returnDocument: 'after', lean: true }
+        )
+      } else {
+        const empId = user.id || user._id || user.employeeId
+        updatedEmployee = await service.update(empId, { avatarUrl: cleanAvatar }, request.auth.user)
+      }
+
+      if (!updatedEmployee) {
+        return response.status(404).json({ success: false, error: { code: 'EMPLOYEE_NOT_FOUND', message: 'Employee record not found.' } })
+      }
+
+      // Invalidate memory caches across auth, userStore, and employee repository
+      const finalId = updatedEmployee._id || updatedEmployee.id || user.id || user._id
+      auth.clearUserCache?.(finalId)
+      auth.clearUserCache?.(user.id || user._id)
+      userStore?.clearUserCache?.(finalId)
+      userStore?.clearUserCache?.(user.email)
+      userStore?.clearUserCache?.(updatedEmployee.email)
+      userStore?.clearUserCache?.(updatedEmployee.employeeId)
+      listCache.clear()
+      service?.repository?.clearCache?.()
+      employeeRepository?.clearCache?.()
+
+      const publicEmp = toPublicEmployee ? toPublicEmployee(updatedEmployee) : updatedEmployee
+      return response.json({ success: true, data: publicEmp })
     } catch (error) { return next(error) }
   })
 
@@ -193,7 +230,14 @@ export function createEmployeeRouter({ auth, service }) {
           updateBody.onboardingDocs = sanitizedDocs
         }
       }
-      return response.json({ success: true, data: await service.update(request.params.id, updateBody, request.auth.user) })
+      const updated = await service.update(request.params.id, updateBody, request.auth.user)
+      auth.clearUserCache?.(request.params.id)
+      auth.clearUserCache?.(updated?.id || updated?._id)
+      userStore?.clearUserCache?.(request.params.id)
+      userStore?.clearUserCache?.(updated?.email)
+      userStore?.clearUserCache?.(updated?.employeeId)
+      employeeRepository?.clearCache?.()
+      return response.json({ success: true, data: updated })
     } catch (error) { return next(error) }
   })
   router.post('/:id/invite', auth.authenticate, auth.requirePermission(PERMISSIONS.EMPLOYEES_WRITE), async (request, response, next) => {

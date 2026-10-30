@@ -39,12 +39,13 @@ export function EmployeeProfilePage() {
           } else {
             await apiClient.patch('/employees/me/avatar', { avatarUrl: dataUrl })
           }
+          if (updateUser) updateUser({ avatarUrl: dataUrl })
+          setPhotoNotice(true)
+          setTimeout(() => setPhotoNotice(false), 4000)
         } catch (err) {
-          console.warn('Failed to persist profile picture:', err.message)
+          console.error('Failed to persist profile picture:', err.message)
+          alert('Failed to save profile picture: ' + (err.message || 'Please try again.'))
         }
-        if (updateUser) updateUser({ avatarUrl: dataUrl })
-        setPhotoNotice(true)
-        setTimeout(() => setPhotoNotice(false), 4000)
       }
       setUploadingPhoto(false)
     }

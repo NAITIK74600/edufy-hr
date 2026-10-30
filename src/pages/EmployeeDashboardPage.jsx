@@ -3394,18 +3394,27 @@ function ESSProfileView({ user }) {
       {/* Profile Header Summary Card */}
       <div className="panel" style={{ padding: '20px', display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
         <div className="profile-avatar-box">
-          <img
-            src={user?.avatarUrl || employee?.avatarUrl || '/avatar.jpg'}
-            alt={employee?.name || user?.displayName || 'User'}
-            className="user-profile-img lg"
-            style={{ width: '60px', height: '60px', borderRadius: '50%', objectFit: 'cover' }}
-            onError={(e) => {
-              e.currentTarget.style.display = 'none'
-            }}
-          />
+          {(user?.avatarUrl || employee?.avatarUrl || employee?.onboardingDocs?.passportPhoto?.url) ? (
+            <img
+              src={user?.avatarUrl || employee?.avatarUrl || employee?.onboardingDocs?.passportPhoto?.url}
+              alt={employee?.name || user?.displayName || 'User'}
+              className="user-profile-img lg"
+              style={{ width: '60px', height: '60px', borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--teal)' }}
+              onError={(e) => {
+                e.currentTarget.style.display = 'none'
+                if (e.currentTarget.nextElementSibling) e.currentTarget.nextElementSibling.style.display = 'grid'
+              }}
+            />
+          ) : null}
           <div
             className="avatar avatar-teal"
-            style={{ width: '60px', height: '60px', fontSize: '18px', display: 'grid', borderRadius: '50%' }}
+            style={{
+              width: '60px',
+              height: '60px',
+              fontSize: '18px',
+              display: (user?.avatarUrl || employee?.avatarUrl || employee?.onboardingDocs?.passportPhoto?.url) ? 'none' : 'grid',
+              borderRadius: '50%'
+            }}
           >
             {(employee?.name || user?.displayName || user?.name || user?.email?.split('@')[0] || 'EM').slice(0, 2).toUpperCase()}
           </div>

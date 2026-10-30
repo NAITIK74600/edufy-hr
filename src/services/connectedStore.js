@@ -387,7 +387,25 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
       return mutate(() => apiClient.delete(`/workspace/departments/${encodeURIComponent(deptId)}`)).then(() => res)
     },
     updateMyAvatar(avatarUrl) {
-      return mutate(() => apiClient.patch('/employees/me/avatar', { avatarUrl }))
+      return mutate(async () => {
+        const res = await apiClient.patch('/employees/me/avatar', { avatarUrl })
+        if (res?.data) {
+          const updated = normalizeEmployee(res.data)
+          const list = state().employees || []
+          const idx = list.findIndex((e) => e.id === updated.id || e._id === updated.id || e.employeeId === updated.employeeId)
+          if (idx !== -1) {
+            list[idx] = { ...list[idx], ...updated, avatarUrl }
+          } else {
+            list.unshift({ ...updated, avatarUrl })
+          }
+          state().employees = [...list]
+          if (user) {
+            user.avatarUrl = avatarUrl
+          }
+          notify()
+        }
+        return res
+      })
     },
     restoreDataJSON(data) {
       if (!user && rawLocal.restoreDataJSON) return rawLocal.restoreDataJSON(data)
