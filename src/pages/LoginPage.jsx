@@ -797,6 +797,7 @@ export function ManagementLoginPage({ defaultRole = 'hr' }) {
   const [remember, setRemember] = useState(true)
   const [loading, setLoading] = useState(false)
   const [passkeyLoading, setPasskeyLoading] = useState(false)
+  const [passkeyModalOpen, setPasskeyModalOpen] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [mustSetNewPassword, setMustSetNewPassword] = useState(false)
