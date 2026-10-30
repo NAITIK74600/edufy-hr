@@ -300,6 +300,7 @@ export function createApp(options = {}) {
       if (request.path.startsWith('/api') || request.path.startsWith('/verification-forms') || request.path.startsWith('/company-policies')) {
         return next()
       }
+      response.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
       return response.sendFile(path.join(options.staticDirectory, 'index.html'))
     })
   } else {
