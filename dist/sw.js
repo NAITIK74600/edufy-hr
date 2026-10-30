@@ -1,5 +1,5 @@
 // Edufyi HR Progressive Web App (PWA) Service Worker
-const CACHE_NAME = 'edufyi-hr-pwa-v1'
+const CACHE_NAME = 'edufyi-hr-pwa-v2'
 const PRECACHE_ASSETS = [
   '/',
   '/index.html',
@@ -29,6 +29,7 @@ self.addEventListener('activate', (event) => {
       return Promise.all(
         keys.map((key) => {
           if (key !== CACHE_NAME) {
+            console.log('[PWA SW] Deleting old cache:', key)
             return caches.delete(key)
           }
         })
@@ -75,65 +76,7 @@ self.addEventListener('sync', (event) => {
     event.waitUntil(
       fetch('/api/v1/health')
         .then(() => console.log('[PWA SW] Background sync attendance heartbeat succeeded'))
-        .catch((err) => console.warn('[PWA SW] Background sync failed:', err))
+        .catch((err) => console.warn('[PWA SW] Background sync attendance heartbeat notice:', err))
     )
   }
 })
-
-// 5. Periodic Background Sync Event (for supported browsers)
-self.addEventListener('periodicsync', (event) => {
-  if (event.tag === 'edufyi-bg-keepalive') {
-    event.waitUntil(
-      fetch('/api/v1/health')
-        .then(() => console.log('[PWA SW] Periodic keep-alive ping dispatched'))
-        .catch(() => {})
-    )
-  }
-})
-
-// 6. Push Notifications Event
-self.addEventListener('push', (event) => {
-  let data = { title: 'Edufyi Workforce Notification', body: 'You have a new update in your HR portal.' }
-  try {
-    if (event.data) {
-      data = event.data.json()
-    }
-  } catch {
-    if (event.data) data.body = event.data.text()
-  }
-
-  const options = {
-    body: data.body,
-    icon: '/elythra-edufyitech-logo.png',
-    badge: '/elythra-edufyitech-logo.png',
-    vibrate: [100, 50, 100],
-    data: {
-      url: data.url || '/#/'
-    }
-  }
-
-  event.waitUntil(
-    self.registration.showNotification(data.title, options)
-  )
-})
-
-// 7. Notification Click: Focus existing window or open app
-self.addEventListener('notificationclick', (event) => {
-  event.notification.close()
-  const targetUrl = event.notification.data?.url || '/#/'
-
-  event.waitUntil(
-    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
-      for (const client of clientList) {
-        if (client.url.includes(self.registration.scope) && 'focus' in client) {
-          client.navigate(targetUrl)
-          return client.focus()
-        }
-      }
-      if (self.clients.openWindow) {
-        return self.clients.openWindow(targetUrl)
-      }
-    })
-  )
-})
-
