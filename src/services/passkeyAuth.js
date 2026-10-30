@@ -127,9 +127,11 @@ export async function registerPasskey({ email = '', password = '', deviceName = 
       { alg: -7, type: 'public-key' },
       { alg: -257, type: 'public-key' },
     ],
-    authenticatorSelection: authenticatorSelection || {
+    authenticatorSelection: {
+      authenticatorAttachment: 'platform',
       userVerification: 'preferred',
       residentKey: 'preferred',
+      ...(authenticatorSelection || {}),
     },
     timeout: timeout || 60000,
   }

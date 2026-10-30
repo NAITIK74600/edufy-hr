@@ -544,6 +544,7 @@ export function createAuthRouter({ authService, auth, userStore }) {
             { alg: -257, type: 'public-key' },
           ],
           authenticatorSelection: {
+            authenticatorAttachment: 'platform',
             userVerification: 'preferred',
             residentKey: 'preferred',
           },
