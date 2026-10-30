@@ -88,8 +88,30 @@ export function createApp(options = {}) {
               }
             })
           }
+          if (settings.helpDeskSettings) {
+            const hd = settings.helpDeskSettings
+            hd.itSupportEmail = 'itsupport@edufyitech.in'
+            hd.hrSupportEmail = 'hr@edufyitech.in'
+            hd.payrollSupportEmail = 'hr@edufyitech.in'
+            hd.facilitiesEmail = 'admin@edufyitech.in'
+            if (!hd.generalSupportEmail || /edufy.*solution/i.test(hd.generalSupportEmail)) {
+              hd.generalSupportEmail = 'admin@edufyitech.in'
+            }
+            if (!hd.supportEmail || /edufy.*solution/i.test(hd.supportEmail)) {
+              hd.supportEmail = 'admin@edufyitech.in'
+            }
+            dirty = true
+          }
           if (dirty) await settings.save()
         }
+        // Also update any existing tickets with typo domains
+        try {
+          const { Ticket } = await import('./models/Ticket.js')
+          await Ticket.updateMany(
+            { assignedToEmail: /edufy.*solution/i },
+            [{ $set: { assignedToEmail: { $cond: [{ $regexMatch: { input: '$category', regex: /it/i } }, 'itsupport@edufyitech.in', { $cond: [{ $regexMatch: { input: '$category', regex: /hr|payroll|leave/i } }, 'hr@edufyitech.in', 'admin@edufyitech.in'] }] } } }]
+          )
+        } catch {}
       } catch (err) {
         console.warn('Attendance Wi-Fi cleanup notice:', err.message)
       }

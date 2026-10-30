@@ -395,11 +395,12 @@ export function createAttendanceService({ repository, companySettings = {} }) {
   let attendanceRules = { ...DEFAULT_ATTENDANCE_RULES, ...(companySettings.attendanceRules || {}) }
   let holidayCalendarImages = companySettings.holidayCalendarImages || []
   let helpDeskSettings = companySettings.helpDeskSettings || {
-    supportEmail: 'leaveupdate@edufytechsolution.in',
-    itSupportEmail: 'itsupport@edufytechsolution.in',
-    hrSupportEmail: 'leaveupdate@edufytechsolution.in',
-    payrollSupportEmail: 'payroll@edufytechsolution.in',
-    facilitiesEmail: 'facilities@edufytechsolution.in',
+    supportEmail: 'admin@edufyitech.in',
+    itSupportEmail: 'itsupport@edufyitech.in',
+    hrSupportEmail: 'hr@edufyitech.in',
+    payrollSupportEmail: 'hr@edufyitech.in',
+    facilitiesEmail: 'admin@edufyitech.in',
+    generalSupportEmail: 'admin@edufyitech.in',
     defaultPriority: 'Medium',
     autoAssignToManager: true,
     emailNotificationsEnabled: true,

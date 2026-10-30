@@ -209,8 +209,10 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
           (hd.itSupportEmail && actorEmail === String(hd.itSupportEmail).trim().toLowerCase())
         )
         const isGeneralSpecialist = Boolean(
-          actorEmail === String(process.env.HELPDESK_EMAIL || 'helpsupport@edufyitechsolution.in').trim().toLowerCase() ||
+          actorEmail === String(process.env.ADMIN_EMAIL || 'admin@edufyitech.in').trim().toLowerCase() ||
+          actorEmail === String(process.env.HR_EMAIL || 'hr@edufyitech.in').trim().toLowerCase() ||
           actorDept.includes('hr') ||
+          actorDept.includes('admin') ||
           actorDept.includes('support') ||
           (hd.generalSupportEmployeeId && [actorIdStr, actorEmpId].includes(String(hd.generalSupportEmployeeId).toUpperCase())) ||
           (hd.generalSupportEmployeeEmail && actorEmail === String(hd.generalSupportEmployeeEmail).trim().toLowerCase()) ||
@@ -312,7 +314,9 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
         case 'tickets': {
           allowedBody(body, ['subject', 'description', 'category', 'priority', 'assignedToId', 'assignedToName', 'assignedToEmail'])
           const ticketCat = string(body, 'category') || 'IT Support'
-          const isIt = ticketCat.toLowerCase().includes('it')
+          const catLower = ticketCat.toLowerCase()
+          const isIt = catLower.includes('it')
+          const isHrOrPayroll = catLower.includes('hr') || catLower.includes('payroll') || catLower.includes('policy') || catLower.includes('leave')
           let assignedId = body.assignedToId || ''
           let assignedName = body.assignedToName || ''
           let assignedEmail = body.assignedToEmail || ''
@@ -323,12 +327,17 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
               const hd = settingsDoc?.helpDeskSettings || {}
               if (isIt) {
                 assignedId = assignedId || hd.itSupportEmployeeId || ''
-                assignedName = assignedName || hd.itSupportEmployeeName || ''
+                assignedName = assignedName || hd.itSupportEmployeeName || 'IT Support'
                 assignedEmail = assignedEmail || hd.itSupportEmployeeEmail || hd.itSupportEmail || process.env.IT_EMAIL || 'itsupport@edufyitech.in'
+              } else if (isHrOrPayroll) {
+                assignedId = assignedId || hd.hrSupportEmployeeId || ''
+                assignedName = assignedName || hd.hrSupportEmployeeName || 'HR Operations'
+                assignedEmail = assignedEmail || hd.hrSupportEmployeeEmail || hd.hrSupportEmail || process.env.HR_EMAIL || 'hr@edufyitech.in'
               } else {
+                // Facilities, Workplace & General Admin
                 assignedId = assignedId || hd.generalSupportEmployeeId || ''
-                assignedName = assignedName || hd.generalSupportEmployeeName || ''
-                assignedEmail = assignedEmail || hd.generalSupportEmployeeEmail || hd.generalSupportEmail || process.env.HELPDESK_EMAIL || 'helpsupport@edufyitechsolution.in'
+                assignedName = assignedName || hd.generalSupportEmployeeName || 'Workplace & Facilities Admin'
+                assignedEmail = assignedEmail || hd.generalSupportEmployeeEmail || hd.generalSupportEmail || process.env.ADMIN_EMAIL || 'admin@edufyitech.in'
               }
             } catch {}
           }
@@ -343,10 +352,13 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
           }
           if (!assignedId) {
             try {
-              const itQuery = isIt
-                ? { $or: [{ email: new RegExp(assignedEmail, 'i') }, { email: /itsupport/i }, { department: /it/i }, { role: /it/i }] }
-                : { $or: [{ email: new RegExp(assignedEmail, 'i') }, { department: /hr/i }] }
-              const empDoc = await Employee.findOne(itQuery).lean()
+              let assignQuery = { $or: [{ email: /admin@edufyitech\.in/i }, { role: /admin/i }] }
+              if (isIt) {
+                assignQuery = { $or: [{ email: new RegExp(assignedEmail, 'i') }, { email: /itsupport/i }, { department: /it/i }, { role: /it/i }] }
+              } else if (isHrOrPayroll) {
+                assignQuery = { $or: [{ email: new RegExp(assignedEmail, 'i') }, { email: /hr@/i }, { department: /hr/i }, { role: /hr/i }] }
+              }
+              const empDoc = await Employee.findOne(assignQuery).lean()
               if (empDoc) {
                 assignedId = String(empDoc._id)
                 assignedName = assignedName || empDoc.name
@@ -790,8 +802,10 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
               (hd.itSupportEmail && actorEmail === String(hd.itSupportEmail).trim().toLowerCase())
             )
             const isGeneralSpecialist = Boolean(
-              actorEmail === String(process.env.HELPDESK_EMAIL || 'helpsupport@edufyitechsolution.in').trim().toLowerCase() ||
+              actorEmail === String(process.env.ADMIN_EMAIL || 'admin@edufyitech.in').trim().toLowerCase() ||
+              actorEmail === String(process.env.HR_EMAIL || 'hr@edufyitech.in').trim().toLowerCase() ||
               actorDept.includes('hr') ||
+              actorDept.includes('admin') ||
               actorDept.includes('support') ||
               (hd.generalSupportEmployeeId && [actorIdStr, actorEmpId].includes(String(hd.generalSupportEmployeeId).toUpperCase())) ||
               (hd.generalSupportEmployeeEmail && actorEmail === String(hd.generalSupportEmployeeEmail).trim().toLowerCase()) ||

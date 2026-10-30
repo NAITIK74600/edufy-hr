@@ -4317,7 +4317,8 @@ function ESSHelpDeskView({ user }) {
     (hd.itSupportEmail && uEmail && String(hd.itSupportEmail).trim().toLowerCase() === uEmail)
   )
   const isGeneralSpecialist = Boolean(
-    uEmail === 'helpsupport@edufyitechsolution.in' ||
+    uEmail === 'admin@edufyitech.in' ||
+    uEmail === 'hr@edufyitech.in' ||
     (user?.department && /hr/i.test(user.department)) ||
     (hd.generalSupportEmployeeId && [uId, uMongoId, uEmp].includes(String(hd.generalSupportEmployeeId).toUpperCase())) ||
     (hd.generalSupportEmployeeEmail && uEmail && String(hd.generalSupportEmployeeEmail).trim().toLowerCase() === uEmail) ||

@@ -23,7 +23,7 @@ export function PayslipDocument({
 
   const companyName = company.companyName || 'Elythra Edufyi Tech Solutions Pvt Ltd'
   const companyAddress = company.branchAddress || company.address || 'Third Floor, 7 Hills, #424, 10th Cross, 27th Main, Sector 1, HSR Layout, Bengaluru, Karnataka 560102'
-  const companyContacts = [company.phone || '+91 80 4567 8900', company.email || 'payroll@edufyitech.com', company.website || 'https://edufyitech.com'].filter(Boolean).join(' | ')
+  const companyContacts = [company.phone || '+91 80 4567 8900', company.email || 'hr@edufyitech.in', company.website || 'https://edufyitech.in'].filter(Boolean).join(' | ')
   const logoUrl = company.logoUrl || '/elythra-edufyitech-logo.png'
   const primaryColor = company.primaryColor || '#087E9E'
   const secondaryColor = company.secondaryColor || '#0B3155'

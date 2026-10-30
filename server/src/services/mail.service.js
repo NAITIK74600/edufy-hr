@@ -90,7 +90,7 @@ export function getMailConfig() {
   const itEmail = (process.env.IT_EMAIL || 'itsupport@edufyitech.in').trim()
   const itPass = cleanPassword(process.env.IT_EMAIL_PASS)
 
-  const helpdeskEmail = (process.env.HELPDESK_EMAIL || 'helpsupport@edufyitechsolution.in').trim()
+  const helpdeskEmail = (process.env.HELPDESK_EMAIL || 'admin@edufyitech.in').trim()
   const helpdeskPass = cleanPassword(process.env.HELPDESK_EMAIL_PASS)
 
   const publicUrl = process.env.APP_PUBLIC_URL || 'https://edufyione.edufyitech.in'
@@ -914,13 +914,28 @@ export async function sendSupportTicketEmail({
   replyText = '',
 }) {
   if (!recipientEmail) return { success: false, reason: 'No recipient email' }
-  const isIt = (ticket.category || '').toLowerCase().includes('it')
-  const transporter = createTransporter(isIt ? 'it' : 'support')
+  const catLower = (ticket.category || '').toLowerCase()
+  const isIt = catLower.includes('it')
+  const isHrOrPayroll = catLower.includes('hr') || catLower.includes('payroll') || catLower.includes('policy') || catLower.includes('leave')
+
   const config = getMailConfig()
   const publicUrl = config.publicUrl
 
-  const channelEmail = isIt ? config.itEmail : config.helpdeskEmail
-  const channelName = isIt ? 'Edufyi IT Support' : 'Edufyi Help Support'
+  let transportType = 'admin'
+  let channelEmail = config.adminEmail || 'admin@edufyitech.in'
+  let channelName = 'Edufyi Workplace & Facilities'
+
+  if (isIt) {
+    transportType = 'it'
+    channelEmail = config.itEmail || 'itsupport@edufyitech.in'
+    channelName = 'Edufyi IT Support'
+  } else if (isHrOrPayroll) {
+    transportType = 'hr'
+    channelEmail = config.hrEmail || 'hr@edufyitech.in'
+    channelName = 'Edufyi HR & Payroll Support'
+  }
+
+  const transporter = createTransporter(transportType)
   const ticketIdStr = String(ticket._id || ticket.id || '').slice(-6).toUpperCase()
 
   let emailSubject = ''

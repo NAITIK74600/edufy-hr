@@ -3359,7 +3359,7 @@ function HelpDeskModule() {
   const [itSupportEmployeeName, setItSupportEmployeeName] = useState(initialHelpDesk.itSupportEmployeeName || '')
   const [itSupportEmployeeEmail, setItSupportEmployeeEmail] = useState(initialHelpDesk.itSupportEmployeeEmail || '')
 
-  const [generalSupportEmail, setGeneralSupportEmail] = useState(initialHelpDesk.generalSupportEmail || initialHelpDesk.supportEmail || 'helpsupport@edufyitechsolution.in')
+  const [generalSupportEmail, setGeneralSupportEmail] = useState(initialHelpDesk.generalSupportEmail || initialHelpDesk.supportEmail || 'admin@edufyitech.in')
   const [generalSupportEmployeeId, setGeneralSupportEmployeeId] = useState(initialHelpDesk.generalSupportEmployeeId || '')
   const [generalSupportEmployeeName, setGeneralSupportEmployeeName] = useState(initialHelpDesk.generalSupportEmployeeName || '')
   const [generalSupportEmployeeEmail, setGeneralSupportEmployeeEmail] = useState(initialHelpDesk.generalSupportEmployeeEmail || '')
@@ -3400,11 +3400,11 @@ function HelpDeskModule() {
           itSupportEmployeeId,
           itSupportEmployeeName,
           itSupportEmployeeEmail,
-          generalSupportEmail: generalSupportEmail.trim() || 'helpsupport@edufyitechsolution.in',
+          generalSupportEmail: generalSupportEmail.trim() || 'admin@edufyitech.in',
           generalSupportEmployeeId,
           generalSupportEmployeeName,
           generalSupportEmployeeEmail,
-          supportEmail: generalSupportEmail.trim() || 'helpsupport@edufyitechsolution.in',
+          supportEmail: generalSupportEmail.trim() || 'admin@edufyitech.in',
           defaultPriority,
           autoAssignToManager: Boolean(autoAssignToManager),
           emailNotificationsEnabled: Boolean(emailNotificationsEnabled),
@@ -3703,11 +3703,11 @@ function HelpDeskModule() {
                       </div>
                       <div>
                         <span style={{ color: 'var(--muted)' }}>Unified Gateway Address:</span>{' '}
-                        <strong style={{ color: '#16a34a' }}>{generalSupportEmail || 'helpsupport@edufyitechsolution.in'}</strong>
+                        <strong style={{ color: '#16a34a' }}>{generalSupportEmail || 'admin@edufyitech.in'}</strong>
                       </div>
                     </div>
                     <span style={{ fontSize: '10.5px', color: 'var(--muted)', marginTop: '6px', display: 'block' }}>
-                      All HR Policies, Payroll, and Facilities tickets are routed to this employee and dispatched via the unified <strong>helpsupport@edufyitechsolution.in</strong> gateway.
+                      HR Policies &amp; Payroll tickets route to <strong>hr@edufyitech.in</strong> and Workplace &amp; Facilities tickets route to <strong>admin@edufyitech.in</strong>.
                     </span>
                   </div>
 
