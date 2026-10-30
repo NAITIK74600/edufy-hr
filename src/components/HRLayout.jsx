@@ -234,9 +234,18 @@ export function HRLayout({ route, children }) {
         setNotifOpen(false)
       }
     }
-    document.addEventListener('mousedown', handleClickOutside)
+    function handleKeyDown(event) {
+      if (event.key === 'Escape') {
+        setMobileOpen(false)
+        setProfileOpen(false)
+        setNotifOpen(false)
+      }
+    }
+    document.addEventListener('pointerdown', handleClickOutside)
+    window.addEventListener('keydown', handleKeyDown)
     return () => {
-      document.removeEventListener('mousedown', handleClickOutside)
+      document.removeEventListener('pointerdown', handleClickOutside)
+      window.removeEventListener('keydown', handleKeyDown)
     }
   }, [])
 
@@ -1142,14 +1151,33 @@ export function HRLayout({ route, children }) {
                     setProfileOpen((prev) => !prev)
                     setNotifOpen(false)
                   }}
+                  aria-expanded={profileOpen}
+                  aria-haspopup="true"
                   aria-label="Open account menu"
                   title={`${user?.displayName} (${user?.role})`}
+                  style={{
+                    cursor: 'pointer',
+                    touchAction: 'manipulation',
+                    WebkitTapHighlightColor: 'transparent',
+                    minWidth: '44px',
+                    minHeight: '44px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: '4px 6px',
+                  }}
                 >
-                  <div className="profile-avatar-box">
+                  <div className="profile-avatar-box" style={{ pointerEvents: 'none' }}>
                     <img
                       src={user?.avatarUrl || '/avatar.jpg'}
                       alt={user?.displayName || 'User'}
                       className="user-profile-img sm"
+                      style={{
+                        pointerEvents: 'none',
+                        WebkitTouchCallout: 'none',
+                        WebkitUserSelect: 'none',
+                        userSelect: 'none',
+                      }}
                       onError={(e) => {
                         e.currentTarget.style.display = 'none'
                         if (e.currentTarget.nextElementSibling) {
@@ -1159,13 +1187,13 @@ export function HRLayout({ route, children }) {
                     />
                     <div
                       className={`avatar avatar-${user?.avatarTone ?? 'teal'}`}
-                      style={{ display: 'none', width: '28px', height: '28px', fontSize: '10px' }}
+                      style={{ display: 'none', width: '28px', height: '28px', fontSize: '10px', pointerEvents: 'none' }}
                     >
                       {user?.displayName?.slice(0, 2).toUpperCase() ?? 'HR'}
                     </div>
-                    <span className="profile-online-badge" />
+                    <span className="profile-online-badge" style={{ pointerEvents: 'none' }} />
                   </div>
-                  <ChevronDown size={14} className="muted-icon" />
+                  <ChevronDown size={14} className="muted-icon" style={{ pointerEvents: 'none', flexShrink: 0 }} />
                 </button>
 
                 {profileOpen && (

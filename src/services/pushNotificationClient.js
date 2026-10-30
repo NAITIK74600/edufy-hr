@@ -124,3 +124,4 @@ export async function unsubscribeFromPushNotifications() {
 export async function sendTestPushNotification() {
   return apiClient.post('/notifications/test-push', {})
 }
+

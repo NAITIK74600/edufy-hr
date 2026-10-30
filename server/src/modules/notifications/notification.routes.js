@@ -325,3 +325,4 @@ export function createNotificationRouter({ auth }) {
 
   return router
 }
+

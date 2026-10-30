@@ -25,3 +25,4 @@ const pushSubscriptionSchema = new mongoose.Schema({
 }, { timestamps: true })
 
 export const PushSubscription = mongoose.models.PushSubscription ?? mongoose.model('PushSubscription', pushSubscriptionSchema)
+

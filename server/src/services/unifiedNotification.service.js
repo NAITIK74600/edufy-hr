@@ -1,30 +1,41 @@
-import webpush from 'web-push'
 import { Notification } from '../models/Notification.js'
 import { PushSubscription } from '../models/PushSubscription.js'
 import { workspaceModels } from '../models/Workspace.js'
 
+let webpushInstance = null
 let isVapidInitialized = false
+
+export async function getWebPush() {
+  if (webpushInstance) return webpushInstance
+  try {
+    const mod = await import('web-push')
+    webpushInstance = mod.default || mod
+    initWebPush()
+    return webpushInstance
+  } catch (err) {
+    console.warn('⚠️ [Web Push Module Notice]: web-push not yet installed in node_modules. Push notifications deferred. Bell notifications active.')
+    return null
+  }
+}
 
 export function initWebPush() {
   const publicKey = process.env.VAPID_PUBLIC_KEY
   const privateKey = process.env.VAPID_PRIVATE_KEY
   const subject = process.env.VAPID_SUBJECT || 'mailto:admin@edufyitech.in'
 
-  if (publicKey && privateKey) {
+  if (webpushInstance && publicKey && privateKey) {
     try {
-      webpush.setVapidDetails(subject, publicKey, privateKey)
+      webpushInstance.setVapidDetails(subject, publicKey, privateKey)
       isVapidInitialized = true
       console.log('✅ Web Push VAPID initialized successfully.')
     } catch (err) {
       console.warn('⚠️ Web Push VAPID initialization warning:', err.message)
     }
-  } else {
-    console.warn('⚠️ Web Push VAPID keys missing in environment. Push notifications disabled.')
   }
 }
 
-// Auto-initialize on module load
-initWebPush()
+// Attempt lazy initialization
+getWebPush().catch(() => {})
 
 /**
  * Creates and delivers a unified notification:
@@ -98,13 +109,12 @@ export async function createUnifiedNotification({
       })
     }
   } catch (err) {
-    // Non-fatal if workspace mirror fails
     console.warn('[Notification Mirror Notice]:', err.message)
   }
 
   // 3. Send Web Push to registered devices
   let pushStatus = 'skipped'
-  if (isVapidInitialized && targetRecipientId) {
+  if (targetRecipientId) {
     try {
       pushStatus = await deliverDevicePush(targetRecipientId, {
         notificationId,
@@ -145,6 +155,11 @@ async function deliverDevicePush(employeeId, { notificationId, title, message, c
     return 'skipped'
   }
 
+  const wp = await getWebPush()
+  if (!wp || !isVapidInitialized) {
+    return 'skipped'
+  }
+
   const payload = JSON.stringify({
     notificationId,
     title,
@@ -164,20 +179,19 @@ async function deliverDevicePush(employeeId, { notificationId, title, message, c
   let failedCount = 0
 
   for (const sub of subscriptions) {
-    // Check category preferences
     if (sub.preferences && sub.preferences[category] === false) {
       continue
     }
 
     try {
-      await webpush.sendNotification(
+      await wp.sendNotification(
         {
           endpoint: sub.endpoint,
           keys: sub.keys,
         },
         payload,
         {
-          TTL: 86400, // 24 hours
+          TTL: 86400,
           urgency: 'high',
         }
       )
@@ -185,7 +199,6 @@ async function deliverDevicePush(employeeId, { notificationId, title, message, c
       await PushSubscription.updateOne({ _id: sub._id }, { $set: { lastUsedAt: new Date() } })
     } catch (err) {
       failedCount++
-      // 404 or 410 indicates expired or unsubscribed endpoint
       if (err.statusCode === 404 || err.statusCode === 410) {
         console.log(`[Web Push] Pruning expired subscription endpoint: ${sub.endpoint.slice(0, 30)}...`)
         await PushSubscription.updateOne({ _id: sub._id }, { $set: { active: false } })
@@ -204,7 +217,7 @@ async function deliverDevicePush(employeeId, { notificationId, title, message, c
  * Broadcasts a notification to multiple employees, departments, or roles
  */
 export async function broadcastUnifiedNotification({
-  targetType = 'all', // 'all' | 'department' | 'role' | 'selected'
+  targetType = 'all',
   targetValue = null,
   employeeIds = [],
   title,
