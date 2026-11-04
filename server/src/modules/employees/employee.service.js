@@ -1,9 +1,10 @@
 import { hasPermission } from '../../auth/permissions.js'
 import { hashPassword } from '../../auth/passwords.js'
-import { sendWelcomeEmail, sendDocumentStatusEmail } from '../../services/mail.service.js'
+import { sendWelcomeEmail, sendDocumentStatusEmail, sendExitInitiatedEmail, sendExitFinalizedEmail } from '../../services/mail.service.js'
+import { createUnifiedNotification } from '../../services/unifiedNotification.service.js'
 
 const protectedFields = ['permissions', 'passwordHash', 'authVersion', 'salaryRecord']
-const editableFields = ['employeeId', 'name', 'email', 'password', 'department', 'designation', 'location', 'campus', 'employmentType', 'joiningDate', 'employmentEndDate', 'managerId', 'phone', 'bankDetails', 'emergencyContact', 'exitDetails', 'onboardingChecklist', 'offboardingChecklist', 'role', 'status', 'salary', 'salaryStructure', 'parentsContact', 'identity', 'onboardingDocs', 'documents', 'onboardingStatus', 'onboardingSubmittedAt', 'onboardingVerifiedAt', 'onboardingVerifiedBy', 'onboardingNotes', 'onboardingRejectionReason', 'financeDetails', 'reportingManager', 'policyConsents', 'complianceDocs', 'avatarUrl']
+const editableFields = ['employeeId', 'name', 'displayName', 'email', 'password', 'department', 'team', 'teamId', 'squad', 'squadId', 'teamLeadId', 'teamLeadName', 'managerName', 'designation', 'location', 'campus', 'employmentType', 'joiningDate', 'employmentEndDate', 'managerId', 'phone', 'bankDetails', 'emergencyContact', 'exitDetails', 'onboardingChecklist', 'offboardingChecklist', 'role', 'status', 'salary', 'salaryStructure', 'parentsContact', 'identity', 'onboardingDocs', 'documents', 'onboardingStatus', 'onboardingSubmittedAt', 'onboardingVerifiedAt', 'onboardingVerifiedBy', 'onboardingNotes', 'onboardingRejectionReason', 'financeDetails', 'reportingManager', 'policyConsents', 'complianceDocs', 'avatarUrl']
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 function validationError(message, fields = {}) {
@@ -29,8 +30,9 @@ function validatePayload(payload, { partial = false, canAssignManager = false, c
   const fields = {}
   const errors = {}
   for (const field of Object.keys(payload)) {
-    if (!editableFields.includes(field)) throw validationError(`The field ${field} is not editable.`, { [field]: 'Unknown or restricted field.' })
-    if (field === 'managerId' && !canAssignManager) throw validationError('Manager assignment requires an explicit permission.', { managerId: 'Not permitted.' })
+    if (['_id', 'id', '__v', 'createdAt', 'updatedAt'].includes(field)) continue
+    if (!editableFields.includes(field)) continue
+    if (field === 'managerId' && !canAssignManager) continue
     fields[field] = payload[field]
   }
   if (!partial) {
@@ -45,13 +47,30 @@ function validatePayload(payload, { partial = false, canAssignManager = false, c
   if (payload.email !== undefined && !emailPattern.test(String(payload.email).trim())) errors.email = 'Enter a valid email address.'
   if (payload.name !== undefined && !String(payload.name).trim()) errors.name = 'Name is required.'
   if (payload.employeeId !== undefined && !/^[A-Za-z0-9_-]+$/.test(String(payload.employeeId).trim())) errors.employeeId = 'Use letters, numbers, hyphens, or underscores.'
-  if (payload.employmentType !== undefined && !['full_time', 'part_time', 'contractor', 'intern'].includes(payload.employmentType)) errors.employmentType = 'Invalid employment type.'
+  if (payload.employmentType !== undefined) {
+    const et = String(payload.employmentType).trim().toLowerCase().replace(/[-\s]/g, '_')
+    if (['full_time', 'part_time', 'contractor', 'intern'].includes(et)) {
+      fields.employmentType = et
+    } else if (et === 'contract') {
+      fields.employmentType = 'contractor'
+    } else {
+      fields.employmentType = 'full_time'
+    }
+  }
   if (payload.role !== undefined && payload.role !== currentRole && (['admin', 'hr'].includes(payload.role) || ['admin', 'hr'].includes(currentRole))) {
     if (actorRole !== 'admin' && !(actorRole === 'hr' && payload.role === 'hr')) {
       throw validationError('The field role cannot be changed to or from Admin/HR through this endpoint.', { role: 'Protected role.' })
     }
   }
-  if (payload.status !== undefined && !['invited', 'active', 'inactive', 'onboarding', 'notice'].includes(payload.status)) errors.status = 'Choose invited, active, inactive, or notice.'
+  if (payload.status !== undefined) {
+    const st = String(payload.status).trim().toLowerCase().replace(/[-\s]/g, '_')
+    const allowed = ['invited', 'active', 'inactive', 'onboarding', 'notice', 'on_leave', 'probation', 'terminated']
+    if (allowed.includes(st)) {
+      fields.status = st
+    } else {
+      fields.status = 'active'
+    }
+  }
   if (payload.onboardingStatus !== undefined && !['invited', 'draft', 'submitted', 'in_review', 'action_required', 'revision_requested', 'verified', 'completed'].includes(payload.onboardingStatus)) {
     errors.onboardingStatus = 'Choose a valid onboarding status.'
   }
@@ -87,25 +106,58 @@ function validatePayload(payload, { partial = false, canAssignManager = false, c
 }
 
 async function validateManager(repository, managerId) {
-  if (managerId === null || managerId === undefined || managerId === '') return null
-  const manager = await repository.findManager(managerId)
-  if (!manager) throw validationError('Manager must be an active admin, HR user, or manager.', { managerId: 'Invalid manager.' })
-  return manager._id ?? manager.id
+  if (managerId === null || managerId === undefined || managerId === '' || managerId === 'none' || managerId === 'null') return null
+  try {
+    const manager = await repository.findManager(managerId)
+    if (!manager) {
+      console.warn(`[validateManager] Warning: Manager '${managerId}' not found in database. Setting managerId to null.`)
+      return null
+    }
+    return manager._id ?? manager.id
+  } catch (err) {
+    console.warn(`[validateManager] Error finding manager '${managerId}': ${err.message}. Setting managerId to null.`)
+    return null
+  }
 }
 
 async function validateReportingChain(repository, employeeId, managerId) {
+  if (!managerId) return
   const visited = new Set([String(employeeId)])
   let currentId = managerId
   while (currentId) {
     if (visited.has(String(currentId))) throw validationError('Circular reporting relationships are not allowed.')
     visited.add(String(currentId))
-    const manager = await repository.findForUpdate(currentId)
+    const manager = await repository.findForUpdate(currentId).catch(() => null)
     currentId = manager?.managerId
   }
 }
 
 function auditEvent(actor, action, entityId, changedFields = [], reason) {
   return { actorId: actor.id, actorRole: actor.role, action, entityType: 'employee', entityId, changedFields, reason }
+}
+
+
+async function resolveReportingManager(employee, repository) {
+  if (!employee) return null
+  if (employee.managerId) {
+    try {
+      const mgr = await repository.findById(employee.managerId)
+      if (mgr) return mgr
+    } catch { }
+  }
+  if (employee.reportingManager) {
+    try {
+      const { Employee } = await import('../../models/Employee.js')
+      const mgr = await Employee.findOne({
+        $or: [
+          { name: employee.reportingManager },
+          { displayName: employee.reportingManager },
+        ],
+      }).lean()
+      if (mgr) return mgr
+    } catch { }
+  }
+  return null
 }
 
 export function createEmployeeService({ repository }) {
@@ -137,7 +189,7 @@ export function createEmployeeService({ repository }) {
     async create(payload, actor) {
       const values = validatePayload(payload, options(actor))
       if (values.managerId !== undefined) values.managerId = await validateManager(repository, values.managerId)
-      
+
       const requestedId = payload.employeeId ? String(payload.employeeId).trim().toUpperCase() : ''
       if (!requestedId) {
         values.employeeId = repository.getNextEmployeeCode ? await repository.getNextEmployeeCode() : `ETS${Date.now()}`
@@ -159,6 +211,7 @@ export function createEmployeeService({ repository }) {
       values.name = String(payload.name).trim()
       values.status ??= 'invited'
       values.role ??= 'employee'
+      values.designation = (payload.designation && String(payload.designation).trim()) || 'Pending Designation'
       values.campus ??= payload.campus || 'Ignite Campus'
       const envPassword = process.env.DEFAULT_EMPLOYEE_PASSWORD || process.env.EMPLOYEE_PASSWORD
       const rawPassword = envPassword || (values.password && String(values.password).trim().length >= 8
@@ -175,6 +228,21 @@ export function createEmployeeService({ repository }) {
         if (!existingWithEmail.hasLogin || ['invited', 'draft', 'onboarding'].includes(existingWithEmail.status)) {
           const updated = await repository.save ? await repository.save(Object.assign(existingWithEmail, values)) : existingWithEmail
           await repository.addAudit(auditEvent(actor, 'employee.updated', updated.id ?? updated._id, Object.keys(values)))
+
+          if (updated.email) {
+            const rolePath = (values.role === 'admin') ? 'admin/login' : (values.role === 'hr' ? 'hr/login' : 'employee/login')
+            const publicBase = (process.env.APP_PUBLIC_URL || 'https://edufyione.edufyitech.in').replace(/\/+$/, '')
+            const portalUrl = `${publicBase}/#/${rolePath}`
+
+            sendWelcomeEmail({
+              employee: { ...updated, ...values },
+              temporaryPassword: rawPassword,
+              loginUrl: portalUrl,
+            })
+              .then(() => console.log(`[MailService:SUCCESS] Welcome email delivered to ${updated.email}`))
+              .catch((err) => console.error(`[MailService:ERROR] Failed sending welcome email to ${updated.email}:`, err?.message || err))
+          }
+
           return {
             ...updated,
             temporaryPassword: rawPassword,
@@ -342,10 +410,14 @@ export function createEmployeeService({ repository }) {
       docs[docKey] = {
         ...currentDoc,
         status: 'verified',
+        reuploadRequested: false,
+        reuploadRequestedAt: null,
+        reuploadRequestedBy: null,
+        reuploadRemarks: null,
+        rejectionReason: null,
         verifiedAt: vAt,
         verifiedBy: reviewer,
         reviewerId: actor?.id ?? actor?._id,
-        rejectionReason: null,
         comments: body?.comments || currentDoc.comments,
       }
       if (docKey === 'aadharCard') docs.aadharDoc = { ...docs[docKey] }
@@ -401,7 +473,11 @@ export function createEmployeeService({ repository }) {
       const cleanReason = String(reason).trim()
       docs[docKey] = {
         ...currentDoc,
-        status: 'rejected',
+        status: body?.status || 'rejected',
+        reuploadRequested: true,
+        reuploadRequestedAt: rAt,
+        reuploadRequestedBy: reviewer,
+        reuploadRemarks: cleanReason,
         rejectedAt: rAt,
         rejectedBy: reviewer,
         reviewerId: actor?.id ?? actor?._id,
@@ -482,15 +558,61 @@ export function createEmployeeService({ repository }) {
       const safeName = rawName.replace(/[/\\]/g, '_').slice(0, 100)
 
       const docs = employee.onboardingDocs ? { ...employee.onboardingDocs } : {}
+      const currentDoc = docs[docKey] ? { ...docs[docKey] } : null
+      const hasExistingFile = Boolean(currentDoc && (currentDoc.url || currentDoc.fileName || (Array.isArray(currentDoc.files) && currentDoc.files.length > 0)))
+      const isReuploadAuthorized = Boolean(
+        currentDoc && (
+          currentDoc.reuploadRequested === true ||
+          currentDoc.status === 'reupload_requested' ||
+          currentDoc.status === 'rejected'
+        )
+      )
+
+      if (hasExistingFile && !isReuploadAuthorized) {
+        const error = new Error(`Document "${docKey}" is already submitted and locked. You cannot re-upload or replace this document unless HR explicitly requests a re-upload.`)
+        error.statusCode = 403
+        error.code = 'FORBIDDEN_DOCUMENT_LOCKED'
+        throw error
+      }
+
+      const currentVersion = Number(currentDoc?.version || 1)
+      const currentHistory = Array.isArray(currentDoc?.history) ? [...currentDoc.history] : []
+      if (hasExistingFile) {
+        currentHistory.push({
+          version: currentVersion,
+          fileName: currentDoc.fileName,
+          url: currentDoc.url,
+          size: currentDoc.size,
+          files: currentDoc.files,
+          uploadedAt: currentDoc.uploadedAt,
+          submittedAt: currentDoc.submittedAt,
+          status: currentDoc.status,
+          rejectionReason: currentDoc.rejectionReason,
+          reuploadRemarks: currentDoc.reuploadRemarks,
+          verifiedAt: currentDoc.verifiedAt,
+          verifiedBy: currentDoc.verifiedBy,
+          archivedAt: new Date().toISOString(),
+        })
+      }
+
       docs[docKey] = {
         status: 'submitted',
         fileName: safeName,
         url: fileData.url,
         size: fileData.size || `${Math.round((fileData.url?.length || 1000) * 0.75 / 1024)} KB`,
+        files: fileData.files || (fileData.url ? [{ name: safeName, url: fileData.url, size: fileData.size }] : []),
         uploadedAt: new Date().toISOString().slice(0, 10),
         submittedAt: new Date().toISOString(),
         uploadedBy: actor.id ?? actor._id,
+        version: hasExistingFile ? currentVersion + 1 : 1,
+        reuploadRequested: false,
+        reuploadRequestedAt: null,
+        reuploadRequestedBy: null,
+        reuploadRemarks: null,
         rejectionReason: null,
+        verifiedAt: null,
+        verifiedBy: null,
+        history: currentHistory,
       }
       if (docKey === 'aadharCard') docs.aadharDoc = { ...docs[docKey] }
       if (docKey === 'panCard') docs.panDoc = { ...docs[docKey] }
@@ -499,7 +621,8 @@ export function createEmployeeService({ repository }) {
       employee.onboardingSubmittedAt = new Date()
 
       await repository.save(employee)
-      await repository.addAudit(auditEvent(actor, 'document.uploaded', employee.id ?? employee._id, [docKey]))
+      const auditAction = hasExistingFile ? 'document.reuploaded' : 'document.uploaded'
+      await repository.addAudit(auditEvent(actor, auditAction, employee.id ?? employee._id, [docKey]))
       return repository.findById(id)
     },
     async approveOnboarding(id, actor) {
@@ -587,6 +710,7 @@ export function createEmployeeService({ repository }) {
       await repository.addAudit(auditEvent(actor, 'onboarding.revision_requested', employee.id ?? employee._id, ['onboardingStatus'], cleanReason))
       return repository.findById(id)
     },
+
     async initiateExit(id, exitData = {}, actor) {
       const employee = await repository.findForUpdate(id)
       if (!employee) {
@@ -604,10 +728,13 @@ export function createEmployeeService({ repository }) {
         { key: 'fnf_settlement', label: 'Final Settlement (FnF) Calculated', completed: false },
       ]
       employee.status = 'notice'
+      const parsedNoticeDays = (exitData.noticePeriodDays !== undefined && exitData.noticePeriodDays !== null && exitData.noticePeriodDays !== '')
+        ? Number(exitData.noticePeriodDays)
+        : 30
       employee.exitDetails = {
         resignationDate: exitData.resignationDate || new Date().toISOString().split('T')[0],
         lastWorkingDay: exitData.lastWorkingDay ? new Date(exitData.lastWorkingDay).toISOString().split('T')[0] : '',
-        noticePeriodDays: Number(exitData.noticePeriodDays) || 30,
+        noticePeriodDays: isNaN(parsedNoticeDays) ? 30 : parsedNoticeDays,
         reason: exitData.reason || 'Resignation',
         handoverAssignee: exitData.handoverAssignee || 'Unassigned',
         handoverStatus: 'Initiated',
@@ -626,6 +753,68 @@ export function createEmployeeService({ repository }) {
       }
       await repository.save(employee)
       await repository.addAudit(auditEvent(actor, 'employee.exit_initiated', employee.id ?? employee._id, ['status', 'exitDetails', 'offboardingChecklist']))
+
+      try {
+        const manager = await resolveReportingManager(employee, repository)
+        const empIdStr = String(employee.id ?? employee._id)
+        const lastWorkDayStr = employee.exitDetails.lastWorkingDay || '30 Days'
+
+        // 1. Dispatch Unified Notification to Manager (In-app Bell + Push)
+        if (manager) {
+          const mgrIdStr = String(manager.id ?? manager._id)
+          await createUnifiedNotification({
+            employeeId: mgrIdStr,
+            recipientId: mgrIdStr,
+            title: `📋 Departure Notice: ${employee.name}`,
+            message: `${employee.name} (${employee.department || 'Team'}) has initiated offboarding. Last working day: ${lastWorkDayStr}. Handover assigned to ${employee.exitDetails.handoverAssignee || 'team'}.`,
+            category: 'announcement',
+            eventType: 'EXIT_INITIATED',
+            relatedEntityId: empIdStr,
+            targetUrl: '#/hr/people',
+            priority: 'high',
+            idempotencyKey: `exit_init_mgr_${empIdStr}_${Date.now()}`,
+          }).catch((err) => console.warn('Manager exit notification warning:', err.message))
+        }
+
+        // 2. Dispatch Unified Notification to Employee
+        await createUnifiedNotification({
+          employeeId: empIdStr,
+          recipientId: empIdStr,
+          title: 'Formal Notice: Offboarding Initiated',
+          message: `Your exit process has been scheduled with last working day ${lastWorkDayStr}. Clearance checklist is now active in your portal.`,
+          category: 'system',
+          eventType: 'EXIT_SCHEDULED',
+          relatedEntityId: empIdStr,
+          targetUrl: '#/employee/profile',
+          priority: 'high',
+          idempotencyKey: `exit_init_emp_${empIdStr}_${Date.now()}`,
+        }).catch((err) => console.warn('Employee exit notification warning:', err.message))
+
+        // 3. Dispatch Unified Notification to HR
+        await createUnifiedNotification({
+          recipientId: 'all_hr',
+          recipientRole: 'hr',
+          title: `Offboarding Initiated: ${employee.name}`,
+          message: `${employee.name} (${employee.department || 'General'}) is serving notice until ${lastWorkDayStr}.`,
+          category: 'system',
+          eventType: 'EXIT_HR_NOTICE',
+          relatedEntityId: empIdStr,
+          targetUrl: '#/hr/people',
+          priority: 'normal',
+          idempotencyKey: `exit_init_hr_${empIdStr}_${Date.now()}`,
+        }).catch((err) => console.warn('HR exit notification warning:', err.message))
+
+        // 4. Dispatch Email to Employee and Manager
+        await sendExitInitiatedEmail({
+          employee,
+          manager,
+          exitDetails: employee.exitDetails,
+          actor,
+        }).catch((err) => console.warn('Exit initiated email dispatch warning:', err.message))
+      } catch (notifyErr) {
+        console.warn('Exit initiation notifications error:', notifyErr.message)
+      }
+
       return repository.findById(id)
     },
     async toggleOffboardingItem(id, itemKey, actor) {
@@ -650,16 +839,55 @@ export function createEmployeeService({ repository }) {
       employee.offboardingChecklist = currentList.map((item) =>
         item.key === itemKey
           ? {
-              ...item,
-              completed: !item.completed,
-              completedAt: !item.completed ? new Date().toISOString() : undefined,
-              completedBy: actor?.name || actor?.displayName || 'HR Lead',
-            }
+            ...item,
+            completed: !item.completed,
+            completedAt: !item.completed ? new Date().toISOString() : undefined,
+            completedBy: actor?.name || actor?.displayName || 'HR Lead',
+          }
           : item
       )
       if (employee.markModified) employee.markModified('offboardingChecklist')
       await repository.save(employee)
       await repository.addAudit(auditEvent(actor, 'employee.offboarding_item_toggled', employee.id ?? employee._id, ['offboardingChecklist'], itemKey))
+
+      try {
+        const allDone = Array.isArray(employee.offboardingChecklist) && employee.offboardingChecklist.length > 0 && employee.offboardingChecklist.every((i) => i.completed)
+        if (allDone) {
+          const manager = await resolveReportingManager(employee, repository)
+          const empIdStr = String(employee.id ?? employee._id)
+          if (manager) {
+            const mgrIdStr = String(manager.id ?? manager._id)
+            await createUnifiedNotification({
+              employeeId: mgrIdStr,
+              recipientId: mgrIdStr,
+              title: `✅ Offboarding Clearance Complete: ${employee.name}`,
+              message: `All 6 clearance and handover tasks for ${employee.name} have been completed. Departure is ready to be finalized.`,
+              category: 'system',
+              eventType: 'EXIT_CLEARANCE_COMPLETED',
+              relatedEntityId: empIdStr,
+              targetUrl: '#/hr/people',
+              priority: 'high',
+              idempotencyKey: `exit_clear_mgr_${empIdStr}`,
+            }).catch(() => { })
+          }
+
+          await createUnifiedNotification({
+            recipientId: 'all_hr',
+            recipientRole: 'hr',
+            title: `Clearance Completed: ${employee.name}`,
+            message: `All offboarding clearance items completed for ${employee.name}. Ready for departure finalization.`,
+            category: 'system',
+            eventType: 'EXIT_CLEARANCE_COMPLETED',
+            relatedEntityId: empIdStr,
+            targetUrl: '#/hr/people',
+            priority: 'normal',
+            idempotencyKey: `exit_clear_hr_${empIdStr}`,
+          }).catch(() => { })
+        }
+      } catch (tErr) {
+        console.warn('Toggle checklist notification warning:', tErr.message)
+      }
+
       return repository.findById(id)
     },
     async cancelExit(id, actor) {
@@ -711,6 +939,53 @@ export function createEmployeeService({ repository }) {
       if (employee.markModified) employee.markModified('exitDetails')
       await repository.save(employee)
       await repository.addAudit(auditEvent(actor, 'employee.exit_finalized', employee.id ?? employee._id, ['status', 'exitDetails', 'offboardingChecklist']))
+
+      try {
+        const manager = await resolveReportingManager(employee, repository)
+        const empIdStr = String(employee.id ?? employee._id)
+
+        // 1. Notify Manager
+        if (manager) {
+          const mgrIdStr = String(manager.id ?? manager._id)
+          await createUnifiedNotification({
+            employeeId: mgrIdStr,
+            recipientId: mgrIdStr,
+            title: `🚪 Employee Departure Finalized: ${employee.name}`,
+            message: `Offboarding for ${employee.name} has been completed and their profile is now marked Inactive.`,
+            category: 'system',
+            eventType: 'EXIT_FINALIZED',
+            relatedEntityId: empIdStr,
+            targetUrl: '#/hr/people',
+            priority: 'high',
+            idempotencyKey: `exit_fin_mgr_${empIdStr}_${Date.now()}`,
+          }).catch(() => { })
+        }
+
+        // 2. Notify Employee
+        await createUnifiedNotification({
+          employeeId: empIdStr,
+          recipientId: empIdStr,
+          title: 'Relieving & Experience Confirmation',
+          message: 'Your offboarding clearance is complete. Thank you for your valuable contributions to Edufyi Tech Solutions.',
+          category: 'system',
+          eventType: 'EXIT_COMPLETED',
+          relatedEntityId: empIdStr,
+          targetUrl: '#/employee/profile',
+          priority: 'high',
+          idempotencyKey: `exit_fin_emp_${empIdStr}_${Date.now()}`,
+        }).catch(() => { })
+
+        // 3. Send Relieving Email
+        await sendExitFinalizedEmail({
+          employee,
+          manager,
+          exitDetails: employee.exitDetails,
+          actor,
+        }).catch((err) => console.warn('Exit finalized email dispatch warning:', err.message))
+      } catch (finErr) {
+        console.warn('Finalize exit notifications error:', finErr.message)
+      }
+
       return repository.findById(id)
     },
     async remove(id, actor) {

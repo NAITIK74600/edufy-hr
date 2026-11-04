@@ -238,19 +238,24 @@ async function context(employee, month) {
       }
     }
 
-    // 3. Process late logins LOP: every 3 late logins = 0.5 LOP day, 6 late logins = 1.0 LOP day
+    // 3. Process combined late logins & early logouts LOP:
+    // Rule: Every 3 infractions (late login or early logout, combined) = 0.5 LOP day
     const lateLoginsCount = attendance.filter((r) => r.isLate || r.status === 'late').length
-    const lateLopDays = Math.floor(lateLoginsCount / 3) * 0.5
-    totalLopDays += lateLopDays
+    const earlyLogoutDays = attendance.filter((r) => r.isEarlyLogout || r.status === 'early-logout').length
+    const combinedInfractions = lateLoginsCount + earlyLogoutDays
+    const lateEarlyLopDays = Math.floor(combinedInfractions / 3) * 0.5
+    totalLopDays += lateEarlyLopDays
 
     return {
       attendanceDays: attendance.length,
       absentDays: attendance.filter((record) => record.status === 'absent').length,
       halfDays: attendance.filter((record) => record.status === 'half-day').length,
       lateCount: lateLoginsCount,
-      lateLopDays,
+      earlyLogoutDays,
+      combinedInfractions,
+      lateLopDays: lateEarlyLopDays,
+      lateEarlyLopDays,
       lopDays: totalLopDays,
-      earlyLogoutDays: attendance.filter((record) => record.status === 'early-logout' || record.isEarlyLogout).length,
       approvedLeave: leave.map(({ leaveType, startDate, endDate, units, isDoubleLop, doubleLopDays }) => ({
         leaveType,
         startDate,

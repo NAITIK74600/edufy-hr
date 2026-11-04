@@ -6,6 +6,7 @@ import { AttendanceSettings } from '../../models/AttendanceSettings.js'
 import { Notification } from '../../models/Notification.js'
 import { hasPermission } from '../../auth/permissions.js'
 import { ensureConnected } from '../leave/leave.repository.js'
+import { invalidateEmployeeListCache } from '../employees/employee.repository.js'
 import { sendSupportTicketEmail, sendAnnouncementEmailBroadcast, getMailConfig } from '../../services/mail.service.js'
 
 const permissions = { announcements: 'announcements.read', tasks: 'tasks.read', courses: 'training.read', enrollments: 'training.read', tickets: 'helpdesk.read', expenses: 'reports.read', dailyReports: 'reports.read', kudos: 'performance.read', performanceGoals: 'performance.read', performanceReviews: 'performance.read', holidays: 'holidays.read', documents: 'documents.read', requisitions: 'recruitment.read', notifications: 'dashboard.read', roles: 'dashboard.read', departments: 'dashboard.read', teams: 'dashboard.read' }
@@ -268,7 +269,65 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
       const employees = references.length ? await Employee.find({ _id: { $in: references } }).select('name employeeId department').lean() : []
       people = new Map(employees.map((employee) => [String(employee._id), employee]))
     }
+    if (resource === 'teams') {
+      let teamDocs = await models.teams.find(query).sort({ createdAt: -1 }).lean()
+
+      const seenTeams = new Set()
+      teamDocs = teamDocs.filter((t) => {
+        const k = String(t.teamId || t.name || '').toLowerCase().trim()
+        if (seenTeams.has(k)) return false
+        seenTeams.add(k)
+        return true
+      })
+
+      const allEmps = await Employee.find({ status: { $ne: 'terminated' } })
+        .select('_id name employeeId team teamId squad squadId department role designation')
+        .lean()
+
+      return teamDocs.map((t) => {
+        const teamKey = String(t.teamId || t.id || t._id || '').toLowerCase()
+        const teamNameKey = String(t.name || '').toLowerCase()
+        const teamSlug = `team-${teamNameKey.replace(/[^a-z0-9]/g, '_')}`
+        const members = allEmps.filter((e) => {
+          const eTeam = String(e.team || '').toLowerCase()
+          const eTeamId = String(e.teamId || '').toLowerCase()
+          const eSquad = String(e.squad || '').toLowerCase()
+          const eSquadId = String(e.squadId || '').toLowerCase()
+          return (
+            (eTeamId && (eTeamId === teamKey || eTeamId === teamSlug)) ||
+            (eTeam && (eTeam === teamNameKey || eTeam === teamKey)) ||
+            (eSquadId && (eSquadId === teamKey || eSquadId === teamSlug)) ||
+            (eSquad && (eSquad === teamNameKey || eSquad === teamKey))
+          )
+        })
+        return {
+          ...serialize('teams', t, actor, people),
+          memberCount: members.length,
+          members: members.map((m) => ({
+            id: String(m._id),
+            _id: String(m._id),
+            employeeId: m.employeeId,
+            name: m.name,
+            role: m.role,
+            designation: m.designation,
+            department: m.department,
+          })),
+        }
+      })
+    }
     const result = records.map((record) => serialize(resource, record, actor, people))
+    if (resource === 'roles') {
+      const seenRoles = new Set()
+      const dedupedRoles = []
+      for (const r of result) {
+        const k = String(r.roleId || r.id || r.name || '').toLowerCase().trim()
+        if (k && !seenRoles.has(k)) {
+          seenRoles.add(k)
+          dedupedRoles.push(r)
+        }
+      }
+      return dedupedRoles
+    }
     if (resource === 'courses') {
       const enrollments = await models.enrollments.find({ ownerId: id(actor) }).lean()
       return result.map((course) => {
@@ -287,9 +346,145 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
       const people = await Employee.find().select('name employeeId department status').lean()
       const byId = new Map(people.map((employee) => [String(employee._id), employee]))
       const entries = await Promise.all(Object.keys(models).map(async (resource) => [resource, await list(req.auth.user, resource, byId)]))
+      invalidateEmployeeListCache()
       res.json({ success: true, data: { ...Object.fromEntries(entries), workspacePeople: people.filter((record) => record.status === 'active').map((record) => ({ id: String(record._id), name: record.name, employeeId: record.employeeId })) } })
     } catch (error) { next(error) }
   })
+  // Authoritative Squad / Team Member Assignment Endpoint
+  const handleAssignTeamMembers = async (req, res, next) => {
+    try {
+      const actor = req.auth.user
+      if (!management(actor)) throw fail('HR or administrator access is required to assign squad members.', 403)
+      const teamIdentifier = req.params.id || req.body.teamId || req.body.id
+      if (!teamIdentifier) throw fail('Team identifier is required.', 400)
+      const { employeeIds = [], department, teamLeadId, managerId } = req.body
+
+      const escapedId = String(teamIdentifier).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      let query = mongoose.isValidObjectId(teamIdentifier)
+        ? { $or: [{ _id: teamIdentifier }, { teamId: teamIdentifier }] }
+        : { $or: [{ teamId: teamIdentifier }, { name: new RegExp(`^${escapedId}$`, 'i') }] }
+
+      let team = await models.teams.findOne(query)
+      const teamName = team?.name || req.body.name || teamIdentifier
+      const cleanTeamId = team?.teamId || (team?._id ? String(team._id) : `team-${teamName.toLowerCase().replace(/[^a-z0-9]/g, '_')}`)
+      const teamDept = team?.department || department || 'Revenue Growth'
+
+      if (!team) {
+        team = await models.teams.create({
+          ownerId: id(actor),
+          teamId: cleanTeamId,
+          name: teamName,
+          department: teamDept,
+          teamLeadId: teamLeadId || null,
+          managerId: managerId || null,
+          description: `${teamName} operational squad`,
+        })
+      }
+
+      const strIds = employeeIds.map(String).filter(Boolean)
+      const validObjIds = strIds.filter((sid) => mongoose.isValidObjectId(sid))
+      const codeList = Array.from(new Set([
+        ...strIds,
+        ...strIds.map((sid) => sid.toUpperCase()),
+        ...strIds.map((sid) => sid.toLowerCase()),
+      ]))
+
+      // 1. Assign selected employees to this team
+      if (strIds.length > 0) {
+        const assignFilter = {
+          $or: [
+            ...(validObjIds.length ? [{ _id: { $in: validObjIds } }] : []),
+            { employeeId: { $in: codeList } },
+            { email: { $in: strIds.map((s) => s.toLowerCase()) } },
+          ],
+        }
+        const assignUpdates = {
+          team: teamName,
+          teamId: cleanTeamId,
+          squad: teamName,
+          squadId: cleanTeamId,
+        }
+        if (teamDept) assignUpdates.department = teamDept
+        if (team?.teamLeadId) {
+          assignUpdates.teamLeadId = team.teamLeadId
+          assignUpdates.teamLeadName = team.teamLeadName || ''
+        }
+        if (team?.managerId) {
+          if (mongoose.isValidObjectId(team.managerId)) {
+            assignUpdates.managerId = new mongoose.Types.ObjectId(team.managerId)
+          } else {
+            const realMgr = await Employee.findOne({
+              $or: [
+                { employeeId: String(team.managerId).toUpperCase() },
+                { email: String(team.managerId).toLowerCase() },
+              ],
+            }).select('_id name displayName').lean()
+            if (realMgr) {
+              assignUpdates.managerId = realMgr._id
+              if (!assignUpdates.managerName) assignUpdates.managerName = realMgr.displayName || realMgr.name
+            }
+          }
+          if (team.managerName && !assignUpdates.managerName) {
+            assignUpdates.managerName = team.managerName
+          }
+        }
+        await Employee.updateMany(assignFilter, { $set: assignUpdates })
+      }
+
+      // 2. Unassign any employees who were previously in this team but deselected
+      const escapedTeamName = teamName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      const unassignFilter = {
+        $or: [
+          { teamId: cleanTeamId },
+          { squadId: cleanTeamId },
+          { team: new RegExp(`^${escapedTeamName}$`, 'i') },
+          { squad: new RegExp(`^${escapedTeamName}$`, 'i') },
+        ],
+      }
+      if (strIds.length > 0) {
+        unassignFilter.$nor = [
+          ...(validObjIds.length ? [{ _id: { $in: validObjIds } }] : []),
+          { employeeId: { $in: codeList } },
+        ]
+      }
+      await Employee.updateMany(unassignFilter, {
+        $set: { team: '', teamId: '', squad: '', squadId: '' },
+      })
+
+      invalidateEmployeeListCache()
+
+      // Count fresh roster directly from DB
+      const assignedCount = await Employee.countDocuments({
+        $or: [
+          { teamId: cleanTeamId },
+          { squadId: cleanTeamId },
+          { team: new RegExp(`^${escapedTeamName}$`, 'i') },
+          { squad: new RegExp(`^${escapedTeamName}$`, 'i') },
+        ],
+        status: { $ne: 'terminated' },
+      })
+
+      invalidateEmployeeListCache()
+      res.json({
+        success: true,
+        data: {
+          id: cleanTeamId,
+          teamId: cleanTeamId,
+          name: teamName,
+          department: teamDept,
+          assignedCount,
+        },
+      })
+    } catch (error) { next(error) }
+  }
+
+  router.post('/teams/:id/assign', handleAssignTeamMembers)
+  router.put('/teams/:id/assign', handleAssignTeamMembers)
+  router.post('/teams/:id/members', handleAssignTeamMembers)
+  router.put('/teams/:id/members', handleAssignTeamMembers)
+  router.post('/teams/assign', handleAssignTeamMembers)
+  router.put('/teams/assign', handleAssignTeamMembers)
+
   router.param('resource', (req, res, next, resource) => {
     if (!Object.hasOwn(models, resource)) return next(fail('Unknown workspace resource.', 404))
     if (!access(req.auth.user, resource)) return next(fail('Workspace access is not permitted.', 403))
@@ -509,24 +704,63 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
             isCustom: body.isCustom !== undefined ? Boolean(body.isCustom) : true,
           }
           break
-        case 'teams':
+        case 'teams': {
           allowedBody(body, ['teamId', 'id', 'name', 'department', 'managerId', 'managerName', 'teamLeadId', 'teamLeadName', 'description', 'flaggedForVerification', 'verificationNote'])
+          let mgrName = string(body, 'managerName', false, 100) || ''
+          let tlName = string(body, 'teamLeadName', false, 100) || ''
+          const mgrId = string(body, 'managerId', false, 100) || null
+          const tlId = string(body, 'teamLeadId', false, 100) || null
+          if (mgrId && !mgrName) {
+            try {
+              const mDoc = await Employee.findOne(mongoose.isValidObjectId(mgrId) ? { _id: mgrId } : { employeeId: mgrId }).select('name').lean()
+              if (mDoc) mgrName = mDoc.name
+            } catch { }
+          }
+          if (tlId && !tlName) {
+            try {
+              const tlDoc = await Employee.findOne(mongoose.isValidObjectId(tlId) ? { _id: tlId } : { employeeId: tlId }).select('name').lean()
+              if (tlDoc) tlName = tlDoc.name
+            } catch { }
+          }
           values = {
             ...values,
             teamId: string(body, 'teamId', false, 100) || string(body, 'id', false, 100) || `team-${string(body, 'name', true, 100).toLowerCase().replace(/[^a-z0-9]/g, '_')}`,
             name: string(body, 'name', true, 100),
             department: string(body, 'department', false, 100) || 'Revenue Growth',
-            managerId: string(body, 'managerId', false, 100) || null,
-            managerName: string(body, 'managerName', false, 100) || '',
-            teamLeadId: string(body, 'teamLeadId', false, 100) || null,
-            teamLeadName: string(body, 'teamLeadName', false, 100) || '',
+            managerId: mgrId,
+            managerName: mgrName,
+            teamLeadId: tlId,
+            teamLeadName: tlName,
             description: string(body, 'description', false, 1000) || '',
             flaggedForVerification: Boolean(body.flaggedForVerification),
             verificationNote: string(body, 'verificationNote', false, 500) || '',
           }
+          invalidateEmployeeListCache()
           break
+        }
       }
-      const record = await models[resource].create(values)
+      let record
+      if (resource === 'roles') {
+        record = await models.roles.findOneAndUpdate(
+          { roleId: values.roleId },
+          { $set: values },
+          { upsert: true, returnDocument: 'after' }
+        )
+      } else if (resource === 'teams') {
+        record = await models.teams.findOneAndUpdate(
+          { $or: [{ teamId: values.teamId }, { name: values.name }] },
+          { $set: values },
+          { upsert: true, returnDocument: 'after' }
+        )
+      } else if (resource === 'departments') {
+        record = await models.departments.findOneAndUpdate(
+          { $or: [{ deptId: values.deptId }, { name: values.name }] },
+          { $set: values },
+          { upsert: true, returnDocument: 'after' }
+        )
+      } else {
+        record = await models[resource].create(values)
+      }
 
       if (resource === 'expenses') {
         const formattedAmt = Number(values.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })
@@ -716,6 +950,7 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
       const targetQuery = filter(req.auth.user, 'notifications')
       await models.notifications.updateMany(targetQuery, { $set: { read: true } })
       if (mongoose.isValidObjectId(actorId)) await Notification.updateMany({ recipientId: actorId, readAt: null }, { $set: { readAt: new Date() } })
+      invalidateEmployeeListCache()
       res.json({ success: true, data: { read: true } })
     } catch (error) { next(error) }
   })
@@ -725,6 +960,7 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
       const targetQuery = filter(req.auth.user, 'notifications')
       await models.notifications.deleteMany(targetQuery)
       if (mongoose.isValidObjectId(actorId)) await Notification.deleteMany({ recipientId: actorId })
+      invalidateEmployeeListCache()
       res.json({ success: true, data: { cleared: true } })
     } catch (error) { next(error) }
   })
@@ -734,10 +970,11 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
       const targetQuery = filter(req.auth.user, 'notifications')
       await models.notifications.deleteMany(targetQuery)
       if (mongoose.isValidObjectId(actorId)) await Notification.deleteMany({ recipientId: actorId })
+      invalidateEmployeeListCache()
       res.json({ success: true, data: { cleared: true } })
     } catch (error) { next(error) }
   })
-  router.patch('/:resource/:id', async (req, res, next) => {
+  const handleUpdateResource = async (req, res, next) => {
     try {
       const { resource, id: recordId } = req.params
       const actor = req.auth.user
@@ -767,10 +1004,32 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
         update = { $set: {} }
         if (req.body.name !== undefined) update.$set.name = string(req.body, 'name', true, 100)
         if (req.body.department !== undefined) update.$set.department = string(req.body, 'department', false, 100)
-        if (req.body.managerId !== undefined) update.$set.managerId = req.body.managerId ? string(req.body, 'managerId', false, 100) : null
-        if (req.body.managerName !== undefined) update.$set.managerName = string(req.body, 'managerName', false, 100)
-        if (req.body.teamLeadId !== undefined) update.$set.teamLeadId = req.body.teamLeadId ? string(req.body, 'teamLeadId', false, 100) : null
-        if (req.body.teamLeadName !== undefined) update.$set.teamLeadName = string(req.body, 'teamLeadName', false, 100)
+        if (req.body.managerId !== undefined) {
+          update.$set.managerId = req.body.managerId ? string(req.body, 'managerId', false, 100) : null
+          let mName = string(req.body, 'managerName', false, 100) || ''
+          if (update.$set.managerId && !mName) {
+            try {
+              const mDoc = await Employee.findOne(mongoose.isValidObjectId(update.$set.managerId) ? { _id: update.$set.managerId } : { employeeId: update.$set.managerId }).select('name').lean()
+              if (mDoc) mName = mDoc.name
+            } catch { }
+          }
+          update.$set.managerName = mName
+        } else if (req.body.managerName !== undefined) {
+          update.$set.managerName = string(req.body, 'managerName', false, 100)
+        }
+        if (req.body.teamLeadId !== undefined) {
+          update.$set.teamLeadId = req.body.teamLeadId ? string(req.body, 'teamLeadId', false, 100) : null
+          let tName = string(req.body, 'teamLeadName', false, 100) || ''
+          if (update.$set.teamLeadId && !tName) {
+            try {
+              const tDoc = await Employee.findOne(mongoose.isValidObjectId(update.$set.teamLeadId) ? { _id: update.$set.teamLeadId } : { employeeId: update.$set.teamLeadId }).select('name').lean()
+              if (tDoc) tName = tDoc.name
+            } catch { }
+          }
+          update.$set.teamLeadName = tName
+        } else if (req.body.teamLeadName !== undefined) {
+          update.$set.teamLeadName = string(req.body, 'teamLeadName', false, 100)
+        }
         if (req.body.description !== undefined) update.$set.description = string(req.body, 'description', false, 1000)
         if (req.body.flaggedForVerification !== undefined) update.$set.flaggedForVerification = Boolean(req.body.flaggedForVerification)
         if (req.body.verificationNote !== undefined) update.$set.verificationNote = string(req.body, 'verificationNote', false, 500)
@@ -961,6 +1220,41 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
           verificationNote: req.body.verificationNote || '',
         })
         record = createdTeam.toObject()
+      }
+      if (resource === 'teams' && record) {
+        const newTeamName = update.$set?.name || record.name
+        const newLeadId = update.$set?.teamLeadId !== undefined ? update.$set.teamLeadId : record.teamLeadId
+        const newLeadName = update.$set?.teamLeadName !== undefined ? update.$set.teamLeadName : record.teamLeadName
+        const newMgrId = update.$set?.managerId !== undefined ? update.$set.managerId : record.managerId
+        const newMgrName = update.$set?.managerName !== undefined ? update.$set.managerName : record.managerName
+        const teamIdentifier = record.teamId || recordId
+
+        const empFilter = {
+          $or: [
+            { teamId: teamIdentifier },
+            { squadId: teamIdentifier },
+            { team: record.name },
+            { squad: record.name },
+          ],
+        }
+        const empUpdate = {
+          $set: {
+            team: newTeamName,
+            squad: newTeamName,
+            teamId: teamIdentifier,
+            squadId: teamIdentifier,
+          },
+        }
+        if (newLeadId) {
+          empUpdate.$set.teamLeadId = newLeadId
+          empUpdate.$set.teamLeadName = newLeadName || ''
+        }
+        if (newMgrId) {
+          empUpdate.$set.managerId = newMgrId
+          empUpdate.$set.managerName = newMgrName || ''
+        }
+        await Employee.updateMany(empFilter, empUpdate)
+        invalidateEmployeeListCache()
       }
       if (resource === 'departments' && record) {
         const newName = update.$set?.name || record.name
@@ -1158,9 +1452,12 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
         }
       }
       if (resource === 'enrollments') await models.notifications.create({ ownerId: record.ownerId, title: 'Training progress saved', message: `Your self-reported course progress is ${record.progress}%.`, type: 'training', read: false })
+      invalidateEmployeeListCache()
       res.json({ success: true, data: serialize(resource, record, actor) })
     } catch (error) { next(error) }
-  })
+  }
+  router.patch('/:resource/:id', handleUpdateResource)
+  router.put('/:resource/:id', handleUpdateResource)
   router.delete('/:resource/:id', async (req, res, next) => {
     try {
       const { resource, id: recordId } = req.params
@@ -1235,13 +1532,19 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
         const result = await models.teams.deleteOne(deleteQuery)
         if (!result.deletedCount) throw fail('Record not found.', 404)
         const teamName = teamToDelete?.name
-        if (teamName) {
-          const escaped = teamName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-          await Employee.updateMany(
-            { team: { $regex: new RegExp(`^${escaped}$`, 'i') } },
-            { $set: { team: '', teamId: '' } }
-          )
+        const teamId = teamToDelete?.teamId || recordId
+        const escaped = (teamName || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+        const clearFilter = {
+          $or: [
+            { teamId },
+            { squadId: teamId },
+            ...(escaped ? [{ team: new RegExp(`^${escaped}$`, 'i') }, { squad: new RegExp(`^${escaped}$`, 'i') }] : []),
+          ],
         }
+        await Employee.updateMany(clearFilter, {
+          $set: { team: '', teamId: '', squad: '', squadId: '' },
+        })
+        invalidateEmployeeListCache()
         return res.json({ success: true, data: { id: recordId } })
       } else {
         if (!mongoose.isValidObjectId(recordId)) throw fail('Invalid record identifier.')
@@ -1250,6 +1553,7 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
       const result = await models[resource].deleteOne(deleteQuery)
       if (!result.deletedCount) throw fail('Record not found.', 404)
       if (resource === 'courses') await models.enrollments.deleteMany({ courseId: recordId })
+      invalidateEmployeeListCache()
       res.json({ success: true, data: { id: recordId } })
     } catch (error) { next(error) }
   })

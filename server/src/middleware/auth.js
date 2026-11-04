@@ -16,7 +16,8 @@ export function createAuthMiddleware({ userStore, jwtSecret, issuer = 'edufyi-hr
   }
   function authenticate(request, response, next) {
     const authorization = request.get('authorization')
-    const token = authorization?.startsWith('Bearer ') ? authorization.slice(7) : null
+    const isEventStream = request.path === '/events' || request.originalUrl?.includes('/events')
+    const token = authorization?.startsWith('Bearer ') ? authorization.slice(7) : (isEventStream ? (request.query?.token || null) : null)
     if (!token) return response.status(401).json({ success: false, error: { code: 'AUTH_REQUIRED', message: 'Authentication is required.' } })
 
     try {

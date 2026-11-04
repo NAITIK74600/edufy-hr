@@ -9,15 +9,62 @@ import { PayrollRecord } from '../../models/PayrollRecord.js'
 import { Notification } from '../../models/Notification.js'
 import { workspaceModels } from '../../models/Workspace.js'
 
+const moduleListCaches = new Set()
+export function invalidateEmployeeListCache() {
+  for (const cache of moduleListCaches) {
+    try { cache.clear() } catch { }
+  }
+}
+
 function toPublicEmployee(employee) {
   if (!employee) return null
   const source = employee.toObject ? employee.toObject() : { ...employee }
   source.id = String(source._id ?? source.id)
   source.hasLogin = Boolean(source.passwordHash)
+  source.team = source.team || source.squad || ''
+  source.teamId = source.teamId || source.squadId || ''
+  source.squad = source.squad || source.team || ''
+  source.squadId = source.squadId || source.teamId || ''
   delete source.passwordHash
   delete source.authVersion
   if (source.documents) source.documents = source.documents.map(({ fileKey, ...document }) => document)
   return source
+}
+
+function sanitizeEmployeeForViewer(employee, viewer = null) {
+  const publicData = toPublicEmployee(employee)
+  if (!publicData || !viewer) return publicData
+
+  const viewerId = String(viewer.id || viewer._id || '')
+  const viewerEmpId = String(viewer.employeeId || '').toUpperCase()
+  const targetId = String(publicData.id || publicData._id || '')
+  const targetEmpId = String(publicData.employeeId || '').toUpperCase()
+
+  const isSelf = (viewerId && viewerId === targetId) || (viewerEmpId && viewerEmpId === targetEmpId)
+  const isPrivileged = Boolean(
+    viewer.role === 'admin' ||
+    viewer.role === 'hr' ||
+    viewer.role === 'director' ||
+    viewer.role === 'managing_director' ||
+    (Array.isArray(viewer.permissions) && (
+      viewer.permissions.includes('*') ||
+      viewer.permissions.includes('employees.write') ||
+      viewer.permissions.includes('payroll.read') ||
+      viewer.permissions.includes('payroll.write')
+    ))
+  )
+
+  if (!isSelf && !isPrivileged) {
+    delete publicData.salary
+    delete publicData.salaryStructure
+    delete publicData.bankDetails
+    delete publicData.identity
+    delete publicData.financeDetails
+    delete publicData.onboardingDocs
+    delete publicData.complianceDocs
+  }
+
+  return publicData
 }
 
 function buildFilter(filters = {}) {
@@ -69,6 +116,7 @@ function ensureConnected() {
 
 export function createMongoEmployeeRepository() {
   const listCache = new Map()
+  moduleListCaches.add(listCache)
   const LIST_TTL_MS = 10000 // 10-second shared employee-list cache
 
   function clearCache() {
@@ -150,15 +198,29 @@ export function createMongoEmployeeRepository() {
     async findManager(id) {
       ensureConnected()
       if (!id) return null
-      const managerRoles = [
-        'admin', 'hr', 'manager', 'director', 'team_lead', 'team_leader',
-        'vertical_head', 'managing_director', 'co_founder', 'revenue_growth_manager',
-        'senior_manager', 'general_manager', 'assistant_general_manager', 'head_of_sales', 'head_of_marketing',
-      ]
-      const query = mongoose.isValidObjectId(id)
-        ? { _id: id }
-        : { $or: [{ employeeId: String(id).toUpperCase() }, { id: String(id) }, { email: String(id).toLowerCase() }] }
-      return Employee.findOne({ ...query, role: { $in: managerRoles }, status: { $ne: 'inactive' } }).select('_id employeeId name email role status').lean()
+      const cleanId = String(id).trim()
+      if (!cleanId || cleanId === 'null' || cleanId === 'undefined' || cleanId === 'none') return null
+
+      const query = mongoose.isValidObjectId(cleanId)
+        ? { _id: cleanId }
+        : {
+            $or: [
+              { employeeId: cleanId.toUpperCase() },
+              { employeeId: cleanId },
+              { id: cleanId },
+              { email: cleanId.toLowerCase() },
+              { name: cleanId },
+              { displayName: cleanId },
+            ],
+          }
+
+      // Allow any active employee whose account is not inactive or terminated to be a reporting manager or team lead
+      const candidate = await Employee.findOne({
+        ...query,
+        status: { $nin: ['inactive', 'terminated'] },
+      }).select('_id employeeId name displayName email role designation status managerId').lean()
+
+      return candidate || null
     },
     async getNextEmployeeCode() {
       ensureConnected()
@@ -240,4 +302,4 @@ export function createMongoEmployeeRepository() {
   }
 }
 
-export { toPublicEmployee, buildFilter }
+export { toPublicEmployee, sanitizeEmployeeForViewer, buildFilter }

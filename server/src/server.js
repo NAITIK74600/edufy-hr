@@ -54,7 +54,7 @@ for (const envPath of envCandidatePaths) {
 
 const rawPort = process.env.PORT || 30000
 const isUnixSocket = typeof rawPort === 'string' && (rawPort.startsWith('/') || rawPort.includes('.sock') || rawPort.startsWith('\\\\.\\pipe'))
-const port = isUnixSocket ? rawPort : Number(rawPort || 30000)
+const port = isUnixSocket ? rawPort : Number(rawPort || 30005)
 logStartup(`Configured Listen Target: ${port} (Type: ${isUnixSocket ? 'Unix Socket' : 'TCP Port'})`)
 
 if (!process.env.JWT_SECRET) {
@@ -132,7 +132,28 @@ const server = app.listen(...listenArgs, () => {
   } else {
     logStartup(`🚀 Edufyi HR API successfully listening on http://0.0.0.0:${port} (database: ${useDatabase ? 'MongoDB' : 'In-Memory Store'})`)
   }
-  if (useDatabase) warmOnboardingDocsCache().catch((error) => logStartup(`Onboarding docs cache warm-up failed: ${error.message}`))
+  if (useDatabase) {
+    warmOnboardingDocsCache().catch((error) => logStartup(`Onboarding docs cache warm-up failed: ${error.message}`))
+    import('./modules/leave/leave.repository.js').then(({ createMongoLeaveRepository }) => {
+      const repo = createMongoLeaveRepository()
+      if (repo?.reconcileMonthlyBalances) {
+        repo.reconcileMonthlyBalances()
+          .then((res) => logStartup(`✨ Monthly leave balances reconciled: ${JSON.stringify(res)}`))
+          .catch((err) => logStartup(`Leave reconciliation notice: ${err.message}`))
+        // Run hourly background renewal
+        setInterval(() => {
+          repo.reconcileMonthlyBalances().catch(() => {})
+        }, 1000 * 60 * 60)
+      }
+    }).catch(() => {})
+
+    // Scheduled end-of-day auto punch-out cut-off checker (runs every 60 seconds)
+    setInterval(() => {
+      app.locals.attendanceService?.autoPunchOutScheduledCutoff?.().catch((err) => {
+        console.warn('[AutoPunchCutoff Daemon] Notice:', err.message)
+      })
+    }, 60000)
+  }
 })
 
 // Enable persistent HTTP Keep-Alive to eliminate TCP+TLS handshake latency on every request

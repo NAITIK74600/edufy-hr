@@ -20,6 +20,8 @@ import {
   Search,
   Send,
   Sparkles,
+  Sun,
+  Moon,
   Table as TableIcon,
   Trash2,
   UserCheck,
@@ -97,7 +99,9 @@ function RequestStatus({ status }) {
 }
 
 function RequestCard({ request, onSelect, selected, onQuickApprove, onQuickReject }) {
+  if (!request) return null
   const employee = request.employeeName || request.employeeId?.name || 'Employee'
+  const isHalfDay = Boolean(request.isHalfDay || request.days === 0.5 || request.units === 0.5)
   const isPending =
     request.status === 'pending_tl' ||
     request.status === 'pending_manager' ||
@@ -112,10 +116,15 @@ function RequestCard({ request, onSelect, selected, onQuickApprove, onQuickRejec
       style={{ cursor: 'pointer', position: 'relative' }}
     >
       <div className="leave-request-top">
-        <div>
-          <strong style={{ fontSize: '12px' }}>{employee}</strong>
-          <span>
-            {leaveTypeLabels[request.leaveType] || request.leaveType} · {formatDate(request.startDate)} to {formatDate(request.endDate)}
+        <div style={{ minWidth: 0, flex: 1, overflow: 'hidden' }}>
+          <strong style={{ fontSize: '12px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>{employee}</strong>
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>
+            {leaveTypeLabels[request.leaveType] || request.leaveType} · {isHalfDay ? formatDate(request.startDate) : `${formatDate(request.startDate)} to ${formatDate(request.endDate)}`}
+            {isHalfDay && (
+              <span className="half-day-badge" style={{ marginLeft: '6px' }}>
+                0.5 Day · {request.halfDayPeriod === 'second_half' ? '2nd Half' : '1st Half'}
+              </span>
+            )}
             {(request.isDoubleLop || request.doubleLopDays > 0 || (new Date(request.startDate).getDate() >= 25) || (new Date(request.endDate).getDate() >= 25)) && (
               <span style={{ marginLeft: '6px', background: '#fee2e2', color: '#b91c1c', border: '1px solid #fca5a5', fontSize: '9px', padding: '1px 5px', borderRadius: '4px', fontWeight: 700 }}>
                 Double LOP (25th+)
@@ -126,16 +135,16 @@ function RequestCard({ request, onSelect, selected, onQuickApprove, onQuickRejec
         <RequestStatus status={request.status} />
       </div>
 
-      <div className="leave-request-bottom" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span>
-          <strong>{request.days || request.units || 1} day(s)</strong> — {request.reason}
+      <div className="leave-request-bottom" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', minWidth: 0, width: '100%', gap: '8px' }}>
+        <span style={{ minWidth: 0, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={request.reason}>
+          <strong>{isHalfDay ? '0.5 day (Half Day)' : `${request.days || request.units || 1} day(s)`}</strong> — {request.reason}
         </span>
 
         {isPending && onQuickApprove && (
           <div
             className="emp-action-group"
             onClick={(e) => e.stopPropagation()}
-            style={{ marginLeft: 'auto' }}
+            style={{ marginLeft: 'auto', flexShrink: 0 }}
           >
             <button
               type="button"
@@ -165,6 +174,11 @@ function RequestDetail({ request, mode, onRefresh, onDeleteRequest }) {
   const [decisionReason, setDecisionReason] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [localStatus, setLocalStatus] = useState(null)
+
+  useEffect(() => {
+    setLocalStatus(null)
+  }, [request?.id, request?.status])
 
   if (!request) {
     return (
@@ -176,36 +190,51 @@ function RequestDetail({ request, mode, onRefresh, onDeleteRequest }) {
     )
   }
 
+  const currentStatus = localStatus || request?.status
+
   const isAdmin = user?.role === 'admin' || (user?.permissions || []).includes('admin.access')
-  const isDirector = user?.role === 'director'
-  const isManager = user?.role === 'manager'
-  const isTeamLead = user?.role === 'team_lead'
-  const isHrOrAdmin = mode === 'hr' || ['admin', 'hr'].includes(user?.role) || (user?.permissions || []).includes('leave.hr.review')
+  const isDirector = ['director', 'managing_director', 'co_founder', 'vertical_head'].includes(user?.role) || user?.email === 'jagadishbabu@edufyitech.in'
+  const isManager = ['manager', 'revenue_growth_manager', 'senior_manager'].includes(user?.role)
+  const isTeamLead = ['team_lead', 'team_leader'].includes(user?.role)
+  const isHrOrAdmin = mode === 'hr' || ['admin', 'hr', 'director', 'managing_director'].includes(user?.role) || (user?.permissions || []).includes('leave.hr.review')
+
+  // Resolve candidate IDs of current viewer
+  const userCandIds = [user?.id, user?._id, user?.employeeId].filter(Boolean).map(String)
+  const reqMgrId = request?.managerId?._id || request?.managerId?.id || request?.managerId
+  const isAssignedManagerOfThisRequest = Boolean(reqMgrId && userCandIds.includes(String(reqMgrId)))
+
+  const reqEmpId = request?.employeeId?._id || request?.employeeId?.id || request?.employeeId
+  const reqEmpCode = request?.employeeId?.employeeId || (typeof request?.employeeId === 'string' ? request?.employeeId : null)
+  const isOwnRequest = Boolean(userCandIds.includes(String(reqEmpId)) || (reqEmpCode && userCandIds.includes(String(reqEmpCode))))
 
   // Team Lead does not approve leaves; TL is only notified of squad member leaves. Manager approves!
   const canTlDecide = false
 
-  // Can Manager decide? (Employee leave or TL leave pending Manager approval)
-  const canManagerDecide = (isManager || isDirector || isHrOrAdmin) && (request.status === 'pending_manager' || request.currentApproverRole === 'manager')
+  // Can Manager decide? (Assigned manager, Department Manager, Director, or HR)
+  const canManagerDecide = (isManager || isDirector || isHrOrAdmin || isAssignedManagerOfThisRequest) && (currentStatus === 'pending_manager' || currentStatus === 'pending_tl' || request.currentApproverRole === 'manager' || request.currentApproverRole === 'team_lead')
 
-  // Can Director decide? (Manager leave pending Director approval)
-  const canDirectorDecide = (isDirector || isHrOrAdmin) && (request.status === 'pending_director' || request.currentApproverRole === 'director')
+  // Can Director decide? (Manager leave pending Director approval or executive review)
+  const canDirectorDecide = (isDirector || isHrOrAdmin) && (currentStatus === 'pending_director' || request.currentApproverRole === 'director')
 
   // Can Admin decide? (25th Month LOP leave pending final Admin sign-off)
-  const canAdminDecide = isAdmin && (request.status === 'pending_admin' || request.currentApproverRole === 'admin')
+  const canAdminDecide = isAdmin && (currentStatus === 'pending_admin' || request.currentApproverRole === 'admin')
 
   // Can HR decide? (HR reviews pending_hr or advances 25th month LOP to admin)
-  const canHrDecide = isHrOrAdmin && ['pending_hr', 'pending_manager', 'pending_director'].includes(request.status)
+  const canHrDecide = isHrOrAdmin && ['pending_hr', 'pending_manager', 'pending_director'].includes(currentStatus)
   const canDecide = canAdminDecide || canManagerDecide || canDirectorDecide || canHrDecide
-  const canCancel = (mode === 'self' || isHrOrAdmin) && ['pending_tl', 'pending_manager', 'pending_director', 'pending_hr', 'pending_admin', 'approved'].includes(request.status)
+
+  // Cancel is strictly for the applicant on their own request in self-service mode (never in HR/Admin review mode)
+  const canCancel = isOwnRequest && mode === 'ess' && ['pending_tl', 'pending_manager', 'pending_director', 'pending_hr', 'pending_admin'].includes(currentStatus)
 
   async function handleApprove() {
     setBusy(true)
     setError('')
     try {
       let role = 'hr'
-      if (canAdminDecide || (isAdmin && request.status === 'pending_admin')) {
+      if (canAdminDecide || (isAdmin && currentStatus === 'pending_admin')) {
         role = 'admin'
+      } else if (isAssignedManagerOfThisRequest && !isHrOrAdmin) {
+        role = isTeamLead ? 'team_lead' : 'manager'
       } else if (canTlDecide && !isHrOrAdmin) {
         role = 'team_lead'
       } else if (canManagerDecide && !isHrOrAdmin) {
@@ -214,16 +243,17 @@ function RequestDetail({ request, mode, onRefresh, onDeleteRequest }) {
         role = 'director'
       } else if (isDirector) {
         role = 'director'
-      } else if (request.status === 'pending_tl') {
+      } else if (currentStatus === 'pending_tl') {
         role = 'team_lead'
-      } else if (request.status === 'pending_manager') {
+      } else if (currentStatus === 'pending_manager') {
         role = 'manager'
-      } else if (request.status === 'pending_director') {
+      } else if (currentStatus === 'pending_director') {
         role = 'director'
-      } else if (request.status === 'pending_admin') {
+      } else if (currentStatus === 'pending_admin') {
         role = 'admin'
       }
       await hrStore.approveLeave(request.id, role, decisionReason, user)
+      setLocalStatus('approved')
       setDecisionReason('')
       onRefresh()
     } catch (err) {
@@ -242,8 +272,10 @@ function RequestDetail({ request, mode, onRefresh, onDeleteRequest }) {
     setError('')
     try {
       let role = 'hr'
-      if (canAdminDecide || (isAdmin && request.status === 'pending_admin')) {
+      if (canAdminDecide || (isAdmin && currentStatus === 'pending_admin')) {
         role = 'admin'
+      } else if (isAssignedManagerOfThisRequest && !isHrOrAdmin) {
+        role = isTeamLead ? 'team_lead' : 'manager'
       } else if (canTlDecide && !isHrOrAdmin) {
         role = 'team_lead'
       } else if (canManagerDecide && !isHrOrAdmin) {
@@ -252,16 +284,17 @@ function RequestDetail({ request, mode, onRefresh, onDeleteRequest }) {
         role = 'director'
       } else if (isDirector) {
         role = 'director'
-      } else if (request.status === 'pending_tl') {
+      } else if (currentStatus === 'pending_tl') {
         role = 'team_lead'
-      } else if (request.status === 'pending_manager') {
+      } else if (currentStatus === 'pending_manager') {
         role = 'manager'
-      } else if (request.status === 'pending_director') {
+      } else if (currentStatus === 'pending_director') {
         role = 'director'
-      } else if (request.status === 'pending_admin') {
+      } else if (currentStatus === 'pending_admin') {
         role = 'admin'
       }
       await hrStore.rejectLeave(request.id, role, decisionReason, user)
+      setLocalStatus('rejected')
       setDecisionReason('')
       onRefresh()
     } catch (err) {
@@ -278,19 +311,30 @@ function RequestDetail({ request, mode, onRefresh, onDeleteRequest }) {
           <p className="section-kicker">Leave Dossier</p>
           <h2>{leaveTypeLabels[request.leaveType] || request.leaveType?.toUpperCase()}</h2>
         </div>
-        <RequestStatus status={request.status} />
+        <RequestStatus status={currentStatus} />
       </div>
 
       <div className="leave-detail-summary">
         <div>
           <span>Dates</span>
           <strong>
-            {formatDate(request.startDate)} – {formatDate(request.endDate)}
+            {Boolean(request.isHalfDay || request.days === 0.5 || request.units === 0.5)
+              ? formatDate(request.startDate)
+              : `${formatDate(request.startDate)} – ${formatDate(request.endDate)}`}
           </strong>
+          {Boolean(request.isHalfDay || request.days === 0.5 || request.units === 0.5) && (
+            <span style={{ display: 'block', color: 'var(--teal)', fontSize: '10px', fontWeight: 600, marginTop: '2px' }}>
+              {request.halfDayPeriod === 'second_half' ? 'Second Half (Afternoon Session)' : 'First Half (Morning Session)'}
+            </span>
+          )}
         </div>
         <div>
           <span>Duration</span>
-          <strong>{request.days || request.units || 1} Working Day(s)</strong>
+          <strong>
+            {Boolean(request.isHalfDay || request.days === 0.5 || request.units === 0.5)
+              ? '0.5 Working Day (Half Day)'
+              : `${request.days || request.units || 1} Working Day(s)`}
+          </strong>
           {(request.isDoubleLop || request.doubleLopDays > 0) && (
             <span style={{ display: 'block', color: '#b91c1c', fontSize: '10px', fontWeight: 700, marginTop: '2px' }}>
               ⚠️ Double LOP Applied (25th+ Month-End)
@@ -301,7 +345,7 @@ function RequestDetail({ request, mode, onRefresh, onDeleteRequest }) {
           <span>Employee</span>
           <strong>{request.employeeName || request.employeeId?.name || 'Employee'}</strong>
           <small style={{ color: 'var(--muted)', fontSize: '9px' }}>
-            {request.employeeId} · {request.department || 'General'}{' '}
+            {(typeof request.employeeId === 'object' ? request.employeeId?.employeeId : request.employeeId) || request.employeeCode || 'N/A'} · {request.department || 'General'}{' '}
             {request.applicantRole && `(${request.applicantRole.replace('_', ' ')})`}
           </small>
         </div>
@@ -368,9 +412,9 @@ function RequestDetail({ request, mode, onRefresh, onDeleteRequest }) {
               <div>
                 <strong>HR Panel Verification</strong>
                 <small>
-                  {request.status === 'approved'
+                  {currentStatus === 'approved'
                     ? 'Synced to HR Panel for Payroll & Leave Balance Deductions'
-                    : request.status === 'pending_admin'
+                    : currentStatus === 'pending_admin'
                     ? 'Verified by HR Operations — Escalated to Admin for 25th Month LOP Approval'
                     : 'HR Operations Review'}
                 </small>
@@ -403,12 +447,14 @@ function RequestDetail({ request, mode, onRefresh, onDeleteRequest }) {
               placeholder={
                 canAdminDecide
                   ? 'Add Administrator remarks for 25th Month LOP approval...'
+                  : (mode === 'hr' || user?.role === 'hr')
+                  ? 'Add HR remarks / resolution comments...'
+                  : (isDirector && currentStatus === 'pending_director')
+                  ? 'Add Managing Director remarks (Approved request will sync to HR Panel)...'
                   : canTlDecide
                   ? 'Add Team Lead remarks (Manager & Director will be notified; not Admin)...'
                   : canManagerDecide
                   ? 'Add Manager remarks (Director will be notified; not Admin)...'
-                  : canDirectorDecide
-                  ? 'Add Managing Director remarks (Approved request will sync to HR Panel)...'
                   : 'Add official resolution comments...'
               }
               rows={2}
@@ -417,9 +463,9 @@ function RequestDetail({ request, mode, onRefresh, onDeleteRequest }) {
           <div className="detail-actions">
             <Button disabled={busy} onClick={handleApprove}>
               <Check size={14} />
-              {request.status === 'pending_admin'
+              {currentStatus === 'pending_admin'
                 ? 'Approve LOP (Admin Sign-off)'
-                : (request.status === 'pending_hr' && (request.isDoubleLop || request.doubleLopDays > 0 || (new Date(request.startDate).getDate() >= 25) || (new Date(request.endDate).getDate() >= 25)))
+                : (currentStatus === 'pending_hr' && (request.isDoubleLop || request.doubleLopDays > 0 || (new Date(request.startDate).getDate() >= 25) || (new Date(request.endDate).getDate() >= 25)))
                 ? 'Verify & Advance to Admin'
                 : 'Approve Request'}
             </Button>
@@ -530,20 +576,21 @@ function LeaveDateRangePicker({ startDate, endDate, days, onChange, required = f
     setCurrentMonth(new Date(s.getFullYear(), s.getMonth(), 1))
   }
 
-  // Handle Day Click in Range Calendar
+  // Handle Day Click in Range Calendar (Smart 1-click single day, 2nd-click range)
   const handleDayClick = (dayStr) => {
-    if (!startDate || (startDate && endDate)) {
-      // First click: select start date
-      onChange({ startDate: dayStr, endDate: '', days: 1 })
-    } else {
-      // Second click: select end date
-      if (dayStr >= startDate) {
+    if (!startDate || (startDate && endDate && startDate !== endDate)) {
+      // Clean first click: sets valid 1-day selection immediately
+      onChange({ startDate: dayStr, endDate: dayStr, days: 1 })
+    } else if (startDate && (!endDate || startDate === endDate)) {
+      // Second click: if clicking later date, expand range; otherwise change start date
+      if (dayStr > startDate) {
         const diff = Math.max(1, Math.round((new Date(dayStr) - new Date(startDate)) / (1000 * 60 * 60 * 24)) + 1)
         onChange({ startDate, endDate: dayStr, days: diff })
       } else {
-        // Clicked date is earlier than start date -> set as new start date
-        onChange({ startDate: dayStr, endDate: '', days: 1 })
+        onChange({ startDate: dayStr, endDate: dayStr, days: 1 })
       }
+    } else {
+      onChange({ startDate: dayStr, endDate: dayStr, days: 1 })
     }
   }
 
@@ -641,7 +688,7 @@ function LeaveDateRangePicker({ startDate, endDate, days, onChange, required = f
               const isEnd = dateStr === endDate
               const isSingle = isStart && (isEnd || !endDate)
               const isInRange = startDate && endDate && dateStr > startDate && dateStr < endDate
-              const isHovered = startDate && !endDate && hoverDate && dateStr > startDate && dateStr <= hoverDate
+              const isHovered = startDate && (!endDate || startDate === endDate) && hoverDate && hoverDate > startDate && dateStr > startDate && dateStr <= hoverDate
 
               let dayClass = 'range-cal-day'
               if (isPast) dayClass += ' disabled'
@@ -673,11 +720,11 @@ function LeaveDateRangePicker({ startDate, endDate, days, onChange, required = f
             })}
           </div>
 
-          <div style={{ marginTop: '8px', fontSize: '11px', color: 'var(--muted)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span>Click Start Date, then click End Date to complete your range.</span>
-            {startDate && !endDate && (
+          <div style={{ marginTop: '8px', fontSize: '11px', color: 'var(--muted)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
+            <span>Click any date for 1-day leave, or click a 2nd date to select a range.</span>
+            {startDate && endDate && (
               <span style={{ color: 'var(--teal)', fontWeight: 700 }}>
-                👉 Select End Date (&gt;= {startDate})
+                ✓ {days} Day(s) Selected ({startDate}{startDate !== endDate ? ` to ${endDate}` : ''})
               </span>
             )}
           </div>
@@ -749,6 +796,8 @@ function LeaveDateRangePicker({ startDate, endDate, days, onChange, required = f
 
 function ApplyLeaveSelf({ onSubmitted }) {
   const { user } = useAuth()
+  const [isHalfDay, setIsHalfDay] = useState(false)
+  const [halfDayPeriod, setHalfDayPeriod] = useState('first_half')
   const [form, setForm] = useState({
     leaveType: 'casual',
     startDate: todayKey(),
@@ -766,11 +815,14 @@ function ApplyLeaveSelf({ onSubmitted }) {
   const balances = hrStore.getState().leaveBalances || []
   const userEmpId = user?.employeeId
   const userId = user?.id || user?._id
+  const userEmpCode = String(userEmpId || '').trim()
+  const userIdentifier = String(userId || '').trim()
   const userBalances = balances.filter((b) => {
-    if (typeof b.employeeId === 'object' && b.employeeId !== null) {
-      return (userEmpId && b.employeeId.employeeId === userEmpId) || (userId && b.employeeId._id === userId)
-    }
-    return (userEmpId && b.employeeId === userEmpId) || (userId && b.employeeId === userId)
+    if (!b) return false
+    const bEmpObj = typeof b.employeeId === 'object' && b.employeeId !== null ? b.employeeId : null
+    const bEmpCode = String(bEmpObj?.employeeId || (typeof b.employeeId === 'string' ? b.employeeId : '')).trim()
+    const bEmpId = String(bEmpObj?._id || bEmpObj?.id || (typeof b.employeeId === 'string' ? b.employeeId : '')).trim()
+    return (userEmpCode && (bEmpCode === userEmpCode || bEmpId === userEmpCode)) || (userIdentifier && (bEmpId === userIdentifier || bEmpCode === userIdentifier))
   })
 
   // Find user's active pending requests
@@ -832,6 +884,11 @@ function ApplyLeaveSelf({ onSubmitted }) {
       await hrStore.applyLeave(
         {
           ...form,
+          startDate: form.startDate,
+          endDate: isHalfDay ? form.startDate : form.endDate,
+          days: isHalfDay ? 0.5 : form.days,
+          isHalfDay,
+          halfDayPeriod: isHalfDay ? halfDayPeriod : null,
           employeeId: user?.employeeId || user?.id,
           employeeName: user?.displayName || user?.name,
           department: user?.department,
@@ -842,7 +899,9 @@ function ApplyLeaveSelf({ onSubmitted }) {
       setSuccess(true)
       setOverlapInfo(null)
       setTimeout(() => setSuccess(false), 4500)
-      setForm({ leaveType: 'casual', startDate: todayKey(), endDate: todayKey(), days: 1, reason: '' })
+      setForm({ leaveType: 'casual', startDate: '', endDate: '', days: 1, reason: '' })
+      setIsHalfDay(false)
+      setHalfDayPeriod('first_half')
       onSubmitted()
     } catch (requestError) {
       setError(requestError.message)
@@ -861,6 +920,11 @@ function ApplyLeaveSelf({ onSubmitted }) {
       await hrStore.applyLeave(
         {
           ...form,
+          startDate: form.startDate,
+          endDate: isHalfDay ? form.startDate : form.endDate,
+          days: isHalfDay ? 0.5 : form.days,
+          isHalfDay,
+          halfDayPeriod: isHalfDay ? halfDayPeriod : null,
           replaceOverlap: true,
           employeeId: user?.employeeId || user?.id,
           employeeName: user?.displayName || user?.name,
@@ -872,7 +936,9 @@ function ApplyLeaveSelf({ onSubmitted }) {
       setSuccess(true)
       setOverlapInfo(null)
       setTimeout(() => setSuccess(false), 4500)
-      setForm({ leaveType: 'casual', startDate: todayKey(), endDate: todayKey(), days: 1, reason: '' })
+      setForm({ leaveType: 'casual', startDate: '', endDate: '', days: 1, reason: '' })
+      setIsHalfDay(false)
+      setHalfDayPeriod('first_half')
       onSubmitted()
     } catch (err) {
       setError(err.message)
@@ -926,13 +992,13 @@ function ApplyLeaveSelf({ onSubmitted }) {
                 {myPendingLeaves.map((l) => `${leaveTypeLabels[l.leaveType] || l.leaveType} (${formatDate(l.startDate)} to ${formatDate(l.endDate)})`).join('; ')}
               </span>
             </div>
-            {myPendingLeaves.map((l) => (
+            {myPendingLeaves.map((l, idx) => (
               <button
-                key={l.id}
+                key={l?.id || l?._id || idx}
                 type="button"
                 className="btn btn-secondary"
                 style={{ fontSize: '11px', padding: '4px 10px', height: 'auto', lineHeight: '1.2' }}
-                onClick={() => handleCancelExisting(l.id)}
+                onClick={() => handleCancelExisting(l?.id || l?._id)}
                 disabled={busy}
               >
                 Withdraw / Cancel
@@ -968,14 +1034,101 @@ function ApplyLeaveSelf({ onSubmitted }) {
           </select>
         </label>
 
-        {/* INTERACTIVE DATE RANGE PICKER & CALENDAR */}
-        <LeaveDateRangePicker
-          startDate={form.startDate}
-          endDate={form.endDate}
-          days={form.days}
-          onChange={handleRangeChange}
-          required={true}
-        />
+        {/* LEAVE DURATION OPTION: FULL DAY VS HALF DAY */}
+        <div>
+          <label style={{ display: 'block', marginBottom: '6px', fontSize: '11px', fontWeight: 600, color: 'var(--ink)' }}>
+            Leave Duration Option
+          </label>
+          <div className="leave-mode-toggle">
+            <button
+              type="button"
+              className={`leave-mode-btn ${!isHalfDay ? 'active' : ''}`}
+              onClick={() => {
+                setIsHalfDay(false)
+                setForm((prev) => ({
+                  ...prev,
+                  days: prev.startDate && prev.endDate && prev.startDate !== prev.endDate
+                    ? Math.max(1, Math.round((new Date(prev.endDate) - new Date(prev.startDate)) / (1000 * 60 * 60 * 24)) + 1)
+                    : 1
+                }))
+              }}
+            >
+              Full Day Leave
+            </button>
+            <button
+              type="button"
+              className={`leave-mode-btn ${isHalfDay ? 'active' : ''}`}
+              onClick={() => {
+                setIsHalfDay(true)
+                const d = form.startDate || todayKey()
+                setForm((prev) => ({ ...prev, startDate: d, endDate: d, days: 0.5 }))
+              }}
+            >
+              Half Day Leave (0.5 Day)
+            </button>
+          </div>
+        </div>
+
+        {/* IF HALF DAY: SHOW TIMING / SESSION SELECTOR & SINGLE DATE */}
+        {isHalfDay ? (
+          <div style={{ display: 'grid', gap: '14px', background: '#f8faf9', border: '1px solid var(--line)', borderRadius: '10px', padding: '16px' }}>
+            <div>
+              <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--ink)', display: 'block', marginBottom: '8px' }}>
+                Select Half Day Session
+              </span>
+              <div className="half-day-options">
+                <div
+                  className={`half-day-card ${halfDayPeriod === 'first_half' ? 'selected' : ''}`}
+                  onClick={() => setHalfDayPeriod('first_half')}
+                >
+                  <Sun size={16} color={halfDayPeriod === 'first_half' ? 'var(--teal)' : 'var(--muted)'} />
+                  <div>
+                    <strong style={{ display: 'block', fontSize: '12px' }}>First Half (Morning Session)</strong>
+                    <small style={{ color: 'var(--muted)', fontSize: '10px' }}>09:30 AM – 01:30 PM</small>
+                  </div>
+                </div>
+                <div
+                  className={`half-day-card ${halfDayPeriod === 'second_half' ? 'selected' : ''}`}
+                  onClick={() => setHalfDayPeriod('second_half')}
+                >
+                  <Moon size={16} color={halfDayPeriod === 'second_half' ? 'var(--teal)' : 'var(--muted)'} />
+                  <div>
+                    <strong style={{ display: 'block', fontSize: '12px' }}>Second Half (Afternoon Session)</strong>
+                    <small style={{ color: 'var(--muted)', fontSize: '10px' }}>02:00 PM – 06:30 PM</small>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <label>
+              <span style={{ fontSize: '11px', fontWeight: 600 }}>Date of Half Day Leave</span>
+              <input
+                type="date"
+                value={form.startDate || todayKey()}
+                min={todayKey()}
+                onChange={(e) => setForm((prev) => ({ ...prev, startDate: e.target.value, endDate: e.target.value, days: 0.5 }))}
+                required
+                style={{ width: '100%', padding: '10px', border: '1px solid var(--line)', borderRadius: '8px', background: '#fff', fontSize: '12px' }}
+              />
+            </label>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11.5px', color: 'var(--teal)', fontWeight: 500 }}>
+              <Clock3 size={15} />
+              <span>
+                Applying for <strong>0.5 Day (Half Day)</strong> on <strong>{formatDate(form.startDate || todayKey())}</strong> ({halfDayPeriod === 'second_half' ? 'Second Half / Afternoon' : 'First Half / Morning'}). Only 0.5 quota will be deducted.
+              </span>
+            </div>
+          </div>
+        ) : (
+          /* INTERACTIVE DATE RANGE PICKER & CALENDAR */
+          <LeaveDateRangePicker
+            startDate={form.startDate}
+            endDate={form.endDate}
+            days={form.days}
+            onChange={handleRangeChange}
+            required={true}
+          />
+        )}
 
         {(() => {
           if (!form.startDate) return false
@@ -1015,7 +1168,7 @@ function ApplyLeaveSelf({ onSubmitted }) {
           />
         </label>
 
-        {error && <p className="inline-error">{error}</p>}
+        {error && !overlapInfo && <p className="inline-error">{error}</p>}
 
         {/* Interactive Overlap Resolution Banner */}
         {overlapInfo && (
@@ -1032,12 +1185,12 @@ function ApplyLeaveSelf({ onSubmitted }) {
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#b45309', fontWeight: 600, fontSize: '12px' }}>
               <AlertCircle size={16} />
               <span>
-                Existing {overlapInfo.overlappingStatus?.replace('pending_', 'Pending ') || 'Pending'} Request: {overlapInfo.overlappingStartDate || 'selected dates'} to {overlapInfo.overlappingEndDate || 'selected dates'}
+                {overlapInfo.overlappingStatus === 'approved' ? 'Existing Approved Leave' : 'Existing Active Leave Request'}: {overlapInfo.overlappingStartDate || 'selected dates'} to {overlapInfo.overlappingEndDate || 'selected dates'}
               </span>
             </div>
             <p style={{ margin: 0, fontSize: '11px', color: '#78350f' }}>
               {overlapInfo.canCancelExisting
-                ? `You have an unapproved leave request for these dates${overlapInfo.overlappingReason ? ` ("${overlapInfo.overlappingReason}")` : ''}. You can replace it with your new ${form.days}-day request, or cancel the previous request.`
+                ? `You already have ${overlapInfo.overlappingStatus === 'approved' ? 'an approved leave' : 'a pending leave request'}${overlapInfo.overlappingReason ? ` ("${overlapInfo.overlappingReason}")` : ''} covering these dates. Click "Replace Previous & Submit New Range" to replace it with this new ${form.days}-day request, or cancel the previous request.`
                 : 'This date range conflicts with an active leave request.'}
             </p>
             {overlapInfo.canCancelExisting && (
@@ -1120,13 +1273,17 @@ function GrantLeaveHR({ employees, onGranted, preselectedEmpId }) {
 
   const handleSubmit = storeAction(async (e) => {
     e.preventDefault()
-    const emp = employees.find((x) => x.employeeId === form.employeeId || x.id === form.employeeId)
+    const emp = employees.find((x) => x && (x.employeeId === form.employeeId || x.id === form.employeeId || x._id === form.employeeId))
     if (!emp) return
 
     setBusy(true)
     try {
       await hrStore.applyLeave({
         ...form,
+        isHalfDay: Boolean(form.isHalfDay),
+        halfDayPeriod: form.isHalfDay ? (form.halfDayPeriod || 'first_half') : null,
+        days: form.isHalfDay ? 0.5 : form.days,
+        endDate: form.isHalfDay ? form.startDate : form.endDate,
         employeeId: emp.employeeId,
         employeeName: emp.name,
         department: emp.department,
@@ -1139,6 +1296,8 @@ function GrantLeaveHR({ employees, onGranted, preselectedEmpId }) {
     setForm({
       employeeId: '',
       leaveType: 'casual',
+      isHalfDay: false,
+      halfDayPeriod: 'first_half',
       startDate: todayKey(),
       endDate: todayKey(),
       days: 1,
@@ -1212,38 +1371,125 @@ function GrantLeaveHR({ employees, onGranted, preselectedEmpId }) {
           </Field>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 100px', gap: '14px' }}>
-          <Field label="Start Date" required>
-            <input
-              type="date"
-              value={form.startDate}
-              onChange={(e) => update('startDate', e.target.value)}
-              required
-              style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--line)', borderRadius: '8px', background: '#fff', fontSize: '11px' }}
-            />
-          </Field>
-
-          <Field label="End Date" required>
-            <input
-              type="date"
-              value={form.endDate}
-              min={form.startDate || todayKey()}
-              onChange={(e) => update('endDate', e.target.value)}
-              required
-              style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--line)', borderRadius: '8px', background: '#fff', fontSize: '11px' }}
-            />
-          </Field>
-
-          <Field label="Duration">
-            <input
-              type="number"
-              min="1"
-              value={form.days}
-              onChange={(e) => update('days', e.target.value)}
-              style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--line)', borderRadius: '8px', background: '#fff', fontSize: '11px' }}
-            />
-          </Field>
+        {/* LEAVE DURATION OPTION: FULL DAY VS HALF DAY */}
+        <div>
+          <label style={{ display: 'block', marginBottom: '6px', fontSize: '11px', fontWeight: 600, color: 'var(--ink)' }}>
+            Leave Duration Option
+          </label>
+          <div className="leave-mode-toggle">
+            <button
+              type="button"
+              className={`leave-mode-btn ${!form.isHalfDay ? 'active' : ''}`}
+              onClick={() => {
+                update('isHalfDay', false)
+                const s = form.startDate
+                const e = form.endDate && form.endDate >= s ? form.endDate : s
+                const diff = s && e ? Math.max(1, Math.round((new Date(e) - new Date(s)) / (1000 * 60 * 60 * 24)) + 1) : 1
+                update('days', diff)
+              }}
+            >
+              Full Day Leave
+            </button>
+            <button
+              type="button"
+              className={`leave-mode-btn ${form.isHalfDay ? 'active' : ''}`}
+              onClick={() => {
+                update('isHalfDay', true)
+                update('endDate', form.startDate || todayKey())
+                update('days', 0.5)
+              }}
+            >
+              Half Day Leave (0.5 Day)
+            </button>
+          </div>
         </div>
+
+        {form.isHalfDay ? (
+          <div style={{ display: 'grid', gap: '14px', background: '#f8faf9', border: '1px solid var(--line)', borderRadius: '10px', padding: '16px' }}>
+            <div>
+              <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--ink)', display: 'block', marginBottom: '8px' }}>
+                Select Half Day Session
+              </span>
+              <div className="half-day-options">
+                <div
+                  className={`half-day-card ${form.halfDayPeriod !== 'second_half' ? 'selected' : ''}`}
+                  onClick={() => update('halfDayPeriod', 'first_half')}
+                >
+                  <Sun size={16} color={form.halfDayPeriod !== 'second_half' ? 'var(--teal)' : 'var(--muted)'} />
+                  <div>
+                    <strong style={{ display: 'block', fontSize: '12px' }}>First Half (Morning Session)</strong>
+                    <small style={{ color: 'var(--muted)', fontSize: '10px' }}>09:30 AM – 01:30 PM</small>
+                  </div>
+                </div>
+                <div
+                  className={`half-day-card ${form.halfDayPeriod === 'second_half' ? 'selected' : ''}`}
+                  onClick={() => update('halfDayPeriod', 'second_half')}
+                >
+                  <Moon size={16} color={form.halfDayPeriod === 'second_half' ? 'var(--teal)' : 'var(--muted)'} />
+                  <div>
+                    <strong style={{ display: 'block', fontSize: '12px' }}>Second Half (Afternoon Session)</strong>
+                    <small style={{ color: 'var(--muted)', fontSize: '10px' }}>02:00 PM – 06:30 PM</small>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <Field label="Date of Half Day Leave" required>
+              <input
+                type="date"
+                value={form.startDate || todayKey()}
+                onChange={(e) => {
+                  update('startDate', e.target.value)
+                  update('endDate', e.target.value)
+                  update('days', 0.5)
+                }}
+                required
+                style={{ width: '100%', padding: '10px', border: '1px solid var(--line)', borderRadius: '8px', background: '#fff', fontSize: '12px' }}
+              />
+            </Field>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11.5px', color: 'var(--teal)', fontWeight: 500 }}>
+              <Clock3 size={15} />
+              <span>
+                Recording <strong>0.5 Day (Half Day)</strong> on <strong>{formatDate(form.startDate || todayKey())}</strong> ({form.halfDayPeriod === 'second_half' ? 'Second Half / Afternoon' : 'First Half / Morning'}).
+              </span>
+            </div>
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 110px', gap: '14px' }}>
+            <Field label="Start Date" required>
+              <input
+                type="date"
+                value={form.startDate}
+                onChange={(e) => update('startDate', e.target.value)}
+                required
+                style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--line)', borderRadius: '8px', background: '#fff', fontSize: '11px' }}
+              />
+            </Field>
+
+            <Field label="End Date" required>
+              <input
+                type="date"
+                value={form.endDate}
+                min={form.startDate || todayKey()}
+                onChange={(e) => update('endDate', e.target.value)}
+                required
+                style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--line)', borderRadius: '8px', background: '#fff', fontSize: '11px' }}
+              />
+            </Field>
+
+            <Field label="Duration">
+              <input
+                type="number"
+                min="1"
+                step="1"
+                value={form.days}
+                onChange={(e) => update('days', Math.max(1, parseInt(e.target.value, 10) || 1))}
+                style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--line)', borderRadius: '8px', background: '#fff', fontSize: '11px' }}
+              />
+            </Field>
+          </div>
+        )}
 
         {(() => {
           if (!form.startDate) return false
@@ -1370,40 +1616,55 @@ export function LeaveManagementPage({ mode = 'self' }) {
     const userEmpId = String(user?.employeeId || '')
     const userId = String(user?.id || user?._id || '')
     const userRole = user?.role
+    const candidateIds = [userId, userEmpId].filter(Boolean)
+
+    // Direct reportees in workforce registry
+    const directReportIds = new Set(
+      allEmployees
+        .filter((e) => {
+          const mgrId = String(e.managerId?._id || e.managerId?.id || e.managerId || '')
+          return candidateIds.includes(mgrId)
+        })
+        .map((e) => String(e.id || e._id || e.employeeId || ''))
+        .filter(Boolean)
+    )
 
     filteredRequests = filteredRequests.filter((l) => {
-      // Team Lead: views squad leaves (only notified/info, not an approval gate)
-      if (userRole === 'team_lead') {
+      const lMgrId = String(l.managerId?._id || l.managerId?.id || l.managerId || '')
+      const lEmpId = String(l.employeeId?._id || l.employeeId?.id || l.employeeId || l.employeeRef || '')
+      const isDirectReport = candidateIds.includes(lMgrId) || directReportIds.has(lEmpId)
+
+      // Managing Director / Executive: views all leadership, manager, and team requests
+      if (['director', 'managing_director', 'co_founder', 'vertical_head'].includes(userRole) || user?.email === 'jagadishbabu@edufyitech.in') {
         return (
+          isDirectReport ||
+          l.status === 'pending_director' ||
+          l.status === 'pending_manager' ||
+          l.applicantRole === 'manager'
+        )
+      }
+
+      // Department Manager / Assigned Manager
+      if (['manager', 'revenue_growth_manager', 'senior_manager'].includes(userRole) || isDirectReport) {
+        return (
+          isDirectReport ||
+          l.status === 'pending_manager' ||
+          (user?.department && l.department === user.department)
+        )
+      }
+
+      // Team Lead
+      if (userRole === 'team_lead' || userRole === 'team_leader') {
+        return (
+          isDirectReport ||
           (userEmpId && (l.tlId === userEmpId || l.managerId === userEmpId)) ||
           (userId && (l.tlId === userId || l.managerId === userId)) ||
           (user?.department && l.department === user.department)
         )
       }
-      // Department Manager: reviews pending_manager from employees and TLs
-      if (userRole === 'manager') {
-        return (
-          l.status === 'pending_manager' ||
-          (userEmpId && l.managerId === userEmpId) ||
-          (userId && l.managerId === userId) ||
-          (user?.department && l.department === user.department)
-        )
-      }
-      // Managing Director: reviews pending_director from Managers and high-level leaves
-      if (userRole === 'director') {
-        return (
-          l.status === 'pending_director' ||
-          l.applicantRole === 'manager' ||
-          l.status === 'pending_manager'
-        )
-      }
-      // Fallback team view
-      return (
-        l.status === 'pending_manager' ||
-        l.status === 'pending_director' ||
-        (userEmpId && (l.managerId === userEmpId || l.tlId === userEmpId)) ||
-        (userId && (l.managerId === userId || l.tlId === userId))
-      )
+
+      // Fallback
+      return isDirectReport || candidateIds.includes(lMgrId)
     })
   }
 
@@ -1423,7 +1684,7 @@ export function LeaveManagementPage({ mode = 'self' }) {
 
   // Synchronize selection
   useEffect(() => {
-    const latest = filteredRequests.find((request) => request.id === selected?.id) ?? filteredRequests[0] ?? null
+    const latest = filteredRequests.find((request) => request?.id === selected?.id) ?? filteredRequests[0] ?? null
     if (latest !== selected) setSelected(latest)
   }, [filteredRequests])
 
@@ -1446,8 +1707,8 @@ export function LeaveManagementPage({ mode = 'self' }) {
   const handleQuickApprove = storeAction(async (request) => {
     let role = 'hr'
     if (user?.role === 'admin' || request.status === 'pending_admin') role = 'admin'
-    else if (user?.role === 'manager' || request.status === 'pending_manager') role = 'manager'
-    else if (user?.role === 'director' || request.status === 'pending_director') role = 'director'
+    else if (['director', 'managing_director', 'co_founder'].includes(user?.role) || request.status === 'pending_director') role = 'director'
+    else if (['manager', 'revenue_growth_manager'].includes(user?.role) || request.status === 'pending_manager') role = 'manager'
     await hrStore.approveLeave(request.id, role, 'Approved after review', user)
     showFeedback(`Approved ${leaveTypeLabels[request.leaveType] || request.leaveType} for ${request.employeeName}.`)
   })
@@ -1462,16 +1723,16 @@ export function LeaveManagementPage({ mode = 'self' }) {
     const reason = rejectReason.trim() || 'Declined due to operational coverage requirements.'
     let role = 'hr'
     if (user?.role === 'admin' || rejectingLeave.status === 'pending_admin') role = 'admin'
-    else if (user?.role === 'manager' || rejectingLeave.status === 'pending_manager') role = 'manager'
-    else if (user?.role === 'director' || rejectingLeave.status === 'pending_director') role = 'director'
-    await hrStore.rejectLeave(rejectingLeave.id, role, reason, user)
+    else if (['director', 'managing_director', 'co_founder'].includes(user?.role) || rejectingLeave.status === 'pending_director') role = 'director'
+    else if (['manager', 'revenue_growth_manager'].includes(user?.role) || rejectingLeave.status === 'pending_manager') role = 'manager'
+    await hrStore.rejectLeave(rejectingLeave?.id, role, reason, user)
     setRejectingLeave(null)
     setRejectReason('')
-    showFeedback(`Declined leave request for ${rejectingLeave.employeeName}.`)
+    showFeedback(`Declined leave request for ${rejectingLeave?.employeeName || 'employee'}.`)
   })
 
   const handleDeleteLeave = storeAction(async () => {
-    if (!leaveToDelete) return
+    if (!leaveToDelete?.id) return
     await hrStore.deleteLeave(leaveToDelete.id)
     setLeaveToDelete(null)
     showFeedback('Leave record removed from system.')
@@ -1499,19 +1760,19 @@ export function LeaveManagementPage({ mode = 'self' }) {
       'Created Date',
     ]
     const rows = filteredRequests.map((l) => [
-      l.id,
-      l.employeeId,
-      l.employeeName,
-      l.department || 'General',
-      l.leaveType,
-      l.startDate,
-      l.endDate,
-      l.days || 1,
-      l.status,
-      `"${(l.reason || '').replace(/"/g, '""')}"`,
-      `"${(l.managerComment || '').replace(/"/g, '""')}"`,
-      `"${(l.hrComment || '').replace(/"/g, '""')}"`,
-      l.createdAt || '',
+      l?.id || l?._id || '',
+      l?.employeeId || '',
+      l?.employeeName || '',
+      l?.department || 'General',
+      l?.leaveType || '',
+      l?.startDate || '',
+      l?.endDate || '',
+      l?.days || 1,
+      l?.status || '',
+      `"${(l?.reason || '').replace(/"/g, '""')}"`,
+      `"${(l?.managerComment || '').replace(/"/g, '""')}"`,
+      `"${(l?.hrComment || '').replace(/"/g, '""')}"`,
+      l?.createdAt || '',
     ])
     const csvContent =
       'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\n')
@@ -1525,9 +1786,28 @@ export function LeaveManagementPage({ mode = 'self' }) {
     showFeedback('Exported leave requests to CSV successfully.')
   }
 
-  const balancesSelf = (storeState.leaveBalances ?? []).map((balance) => ({
-    leaveType: balance.leaveType, available: balance.allowance - balance.used - balance.reserved,
-    total: balance.allowance, used: balance.used, reserved: balance.reserved,
+  const balancesRaw = storeState.leaveBalances ?? []
+  const userEmpId = String(user?.employeeId || '').trim()
+  const userId = String(user?.id || user?._id || '').trim()
+  const isIntern = String(user?.role || '').toLowerCase().includes('intern') || String(user?.designation || '').toLowerCase().includes('intern')
+  const defaultFallbackBalances = [
+    { leaveType: 'casual', allowance: isIntern ? 0 : 1, used: 0, reserved: 0 },
+    { leaveType: 'sick', allowance: 1, used: 0, reserved: 0 },
+  ]
+  const myBalances = balancesRaw.filter((b) => {
+    if (!b) return false
+    const bEmpObj = typeof b.employeeId === 'object' && b.employeeId !== null ? b.employeeId : null
+    const bEmpCode = String(bEmpObj?.employeeId || (typeof b.employeeId === 'string' ? b.employeeId : '')).trim()
+    const bEmpId = String(bEmpObj?._id || bEmpObj?.id || (typeof b.employeeId === 'string' ? b.employeeId : '')).trim()
+    return (userEmpId && (bEmpCode === userEmpId || bEmpId === userEmpId)) || (userId && (bEmpId === userId || bEmpCode === userId))
+  })
+  const balancesToMap = myBalances.length > 0 ? myBalances : defaultFallbackBalances
+  const balancesSelf = balancesToMap.map((balance) => ({
+    leaveType: balance?.leaveType || 'General Leave',
+    available: Math.max(0, (balance?.allowance || 0) - (balance?.used || 0) - (balance?.reserved || 0)),
+    total: balance?.allowance || 0,
+    used: balance?.used || 0,
+    reserved: balance?.reserved || 0,
   }))
 
   const title = isSelf
@@ -1671,15 +1951,15 @@ export function LeaveManagementPage({ mode = 'self' }) {
           {balancesSelf.map((b) => (
             <div className="panel leave-balance-card" key={b.leaveType}>
               <span>{b.leaveType}</span>
-              <strong>{b.available} Days</strong>
-              <small>Used: {b.used} · Reserved: {b.reserved}</small>
+              <strong>{typeof b.available === 'number' ? (b.available % 1 === 0 ? b.available : b.available.toFixed(1)) : b.available} Days</strong>
+              <small>Used: {typeof b.used === 'number' ? (b.used % 1 === 0 ? b.used : b.used.toFixed(1)) : b.used} · Reserved: {typeof b.reserved === 'number' ? (b.reserved % 1 === 0 ? b.reserved : b.reserved.toFixed(1)) : b.reserved}</small>
             </div>
           ))}
         </div>
       )}
 
       {/* SELF-SERVICE APPLY */}
-      {isSelf && <ApplyLeaveSelf onSubmitted={() => setRefreshKey((k) => k + 1)} />}
+      {isSelf && <ApplyLeaveSelf onSubmitted={() => { hrStore.refresh().catch(() => {}); setRefreshKey((k) => k + 1) }} />}
 
       {/* TAB 1: LEAVE REQUESTS & APPROVALS */}
       {activeTab === 'approvals' && (
@@ -1769,14 +2049,14 @@ export function LeaveManagementPage({ mode = 'self' }) {
 
                 <div className="leave-request-list">
                   {filteredRequests.length ? (
-                    filteredRequests.map((request) => (
+                    filteredRequests.map((request, idx) => (
                       <RequestCard
                         request={request}
-                        selected={selected?.id === request.id}
+                        selected={selected?.id === request?.id}
                         onSelect={setSelected}
                         onQuickApprove={mode === 'hr' ? handleQuickApprove : null}
                         onQuickReject={mode === 'hr' ? handleQuickRejectPrompt : null}
-                        key={request.id}
+                        key={request?.id || request?._id || idx}
                       />
                     ))
                   ) : (
@@ -1810,7 +2090,7 @@ export function LeaveManagementPage({ mode = 'self' }) {
                       <div>
                         <strong>{r.employeeName || 'Employee'}</strong>
                         <div style={{ fontSize: '9px', color: 'var(--muted)' }}>
-                          {r.employeeId} · {r.department || 'General'}
+                          {(typeof r.employeeId === 'object' ? r.employeeId?.employeeId : r.employeeId) || 'N/A'} · {r.department || 'General'}
                         </div>
                       </div>
                     ),
@@ -1832,7 +2112,13 @@ export function LeaveManagementPage({ mode = 'self' }) {
                   {
                     key: 'days',
                     label: 'Days',
-                    render: (r) => <strong>{r.days || 1} d</strong>,
+                    render: (r) => (
+                      <strong>
+                        {Boolean(r.isHalfDay || r.days === 0.5 || r.units === 0.5)
+                          ? '0.5 d (Half)'
+                          : `${r.days || 1} d`}
+                      </strong>
+                    ),
                   },
                   {
                     key: 'reason',

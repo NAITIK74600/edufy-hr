@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react'
 import {
   Network,
   Bell,
@@ -58,12 +58,7 @@ import { AIHRAssistant } from './AIHRAssistant'
 import { isSoundMuted, toggleSoundMuted, playNotificationSound } from '../utils/soundHelper'
 import { ChangePasswordModal } from './ChangePasswordModal'
 import { PasskeyModal } from './PasskeyModal'
-import {
-  isPushNotificationSupported,
-  getPushPermissionStatus,
-  subscribeToPushNotifications,
-  sendTestPushNotification,
-} from '../services/pushNotificationClient'
+// Push notifications disabled by system policy (push notification channel removed)
 import { compressImageFile } from '../utils/imageCompressor'
 
 
@@ -189,9 +184,7 @@ export function HRLayout({ route, children }) {
   const [storeState, setStoreState] = useState(() => hrStore.getState())
   const [notifications, setNotifications] = useState(() => (hrStore.getUserNotifications ? hrStore.getUserNotifications(user) : hrStore.getNotifications()))
   const [notifCategory, setNotifCategory] = useState('all')
-  const [pushStatus, setPushStatus] = useState(() => (typeof window !== 'undefined' ? getPushPermissionStatus() : 'unsupported'))
-  const [pushLoading, setPushLoading] = useState(false)
-  const [pushNotice, setPushNotice] = useState('')
+  // Push notification states removed
   const [isStandalone, setIsStandalone] = useState(() => {
     if (typeof window === 'undefined') return false
     return Boolean(
@@ -228,12 +221,12 @@ export function HRLayout({ route, children }) {
 
   useEffect(() => {
     function handleClickOutside(event) {
-      if (profileRef.current && !profileRef.current.contains(event.target)) {
-        setProfileOpen(false)
-      }
-      if (notifRef.current && !notifRef.current.contains(event.target)) {
-        setNotifOpen(false)
-      }
+      const path = event.composedPath ? event.composedPath() : []
+      const clickedProfile = profileRef.current && (profileRef.current.contains(event.target) || path.includes(profileRef.current))
+      const clickedNotif = notifRef.current && (notifRef.current.contains(event.target) || path.includes(notifRef.current))
+
+      if (!clickedProfile) setProfileOpen(false)
+      if (!clickedNotif) setNotifOpen(false)
     }
     function handleKeyDown(event) {
       if (event.key === 'Escape') {
@@ -260,9 +253,16 @@ export function HRLayout({ route, children }) {
   const syncUnifiedNotifications = React.useCallback(async (silent = false) => {
     try {
       const res = await apiClient.get('/notifications?limit=60')
-      if (res?.data && Array.isArray(res.data)) {
-        setNotifications(res.data)
-        const unread = res.data.filter((n) => !n.read)
+      const items = res?.data || res
+      if (Array.isArray(items)) {
+        const normalized = items.map((n) => ({
+          ...n,
+          id: String(n.id || n._id || ''),
+          _id: String(n._id || n.id || ''),
+        })).filter((n) => Boolean(n.id))
+
+        setNotifications(normalized)
+        const unread = normalized.filter((n) => !n.read && !n.readAt)
         const newArrivals = unread.filter((n) => !prevNotifIdsRef.current.has(n.id))
         if (newArrivals.length > 0 && !isFirstLoadRef.current && !silent) {
           try {
@@ -277,7 +277,13 @@ export function HRLayout({ route, children }) {
       // Graceful local store fallback
     }
     const local = hrStore.getUserNotifications ? hrStore.getUserNotifications(user) : hrStore.getNotifications()
-    setNotifications(local)
+    if (Array.isArray(local)) {
+      setNotifications(local.map((n) => ({
+        ...n,
+        id: String(n.id || n._id || ''),
+        _id: String(n._id || n.id || ''),
+      })))
+    }
   }, [user])
 
   useEffect(() => {
@@ -288,12 +294,21 @@ export function HRLayout({ route, children }) {
 
     const unsubscribeStore = hrStore.subscribe(() => {
       const fresh = hrStore.getUserNotifications ? hrStore.getUserNotifications(user) : hrStore.getNotifications()
-      if (fresh && fresh.length > 0) {
+      if (Array.isArray(fresh) && fresh.length > 0) {
         setNotifications((prev) => {
           const map = new Map()
-          fresh.forEach((item) => map.set(item.id, item))
-          prev.forEach((item) => map.set(item.id, item))
-          return Array.from(map.values()).sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
+          prev.forEach((item) => {
+            const id = String(item.id || item._id || '')
+            if (id) map.set(id, item)
+          })
+          fresh.forEach((item) => {
+            const id = String(item.id || item._id || '')
+            if (id) {
+              const prevItem = map.get(id)
+              map.set(id, { ...prevItem, ...item, id, _id: id })
+            }
+          })
+          return Array.from(map.values()).sort((a, b) => new Date(b.createdAt || b.time || 0) - new Date(a.createdAt || a.time || 0))
         })
       }
     })
@@ -337,12 +352,65 @@ export function HRLayout({ route, children }) {
 
   const handleMarkOneRead = async (item) => {
     const id = item.id || item._id
+    setNotifications((prev) => prev.map((n) => ((n.id === id || n._id === id) ? { ...n, read: true } : n)))
     try {
       await apiClient.patch(`/notifications/${id}/read`, {})
     } catch {}
-    setNotifications((prev) => prev.map((n) => ((n.id === id || n._id === id) ? { ...n, read: true } : n)))
     hrStore.markNotificationRead(id)
   }
+
+  const handleDeleteOne = async (item) => {
+    const id = item.id || item._id
+    setNotifications((prev) => prev.filter((n) => n.id !== id && n._id !== id))
+    try {
+      await apiClient.delete(`/notifications/${id}`)
+    } catch {}
+    if (hrStore.deleteNotification) {
+      hrStore.deleteNotification(id)
+    }
+  }
+
+  // Real-time live notification stream (SSE) with automatic fallback
+  useEffect(() => {
+    const token = apiClient.getToken ? apiClient.getToken() : localStorage.getItem('edufyi_token')
+    if (!token) return
+
+    let es = null
+    try {
+      es = new EventSource(`/api/v1/notifications/stream?token=${encodeURIComponent(token)}`)
+      es.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data)
+          if (payload.type === 'notification' && payload.data) {
+            const notif = payload.data
+            const id = String(notif.id || notif._id || notif.notificationId || '')
+            if (!id) return
+            setNotifications((prev) => {
+              if (prev.some((n) => n.id === id || n._id === id)) return prev
+              return [{ ...notif, id, _id: id, read: false }, ...prev]
+            })
+            if (!soundMuted) {
+              try { playNotificationSound('notification') } catch {}
+            }
+          }
+        } catch {}
+      }
+      es.onerror = () => {
+        es?.close()
+      }
+    } catch {}
+
+    return () => {
+      es?.close()
+    }
+  }, [user?.id, user?.employeeId, soundMuted])
+
+  // Reset notification IDs on user change
+  useEffect(() => {
+    prevNotifIdsRef.current = new Set()
+    isFirstLoadRef.current = true
+    syncUnifiedNotifications(true)
+  }, [user?.id, user?.employeeId])
 
   const handleMarkAllRead = async () => {
     try {
@@ -469,8 +537,8 @@ export function HRLayout({ route, children }) {
     const file = e.target.files?.[0]
     if (!file) return
     try {
-      // Compress client-side to max 512x512 JPEG (~50KB) to prevent MongoDB 16MB document size limit
-      const dataUrl = await compressImageFile(file, 512, 512, 0.82)
+      // Compress client-side to max 384x384 JPEG (~30KB-50KB) to prevent MongoDB 16MB document size limit
+      const dataUrl = await compressImageFile(file, 384, 384, 0.75)
       if (dataUrl) {
         if (hrStore.updateMyAvatar) {
           await hrStore.updateMyAvatar(dataUrl)
@@ -491,17 +559,36 @@ export function HRLayout({ route, children }) {
 
   const unreadCount = notifications.filter((n) => !n.read).length
 
-  // STRICT ROLE-BASED: Each role sees ONLY their own portal
+  // STRICT ROLE-BASED: Admin, HR, Executive Leadership, and Employee portals
   const isAdmin = user?.role === 'admin'
-  const isHR = user?.role === 'hr'
-  const isManager = user?.role === 'manager'
-  const isEmployee = user?.role === 'employee'
+  const isExecutive = ['director', 'managing_director', 'co_founder', 'vertical_head'].includes(user?.role) || user?.email === 'jagadishbabu@edufyitech.in'
+  const isHR = !isAdmin && !isExecutive && (user?.role === 'hr' || user?.role === 'hr_executive')
+  const isManager = !isAdmin && !isExecutive && !isHR && (user?.role === 'manager' || ['team_lead', 'team_leader', 'revenue_growth_manager', 'senior_manager', 'head_of_sales', 'head_of_marketing'].includes(user?.role))
+  const isEmployee = !isAdmin && !isExecutive && !isHR && !isManager
 
-  const portalClass = isAdmin ? 'portal-theme-admin' : (isHR ? 'portal-theme-hr' : 'portal-theme-employee')
-  const dashboardHref = isAdmin ? '#/admin' : (isHR ? '#/hr' : '#/employee')
-  const portalLabel = isAdmin ? 'System Admin Console' : (isHR ? 'HR People Operations' : 'Employee Self-Service')
-  const portalPillLabel = isAdmin ? 'Admin Console' : (isHR ? 'HR Operations' : 'ESS Portal')
-  const activeRoutes = isAdmin ? adminRoutes : (isHR ? hrRoutes : employeeRoutes)
+  const activeRoutes = route.path.startsWith('/admin')
+    ? adminRoutes
+    : route.path.startsWith('/hr')
+    ? hrRoutes
+    : isAdmin
+    ? adminRoutes
+    : isHR
+    ? hrRoutes
+    : employeeRoutes
+
+  const portalClass = route.path.startsWith('/admin')
+    ? 'portal-theme-admin'
+    : route.path.startsWith('/hr')
+    ? 'portal-theme-hr'
+    : isAdmin
+    ? 'portal-theme-admin'
+    : isHR
+    ? 'portal-theme-hr'
+    : 'portal-theme-employee'
+
+  const dashboardHref = isAdmin ? '#/admin' : (isExecutive ? '#/employee' : isHR ? '#/hr' : '#/employee')
+  const portalLabel = isAdmin ? 'System Admin Console' : (isExecutive ? 'Managing Director Console' : isHR ? 'HR People Operations' : 'Employee Self-Service')
+  const portalPillLabel = isAdmin ? 'Admin Console' : (isExecutive ? 'Managing Director' : isHR ? 'HR Operations' : 'ESS Portal')
   const visibleRoutes = activeRoutes.filter((item) => !item.permission || hasPermission(user, item.permission))
 
   // Group names present in visible routes
@@ -566,28 +653,30 @@ export function HRLayout({ route, children }) {
             </button>
           </div>
 
-          {/* ROLE INDICATOR - No portal switching, strict role isolation */}
+          {/* ROLE INDICATOR - Strict, mutually exclusive badge */}
           <div style={{ padding: '0 16px 14px 16px' }}>
-            <div className={`role-indicator-box role-indicator-${user?.role || 'employee'}`}>
-              {isAdmin && (
+            <div className={`role-indicator-box role-indicator-${isExecutive ? 'managing_director' : (user?.role || 'employee')}`}>
+              {isAdmin ? (
                 <>
                   <ShieldCheck size={13} />
                   <span>Administrator Access</span>
                 </>
-              )}
-              {isHR && (
+              ) : isExecutive ? (
+                <>
+                  <ShieldCheck size={13} />
+                  <span>{user?.role === 'managing_director' ? 'Managing Director Console' : 'Executive Leadership Access'}</span>
+                </>
+              ) : (user?.role === 'hr' || user?.role === 'hr_executive') ? (
                 <>
                   <Users size={13} />
                   <span>HR Operations Access</span>
                 </>
-              )}
-              {isManager && (
+              ) : isManager ? (
                 <>
                   <UserCheck size={13} />
                   <span>Manager Access</span>
                 </>
-              )}
-              {isEmployee && (
+              ) : (
                 <>
                   <UserCheck size={13} />
                   <span>Employee Self-Service</span>
@@ -664,6 +753,11 @@ export function HRLayout({ route, children }) {
                 <ShieldCheck size={13} />
                 <span>Admin Console</span>
               </span>
+            ) : isExecutive ? (
+              <span className="topbar-portal-indicator executive">
+                <ShieldCheck size={13} />
+                <span>{user?.role === 'managing_director' ? 'Managing Director Console' : 'Executive Console'}</span>
+              </span>
             ) : isHR ? (
               <span className="topbar-portal-indicator hr">
                 <Users size={13} />
@@ -685,14 +779,14 @@ export function HRLayout({ route, children }) {
 
           <div className="topbar-actions">
             {/* Personalized Greeting with Role-Based Title */}
-            <div className="topbar-greeting-pill" title={`Logged in as ${isAdmin ? 'Admin' : isHR ? 'HR' : resolveUserDisplayName(user, storeState?.employees || [])} (${user?.role})`}>
+            <div className="topbar-greeting-pill" title={`Logged in as ${isAdmin ? 'Admin' : isHR && !isExecutive ? 'HR' : resolveUserDisplayName(user, storeState?.employees || [])} (${user?.role})`}>
               <span className="greeting-sparkle">👋</span>
               <span className="greeting-text">
                 {getTimeOfDayGreeting()},{' '}
-                <strong className="greeting-name">{isAdmin ? 'Admin' : isHR ? 'HR' : resolveUserDisplayName(user, storeState?.employees || [])}</strong>
+                <strong className="greeting-name">{isAdmin ? 'Admin' : isHR && !isExecutive ? 'HR' : resolveUserDisplayName(user, storeState?.employees || [])}</strong>
               </span>
               <span className={`role-badge role-${user?.role ?? 'hr'}`}>
-                {isAdmin ? 'Admin' : isHR ? 'HR' : getRoleBadgeLabel(user?.role)}
+                {isAdmin ? 'Admin' : isHR && !isExecutive ? 'HR' : getRoleBadgeLabel(user?.role)}
               </span>
             </div>
 
@@ -701,10 +795,10 @@ export function HRLayout({ route, children }) {
               className="ai-copilot-btn"
               type="button"
               onClick={() => setAiAssistantOpen(true)}
-              title={isAdmin ? 'Open AI Admin Copilot' : (isHR ? 'Open AI HR Copilot' : 'Open AI Copilot')}
+              title={isAdmin ? 'Open AI Admin Copilot' : (isExecutive ? 'Open AI Executive Copilot' : isHR ? 'Open AI HR Copilot' : 'Open AI Copilot')}
             >
               <Sparkles size={14} />
-              <span>{isAdmin ? 'AI Admin Copilot' : (isHR ? 'AI HR Copilot' : 'AI Copilot')}</span>
+              <span>{isAdmin ? 'AI Admin Copilot' : (isExecutive ? 'AI Executive Copilot' : isHR ? 'AI HR Copilot' : 'AI Copilot')}</span>
             </button>
 
 
@@ -825,78 +919,7 @@ export function HRLayout({ route, children }) {
                     </div>
                   </div>
 
-                  {/* Device Push Notification Channel Banner */}
-                  <div
-                    style={{
-                      padding: '8px 12px',
-                      background: pushStatus === 'granted' ? '#f0fdf4' : '#f8fafc',
-                      borderBottom: '1px solid #e2e8f0',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      fontSize: '11px',
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: pushStatus === 'granted' ? '#166534' : '#475569' }}>
-                      <span style={{ fontSize: '13px' }}>{pushStatus === 'granted' ? '📱' : '🔔'}</span>
-                      <span>
-                        {pushStatus === 'granted'
-                          ? 'Device Push: Active'
-                          : pushStatus === 'denied'
-                          ? 'Device Push: Blocked in browser'
-                          : 'Receive instant device push alerts'}
-                      </span>
-                    </div>
 
-                    <div style={{ display: 'flex', gap: '6px' }}>
-                      {pushStatus !== 'granted' && (
-                        <button
-                          type="button"
-                          onClick={handleEnablePush}
-                          disabled={pushLoading}
-                          style={{
-                            border: '1px solid #0d9488',
-                            background: '#0d9488',
-                            color: '#ffffff',
-                            borderRadius: '6px',
-                            fontSize: '10.5px',
-                            fontWeight: 600,
-                            padding: '3px 8px',
-                            cursor: 'pointer',
-                          }}
-                        >
-                          {pushLoading ? 'Enabling...' : 'Enable Push'}
-                        </button>
-                      )}
-
-                      {pushStatus === 'granted' && (
-                        <button
-                          type="button"
-                          onClick={handleTestPush}
-                          disabled={pushLoading}
-                          style={{
-                            border: '1px solid #cbd5e1',
-                            background: '#ffffff',
-                            color: '#0f766e',
-                            borderRadius: '6px',
-                            fontSize: '10px',
-                            fontWeight: 600,
-                            padding: '2px 6px',
-                            cursor: 'pointer',
-                          }}
-                          title="Send a sample notification to your device lock screen"
-                        >
-                          {pushLoading ? 'Testing...' : 'Test Push'}
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  {pushNotice && (
-                    <div style={{ padding: '4px 12px', background: '#ecfdf5', color: '#047857', fontSize: '10.5px', fontWeight: 500, textAlign: 'center' }}>
-                      {pushNotice}
-                    </div>
-                  )}
 
                   {/* Category Filter Tabs */}
                   <div
@@ -1082,11 +1105,11 @@ export function HRLayout({ route, children }) {
 
                                 <button
                                   type="button"
-                                  title="Dismiss notification"
+                                  title="Remove notification"
                                   style={{ border: 0, background: 'transparent', color: '#94a3b8', fontSize: '12px', cursor: 'pointer', padding: '1px 4px' }}
                                   onClick={(e) => {
                                     e.stopPropagation()
-                                    handleMarkOneRead(n)
+                                    handleDeleteOne(n)
                                   }}
                                 >
                                   ✕
@@ -1277,7 +1300,7 @@ export function HRLayout({ route, children }) {
                       </div>
                       <div className="profile-detail-row">
                         <span>Designation</span>
-                        <strong>{user?.designation || 'Head of People Operations'}</strong>
+                        <strong>{user?.designation || (isAdmin ? 'System Administrator' : isExecutive ? 'Managing Director' : isHR ? 'HR Operations' : 'Staff Member')}</strong>
                       </div>
                       <div className="profile-detail-row">
                         <span>Assigned Shift</span>
@@ -1315,7 +1338,7 @@ export function HRLayout({ route, children }) {
 
                       <div className="profile-role-notice">
                         <ShieldCheck size={14} />
-                        <span>Authorized Employee session • Self-Service Portal</span>
+                        <span>{isAdmin ? 'Authorized Administrator Console' : isExecutive ? 'Executive Managing Director Session' : isHR ? 'Authorized HR Operations Session' : 'Authorized Employee Session • Self-Service Portal'}</span>
                       </div>
 
                       <button

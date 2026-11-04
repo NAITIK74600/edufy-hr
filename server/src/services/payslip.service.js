@@ -61,7 +61,7 @@ export function normalizePayrollData(record = {}, employee = {}, settings = DEFA
   const employeeCode = safeRecord.employeeId || emp.employeeId || 'N/A'
   const employeeName = emp.name || safeRecord.employeeName || 'N/A'
   const location = safeRecord.location || safeRecord.branch || emp.location || emp.branch || safeSettings.defaultBranch || 'Bengaluru HQ'
-  const designation = emp.designation || 'Associate'
+  const designation = emp.designation || 'Pending Designation'
   const department = emp.department || 'Operations'
 
   const rawAccount = safeRecord.accountNumber || emp.bankDetails?.accountNumber || emp.bankAccount || emp.accountNumber || ''

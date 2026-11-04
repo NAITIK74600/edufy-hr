@@ -139,5 +139,10 @@ export function createWorkspaceStore(store, mutate, getUser = null, rawLocal = {
       if (isLocal()) return res
       return save('delete', `/teams/${encodeURIComponent(id)}`).then(() => res)
     },
+    assignEmployeesToTeam: (teamIdOrName, employeeIds, actor) => {
+      const res = rawLocal.assignEmployeesToTeam ? rawLocal.assignEmployeesToTeam(teamIdOrName, employeeIds, actor) : { success: true }
+      if (isLocal()) return res
+      return save('put', `/teams/${encodeURIComponent(teamIdOrName)}/members`, { employeeIds: Array.from(employeeIds || []) }).then(() => res)
+    },
   }
 }

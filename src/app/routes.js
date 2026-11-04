@@ -106,14 +106,15 @@ export function findRoute(path) {
 
 export function readPath() {
   const path = window.location.hash.replace(/^#/, '') || ''
-  if (!path) {
+  if (!path || path === '/') {
     if (typeof window !== 'undefined' && window.localStorage) {
       try {
         const stored = window.localStorage.getItem('edufyi.authUser')
         if (stored) {
           const u = JSON.parse(stored)
+          const isExec = ['director', 'managing_director', 'co_founder', 'vertical_head'].includes(u.role) || u.email === 'jagadishbabu@edufyitech.in'
           if (u.role === 'admin') return '/admin'
-          if (u.role === 'hr' || u.role === 'hr_executive') return '/hr'
+          if (u.role === 'hr' || u.role === 'hr_executive' || isExec) return '/hr'
           return '/employee'
         }
       } catch {}

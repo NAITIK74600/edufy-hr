@@ -4,7 +4,7 @@ import { attachOnboardingDocs } from '../models/onboardingDocsCache.js'
 
 function toAuthUser(user) {
   if (!user) return null
-  const displayName = user.displayName || user.name || user.username || (user.email ? user.email.split('@')[0] : 'Employee')
+  const displayName = user.displayName || user.name || user.username || (user.email ? user.email.split('@')[0] : 'Team Member')
   return { ...user, id: String(user._id), displayName, name: user.name || displayName }
 }
 
@@ -13,7 +13,7 @@ function toPublicUser(user) {
   const source = user.toObject ? user.toObject() : user
   delete source.passwordHash
   delete source.authVersion
-  const displayName = source.displayName || source.name || source.username || (source.email ? source.email.split('@')[0] : 'Employee')
+  const displayName = source.displayName || source.name || source.username || (source.email ? source.email.split('@')[0] : 'Team Member')
   return { ...source, displayName, name: source.name || displayName, mustChangePassword: Boolean(source.mustChangePassword) }
 }
 
@@ -46,15 +46,22 @@ export function createMongoUserStore({ managementUsers = [] } = {}) {
     initialization ??= (async () => {
       await Employee.init()
       for (const { id, ...user } of managementUsers) {
-        const existing = await Employee.findOne({ $or: [{ email: user.email }, { employeeId: user.employeeId }] }).lean()
-        if (existing && existing.role !== user.role && existing.employeeId !== user.employeeId) {
-          throw Object.assign(new Error(`Configured ${user.role} email conflicts with an existing employee. Resolve the duplicate before starting.`), { statusCode: 409, code: 'MANAGEMENT_ACCOUNT_CONFLICT' })
-        }
+        const existing = await Employee.findOne({
+          $or: [
+            { email: user.email.toLowerCase().trim() },
+            { employeeId: user.employeeId.toUpperCase().trim() },
+            ...(user.role === 'managing_director' ? [{ employeeId: 'EDU-DIR-001' }, { username: 'jagadishbabu' }, { name: /jagadish\s*babu/i }] : []),
+          ],
+        }).lean()
         const { passwordHash, permissions, role, username, status, ...profile } = user
         if (existing) {
+          const updateFields = { email: user.email, permissions, role, username, status: 'active' }
+          if (!existing.passwordHash) {
+            updateFields.passwordHash = passwordHash
+          }
           await Employee.updateOne(
             { _id: existing._id },
-            { $set: { email: user.email, passwordHash, permissions, role, username, status: 'active' } }
+            { $set: updateFields }
           )
         } else {
           await Employee.findOneAndUpdate(
@@ -76,7 +83,7 @@ export function createMongoUserStore({ managementUsers = [] } = {}) {
         $or: [
           { passwordHash: { $exists: true } },
           { email: { $in: managementUsers.map(({ email }) => email) } },
-          { role: { $in: ['admin', 'director', 'hr', 'manager', 'team_lead', 'employee'] } },
+          { role: { $in: ['admin', 'director', 'managing_director', 'co_founder', 'vertical_head', 'hr', 'manager', 'team_lead', 'team_leader', 'employee'] } },
         ],
       }).lean()
       await attachOnboardingDocs(users)
@@ -143,7 +150,7 @@ export function createMongoUserStore({ managementUsers = [] } = {}) {
           passwordHash: userData.passwordHash,
           role: userData.role || 'employee',
           department: userData.department || 'General',
-          designation: userData.designation || 'Staff Member',
+          designation: (userData.designation && String(userData.designation).trim()) || 'Pending Designation',
           status: userData.status || 'active',
           employmentType: 'full_time',
           joiningDate: userData.joiningDate || new Date(),

@@ -58,3 +58,5 @@ edufyi logo.jpg.jpeg
 dist/stats.html
 
 .jwt_secret
+
+.vapid_keys.json

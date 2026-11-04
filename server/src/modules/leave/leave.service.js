@@ -1,5 +1,7 @@
 import { hasPermission, PERMISSIONS } from '../../auth/permissions.js'
-import { mailService } from '../../services/mail.service.js'
+import mongoose from 'mongoose'
+import { mailService, sendLeaveSubmissionEmail, sendLeaveStatusEmail } from '../../services/mail.service.js'
+import { createUnifiedNotification } from '../../services/unifiedNotification.service.js'
 
 const ACTIVE_STATUSES = ['pending_tl', 'pending_manager', 'pending_director', 'pending_hr', 'pending_admin', 'approved']
 const TRANSITIONS = Object.freeze({
@@ -59,6 +61,7 @@ function calculateUnits(startDate, endDate, policy) {
 function calculateUnitsBreakdown(startDate, endDate, policy) {
   if (!policy?.configured) throw error(`The ${policy?.label ?? 'leave'} policy is not configured. HR must confirm its rules before leave can be calculated.`, 409, 'LEAVE_POLICY_NOT_CONFIGURED')
   const holidayKeys = new Set((policy.holidayDates ?? []).map((date) => dateKey(new Date(date))))
+  const isLopType = String(policy?.leaveType || '').toLowerCase() === 'lop'
   let totalUnits = 0
   let paidUnits = 0
   let doubleLopDays = 0
@@ -70,7 +73,10 @@ function calculateUnitsBreakdown(startDate, endDate, policy) {
     if ((!weekend || policy.countWeekends) && (!holiday || policy.countHolidays)) {
       totalUnits += 1
       const dayOfMonth = cursor.getUTCDate()
-      if (dayOfMonth >= 25) {
+      if (isLopType) {
+        // Loss of Pay is completely unpaid
+        doubleLopDays += 1
+      } else if (dayOfMonth >= 25) {
         // Month end: 25th onwards is considered Double LOP
         doubleLopDays += 1
       } else {
@@ -112,9 +118,35 @@ function assertTransition(from, to) {
 }
 
 function actorCanAccess(request, actor, permission, employeeId) {
+  const isLeadership = ['admin', 'director', 'managing_director', 'co_founder', 'vertical_head'].includes(actor.role) || actor?.email === 'jagadishbabu@edufyitech.in'
+  if (isLeadership) return true
   if (hasPermission(actor, PERMISSIONS.LEAVE_HR_READ) || hasPermission(actor, PERMISSIONS.LEAVE_HR_REVIEW)) return true
-  if (permission === PERMISSIONS.LEAVE_TEAM_READ || permission === PERMISSIONS.LEAVE_TEAM_APPROVE) return idOf(request.managerId) === idOf(actor.id)
-  return idOf(request.employeeId) === idOf(employeeId ?? actor.id)
+
+  const reqMgrId = idOf(request.managerId)
+  const empMgrId = idOf(request.employeeId?.managerId)
+  const candidateActorIds = [idOf(actor?.id), idOf(actor?._id), actor?.employeeId].filter(Boolean).map(String)
+
+  // Default access: Assigned manager always has access to review their reportees' requests
+  if (candidateActorIds.includes(String(reqMgrId)) || candidateActorIds.includes(String(empMgrId))) {
+    return true
+  }
+
+  if (permission === PERMISSIONS.LEAVE_TEAM_READ || permission === PERMISSIONS.LEAVE_TEAM_APPROVE) {
+    if (candidateActorIds.includes(String(reqMgrId)) || candidateActorIds.includes(String(empMgrId))) return true
+    return false
+  }
+  const reqEmpId = idOf(request.employeeId)
+  const reqEmpCode = request.employeeId?.employeeId || (typeof request.employeeId === 'string' ? request.employeeId : null)
+  const candidateIds = [
+    idOf(employeeId),
+    idOf(actor?.id),
+    idOf(actor?._id),
+    actor?.employeeId,
+    actor?.empId,
+    actor?.email
+  ].filter(Boolean).map(String)
+
+  return candidateIds.includes(String(reqEmpId)) || (reqEmpCode && candidateIds.includes(String(reqEmpCode)))
 }
 
 function publicRequest(request) {
@@ -153,15 +185,41 @@ export function createLeaveService({ repository, employeeRepository, notificatio
     }
   }
 
-  async function notifyRecipient(recipientId, event, request, message) {
-    if (!recipientId || !notifier?.notify) return
-    await notifier.notify({ recipientId, event, entityId: idOf(request), message })
+  async function notifyRecipient(recipientId, event, request, message, title = 'Leave Notice', targetUrl = '#/employee/leave', priority = 'normal') {
+    if (!recipientId) return
+    const recIdStr = String(recipientId)
+    const normalizedEvent = String(event || 'leave.notice').toLowerCase().replace(/_/g, '.')
+    const eventType = String(event || 'LEAVE_NOTICE').toUpperCase().replace(/\./g, '_')
+    if (notifier?.notify) {
+      try {
+        await notifier.notify({ recipientId: recIdStr, event: normalizedEvent, entityId: idOf(request), message, title })
+      } catch {}
+    }
+    if (mongoose?.connection?.readyState === 1) {
+      try {
+        await createUnifiedNotification({
+          employeeId: recIdStr,
+          recipientId: recIdStr,
+          title: title || 'Leave Notice',
+          message: message || '',
+          category: 'leave',
+          eventType,
+          relatedEntityId: idOf(request),
+          targetUrl: targetUrl || '#/employee/leave',
+          priority: priority || 'normal',
+        })
+      } catch (err) {
+        console.warn('[leave.service] Notification warning:', err?.message || err)
+      }
+    }
   }
 
   async function notifyHr(event, request, message) {
     if (!notifier?.notify || !employeeRepository.list) return
     const result = await employeeRepository.list({ limit: 100, status: 'active' })
-    const recipients = (result.records ?? result ?? []).filter((employee) => ['admin', 'hr'].includes(employee.role))
+    const recipients = (result.records ?? result ?? []).filter((employee) =>
+      ['admin', 'hr', 'director', 'managing_director', 'co_founder'].includes(employee.role)
+    )
     await Promise.all(recipients.map((employee) => notifyRecipient(idOf(employee), event, request, message)))
   }
 
@@ -179,17 +237,30 @@ export function createLeaveService({ repository, employeeRepository, notificatio
       if (!employee || !['active', 'notice'].includes(employee.status)) throw error('Select an active employee.', 400, 'EMPLOYEE_RECORD_NOT_FOUND')
       const leaveType = String(payload.leaveType ?? '').trim().toLowerCase()
       const policy = await getPolicy(leaveType)
+      const isHalfDay = Boolean(payload.isHalfDay || payload.days === 0.5)
+      const halfDayPeriod = isHalfDay ? (payload.halfDayPeriod || 'first_half') : null
       const startDate = parseDate(payload.startDate, 'startDate')
-      const endDate = parseDate(payload.endDate, 'endDate')
+      const endDate = isHalfDay ? startDate : parseDate(payload.endDate, 'endDate')
       if (endDate < startDate) throw error('End date must be on or after start date.', 400, 'INVALID_LEAVE_RANGE', { endDate: 'Must be on or after start date.' })
       if (policy.requiresReason && !String(payload.reason ?? '').trim()) throw error('A reason is required for this leave type.', 400, 'VALIDATION_ERROR', { reason: 'Required.' })
-      const { totalUnits, paidUnits, doubleLopDays, isDoubleLop } = calculateUnitsBreakdown(startDate, endDate, policy)
+      let { totalUnits, paidUnits, doubleLopDays, isDoubleLop } = calculateUnitsBreakdown(startDate, endDate, policy)
+      if (isHalfDay) {
+        totalUnits = 0.5
+        paidUnits = paidUnits > 0 ? 0.5 : 0
+        doubleLopDays = doubleLopDays > 0 ? 0.5 : 0
+        isDoubleLop = doubleLopDays > 0
+      }
       const units = totalUnits
-      const overlap = await repository.findOverlap({ employeeId: idOf(employee), startDate, endDate })
+      const overlap = await repository.findOverlap({ employeeId: idOf(employee), startDate, endDate, isHalfDay, halfDayPeriod })
       if (overlap) {
         const canCancel = ['pending_tl', 'pending_manager', 'pending_director', 'pending_hr', 'pending_admin', 'approved'].includes(overlap.status)
         if (payload.replaceOverlap && canCancel) {
-          await this.cancel(idOf(overlap), actor)
+          await this.cancel(idOf(overlap), actor, { forceOverride: true })
+          let secondaryOverlap = await repository.findOverlap({ employeeId: idOf(employee), startDate, endDate, isHalfDay, halfDayPeriod })
+          while (secondaryOverlap && ['pending_tl', 'pending_manager', 'pending_director', 'pending_hr', 'pending_admin', 'approved'].includes(secondaryOverlap.status)) {
+            await this.cancel(idOf(secondaryOverlap), actor, { forceOverride: true })
+            secondaryOverlap = await repository.findOverlap({ employeeId: idOf(employee), startDate, endDate, isHalfDay, halfDayPeriod })
+          }
         } else {
           const overlapStart = overlap.startDate ? new Date(overlap.startDate).toISOString().slice(0, 10) : ''
           const overlapEnd = overlap.endDate ? new Date(overlap.endDate).toISOString().slice(0, 10) : ''
@@ -208,26 +279,50 @@ export function createLeaveService({ repository, employeeRepository, notificatio
           )
         }
       }
-      // Resolve the appropriate approver for the leave request
-// 1. Try the employee's direct manager (if any)
-// 2. If no manager or the policy forces HR, fall back to an HR user (admin/HR role)
-let managerId = null;
-if (employee.managerId) {
-  managerId = idOf(employee.managerId);
-}
-// If the policy mandates HR approval or no manager found, pick an HR recipient
-if (!managerId || policy.approvalStage === 'hr') {
-  // Query HR/admin users (cached to avoid multiple DB hits)
-  const hrResult = await employeeRepository.list({ limit: 100, status: 'active' });
-  const hrUsers = (hrResult.records ?? hrResult ?? []).filter((e) => ['admin', 'hr'].includes(e.role));
-  if (hrUsers.length > 0) {
-    // Choose the first HR user as the fallback approver
-    managerId = idOf(hrUsers[0]);
-  }
-}
+      // Resolve the direct reporting manager for this employee from database
+      let directManager = null
+      const rawMgrId = employee.managerId?._id || employee.managerId?.id || employee.managerId
+      if (rawMgrId) {
+        try {
+          if (mongoose?.connection?.readyState === 1) {
+            const { Employee } = await import('../../models/Employee.js')
+            directManager = await Employee.findById(rawMgrId).lean()
+          }
+          if (!directManager) {
+            directManager = await employeeRepository.findById(rawMgrId)
+          }
+        } catch {}
+      }
+      if (!directManager && employee.reportingManager) {
+        try {
+          if (mongoose?.connection?.readyState === 1) {
+            const { Employee } = await import('../../models/Employee.js')
+            directManager = await Employee.findOne({
+              $or: [
+                { employeeId: String(employee.reportingManager).trim().toUpperCase() },
+                { email: String(employee.reportingManager).trim().toLowerCase() },
+                { name: String(employee.reportingManager).trim() },
+                { displayName: String(employee.reportingManager).trim() },
+              ],
+            }).lean()
+          }
+        } catch {}
+      }
+      if (!directManager && employee.department && mongoose?.connection?.readyState === 1) {
+        try {
+          const { Employee } = await import('../../models/Employee.js')
+          directManager = await Employee.findOne({
+            department: employee.department,
+            role: { $in: ['manager', 'director', 'managing_director', 'vertical_head', 'team_lead', 'team_leader'] },
+            status: 'active',
+            _id: { $ne: employee._id },
+          }).lean()
+        } catch {}
+      }
 
-      if (!managerId && policy.approvalStage === 'manager') throw error('A manager must be assigned before this leave type can be submitted.', 409, 'MANAGER_REQUIRED')
-      
+      const directManagerId = directManager ? idOf(directManager) : (rawMgrId ? String(rawMgrId) : null)
+      let managerId = directManagerId
+
       const defaultAllowance = getMonthlyDefaultAllowance(employee, leaveType)
       const targetAllowance = policy.annualAllowance != null ? policy.annualAllowance : defaultAllowance
       if (repository.ensureBalance) await repository.ensureBalance(idOf(employee), leaveType, targetAllowance)
@@ -243,22 +338,50 @@ if (!managerId || policy.approvalStage === 'hr') {
           }
         }
       }
-      const isManagerApplicant = employee.role === 'manager'
-      const isTlApplicant = employee.role === 'team_lead'
-      let manager = managerId ? await employeeRepository.findById(managerId) : null
-      const isReportingToTl = manager?.role === 'team_lead'
+
+      // Determine initial approval status based on configured leave policy and reporting hierarchy
+      const configuredStage = String(policy?.approvalStage || 'manager').toLowerCase().trim()
+      const isDirectorApplicant = ['director', 'managing_director', 'co_founder'].includes(employee.role)
+      const isManagerApplicant = ['manager', 'revenue_growth_manager', 'senior_manager', 'vertical_head'].includes(employee.role)
+      const isDirectManagerDirector = directManager && ['director', 'managing_director', 'co_founder'].includes(directManager.role)
       const isLopMonthLeave = is25thMonthLop(startDate, endDate, leaveType, isDoubleLop, doubleLopDays)
-      const status = isLopMonthLeave
-        ? 'pending_hr'
-        : isManagerApplicant
-        ? 'pending_director'
-        : isTlApplicant
-        ? 'pending_manager'
-        : isReportingToTl
-        ? 'pending_tl'
-        : managerId
-        ? (policy.approvalStage === 'tl' ? 'pending_tl' : 'pending_manager')
-        : 'pending_hr'
+
+      let status = 'pending_manager'
+
+      if (isLopMonthLeave) {
+        // Month-end (>=25th) LOP leave mandates HR verification first
+        status = 'pending_hr'
+      } else if (configuredStage === 'hr') {
+        // Policy explicitly mandates direct HR Operations review
+        status = 'pending_hr'
+      } else if (configuredStage === 'director') {
+        // Policy explicitly mandates Director sign-off
+        status = 'pending_director'
+      } else if (configuredStage === 'tl') {
+        // Policy explicitly mandates Team Lead review
+        status = 'pending_tl'
+      } else if (isDirectorApplicant) {
+        // Director self-leave
+        status = 'approved'
+      } else if (isManagerApplicant) {
+        // Department Manager reporting to Managing Director / Executive Leadership
+        status = 'pending_director'
+      } else if (directManager) {
+        // Standard Employee with an assigned reporting manager:
+        // Always routes to their assigned reporting manager for review!
+        if (directManager.role === 'team_lead' || directManager.role === 'team_leader') {
+          status = 'pending_tl'
+        } else {
+          status = 'pending_manager'
+        }
+      } else {
+        // Fallback when no manager is configured for this employee in the system:
+        // Routes to HR Operations
+        status = 'pending_hr'
+        const hrResult = await employeeRepository.list({ limit: 50, status: 'active' })
+        const hrUsers = (hrResult.records ?? hrResult ?? []).filter((e) => ['hr', 'admin'].includes(e.role))
+        if (hrUsers.length > 0) managerId = idOf(hrUsers[0])
+      }
       let request
       try {
         request = await repository.createRequest({
@@ -269,6 +392,8 @@ if (!managerId || policy.approvalStage === 'hr') {
           endDate,
           units,
           paidUnits,
+          isHalfDay,
+          halfDayPeriod,
           isDoubleLop,
           doubleLopDays,
           reason: String(payload.reason).trim(),
@@ -279,12 +404,88 @@ if (!managerId || policy.approvalStage === 'hr') {
         if (paidUnits > 0) await repository.releaseReservation(idOf(employee), leaveType, paidUnits)
         throw saveError
       }
+      const empName = employee.name || 'Employee'
+      const leaveTypeUpper = leaveType.toUpperCase()
+
+      // 1. Notify HR Operations
       if (isLopMonthLeave) {
-        await notifyHr('leave.hr_review_required', request, `${employee.name} submitted a 25th Month LOP leave request requiring HR review before Admin approval.`)
-        if (managerId) await notifyRecipient(managerId, 'leave.submitted', request, `${employee.name} submitted a 25th Month LOP leave request (routed to HR & Admin).`)
+        await notifyHr('LEAVE_HR_REVIEW_REQUIRED', request, `${empName} submitted a 25th Month LOP leave request requiring HR review before Admin approval.`, `⚠️ 25th Month LOP Leave: ${empName}`)
       } else {
-        await notifyRecipient(managerId, 'leave.submitted', request, `${employee.name} submitted a leave request for ${units} unit(s).`)
-        if (!managerId) await notifyHr('leave.hr_review_required', request, `${employee.name} submitted a leave request requiring HR review.`)
+        await notifyHr('LEAVE_SUBMITTED', request, `${empName} applied for ${units} day(s) of ${leaveTypeUpper} (${startDate} to ${endDate}).`, `Leave Submitted: ${empName}`)
+      }
+
+      // 2. Notify Direct Reporting Manager / Director (In-app + Device Web Push + Email)
+      let recipientManagerId = directManagerId || managerId
+      if (!recipientManagerId && mongoose?.connection?.readyState === 1) {
+        try {
+          const { Employee } = await import('../../models/Employee.js')
+          const executive = await Employee.findOne({
+            role: { $in: ['director', 'managing_director', 'admin', 'hr'] },
+            status: { $ne: 'inactive' },
+            _id: { $ne: employee._id },
+          }).lean()
+          if (executive) {
+            recipientManagerId = idOf(executive)
+            directManager = executive
+          }
+        } catch {}
+      }
+
+      if (recipientManagerId && String(recipientManagerId) !== String(idOf(employee))) {
+        await notifyRecipient(
+          recipientManagerId,
+          'LEAVE_SUBMITTED',
+          request,
+          `${empName} (${employee.department || 'Team'}) applied for ${units} day(s) of ${leaveTypeUpper} (${startDate} to ${endDate}). Reason: "${payload.reason}"`,
+          `📅 New Team Leave: ${empName} (${leaveTypeUpper})`,
+          '#/hr/leave',
+          'high'
+        )
+      }
+
+      // 3. If routed to Director (e.g. for Manager or HR applicant), notify all active Directors
+      if (status === 'pending_director' && mongoose?.connection?.readyState === 1) {
+        try {
+          const { Employee } = await import('../../models/Employee.js')
+          const directors = await Employee.find({ role: { $in: ['director', 'managing_director'] }, status: { $ne: 'inactive' } }).lean()
+          for (const dir of directors) {
+            if (String(idOf(dir)) !== String(recipientManagerId) && String(idOf(dir)) !== String(idOf(employee))) {
+              await notifyRecipient(
+                idOf(dir),
+                'LEAVE_SUBMITTED',
+                request,
+                `${empName} (${(employee.role || 'Team').toUpperCase()}) submitted a leave request (${startDate} to ${endDate}) requiring executive approval. Reason: "${payload.reason}"`,
+                `👔 Executive Leave Request: ${empName} (${leaveTypeUpper})`,
+                '#/hr/leave',
+                'high'
+              )
+              if (dir.email) {
+                await sendLeaveSubmissionEmail({
+                  employee,
+                  manager: dir,
+                  leaveRequest: request,
+                }).catch(() => {})
+              }
+            }
+          }
+        } catch (dirNoticeErr) {
+          console.warn('[leave.service] Director notify notice:', dirNoticeErr?.message || dirNoticeErr)
+        }
+      }
+
+      // 4. Notify the Submitting Employee
+      await notifyRecipient(idOf(employee), 'LEAVE_SUBMITTED', request, `Your leave request for ${startDate} to ${endDate} (${units} days) has been submitted for approval.`, `Leave Request Submitted (${leaveTypeUpper})`, '#/employee/leave')
+
+      // 5. Send Email to Direct Manager and Employee
+      try {
+        const mgrForEmail = directManager || (recipientManagerId ? await employeeRepository.findById(recipientManagerId) : null)
+        await sendLeaveSubmissionEmail({
+          employee,
+          manager: mgrForEmail,
+          leaveRequest: request,
+        })
+      } catch (mailErr) {
+        console.warn('[leave.service] Leave submission email notice:', mailErr?.message || mailErr)
       }
       return publicRequest(request)
     },
@@ -296,8 +497,46 @@ if (!managerId || policy.approvalStage === 'hr') {
 
     async listSelf(actor, filters = {}) { const employee = await getEmployee(actor); return repository.listRequests({ ...filters, employeeId: idOf(employee) }) },
     async listTeam(actor, filters = {}) {
-      if (!hasPermission(actor, PERMISSIONS.LEAVE_TEAM_READ)) throw error('Team leave access is not permitted.', 403, 'FORBIDDEN')
-      return repository.listRequests({ ...filters, managerId: actor.id, status: filters.status ?? 'pending_manager' })
+      const emp = await getEmployee(actor).catch(() => null)
+      const isLeadership = ['director', 'managing_director', 'co_founder', 'vertical_head', 'admin', 'hr'].includes(actor.role)
+      const candidateIds = [actor.id, actor._id, emp?._id, emp?.id, emp?.employeeId].filter(Boolean).map(String)
+
+      // Find all reportees assigned to this actor in MongoDB
+      let reporteeIds = []
+      if (mongoose?.connection?.readyState === 1) {
+        try {
+          const { Employee } = await import('../../models/Employee.js')
+          const candidateObjIds = candidateIds.filter((id) => mongoose.isValidObjectId(id)).map((id) => new mongoose.Types.ObjectId(id))
+          const repDocs = await Employee.find({
+            $or: [
+              { managerId: { $in: candidateObjIds.length ? candidateObjIds : candidateIds } },
+              { teamLeadId: { $in: candidateObjIds.length ? candidateObjIds : candidateIds } },
+              { reportingManager: { $in: [actor.name, actor.displayName, actor.email, actor.employeeId].filter(Boolean) } },
+            ],
+            status: { $ne: 'terminated' },
+          }).select('_id employeeId').lean()
+          reporteeIds = repDocs.map((d) => String(d._id))
+        } catch {}
+      }
+
+      const hasDirectReports = reporteeIds.length > 0
+      if (!hasPermission(actor, PERMISSIONS.LEAVE_TEAM_READ) && !hasDirectReports && !isLeadership) {
+        throw error('Team leave access is not permitted.', 403, 'FORBIDDEN')
+      }
+
+      if (isLeadership) {
+        return repository.listRequests({
+          ...filters,
+          status: filters.status,
+        })
+      }
+      return repository.listRequests({
+        ...filters,
+        managerId: actor.id,
+        managerIds: candidateIds,
+        reporteeEmployeeIds: reporteeIds,
+        status: filters.status,
+      })
     },
     async listHr(actor, filters = {}) {
       if (!hasPermission(actor, PERMISSIONS.LEAVE_HR_READ)) throw error('Company-wide leave access is not permitted.', 403, 'FORBIDDEN')
@@ -330,15 +569,28 @@ if (!managerId || policy.approvalStage === 'hr') {
       if (isSelf) {
         throw error('Self-approval of leave requests is strictly prohibited. You cannot decide your own leave request.', 403, 'FORBIDDEN_SELF_APPROVAL')
       }
+
+      // Resolve applicant employee record for reporting chain and assigned manager verification
+      const targetEmp = (request.employeeId && typeof request.employeeId === 'object' && request.employeeId.email)
+        ? request.employeeId
+        : await employeeRepository.findById(request.employeeId)
+
       const isAdmin = actor.role === 'admin' || (actor.permissions || []).includes('admin.access')
       const isLeadership = ['director', 'managing_director', 'co_founder', 'vertical_head'].includes(actor.role)
-      const isHr = (hasPermission(actor, PERMISSIONS.LEAVE_HR_REVIEW) || ['admin', 'hr'].includes(actor.role))
-      const isAdminApprover = (isAdmin || actor.role === 'admin') && request.status === 'pending_admin'
-      const isDirector = (isLeadership || ['admin', 'hr'].includes(actor.role)) && request.status === 'pending_director'
-      const isManager = (hasPermission(actor, PERMISSIONS.LEAVE_TEAM_APPROVE) || ['manager', 'admin', 'hr'].includes(actor.role)) && (request.status === 'pending_manager' || request.status === 'pending_tl')
-      const isTl = (hasPermission(actor, PERMISSIONS.LEAVE_TEAM_APPROVE) || ['team_lead', 'manager', 'admin', 'hr'].includes(actor.role)) && request.status === 'pending_tl'
+      const isHr = (hasPermission(actor, PERMISSIONS.LEAVE_HR_REVIEW) || ['admin', 'hr', 'director', 'managing_director'].includes(actor.role))
+      const isAdminApprover = (isAdmin || actor.role === 'admin' || actor.role === 'managing_director') && request.status === 'pending_admin'
+      const isDirector = (isLeadership || ['admin', 'hr'].includes(actor.role)) && (request.status === 'pending_director' || isLeadership)
 
-      if (!isAdminApprover && !isHr && !isDirector && !isManager && !isTl) throw error('You are not authorized to decide this request at its current stage.', 403, 'FORBIDDEN')
+      // Check if actor is the designated assigned reporting manager of this applicant or request
+      const reqMgrId = idOf(request.managerId)
+      const empMgrId = idOf(targetEmp?.managerId)
+      const candidateActorIds = [idOf(actor?.id), idOf(actor?._id), actor?.employeeId].filter(Boolean).map(String)
+      const isAssignedManager = candidateActorIds.includes(String(reqMgrId)) || candidateActorIds.includes(String(empMgrId))
+
+      const isManager = (isAssignedManager || hasPermission(actor, PERMISSIONS.LEAVE_TEAM_APPROVE) || isLeadership || ['manager', 'revenue_growth_manager', 'senior_manager', 'vertical_head', 'admin', 'hr'].includes(actor.role)) && (request.status === 'pending_manager' || request.status === 'pending_tl' || isLeadership)
+      const isTl = (isAssignedManager || hasPermission(actor, PERMISSIONS.LEAVE_TEAM_APPROVE) || ['team_lead', 'team_leader', 'manager', 'admin', 'hr'].includes(actor.role)) && request.status === 'pending_tl'
+
+      if (!isAdminApprover && !isHr && !isDirector && !isManager && !isTl && !isLeadership) throw error('You are not authorized to decide this request at its current stage.', 403, 'FORBIDDEN')
       if (decision === 'reject' && !String(payload.reason ?? payload.comment ?? '').trim()) throw error('A rejection reason is required.', 400, 'REJECTION_REASON_REQUIRED', { reason: 'Required.' })
       const policy = await getPolicy(request.leaveType)
       const isLopMonth = is25thMonthLop(request.startDate, request.endDate, request.leaveType, request.isDoubleLop, request.doubleLopDays)
@@ -384,19 +636,51 @@ if (!managerId || policy.approvalStage === 'hr') {
       const paidUnits = request.paidUnits !== undefined ? request.paidUnits : request.units
       if (nextStatus === 'rejected') await releaseReservation(request)
       if (nextStatus === 'approved' && paidUnits > 0) await repository.commitReservation(request.employeeId, request.leaveType, paidUnits)
-      if (nextStatus === 'pending_admin') {
-        await notifyAdmin('leave.admin_review_required', updated, `HR verified 25th Month LOP leave for ${updated.employeeName || 'employee'}. Admin final approval required.`)
-        await notifyRecipient(request.employeeId, 'leave.pending_admin', updated, 'Your 25th Month LOP leave was verified by HR and submitted to Administrator for final approval.')
-      } else if (nextStatus === 'pending_hr' || isDirector) {
-        await notifyHr('leave.hr_review_required', updated, isDirector ? 'Managing Director approved manager leave; synchronized to HR panel.' : 'A manager approved a leave request and HR review is required.')
+      const empIdToFind = idOf(request.employeeId) || (typeof request.employeeId === 'object' ? String(request.employeeId._id || request.employeeId.id) : String(request.employeeId))
+      const empRecord = targetEmp || await employeeRepository.findById(empIdToFind)
+
+      const mgrIdToFind = idOf(request.managerId) || (typeof request.managerId === 'object' ? String(request.managerId._id || request.managerId.id) : (request.managerId ? String(request.managerId) : null))
+      let targetMgr = (request.managerId && typeof request.managerId === 'object' && request.managerId.email)
+        ? request.managerId
+        : (mgrIdToFind ? await employeeRepository.findById(mgrIdToFind) : null)
+
+      if (!targetMgr && targetEmp?.managerId) {
+        try { targetMgr = await employeeRepository.findById(targetEmp.managerId) } catch {}
       }
-      await notifyRecipient(request.employeeId, `leave.${nextStatus}`, updated, `Your leave request is ${nextStatus}.`)
+      if (!targetMgr && mongoose?.connection?.readyState === 1) {
+        try {
+          const { Employee } = await import('../../models/Employee.js')
+          targetMgr = await Employee.findOne({ role: { $in: ['director', 'managing_director', 'admin', 'hr'] }, status: { $ne: 'inactive' } }).lean()
+        } catch {}
+      }
+
+      const empDisplayName = targetEmp?.name || updated.employeeName || 'Employee'
+      const leaveTypeTitle = (updated.leaveType || 'Leave').toUpperCase()
+
+      if (nextStatus === 'pending_admin') {
+        await notifyAdmin('LEAVE_PENDING_ADMIN', updated, `HR verified 25th Month LOP leave for ${empDisplayName}. Admin final approval required.`, `⚠️ 25th Month LOP: ${empDisplayName}`)
+        await notifyRecipient(empIdToFind, 'LEAVE_PENDING_ADMIN', updated, 'Your 25th Month LOP leave was verified by HR and submitted to Administrator for final approval.', 'Leave Submitted to Admin')
+      } else if (nextStatus === 'pending_hr' || isDirector) {
+        await notifyHr('LEAVE_PENDING_HR', updated, isDirector ? `Managing Director approved manager leave for ${empDisplayName}; synchronized to HR panel.` : `Manager approved leave for ${empDisplayName}; HR review is required.`, `📋 Leave Awaiting HR Review: ${empDisplayName}`)
+        await notifyRecipient(empIdToFind, 'LEAVE_FORWARDED', updated, 'Your leave request was endorsed by your manager and forwarded to HR for final review.', 'Leave Endorsed by Manager')
+      }
+
+      if (nextStatus === 'approved') {
+        await notifyRecipient(empIdToFind, 'LEAVE_APPROVED', updated, `Your ${leaveTypeTitle} request (${updated.startDate ? new Date(updated.startDate).toLocaleDateString('en-GB') : ''} to ${updated.endDate ? new Date(updated.endDate).toLocaleDateString('en-GB') : ''}) was approved by ${actor.displayName || actor.name || 'Management'}.`, '✅ Leave Request Approved', '#/employee/leave', 'high')
+        if (mgrIdToFind && idOf(mgrIdToFind) !== idOf(actor.id)) {
+          await notifyRecipient(mgrIdToFind, 'LEAVE_APPROVED', updated, `${empDisplayName}'s ${leaveTypeTitle} request was approved.`, `Leave Approved: ${empDisplayName}`, '#/hr/leave')
+        }
+      } else if (nextStatus === 'rejected') {
+        await notifyRecipient(empIdToFind, 'LEAVE_REJECTED', updated, `Your ${leaveTypeTitle} request was declined. Reason: "${payload.reason || payload.comment || 'Declined'}"`, '❌ Leave Request Declined', '#/employee/leave', 'high')
+      }
+
       if (['approved', 'rejected'].includes(nextStatus)) {
         try {
-          const emp = await employeeRepository.findById(request.employeeId)
-          if (emp && emp.email) {
-            await mailService.sendLeaveStatusEmail({
-              employee: emp,
+          const recipientEmail = targetEmp?.email || (typeof request.employeeId === 'object' ? request.employeeId.email : null)
+          if (recipientEmail) {
+            await sendLeaveStatusEmail({
+              employee: { ...targetEmp, email: recipientEmail, name: empDisplayName },
+              manager: targetMgr,
               leaveRequest: updated,
               action: nextStatus,
               approver: actor,
@@ -409,11 +693,20 @@ if (!managerId || policy.approvalStage === 'hr') {
       }
       return publicRequest(updated)
     },
-    async cancel(id, actor) {
+    async cancel(id, actor, { forceOverride = false } = {}) {
       const request = await getRequest(id, actor, 'self')
       const policy = await getPolicy(request.leaveType)
       const isPending = ['pending_tl', 'pending_manager', 'pending_director', 'pending_hr', 'pending_admin'].includes(request.status)
-      const canCancelApproved = request.status === 'approved' && (policy.allowCancellationAfterApproval !== false || ['admin', 'hr'].includes(actor.role))
+      const reqEmpId = idOf(request.employeeId)
+      const reqEmpCode = request.employeeId?.employeeId || (typeof request.employeeId === 'string' ? request.employeeId : null)
+      const candidateIds = [
+        idOf(actor?.id),
+        idOf(actor?._id),
+        actor?.employeeId,
+        actor?.email
+      ].filter(Boolean).map(String)
+      const isSelfEmployee = candidateIds.includes(String(reqEmpId)) || (reqEmpCode && candidateIds.includes(String(reqEmpCode)))
+      const canCancelApproved = request.status === 'approved' && (forceOverride || isSelfEmployee || policy.allowCancellationAfterApproval !== false || ['admin', 'hr', 'director', 'managing_director'].includes(actor.role))
       if (!isPending && !canCancelApproved) throw error('This request cannot be cancelled under the configured policy.', 409, 'CANCELLATION_NOT_ALLOWED')
       const updated = await repository.transitionRequest(id, [request.status], { set: { status: 'cancelled' }, push: { action: 'cancelled', fromStatus: request.status, toStatus: 'cancelled', actorId: actor.id, actorRole: actor.role, createdAt: new Date() } })
       if (!updated) throw error('This request has already changed.', 409, 'DUPLICATE_DECISION')
@@ -423,12 +716,14 @@ if (!managerId || policy.approvalStage === 'hr') {
       try {
         const emp = await employeeRepository.findById(request.employeeId)
         if (emp && emp.email) {
-          await mailService.sendLeaveStatusEmail({
+          const mgr = request.managerId ? await employeeRepository.findById(request.managerId) : (emp.managerId ? await employeeRepository.findById(emp.managerId) : null)
+          await sendLeaveStatusEmail({
             employee: emp,
+            manager: mgr,
             leaveRequest: updated,
             action: 'cancelled',
             approver: actor,
-            reason: 'Leave request was cancelled',
+            reason: 'Leave request was cancelled.',
           })
         }
       } catch (mailErr) {

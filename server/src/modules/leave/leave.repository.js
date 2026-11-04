@@ -32,7 +32,19 @@ export function createMongoLeaveRepository() {
       ensureConnected()
       const query = {}
       if (filters.employeeId) query.employeeId = objectId(filters.employeeId)
-      if (filters.managerId) query.managerId = objectId(filters.managerId)
+      if (filters.reporteeEmployeeIds && Array.isArray(filters.reporteeEmployeeIds) && filters.reporteeEmployeeIds.length > 0) {
+        const repObjIds = filters.reporteeEmployeeIds.map(objectId).filter(Boolean)
+        const mgrObjIds = (filters.managerIds || [filters.managerId]).filter(Boolean).map(objectId).filter(Boolean)
+        query.$or = [
+          { managerId: { $in: mgrObjIds.length ? mgrObjIds : [filters.managerId] } },
+          { employeeId: { $in: repObjIds } },
+        ]
+      } else if (filters.managerIds && Array.isArray(filters.managerIds) && filters.managerIds.length > 0) {
+        const objIds = filters.managerIds.map(objectId).filter(Boolean)
+        query.managerId = objIds.length ? { $in: objIds } : { $in: filters.managerIds }
+      } else if (filters.managerId) {
+        query.managerId = objectId(filters.managerId) || filters.managerId
+      }
       if (typeof filters.status === 'string' && filters.status.trim()) query.status = filters.status.trim()
       if (typeof filters.leaveType === 'string' && filters.leaveType.trim()) query.leaveType = filters.leaveType.trim().toLowerCase()
       if (filters.from || filters.to) {
@@ -64,11 +76,19 @@ export function createMongoLeaveRepository() {
       if (!objectId(id)) return null
       return LeaveRequest.findByIdAndUpdate(id, { $push: { comments: comment, approvalHistory: { action: 'commented', actorId: comment.actorId, actorRole: comment.actorRole, comment: comment.body } } }, { returnDocument: 'after' }).lean().then(cleanRequest)
     },
-    async findOverlap({ employeeId, startDate, endDate, excludeId }) {
+    async findOverlap({ employeeId, startDate, endDate, excludeId, isHalfDay = false, halfDayPeriod = null }) {
       ensureConnected()
       const query = { employeeId: objectId(employeeId), status: { $in: ['pending_tl', 'pending_manager', 'pending_director', 'pending_hr', 'pending_admin', 'approved'] }, startDate: { $lte: endDate }, endDate: { $gte: startDate } }
       if (excludeId && objectId(excludeId)) query._id = { $ne: excludeId }
-      return LeaveRequest.findOne(query).lean()
+      const candidates = await LeaveRequest.find(query).lean()
+      if (!candidates || candidates.length === 0) return null
+      for (const cand of candidates) {
+        if (!isHalfDay || !cand.isHalfDay) return cand
+        const candPeriod = cand.halfDayPeriod || 'first_half'
+        const reqPeriod = halfDayPeriod || 'first_half'
+        if (candPeriod === reqPeriod) return cand
+      }
+      return null
     },
     async getPolicy(leaveType) { ensureConnected(); return LeavePolicy.findOne({ leaveType: String(leaveType).toLowerCase() }).lean() },
     async listPolicies() { ensureConnected(); return LeavePolicy.find().sort({ label: 1 }).lean() },
@@ -99,6 +119,82 @@ export function createMongoLeaveRepository() {
       }
     },
     async getBalance(employeeId, leaveType) { ensureConnected(); return LeaveBalance.findOne({ employeeId: objectId(employeeId), leaveType: String(leaveType).toLowerCase() }).lean() },
+        async reconcileMonthlyBalances() {
+      ensureConnected()
+      const currentMonthKey = new Date().toISOString().slice(0, 7)
+      let reconciledCount = 0
+      let createdCount = 0
+
+      try {
+        const allEmps = await Employee.find({ status: { $ne: 'terminated' } })
+          .select('_id employeeId name department employmentType designation role')
+          .lean()
+
+        const balances = await LeaveBalance.find().lean()
+        const balancesByEmp = new Map()
+
+        for (const b of balances) {
+          const empId = String(b.employeeId)
+          if (!balancesByEmp.has(empId)) balancesByEmp.set(empId, [])
+          balancesByEmp.get(empId).push(b)
+        }
+
+        for (const emp of allEmps) {
+          const empIdStr = String(emp._id)
+          const empType = String(emp.employmentType || '').toLowerCase().replace(/[-\s]/g, '_')
+          const isIntern = empType === 'intern' || String(emp.designation || '').toLowerCase().includes('intern') || String(emp.role || '').toLowerCase().includes('intern')
+          const expectedCasual = isIntern ? 0 : 1
+          const expectedSick = 1
+
+          const empBalances = balancesByEmp.get(empIdStr) || []
+          const casualRec = empBalances.find((b) => b.leaveType === 'casual')
+          const sickRec = empBalances.find((b) => b.leaveType === 'sick')
+
+          if (!casualRec) {
+            await LeaveBalance.create({
+              employeeId: emp._id,
+              leaveType: 'casual',
+              allowance: expectedCasual,
+              used: 0,
+              reserved: 0,
+              month: currentMonthKey,
+              updatedAt: new Date(),
+            })
+            createdCount++
+          } else if (!casualRec.month || casualRec.month !== currentMonthKey) {
+            await LeaveBalance.updateOne(
+              { _id: casualRec._id },
+              { $set: { allowance: expectedCasual, used: 0, reserved: 0, month: currentMonthKey, updatedAt: new Date() } }
+            )
+            reconciledCount++
+          }
+
+          if (!sickRec) {
+            await LeaveBalance.create({
+              employeeId: emp._id,
+              leaveType: 'sick',
+              allowance: expectedSick,
+              used: 0,
+              reserved: 0,
+              month: currentMonthKey,
+              updatedAt: new Date(),
+            })
+            createdCount++
+          } else if (!sickRec.month || sickRec.month !== currentMonthKey) {
+            await LeaveBalance.updateOne(
+              { _id: sickRec._id },
+              { $set: { allowance: expectedSick, used: 0, reserved: 0, month: currentMonthKey, updatedAt: new Date() } }
+            )
+            reconciledCount++
+          }
+        }
+      } catch (err) {
+        console.warn('[leave.repository] reconcileMonthlyBalances warning:', err.message)
+      }
+
+      return { reconciledCount, createdCount }
+    },
+
     async listBalances(filters = {}) {
       ensureConnected()
 

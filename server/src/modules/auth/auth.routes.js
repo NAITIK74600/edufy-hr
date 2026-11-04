@@ -6,12 +6,22 @@ import { hashPassword, verifyPassword } from '../../auth/passwords.js'
 import { sendPasswordResetEmail, sendWelcomeEmail } from '../../services/mail.service.js'
 import { Employee } from '../../models/Employee.js'
 
+function canManageUsers(user) {
+  if (!user) return false
+  const role = user.role
+  const permissions = user.permissions || []
+  return ['admin', 'hr', 'director', 'managing_director', 'co_founder', 'vertical_head'].includes(role) ||
+    permissions.includes('*') ||
+    permissions.includes('admin.access') ||
+    permissions.includes('users.read') ||
+    user.email === 'jagadishbabu@edufyitech.in'
+}
 export function createAuthRouter({ authService, auth, userStore }) {
   const router = express.Router()
 
   router.get('/users', auth.authenticate, async (request, response, next) => {
     try {
-      if (!['admin', 'hr'].includes(request.auth.user.role)) {
+      if (!canManageUsers(request.auth.user)) {
         return response.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Only Admin or HR can view user accounts.' } })
       }
       return response.json({ success: true, data: (await userStore.listUsers()).map(authService.toPublicUser) })
@@ -33,9 +43,11 @@ export function createAuthRouter({ authService, auth, userStore }) {
       }
       const result = await authService.login(loginIdentifier, password)
 
-      // Strict portal separation
+      // Strict portal separation with full leadership authorization
       const userRole = result?.user?.role
-      if (portal === 'admin' && userRole !== 'admin') {
+      const isLeadership = ['director', 'managing_director', 'co_founder', 'vertical_head'].includes(userRole)
+
+      if (portal === 'admin' && userRole !== 'admin' && !isLeadership) {
         return response.status(403).json({
           success: false,
           error: {
@@ -45,27 +57,17 @@ export function createAuthRouter({ authService, auth, userStore }) {
         })
       }
 
-      if (portal === 'hr' && !['hr', 'admin'].includes(userRole)) {
+      if ((portal === 'hr' || portal === 'management') && !['hr', 'admin'].includes(userRole) && !isLeadership) {
         return response.status(403).json({
           success: false,
           error: {
             code: 'PORTAL_ACCESS_DENIED',
-            message: 'Access denied: Employee credentials cannot be used to log into the HR portal. Please use Employee Self-Service.',
+            message: 'Access denied: Employee credentials cannot be used to log into the HR or Management Console. Please use Employee Self-Service.',
           },
         })
       }
 
-      if (portal === 'management' && !['hr', 'admin'].includes(userRole)) {
-        return response.status(403).json({
-          success: false,
-          error: {
-            code: 'PORTAL_ACCESS_DENIED',
-            message: 'Access denied: Employee credentials cannot be used to log into the Management Console. Please use Employee Self-Service.',
-          },
-        })
-      }
-
-      if (portal === 'employee' && ['admin', 'hr'].includes(userRole)) {
+      if (portal === 'employee' && ['admin', 'hr'].includes(userRole) && !isLeadership) {
         return response.status(403).json({
           success: false,
           error: {
@@ -83,7 +85,7 @@ export function createAuthRouter({ authService, auth, userStore }) {
 
   router.post('/users', auth.authenticate, async (request, response, next) => {
     try {
-      if (request.auth.user.role !== 'admin' && request.auth.user.role !== 'hr') {
+      if (!canManageUsers(request.auth.user)) {
         return response.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Only Admin or HR can create user login credentials.' } })
       }
 
@@ -134,7 +136,7 @@ export function createAuthRouter({ authService, auth, userStore }) {
         email: cleanEmail,
         role: role || 'employee',
         department: department || 'General',
-        designation: designation || 'Staff Member',
+        designation: (designation && String(designation).trim()) || 'Pending Designation',
         status: 'active',
         passwordHash: hashPassword(password),
         mustChangePassword: true,
@@ -254,7 +256,7 @@ export function createAuthRouter({ authService, auth, userStore }) {
 
   router.post('/users/:id/password', auth.authenticate, async (request, response, next) => {
     try {
-      if (!['admin', 'hr'].includes(request.auth.user.role)) {
+      if (!canManageUsers(request.auth.user)) {
         return response.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Only Admin or HR can reset employee passwords.' } })
       }
       const password = request.body?.password
@@ -333,7 +335,7 @@ export function createAuthRouter({ authService, auth, userStore }) {
 
   router.delete('/users/:id', auth.authenticate, async (request, response, next) => {
     try {
-      if (!['admin', 'hr'].includes(request.auth.user.role)) {
+      if (!canManageUsers(request.auth.user)) {
         return response.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Only Admin or HR can delete user accounts.' } })
       }
       const target = await userStore.findById(request.params.id)
@@ -469,19 +471,17 @@ export function createAuthRouter({ authService, auth, userStore }) {
         return response.status(403).json({ success: false, error: { code: 'ACCOUNT_INACTIVE', message: 'This employee account is inactive.' } })
       }
 
-      // Check strict portal access
+      // Check strict portal access with leadership authorization
       const userRole = user.role
+      const isLeadership = ['director', 'managing_director', 'co_founder', 'vertical_head'].includes(userRole)
       const targetPortal = portal || session.portal
-      if (targetPortal === 'admin' && userRole !== 'admin') {
+      if (targetPortal === 'admin' && userRole !== 'admin' && !isLeadership) {
         return response.status(403).json({ success: false, error: { code: 'PORTAL_ACCESS_DENIED', message: 'Access denied: Employee credentials cannot be used to log into Admin portal.' } })
       }
-      if (targetPortal === 'hr' && !['hr', 'admin'].includes(userRole)) {
-        return response.status(403).json({ success: false, error: { code: 'PORTAL_ACCESS_DENIED', message: 'Access denied: Employee credentials cannot be used to log into HR portal.' } })
+      if ((targetPortal === 'hr' || targetPortal === 'management') && !['hr', 'admin'].includes(userRole) && !isLeadership) {
+        return response.status(403).json({ success: false, error: { code: 'PORTAL_ACCESS_DENIED', message: 'Access denied: Employee credentials cannot be used to log into HR or Management portal.' } })
       }
-      if (targetPortal === 'management' && !['hr', 'admin'].includes(userRole)) {
-        return response.status(403).json({ success: false, error: { code: 'PORTAL_ACCESS_DENIED', message: 'Access denied: Employee credentials cannot be used to log into Management Console.' } })
-      }
-      if (targetPortal === 'employee' && ['admin', 'hr'].includes(userRole)) {
+      if (targetPortal === 'employee' && ['admin', 'hr'].includes(userRole) && !isLeadership) {
         return response.status(403).json({ success: false, error: { code: 'PORTAL_ACCESS_DENIED', message: 'Administrative accounts must sign into the Management Console.' } })
       }
 

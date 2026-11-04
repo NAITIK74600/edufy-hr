@@ -63,7 +63,7 @@ import { HolidayCalendarShowcase } from '../components/HolidayCalendarShowcase'
 import { todayKey } from '../services/connectedStore'
 
 function AdminModalPortal({ children }) {
-  if (typeof document === 'undefined') return null
+  if (typeof document === 'undefined' || !document?.body) return null
   return createPortal(children, document.body)
 }
 
@@ -189,7 +189,7 @@ function AdminOverviewModule({ onNavigate }) {
             </div>
 
             {/* Punched In */}
-            <div style={{ background: 'rgba(16, 185, 129, 0.08)', border: '1px solid rgba(16, 185, 129, 0.3)', borderRadius: '10px', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            <a href="#/admin/attendance" title="Click to view employees working now" style={{ textDecoration: 'none', background: 'rgba(16, 185, 129, 0.08)', border: '1px solid rgba(16, 185, 129, 0.3)', borderRadius: '10px', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '4px', cursor: 'pointer' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <span style={{ fontSize: '10px', color: '#047857', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700 }}>Punched In</span>
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '10px', color: '#059669', fontWeight: 700 }}>
@@ -197,28 +197,28 @@ function AdminOverviewModule({ onNavigate }) {
                 </span>
               </div>
               <strong style={{ font: '700 30px "Space Grotesk", sans-serif', color: '#047857', lineHeight: 1.1 }}>{punchedInCount}</strong>
-              <small style={{ fontSize: '11px', color: '#059669' }}>Working on-site now</small>
-            </div>
+              <small style={{ fontSize: '11px', color: '#059669' }}>Working on-site now → View roster</small>
+            </a>
 
             {/* Punched Out */}
-            <div style={{ background: 'rgba(2, 132, 199, 0.08)', border: '1px solid rgba(2, 132, 199, 0.3)', borderRadius: '10px', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            <a href="#/admin/attendance" title="Click to view employees who punched out" style={{ textDecoration: 'none', background: 'rgba(2, 132, 199, 0.08)', border: '1px solid rgba(2, 132, 199, 0.3)', borderRadius: '10px', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '4px', cursor: 'pointer' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <span style={{ fontSize: '10px', color: '#0284c7', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700 }}>Punched Out</span>
                 <CheckCircle2 size={16} style={{ color: '#0284c7' }} />
               </div>
               <strong style={{ font: '700 30px "Space Grotesk", sans-serif', color: '#0369a1', lineHeight: 1.1 }}>{punchedOutCount}</strong>
-              <small style={{ fontSize: '11px', color: '#0284c7' }}>Shift completed today</small>
-            </div>
+              <small style={{ fontSize: '11px', color: '#0284c7' }}>Shift completed today → View roster</small>
+            </a>
 
             {/* Not Checked In */}
-            <div style={{ background: 'var(--surface-sunken)', border: '1px solid var(--border)', borderRadius: '10px', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            <a href="#/admin/attendance" title="Click to view employees not checked in" style={{ textDecoration: 'none', background: 'var(--surface-sunken)', border: '1px solid var(--border)', borderRadius: '10px', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '4px', cursor: 'pointer' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <span style={{ fontSize: '10px', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700 }}>Not Checked In</span>
                 <Clock size={16} style={{ color: 'var(--muted)' }} />
               </div>
               <strong style={{ font: '700 30px "Space Grotesk", sans-serif', color: 'var(--muted)', lineHeight: 1.1 }}>{notPunchedInCount}</strong>
-              <small style={{ fontSize: '11px', color: 'var(--muted)' }}>Pending punch or off</small>
-            </div>
+              <small style={{ fontSize: '11px', color: 'var(--muted)' }}>Pending punch or off → View roster</small>
+            </a>
           </div>
 
           <div className="hero-footnote" style={{ borderTop: '1px solid var(--border)', paddingTop: '12px', marginTop: '12px', display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
@@ -444,7 +444,7 @@ export function AdminUsersModule() {
         email: emp.email,
         role: emp.role || 'employee',
         department: emp.department || 'General',
-        designation: emp.designation || 'Staff',
+        designation: emp.designation || 'Pending Designation',
         status: emp.status || 'active',
         avatarTone: 'teal',
       })),
@@ -495,13 +495,13 @@ export function AdminUsersModule() {
   }
 
   function startEditUser(u) {
-    const isDir = u.role === 'director' || u.email === 'jagadishbabu@edufyitech.in' || u.email === 'director@edufyitech.in'
+    const isDir = u.role === 'director' || u.role === 'managing_director' || u.email === 'jagadishbabu@edufyitech.in' || u.email === 'director@edufyitech.in'
     const cleanDept = isDir ? 'Executive' : (u.department || 'Executive')
     const rec = getRecommendedRoleConfig(u.role, cleanDept)
     setEditUser({
       ...u,
       department: cleanDept,
-      designation: isDir ? (u.designation && u.designation.toLowerCase().includes('director') ? u.designation : 'Managing Director') : (u.designation || rec.designation),
+      designation: isDir ? (u.designation && u.designation.toLowerCase().includes('director') ? u.designation : 'Managing Director') : (u.designation || 'Pending Designation'),
     })
   }
 
@@ -546,22 +546,22 @@ export function AdminUsersModule() {
 
   const empMap = useMemo(() => {
     const map = new Map()
-    ;(storeState.employees || []).forEach((e) => {
-      if (e.employeeId) map.set(e.employeeId.toUpperCase(), e)
-      if (e.email) map.set(e.email.toLowerCase(), e)
-      if (e.id) map.set(String(e.id), e)
-      if (e._id) map.set(String(e._id), e)
-    })
+      ; (storeState.employees || []).forEach((e) => {
+        if (e.employeeId) map.set(e.employeeId.toUpperCase(), e)
+        if (e.email) map.set(e.email.toLowerCase(), e)
+        if (e.id) map.set(String(e.id), e)
+        if (e._id) map.set(String(e._id), e)
+      })
     return map
   }, [storeState.employees])
 
   const availableCampuses = useMemo(() => {
     const set = new Set(['Ignite Campus', 'Velocity Hub'])
-    ;(storeState.companySettings?.locations || []).forEach((l) => { if (l.name) set.add(l.name) })
-    ;(storeState.employees || []).forEach((e) => {
-      const loc = e.campus || e.location || e.branch
-      if (loc) set.add(loc)
-    })
+      ; (storeState.companySettings?.locations || []).forEach((l) => { if (l.name) set.add(l.name) })
+      ; (storeState.employees || []).forEach((e) => {
+        const loc = e.campus || e.location || e.branch
+        if (loc) set.add(loc)
+      })
     return Array.from(set).filter(Boolean)
   }, [storeState.companySettings?.locations, storeState.employees])
 
@@ -609,8 +609,8 @@ export function AdminUsersModule() {
           const prevUsers = prev.users || []
           const existingIdx = prevUsers.findIndex(
             (u) => (u.email && u.email.toLowerCase() === payload.email.toLowerCase()) ||
-                   (u.employeeId && u.employeeId === finalEmpCode) ||
-                   (u.id && u.id === createdResult.id)
+              (u.employeeId && u.employeeId === finalEmpCode) ||
+              (u.id && u.id === createdResult.id)
           )
           let updated
           if (existingIdx >= 0) {
@@ -977,111 +977,335 @@ export function AdminUsersModule() {
       {modalOpen && (
         <AdminModalPortal>
           <div className="payslip-voucher-overlay" onClick={() => setModalOpen(false)}>
-          <div className="payslip-voucher" style={{ maxWidth: '540px' }} onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header-premium">
-              <div className="modal-title-group">
-                <div className="modal-icon-badge">
-                  <UserPlus size={20} />
-                </div>
-                <div>
-                  <h3 className="modal-title-text">Provision New System User</h3>
-                  <p className="modal-subtitle-text">Configure credentials, employee linkage, and access tier</p>
-                </div>
-              </div>
-              <button type="button" className="icon-button" onClick={() => setModalOpen(false)} aria-label="Close modal">
-                <X size={16} />
-              </button>
-            </div>
-
-            <form onSubmit={handleCreateUser}>
-              <div className="modal-body-premium">
-                {notice && (
-                  <p role="alert" style={{ margin: 0, padding: '10px 14px', borderRadius: '8px', background: '#FEF3E2', color: '#B45309', fontSize: '12px' }}>
-                    {notice}
-                  </p>
-                )}
-
-                <div className="profile-link-card">
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span className="form-label-premium" style={{ marginBottom: 0 }}>Employee Profile Target</span>
-                    {linkedEmployeeId && (
-                      <span style={{ fontSize: '10.5px', fontWeight: 700, color: 'var(--primary)', background: 'rgba(0, 110, 111, 0.1)', padding: '2px 8px', borderRadius: '999px' }}>
-                        Linked to existing record
-                      </span>
-                    )}
+            <div className="payslip-voucher" style={{ maxWidth: '540px' }} onClick={(e) => e.stopPropagation()}>
+              <div className="modal-header-premium">
+                <div className="modal-title-group">
+                  <div className="modal-icon-badge">
+                    <UserPlus size={20} />
                   </div>
-                  <select
-                    className="select-control"
-                    aria-label="Employee profile"
-                    value={linkedEmployeeId}
-                    onChange={(event) => selectProfile(event.target.value)}
-                  >
-                    <option value="">Create a new employee and account</option>
-                    {availableProfiles.map((employee) => (
-                      <option key={employee.id} value={employee.id}>
-                        {employee.name} ({employee.employeeId || 'No ID'}) — {employee.department || 'General'}
-                      </option>
-                    ))}
-                  </select>
-                  <span className="form-hint">
-                    {linkedEmployeeId ? 'Connects login to this existing employee profile.' : 'Creates a new employee profile and system account.'}
-                  </span>
+                  <div>
+                    <h3 className="modal-title-text">Provision New System User</h3>
+                    <p className="modal-subtitle-text">Configure credentials, employee linkage, and access tier</p>
+                  </div>
                 </div>
+                <button type="button" className="icon-button" onClick={() => setModalOpen(false)} aria-label="Close modal">
+                  <X size={16} />
+                </button>
+              </div>
 
-                <div>
-                  <label className="form-label-premium">Full Legal Name</label>
-                  <input
-                    type="text"
-                    className="text-input"
-                    placeholder="e.g. Rachel Adams"
-                    value={formName}
-                    readOnly={Boolean(linkedEmployeeId)}
-                    onChange={(e) => setFormName(e.target.value)}
-                    required
-                  />
-                </div>
+              <form onSubmit={handleCreateUser}>
+                <div className="modal-body-premium">
+                  {notice && (
+                    <p role="alert" style={{ margin: 0, padding: '10px 14px', borderRadius: '8px', background: '#FEF3E2', color: '#B45309', fontSize: '12px' }}>
+                      {notice}
+                    </p>
+                  )}
 
-                <div>
-                  <label className="form-label-premium">Corporate Work Email</label>
-                  <input
-                    type="email"
-                    className="text-input"
-                    placeholder="rachel.adams@edufyi.local"
-                    value={formEmail}
-                    readOnly={Boolean(linkedEmployeeId)}
-                    onChange={(e) => setFormEmail(e.target.value)}
-                    required
-                  />
-                </div>
+                  <div className="profile-link-card">
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span className="form-label-premium" style={{ marginBottom: 0 }}>Employee Profile Target</span>
+                      {linkedEmployeeId && (
+                        <span style={{ fontSize: '10.5px', fontWeight: 700, color: 'var(--primary)', background: 'rgba(0, 110, 111, 0.1)', padding: '2px 8px', borderRadius: '999px' }}>
+                          Linked to existing record
+                        </span>
+                      )}
+                    </div>
+                    <select
+                      className="select-control"
+                      aria-label="Employee profile"
+                      value={linkedEmployeeId}
+                      onChange={(event) => selectProfile(event.target.value)}
+                    >
+                      <option value="">Create a new employee and account</option>
+                      {availableProfiles.map((employee) => (
+                        <option key={employee.id} value={employee.id}>
+                          {employee.name} ({employee.employeeId || 'No ID'}) — {employee.department || 'General'}
+                        </option>
+                      ))}
+                    </select>
+                    <span className="form-hint">
+                      {linkedEmployeeId ? 'Connects login to this existing employee profile.' : 'Creates a new employee profile and system account.'}
+                    </span>
+                  </div>
 
-                <div className="form-row-2col">
+                  <div>
+                    <label className="form-label-premium">Full Legal Name</label>
+                    <input
+                      type="text"
+                      className="text-input"
+                      placeholder="e.g. Rachel Adams"
+                      value={formName}
+                      readOnly={Boolean(linkedEmployeeId)}
+                      onChange={(e) => setFormName(e.target.value)}
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="form-label-premium">Corporate Work Email</label>
+                    <input
+                      type="email"
+                      className="text-input"
+                      placeholder="rachel.adams@edufyi.local"
+                      value={formEmail}
+                      readOnly={Boolean(linkedEmployeeId)}
+                      onChange={(e) => setFormEmail(e.target.value)}
+                      required
+                    />
+                  </div>
+
+                  <div className="form-row-2col">
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                        <label className="form-label-premium" style={{ margin: 0 }}>Employee Code</label>
+                        <span style={{ fontSize: '10px', color: 'var(--teal)', fontWeight: 700, background: 'rgba(0,110,111,0.1)', padding: '2px 7px', borderRadius: '4px' }}>
+                          Auto ETS
+                        </span>
+                      </div>
+                      <input
+                        type="text"
+                        className="text-input"
+                        placeholder="e.g. ETS21207"
+                        value={formEmpId}
+                        readOnly={Boolean(linkedEmployeeId)}
+                        onChange={(e) => setFormEmpId(e.target.value.toUpperCase())}
+                        style={{ fontWeight: 600, letterSpacing: '0.04em' }}
+                      />
+                      <span className="form-hint">
+                        {linkedEmployeeId ? 'Inherited from profile.' : 'Auto-generated sequentially (ETS). Locked permanently once created.'}
+                      </span>
+                    </div>
+                    <div>
+                      <label className="form-label-premium">Role Access</label>
+                      <select
+                        className="select-control"
+                        value={formRole}
+                        disabled={Boolean(linkedEmployeeId)}
+                        onChange={(e) => handleRoleChange(e.target.value)}
+                      >
+                        {availableRoles.map((r) => (
+                          <option key={r.id || r.roleId} value={r.id || r.roleId}>
+                            {r.name} {!r.isSystem ? '(Custom)' : ''}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="form-row-2col">
+                    <div>
+                      <label className="form-label-premium">Department</label>
+                      <select
+                        className="select-control"
+                        value={formDept}
+                        disabled={Boolean(linkedEmployeeId)}
+                        onChange={(e) => handleDeptChange(e.target.value)}
+                      >
+                        <option value="">-- Select Department --</option>
+                        {availableDepartments.map((dept) => (
+                          <option key={dept.id || dept.deptId || dept.name} value={dept.name}>
+                            {dept.name} ({dept.code})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                        <label className="form-label-premium" style={{ margin: 0 }}>Designation</label>
+                        <span style={{ fontSize: '10px', color: 'var(--teal)', fontWeight: 600 }}>
+                          {getRecommendedRoleConfig(formRole, formDept)?.roleLabel || 'Designation'}
+                        </span>
+                      </div>
+                      <input
+                        type="text"
+                        className="text-input"
+                        placeholder="e.g. Managing Director"
+                        list="create-user-designations"
+                        value={formDesignation}
+                        readOnly={Boolean(linkedEmployeeId)}
+                        onChange={(e) => setFormDesignation(e.target.value)}
+                      />
+                      <datalist id="create-user-designations">
+                        {(getRecommendedRoleConfig(formRole, formDept)?.suggestions || getRecommendedRoleConfig(formRole, formDept)?.designations || []).map((sug) => (
+                          <option key={sug} value={sug} />
+                        ))}
+                      </datalist>
+                    </div>
+                  </div>
+
+                  {!linkedEmployeeId && (
+                    <div style={{ marginTop: '-4px' }}>
+                      <span style={{ fontSize: '10.5px', color: 'var(--muted)', fontWeight: 600, display: 'block', marginBottom: '5px' }}>
+                        Recommended for {getRecommendedRoleConfig(formRole, formDept)?.roleLabel || 'Role'}:
+                      </span>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
+                        {(getRecommendedRoleConfig(formRole, formDept)?.suggestions || getRecommendedRoleConfig(formRole, formDept)?.designations || []).map((sug) => {
+                          const isSelected = (formDesignation || '').trim().toLowerCase() === sug.trim().toLowerCase()
+                          return (
+                            <button
+                              key={sug}
+                              type="button"
+                              onClick={() => setFormDesignation(sug)}
+                              style={{
+                                background: isSelected ? 'var(--primary)' : 'rgba(0, 110, 111, 0.08)',
+                                color: isSelected ? '#ffffff' : 'var(--primary)',
+                                border: '1px solid ' + (isSelected ? 'var(--primary)' : 'rgba(0, 110, 111, 0.2)'),
+                                borderRadius: '12px',
+                                padding: '2px 8px',
+                                fontSize: '11px',
+                                fontWeight: 600,
+                                cursor: 'pointer',
+                                transition: 'all 0.15s ease',
+                              }}
+                            >
+                              {isSelected ? '✓ ' : ''}{sug}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
+
                   <div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                      <label className="form-label-premium" style={{ margin: 0 }}>Employee Code</label>
-                      <span style={{ fontSize: '10px', color: 'var(--teal)', fontWeight: 700, background: 'rgba(0,110,111,0.1)', padding: '2px 7px', borderRadius: '4px' }}>
-                        Auto ETS
-                      </span>
+                      <label className="form-label-premium" style={{ margin: 0 }}>Account Password</label>
+                      <button
+                        type="button"
+                        onClick={() => setFormPassword(generateAutoPassword())}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          cursor: 'pointer',
+                          color: 'var(--primary)',
+                          fontSize: '11px',
+                          fontWeight: 600,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          padding: '2px 6px',
+                          borderRadius: '4px',
+                        }}
+                        title="Generate another secure password"
+                      >
+                        <RefreshCw size={11} /> Generate New
+                      </button>
+                    </div>
+                    <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                      <input
+                        type={showPassword ? 'text' : 'password'}
+                        className="text-input"
+                        placeholder="Automatic secure password"
+                        value={formPassword}
+                        onChange={(e) => setFormPassword(e.target.value)}
+                        required
+                        minLength={8}
+                        style={{ paddingRight: '40px', fontFamily: showPassword ? 'inherit' : 'monospace', fontWeight: 600 }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        style={{
+                          position: 'absolute',
+                          right: '10px',
+                          background: 'none',
+                          border: 'none',
+                          cursor: 'pointer',
+                          color: 'var(--muted)',
+                          padding: '4px',
+                          display: 'flex',
+                          alignItems: 'center',
+                        }}
+                        title={showPassword ? 'Hide password' : 'Show password'}
+                        aria-label={showPassword ? 'Hide password' : 'Show password'}
+                      >
+                        {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                      </button>
+                    </div>
+                    <span className="form-hint">
+                      ⚡ Auto-generated automatically so HR doesn't need to manually create passwords. You can copy & share complete login credentials with 1-click after creation.
+                    </span>
+                  </div>
+                </div>
+
+                <div className="modal-footer-premium">
+                  <Button type="button" variant="secondary" onClick={() => setModalOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" disabled={saving}>
+                    <UserPlus size={15} /> {saving ? 'Provisioning Account...' : 'Create Account'}
+                  </Button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </AdminModalPortal>
+      )}
+
+      {/* EDIT USER MODAL */}
+      {editUser && (
+        <AdminModalPortal>
+          <div className="payslip-voucher-overlay" onClick={() => setEditUser(null)}>
+            <div className="payslip-voucher" style={{ maxWidth: '480px' }} onClick={(e) => e.stopPropagation()}>
+              <div className="modal-header-premium">
+                <div className="modal-title-group">
+                  <div className="modal-icon-badge">
+                    <Edit size={18} />
+                  </div>
+                  <div>
+                    <h3 className="modal-title-text">Edit System User</h3>
+                    <p className="modal-subtitle-text">{editUser.email}</p>
+                  </div>
+                </div>
+                <button type="button" className="icon-button" onClick={() => setEditUser(null)} aria-label="Close modal">
+                  <X size={16} />
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveEdit}>
+                <div className="modal-body-premium">
+                  {notice && (
+                    <p role="alert" style={{ margin: 0, padding: '10px 14px', borderRadius: '8px', background: '#FEF3E2', color: '#B45309', fontSize: '12px' }}>
+                      {notice}
+                    </p>
+                  )}
+                  <div>
+                    <label className="form-label-premium">Full Name</label>
+                    <input
+                      type="text"
+                      className="text-input"
+                      value={editUser.name}
+                      onChange={(e) => setEditUser({ ...editUser, name: e.target.value })}
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                      <label className="form-label-premium" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '5px' }}>
+                        Employee Code
+                      </label>
+                      <span style={{ fontSize: '10px', color: 'var(--muted)', fontWeight: 600 }}>Unique ID</span>
                     </div>
                     <input
                       type="text"
                       className="text-input"
-                      placeholder="e.g. ETS21207"
-                      value={formEmpId}
-                      readOnly={Boolean(linkedEmployeeId)}
-                      onChange={(e) => setFormEmpId(e.target.value.toUpperCase())}
-                      style={{ fontWeight: 600, letterSpacing: '0.04em' }}
+                      value={editUser.employeeId || ''}
+                      onChange={(e) => setEditUser({ ...editUser, employeeId: e.target.value.toUpperCase() })}
+                      placeholder="e.g. ETS26210"
+                      required
+                      style={{ fontWeight: 600, textTransform: 'uppercase' }}
                     />
                     <span className="form-hint">
-                      {linkedEmployeeId ? 'Inherited from profile.' : 'Auto-generated sequentially (ETS). Locked permanently once created.'}
+                      Unique workforce code for login, attendance, and payroll.
                     </span>
                   </div>
+
                   <div>
                     <label className="form-label-premium">Role Access</label>
                     <select
                       className="select-control"
-                      value={formRole}
-                      disabled={Boolean(linkedEmployeeId)}
-                      onChange={(e) => handleRoleChange(e.target.value)}
+                      value={editUser.role}
+                      onChange={(e) => handleEditRoleChange(e.target.value)}
                     >
                       {availableRoles.map((r) => (
                         <option key={r.id || r.roleId} value={r.id || r.roleId}>
@@ -1090,62 +1314,58 @@ export function AdminUsersModule() {
                       ))}
                     </select>
                   </div>
-                </div>
 
-                <div className="form-row-2col">
-                  <div>
-                    <label className="form-label-premium">Department</label>
-                    <select
-                      className="select-control"
-                      value={formDept}
-                      disabled={Boolean(linkedEmployeeId)}
-                      onChange={(e) => handleDeptChange(e.target.value)}
-                    >
-                      <option value="">-- Select Department --</option>
-                      {availableDepartments.map((dept) => (
-                        <option key={dept.id || dept.deptId || dept.name} value={dept.name}>
-                          {dept.name} ({dept.code})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                      <label className="form-label-premium" style={{ margin: 0 }}>Designation</label>
-                      <span style={{ fontSize: '10px', color: 'var(--teal)', fontWeight: 600 }}>
-                        {getRecommendedRoleConfig(formRole, formDept)?.roleLabel || 'Designation'}
-                      </span>
+                  <div className="form-row-2col">
+                    <div>
+                      <label className="form-label-premium">Department</label>
+                      <select
+                        className="select-control"
+                        value={editUser.department || ''}
+                        onChange={(e) => handleEditDeptChange(e.target.value)}
+                      >
+                        <option value="">-- Select Department --</option>
+                        {availableDepartments.map((dept) => (
+                          <option key={dept.id || dept.deptId || dept.name} value={dept.name}>
+                            {dept.name} ({dept.code})
+                          </option>
+                        ))}
+                      </select>
                     </div>
-                    <input
-                      type="text"
-                      className="text-input"
-                      placeholder="e.g. Managing Director"
-                      list="create-user-designations"
-                      value={formDesignation}
-                      readOnly={Boolean(linkedEmployeeId)}
-                      onChange={(e) => setFormDesignation(e.target.value)}
-                    />
-                    <datalist id="create-user-designations">
-                      {(getRecommendedRoleConfig(formRole, formDept)?.suggestions || getRecommendedRoleConfig(formRole, formDept)?.designations || []).map((sug) => (
-                        <option key={sug} value={sug} />
-                      ))}
-                    </datalist>
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                        <label className="form-label-premium" style={{ margin: 0 }}>Designation</label>
+                        <span style={{ fontSize: '10px', color: 'var(--teal)', fontWeight: 600 }}>
+                          {getRecommendedRoleConfig(editUser.role, editUser.department)?.roleLabel || 'Designation'}
+                        </span>
+                      </div>
+                      <input
+                        type="text"
+                        className="text-input"
+                        list="edit-user-designations"
+                        value={editUser.designation || ''}
+                        placeholder="e.g. Managing Director"
+                        onChange={(e) => setEditUser({ ...editUser, designation: e.target.value })}
+                      />
+                      <datalist id="edit-user-designations">
+                        {(getRecommendedRoleConfig(editUser.role, editUser.department)?.suggestions || getRecommendedRoleConfig(editUser.role, editUser.department)?.designations || []).map((sug) => (
+                          <option key={sug} value={sug} />
+                        ))}
+                      </datalist>
+                    </div>
                   </div>
-                </div>
 
-                {!linkedEmployeeId && (
                   <div style={{ marginTop: '-4px' }}>
                     <span style={{ fontSize: '10.5px', color: 'var(--muted)', fontWeight: 600, display: 'block', marginBottom: '5px' }}>
-                      Recommended for {getRecommendedRoleConfig(formRole, formDept)?.roleLabel || 'Role'}:
+                      Recommended for {getRecommendedRoleConfig(editUser.role, editUser.department)?.roleLabel || 'Role'}:
                     </span>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
-                      {(getRecommendedRoleConfig(formRole, formDept)?.suggestions || getRecommendedRoleConfig(formRole, formDept)?.designations || []).map((sug) => {
-                        const isSelected = (formDesignation || '').trim().toLowerCase() === sug.trim().toLowerCase()
+                      {(getRecommendedRoleConfig(editUser.role, editUser.department)?.suggestions || getRecommendedRoleConfig(editUser.role, editUser.department)?.designations || []).map((sug) => {
+                        const isSelected = (editUser.designation || '').trim().toLowerCase() === sug.trim().toLowerCase()
                         return (
                           <button
                             key={sug}
                             type="button"
-                            onClick={() => setFormDesignation(sug)}
+                            onClick={() => setEditUser({ ...editUser, designation: sug })}
                             style={{
                               background: isSelected ? 'var(--primary)' : 'rgba(0, 110, 111, 0.08)',
                               color: isSelected ? '#ffffff' : 'var(--primary)',
@@ -1164,239 +1384,19 @@ export function AdminUsersModule() {
                       })}
                     </div>
                   </div>
-                )}
-
-                <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                    <label className="form-label-premium" style={{ margin: 0 }}>Account Password</label>
-                    <button
-                      type="button"
-                      onClick={() => setFormPassword(generateAutoPassword())}
-                      style={{
-                        background: 'none',
-                        border: 'none',
-                        cursor: 'pointer',
-                        color: 'var(--primary)',
-                        fontSize: '11px',
-                        fontWeight: 600,
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '4px',
-                        padding: '2px 6px',
-                        borderRadius: '4px',
-                      }}
-                      title="Generate another secure password"
-                    >
-                      <RefreshCw size={11} /> Generate New
-                    </button>
-                  </div>
-                  <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                    <input
-                      type={showPassword ? 'text' : 'password'}
-                      className="text-input"
-                      placeholder="Automatic secure password"
-                      value={formPassword}
-                      onChange={(e) => setFormPassword(e.target.value)}
-                      required
-                      minLength={8}
-                      style={{ paddingRight: '40px', fontFamily: showPassword ? 'inherit' : 'monospace', fontWeight: 600 }}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      style={{
-                        position: 'absolute',
-                        right: '10px',
-                        background: 'none',
-                        border: 'none',
-                        cursor: 'pointer',
-                        color: 'var(--muted)',
-                        padding: '4px',
-                        display: 'flex',
-                        alignItems: 'center',
-                      }}
-                      title={showPassword ? 'Hide password' : 'Show password'}
-                      aria-label={showPassword ? 'Hide password' : 'Show password'}
-                    >
-                      {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
-                    </button>
-                  </div>
-                  <span className="form-hint">
-                    ⚡ Auto-generated automatically so HR doesn't need to manually create passwords. You can copy & share complete login credentials with 1-click after creation.
-                  </span>
                 </div>
-              </div>
 
-              <div className="modal-footer-premium">
-                <Button type="button" variant="secondary" onClick={() => setModalOpen(false)}>
-                  Cancel
-                </Button>
-                <Button type="submit" disabled={saving}>
-                  <UserPlus size={15} /> {saving ? 'Provisioning Account...' : 'Create Account'}
-                </Button>
-              </div>
-            </form>
-          </div>
-        </div>
-        </AdminModalPortal>
-      )}
-
-      {/* EDIT USER MODAL */}
-      {editUser && (
-        <AdminModalPortal>
-          <div className="payslip-voucher-overlay" onClick={() => setEditUser(null)}>
-          <div className="payslip-voucher" style={{ maxWidth: '480px' }} onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header-premium">
-              <div className="modal-title-group">
-                <div className="modal-icon-badge">
-                  <Edit size={18} />
+                <div className="modal-footer-premium">
+                  <Button type="button" variant="secondary" onClick={() => setEditUser(null)}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" disabled={saving}>
+                    Save Changes
+                  </Button>
                 </div>
-                <div>
-                  <h3 className="modal-title-text">Edit System User</h3>
-                  <p className="modal-subtitle-text">{editUser.email}</p>
-                </div>
-              </div>
-              <button type="button" className="icon-button" onClick={() => setEditUser(null)} aria-label="Close modal">
-                <X size={16} />
-              </button>
+              </form>
             </div>
-
-            <form onSubmit={handleSaveEdit}>
-              <div className="modal-body-premium">
-                {notice && (
-                  <p role="alert" style={{ margin: 0, padding: '10px 14px', borderRadius: '8px', background: '#FEF3E2', color: '#B45309', fontSize: '12px' }}>
-                    {notice}
-                  </p>
-                )}
-                <div>
-                  <label className="form-label-premium">Full Name</label>
-                  <input
-                    type="text"
-                    className="text-input"
-                    value={editUser.name}
-                    onChange={(e) => setEditUser({ ...editUser, name: e.target.value })}
-                    required
-                  />
-                </div>
-
-                <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                    <label className="form-label-premium" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '5px' }}>
-                      Employee Code
-                    </label>
-                    <span style={{ fontSize: '10px', color: 'var(--muted)', fontWeight: 600 }}>Unique ID</span>
-                  </div>
-                  <input
-                    type="text"
-                    className="text-input"
-                    value={editUser.employeeId || ''}
-                    onChange={(e) => setEditUser({ ...editUser, employeeId: e.target.value.toUpperCase() })}
-                    placeholder="e.g. ETS26210"
-                    required
-                    style={{ fontWeight: 600, textTransform: 'uppercase' }}
-                  />
-                  <span className="form-hint">
-                    Unique workforce code for login, attendance, and payroll.
-                  </span>
-                </div>
-
-                <div>
-                  <label className="form-label-premium">Role Access</label>
-                  <select
-                    className="select-control"
-                    value={editUser.role}
-                    onChange={(e) => handleEditRoleChange(e.target.value)}
-                  >
-                    {availableRoles.map((r) => (
-                      <option key={r.id || r.roleId} value={r.id || r.roleId}>
-                        {r.name} {!r.isSystem ? '(Custom)' : ''}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="form-row-2col">
-                  <div>
-                    <label className="form-label-premium">Department</label>
-                    <select
-                      className="select-control"
-                      value={editUser.department || ''}
-                      onChange={(e) => handleEditDeptChange(e.target.value)}
-                    >
-                      <option value="">-- Select Department --</option>
-                      {availableDepartments.map((dept) => (
-                        <option key={dept.id || dept.deptId || dept.name} value={dept.name}>
-                          {dept.name} ({dept.code})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                      <label className="form-label-premium" style={{ margin: 0 }}>Designation</label>
-                      <span style={{ fontSize: '10px', color: 'var(--teal)', fontWeight: 600 }}>
-                        {getRecommendedRoleConfig(editUser.role, editUser.department)?.roleLabel || 'Designation'}
-                      </span>
-                    </div>
-                    <input
-                      type="text"
-                      className="text-input"
-                      list="edit-user-designations"
-                      value={editUser.designation || ''}
-                      placeholder="e.g. Managing Director"
-                      onChange={(e) => setEditUser({ ...editUser, designation: e.target.value })}
-                    />
-                    <datalist id="edit-user-designations">
-                      {(getRecommendedRoleConfig(editUser.role, editUser.department)?.suggestions || getRecommendedRoleConfig(editUser.role, editUser.department)?.designations || []).map((sug) => (
-                        <option key={sug} value={sug} />
-                      ))}
-                    </datalist>
-                  </div>
-                </div>
-
-                <div style={{ marginTop: '-4px' }}>
-                  <span style={{ fontSize: '10.5px', color: 'var(--muted)', fontWeight: 600, display: 'block', marginBottom: '5px' }}>
-                    Recommended for {getRecommendedRoleConfig(editUser.role, editUser.department)?.roleLabel || 'Role'}:
-                  </span>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
-                    {(getRecommendedRoleConfig(editUser.role, editUser.department)?.suggestions || getRecommendedRoleConfig(editUser.role, editUser.department)?.designations || []).map((sug) => {
-                      const isSelected = (editUser.designation || '').trim().toLowerCase() === sug.trim().toLowerCase()
-                      return (
-                        <button
-                          key={sug}
-                          type="button"
-                          onClick={() => setEditUser({ ...editUser, designation: sug })}
-                          style={{
-                            background: isSelected ? 'var(--primary)' : 'rgba(0, 110, 111, 0.08)',
-                            color: isSelected ? '#ffffff' : 'var(--primary)',
-                            border: '1px solid ' + (isSelected ? 'var(--primary)' : 'rgba(0, 110, 111, 0.2)'),
-                            borderRadius: '12px',
-                            padding: '2px 8px',
-                            fontSize: '11px',
-                            fontWeight: 600,
-                            cursor: 'pointer',
-                            transition: 'all 0.15s ease',
-                          }}
-                        >
-                          {isSelected ? '✓ ' : ''}{sug}
-                        </button>
-                      )
-                    })}
-                  </div>
-                </div>
-              </div>
-
-              <div className="modal-footer-premium">
-                <Button type="button" variant="secondary" onClick={() => setEditUser(null)}>
-                  Cancel
-                </Button>
-                <Button type="submit" disabled={saving}>
-                  Save Changes
-                </Button>
-              </div>
-            </form>
           </div>
-        </div>
         </AdminModalPortal>
       )}
 
@@ -1404,167 +1404,167 @@ export function AdminUsersModule() {
       {createdCredentials && (
         <AdminModalPortal>
           <div className="payslip-voucher-overlay" onClick={() => setCreatedCredentials(null)}>
-          <div className="payslip-voucher" style={{ maxWidth: '540px' }} onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header-premium" style={{ background: 'linear-gradient(135deg, #0A2328 0%, #006E6F 100%)', color: '#fff', borderRadius: '16px 16px 0 0', padding: '20px 24px' }}>
-              <div className="modal-title-group">
-                <div className="modal-icon-badge" style={{ background: 'rgba(255,255,255,0.2)', color: '#fff' }}>
-                  <CheckCircle2 size={22} />
+            <div className="payslip-voucher" style={{ maxWidth: '540px' }} onClick={(e) => e.stopPropagation()}>
+              <div className="modal-header-premium" style={{ background: 'linear-gradient(135deg, #0A2328 0%, #006E6F 100%)', color: '#fff', borderRadius: '16px 16px 0 0', padding: '20px 24px' }}>
+                <div className="modal-title-group">
+                  <div className="modal-icon-badge" style={{ background: 'rgba(255,255,255,0.2)', color: '#fff' }}>
+                    <CheckCircle2 size={22} />
+                  </div>
+                  <div>
+                    <h3 className="modal-title-text" style={{ color: '#fff', fontSize: '18px', margin: 0 }}>Account Created Successfully!</h3>
+                    <p className="modal-subtitle-text" style={{ color: 'rgba(255,255,255,0.85)', fontSize: '12px', margin: '4px 0 0' }}>
+                      Login credentials ready to copy and send to {createdCredentials.name}
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="modal-title-text" style={{ color: '#fff', fontSize: '18px', margin: 0 }}>Account Created Successfully!</h3>
-                  <p className="modal-subtitle-text" style={{ color: 'rgba(255,255,255,0.85)', fontSize: '12px', margin: '4px 0 0' }}>
-                    Login credentials ready to copy and send to {createdCredentials.name}
-                  </p>
-                </div>
-              </div>
-              <button type="button" className="icon-button" style={{ color: '#fff' }} onClick={() => setCreatedCredentials(null)} aria-label="Close modal">
-                <X size={16} />
-              </button>
-            </div>
-
-            <div className="modal-body-premium" style={{ padding: '24px' }}>
-              <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #EDF2F7', paddingBottom: '8px' }}>
-                  <span style={{ fontSize: '12px', color: '#64748B', fontWeight: 500 }}>Employee Name</span>
-                  <strong style={{ fontSize: '13px', color: '#0F172A' }}>{createdCredentials.name}</strong>
-                </div>
-
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #EDF2F7', paddingBottom: '8px' }}>
-                  <span style={{ fontSize: '12px', color: '#64748B', fontWeight: 500 }}>Employee Code (Locked)</span>
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: '#E6FFFA', color: '#006E6F', padding: '3px 9px', borderRadius: '6px', fontWeight: 700, fontSize: '12.5px' }}>
-                    <Lock size={12} /> {createdCredentials.employeeId}
-                  </span>
-                </div>
-
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #EDF2F7', paddingBottom: '8px' }}>
-                  <span style={{ fontSize: '12px', color: '#64748B', fontWeight: 500 }}>Work Email / Login ID</span>
-                  <strong style={{ fontSize: '13px', color: '#0F172A' }}>{createdCredentials.email}</strong>
-                </div>
-
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #EDF2F7', paddingBottom: '8px' }}>
-                  <span style={{ fontSize: '12px', color: '#64748B', fontWeight: 500 }}>Auto-Generated Password</span>
-                  <code style={{ background: '#FFF5F5', color: '#E53E3E', border: '1px solid #FED7D7', padding: '4px 10px', borderRadius: '6px', fontWeight: 700, fontSize: '13.5px', letterSpacing: '0.04em' }}>
-                    {createdCredentials.password}
-                  </code>
-                </div>
-
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '12px', color: '#64748B', fontWeight: 500 }}>Login Portal URL</span>
-                  <a
-                    href={`${window.location.origin}/#/${createdCredentials.role === 'admin' ? 'admin/login' : (createdCredentials.role === 'hr' ? 'hr/login' : 'employee/login')}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    style={{ fontSize: '12px', color: 'var(--primary)', fontWeight: 600, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '4px' }}
-                  >
-                    Open Portal <ExternalLink size={12} />
-                  </a>
-                </div>
+                <button type="button" className="icon-button" style={{ color: '#fff' }} onClick={() => setCreatedCredentials(null)} aria-label="Close modal">
+                  <X size={16} />
+                </button>
               </div>
 
-              {copySuccess && (
-                <div style={{ marginTop: '14px', padding: '10px 14px', background: '#E6FFFA', border: '1px solid #B2F5EA', borderRadius: '8px', color: '#006E6F', fontSize: '12.5px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <CheckCircle2 size={16} /> All login credentials copied to clipboard! Ready to paste into WhatsApp, Slack, or Email.
+              <div className="modal-body-premium" style={{ padding: '24px' }}>
+                <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #EDF2F7', paddingBottom: '8px' }}>
+                    <span style={{ fontSize: '12px', color: '#64748B', fontWeight: 500 }}>Employee Name</span>
+                    <strong style={{ fontSize: '13px', color: '#0F172A' }}>{createdCredentials.name}</strong>
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #EDF2F7', paddingBottom: '8px' }}>
+                    <span style={{ fontSize: '12px', color: '#64748B', fontWeight: 500 }}>Employee Code (Locked)</span>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: '#E6FFFA', color: '#006E6F', padding: '3px 9px', borderRadius: '6px', fontWeight: 700, fontSize: '12.5px' }}>
+                      <Lock size={12} /> {createdCredentials.employeeId}
+                    </span>
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #EDF2F7', paddingBottom: '8px' }}>
+                    <span style={{ fontSize: '12px', color: '#64748B', fontWeight: 500 }}>Work Email / Login ID</span>
+                    <strong style={{ fontSize: '13px', color: '#0F172A' }}>{createdCredentials.email}</strong>
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #EDF2F7', paddingBottom: '8px' }}>
+                    <span style={{ fontSize: '12px', color: '#64748B', fontWeight: 500 }}>Auto-Generated Password</span>
+                    <code style={{ background: '#FFF5F5', color: '#E53E3E', border: '1px solid #FED7D7', padding: '4px 10px', borderRadius: '6px', fontWeight: 700, fontSize: '13.5px', letterSpacing: '0.04em' }}>
+                      {createdCredentials.password}
+                    </code>
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '12px', color: '#64748B', fontWeight: 500 }}>Login Portal URL</span>
+                    <a
+                      href={`${window.location.origin}/#/${createdCredentials.role === 'admin' ? 'admin/login' : (createdCredentials.role === 'hr' ? 'hr/login' : 'employee/login')}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      style={{ fontSize: '12px', color: 'var(--primary)', fontWeight: 600, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '4px' }}
+                    >
+                      Open Portal <ExternalLink size={12} />
+                    </a>
+                  </div>
                 </div>
-              )}
-            </div>
 
-            <div className="modal-footer-premium" style={{ padding: '16px 24px', borderTop: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <Button
-                  type="button"
-                  variant="primary"
-                  onClick={async () => {
-                    const text = formatCredentialsShareText({
-                      name: createdCredentials.name,
-                      email: createdCredentials.email,
-                      employeeId: createdCredentials.employeeId,
-                      password: createdCredentials.password,
-                      role: createdCredentials.role,
-                      origin: window.location.origin,
-                    })
-                    const copied = await copyTextToClipboard(text)
-                    if (copied) {
-                      setCopySuccess(true)
-                      setTimeout(() => setCopySuccess(false), 4500)
-                    } else {
-                      window.prompt('Copy credentials:', text)
-                    }
-                  }}
-                >
-                  {copySuccess ? <Check size={14} /> : <Copy size={14} />} {copySuccess ? 'Copied to Clipboard!' : 'Copy All Login Details'}
-                </Button>
+                {copySuccess && (
+                  <div style={{ marginTop: '14px', padding: '10px 14px', background: '#E6FFFA', border: '1px solid #B2F5EA', borderRadius: '8px', color: '#006E6F', fontSize: '12.5px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <CheckCircle2 size={16} /> All login credentials copied to clipboard! Ready to paste into WhatsApp, Slack, or Email.
+                  </div>
+                )}
+              </div>
 
-                <Button
-                  type="button"
-                  variant="secondary"
-                  disabled={sendingEmail}
-                  onClick={async () => {
-                    try {
-                      setSendingEmail(true)
-                      setEmailStatus(null)
-                      setEmailMessage('')
-                      const rolePath = createdCredentials.role === 'admin' ? 'admin/login' : (createdCredentials.role === 'hr' ? 'hr/login' : 'employee/login')
-                      const portalUrl = `${window.location.origin}/#/${rolePath}`
-
-                      const res = await apiClient.post('/mail/welcome', {
-                        employee: {
-                          name: createdCredentials.name,
-                          email: createdCredentials.email,
-                          employeeId: createdCredentials.employeeId,
-                          designation: createdCredentials.role ? createdCredentials.role.toUpperCase() : 'Staff Member',
-                          department: 'Workforce',
-                        },
-                        temporaryPassword: createdCredentials.password,
-                        loginUrl: portalUrl,
+              <div className="modal-footer-premium" style={{ padding: '16px 24px', borderTop: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <Button
+                    type="button"
+                    variant="primary"
+                    onClick={async () => {
+                      const text = formatCredentialsShareText({
+                        name: createdCredentials.name,
+                        email: createdCredentials.email,
+                        employeeId: createdCredentials.employeeId,
+                        password: createdCredentials.password,
+                        role: createdCredentials.role,
+                        origin: window.location.origin,
                       })
+                      const copied = await copyTextToClipboard(text)
+                      if (copied) {
+                        setCopySuccess(true)
+                        setTimeout(() => setCopySuccess(false), 4500)
+                      } else {
+                        window.prompt('Copy credentials:', text)
+                      }
+                    }}
+                  >
+                    {copySuccess ? <Check size={14} /> : <Copy size={14} />} {copySuccess ? 'Copied to Clipboard!' : 'Copy All Login Details'}
+                  </Button>
 
-                      setEmailStatus('success')
-                      setEmailMessage(res?.data?.message || `Credentials email successfully dispatched to ${createdCredentials.email}!`)
-                    } catch (err) {
-                      console.error('Failed to dispatch welcome email:', err)
-                      setEmailStatus('error')
-                      setEmailMessage(err?.message || 'Failed to dispatch email. Check SMTP settings.')
-                    } finally {
-                      setSendingEmail(false)
-                    }
-                  }}
-                >
-                  {sendingEmail ? (
-                    <RefreshCw size={14} className="spinning" />
-                  ) : emailStatus === 'success' ? (
-                    <Check size={14} style={{ color: '#059669' }} />
-                  ) : (
-                    <Mail size={14} />
-                  )}
-                  {sendingEmail ? 'Sending Email...' : emailStatus === 'success' ? 'Email Sent (Resend)' : 'Send via Email'}
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={sendingEmail}
+                    onClick={async () => {
+                      try {
+                        setSendingEmail(true)
+                        setEmailStatus(null)
+                        setEmailMessage('')
+                        const rolePath = createdCredentials.role === 'admin' ? 'admin/login' : (createdCredentials.role === 'hr' ? 'hr/login' : 'employee/login')
+                        const portalUrl = `${window.location.origin}/#/${rolePath}`
+
+                        const res = await apiClient.post('/mail/welcome', {
+                          employee: {
+                            name: createdCredentials.name,
+                            email: createdCredentials.email,
+                            employeeId: createdCredentials.employeeId,
+                            designation: createdCredentials.role ? createdCredentials.role.toUpperCase() : 'Staff Member',
+                            department: 'Workforce',
+                          },
+                          temporaryPassword: createdCredentials.password,
+                          loginUrl: portalUrl,
+                        })
+
+                        setEmailStatus('success')
+                        setEmailMessage(res?.data?.message || `Credentials email successfully dispatched to ${createdCredentials.email}!`)
+                      } catch (err) {
+                        console.error('Failed to dispatch welcome email:', err)
+                        setEmailStatus('error')
+                        setEmailMessage(err?.message || 'Failed to dispatch email. Check SMTP settings.')
+                      } finally {
+                        setSendingEmail(false)
+                      }
+                    }}
+                  >
+                    {sendingEmail ? (
+                      <RefreshCw size={14} className="spinning" />
+                    ) : emailStatus === 'success' ? (
+                      <Check size={14} style={{ color: '#059669' }} />
+                    ) : (
+                      <Mail size={14} />
+                    )}
+                    {sendingEmail ? 'Sending Email...' : emailStatus === 'success' ? 'Email Sent (Resend)' : 'Send via Email'}
+                  </Button>
+                </div>
+
+                {emailMessage && (
+                  <div style={{
+                    padding: '10px 14px',
+                    borderRadius: '8px',
+                    fontSize: '12px',
+                    fontWeight: 500,
+                    marginTop: '12px',
+                    background: emailStatus === 'success' ? '#ECFDF5' : '#FEF2F2',
+                    color: emailStatus === 'success' ? '#065F46' : '#991B1B',
+                    border: `1px solid ${emailStatus === 'success' ? '#A7F3D0' : '#FECACA'}`,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px'
+                  }}>
+                    {emailStatus === 'success' ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
+                    <span>{emailMessage}</span>
+                  </div>
+                )}
+
+                <Button type="button" variant="secondary" onClick={() => setCreatedCredentials(null)}>
+                  Done
                 </Button>
               </div>
-
-              {emailMessage && (
-                <div style={{
-                  padding: '10px 14px',
-                  borderRadius: '8px',
-                  fontSize: '12px',
-                  fontWeight: 500,
-                  marginTop: '12px',
-                  background: emailStatus === 'success' ? '#ECFDF5' : '#FEF2F2',
-                  color: emailStatus === 'success' ? '#065F46' : '#991B1B',
-                  border: `1px solid ${emailStatus === 'success' ? '#A7F3D0' : '#FECACA'}`,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px'
-                }}>
-                  {emailStatus === 'success' ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
-                  <span>{emailMessage}</span>
-                </div>
-              )}
-
-              <Button type="button" variant="secondary" onClick={() => setCreatedCredentials(null)}>
-                Done
-              </Button>
             </div>
           </div>
-        </div>
         </AdminModalPortal>
       )}
 
@@ -1572,57 +1572,57 @@ export function AdminUsersModule() {
       {resetUser && (
         <AdminModalPortal>
           <div className="payslip-voucher-overlay" onClick={() => setResetUser(null)}>
-          <div className="payslip-voucher" style={{ maxWidth: '440px' }} onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header-premium">
-              <div className="modal-title-group">
-                <div className="modal-icon-badge" style={{ background: '#FEF3E2', color: '#D97706' }}>
-                  <Key size={18} />
+            <div className="payslip-voucher" style={{ maxWidth: '440px' }} onClick={(e) => e.stopPropagation()}>
+              <div className="modal-header-premium">
+                <div className="modal-title-group">
+                  <div className="modal-icon-badge" style={{ background: '#FEF3E2', color: '#D97706' }}>
+                    <Key size={18} />
+                  </div>
+                  <div>
+                    <h3 className="modal-title-text">Reset Password</h3>
+                    <p className="modal-subtitle-text">{resetUser.name} ({resetUser.email})</p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="modal-title-text">Reset Password</h3>
-                  <p className="modal-subtitle-text">{resetUser.name} ({resetUser.email})</p>
-                </div>
+                <button type="button" className="icon-button" onClick={() => setResetUser(null)} aria-label="Close modal">
+                  <X size={16} />
+                </button>
               </div>
-              <button type="button" className="icon-button" onClick={() => setResetUser(null)} aria-label="Close modal">
-                <X size={16} />
-              </button>
-            </div>
 
-            <form onSubmit={handleExecutePasswordReset}>
-              <div className="modal-body-premium">
-                {notice && (
-                  <p role="alert" style={{ margin: 0, padding: '10px 14px', borderRadius: '8px', background: '#FEF3E2', color: '#B45309', fontSize: '12px' }}>
-                    {notice}
+              <form onSubmit={handleExecutePasswordReset}>
+                <div className="modal-body-premium">
+                  {notice && (
+                    <p role="alert" style={{ margin: 0, padding: '10px 14px', borderRadius: '8px', background: '#FEF3E2', color: '#B45309', fontSize: '12px' }}>
+                      {notice}
+                    </p>
+                  )}
+                  <p style={{ margin: 0, fontSize: '12.5px', color: 'var(--muted)', lineHeight: 1.45 }}>
+                    Set a secure temporary password for <strong>{resetUser.name}</strong>. The user can log in immediately with this credential.
                   </p>
-                )}
-                <p style={{ margin: 0, fontSize: '12.5px', color: 'var(--muted)', lineHeight: 1.45 }}>
-                  Set a secure temporary password for <strong>{resetUser.name}</strong>. The user can log in immediately with this credential.
-                </p>
-                <div>
-                  <label className="form-label-premium">New Temporary Password</label>
-                  <input
-                    type="password"
-                    className="text-input"
-                    placeholder="e.g. TempPass#2026"
-                    value={newPassword}
-                    minLength={8}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    required
-                  />
+                  <div>
+                    <label className="form-label-premium">New Temporary Password</label>
+                    <input
+                      type="password"
+                      className="text-input"
+                      placeholder="e.g. TempPass#2026"
+                      value={newPassword}
+                      minLength={8}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      required
+                    />
+                  </div>
                 </div>
-              </div>
 
-              <div className="modal-footer-premium">
-                <Button type="button" variant="secondary" onClick={() => setResetUser(null)}>
-                  Cancel
-                </Button>
-                <Button type="submit" disabled={saving}>
-                  <Key size={14} /> Update Password
-                </Button>
-              </div>
-            </form>
+                <div className="modal-footer-premium">
+                  <Button type="button" variant="secondary" onClick={() => setResetUser(null)}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" disabled={saving}>
+                    <Key size={14} /> Update Password
+                  </Button>
+                </div>
+              </form>
+            </div>
           </div>
-        </div>
         </AdminModalPortal>
       )}
     </div>
@@ -1792,8 +1792,15 @@ function AdminRolesModule() {
     })
   }, [])
 
-  const roles = hrStore.getRoles()
-  const users = storeState.users || []
+  const rawRoles = hrStore.getRoles()
+  const uniqueRolesMap = new Map()
+  rawRoles.forEach((r) => {
+    if (r && r.id && !uniqueRolesMap.has(r.id)) uniqueRolesMap.set(r.id, r)
+  })
+  const roles = Array.from(uniqueRolesMap.values())
+  const allPeople = (storeState.employees && storeState.employees.length > 0)
+    ? storeState.employees
+    : (storeState.users || [])
   const auditLogs = storeState.auditLogs || []
 
   const activeRole = roles.find((r) => r.id === selectedRoleId) || roles[0]
@@ -1805,7 +1812,7 @@ function AdminRolesModule() {
     }
   }, [selectedRoleId, storeState])
 
-  const assignedUsers = users.filter((u) => u.role === activeRole?.id)
+  const assignedUsers = allPeople.filter((u) => u.role === activeRole?.id)
 
   function handleTogglePermission(permKey) {
     if (activeRole?.id === 'admin') {
@@ -2136,7 +2143,7 @@ function AdminRolesModule() {
         <div className="roles-grid-responsive">
           {roles.map((r) => {
             const isSelected = r.id === selectedRoleId
-            const count = users.filter((u) => u.role === r.id).length
+            const count = allPeople.filter((u) => u.role === r.id).length
             const meta = getRoleVisualMeta(r.id)
             const IconComponent = meta.icon
 
@@ -2825,72 +2832,72 @@ function AdminRolesModule() {
       {addRoleModal && (
         <AdminModalPortal>
           <div className="payslip-voucher-overlay" onClick={() => setAddRoleModal(false)}>
-          <div className="payslip-voucher" style={{ maxWidth: '480px' }} onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header-premium">
-              <div className="modal-title-group">
-                <div className="modal-icon-badge">
-                  <ShieldCheck size={20} />
+            <div className="payslip-voucher" style={{ maxWidth: '480px' }} onClick={(e) => e.stopPropagation()}>
+              <div className="modal-header-premium">
+                <div className="modal-title-group">
+                  <div className="modal-icon-badge">
+                    <ShieldCheck size={20} />
+                  </div>
+                  <div>
+                    <h3 className="modal-title-text">Provision Organization Role</h3>
+                    <p className="modal-subtitle-text">Define access matrix, scope, and system privileges</p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="modal-title-text">Provision Organization Role</h3>
-                  <p className="modal-subtitle-text">Define access matrix, scope, and system privileges</p>
-                </div>
+                <button type="button" className="icon-button" onClick={() => setAddRoleModal(false)} aria-label="Close modal">
+                  <X size={16} />
+                </button>
               </div>
-              <button type="button" className="icon-button" onClick={() => setAddRoleModal(false)} aria-label="Close modal">
-                <X size={16} />
-              </button>
+
+              <form onSubmit={handleCreateRole}>
+                <div className="modal-body-premium">
+                  <div>
+                    <label className="form-label-premium">Role Name</label>
+                    <input
+                      type="text"
+                      className="text-input"
+                      placeholder="e.g. Finance Auditor, Senior Recruiter"
+                      value={newRoleName}
+                      onChange={(e) => setNewRoleName(e.target.value)}
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="form-label-premium">Role Purpose & Description</label>
+                    <input
+                      type="text"
+                      className="text-input"
+                      placeholder="e.g. Audits payroll records and expense reimbursement claims"
+                      value={newRoleDesc}
+                      onChange={(e) => setNewRoleDesc(e.target.value)}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="form-label-premium">Clone Initial Permissions From</label>
+                    <select
+                      className="select-control"
+                      value={newRoleClone}
+                      onChange={(e) => setNewRoleClone(e.target.value)}
+                    >
+                      <option value="employee">Standard Employee (Self-Service)</option>
+                      <option value="manager">Team Manager (Direct Reports)</option>
+                      <option value="hr">HR Operations Lead (Full Ops)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="modal-footer-premium">
+                  <Button type="button" variant="secondary" onClick={() => setAddRoleModal(false)}>
+                    Cancel
+                  </Button>
+                  <Button type="submit">
+                    <ShieldCheck size={14} /> Create Role
+                  </Button>
+                </div>
+              </form>
             </div>
-
-            <form onSubmit={handleCreateRole}>
-              <div className="modal-body-premium">
-                <div>
-                  <label className="form-label-premium">Role Name</label>
-                  <input
-                    type="text"
-                    className="text-input"
-                    placeholder="e.g. Finance Auditor, Senior Recruiter"
-                    value={newRoleName}
-                    onChange={(e) => setNewRoleName(e.target.value)}
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="form-label-premium">Role Purpose & Description</label>
-                  <input
-                    type="text"
-                    className="text-input"
-                    placeholder="e.g. Audits payroll records and expense reimbursement claims"
-                    value={newRoleDesc}
-                    onChange={(e) => setNewRoleDesc(e.target.value)}
-                  />
-                </div>
-
-                <div>
-                  <label className="form-label-premium">Clone Initial Permissions From</label>
-                  <select
-                    className="select-control"
-                    value={newRoleClone}
-                    onChange={(e) => setNewRoleClone(e.target.value)}
-                  >
-                    <option value="employee">Standard Employee (Self-Service)</option>
-                    <option value="manager">Team Manager (Direct Reports)</option>
-                    <option value="hr">HR Operations Lead (Full Ops)</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="modal-footer-premium">
-                <Button type="button" variant="secondary" onClick={() => setAddRoleModal(false)}>
-                  Cancel
-                </Button>
-                <Button type="submit">
-                  <ShieldCheck size={14} /> Create Role
-                </Button>
-              </div>
-            </form>
           </div>
-        </div>
         </AdminModalPortal>
       )}
 
@@ -2898,85 +2905,85 @@ function AdminRolesModule() {
       {editRoleModal && editingRole && (
         <AdminModalPortal>
           <div className="payslip-voucher-overlay" onClick={() => setEditRoleModal(false)}>
-          <div className="payslip-voucher" style={{ maxWidth: '520px' }} onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header-premium">
-              <div className="modal-title-group">
-                <div className="modal-icon-badge" style={{ backgroundColor: '#e6f7f5', color: 'var(--teal, #006e6f)' }}>
-                  <Edit size={20} />
+            <div className="payslip-voucher" style={{ maxWidth: '520px' }} onClick={(e) => e.stopPropagation()}>
+              <div className="modal-header-premium">
+                <div className="modal-title-group">
+                  <div className="modal-icon-badge" style={{ backgroundColor: '#e6f7f5', color: 'var(--teal, #006e6f)' }}>
+                    <Edit size={20} />
+                  </div>
+                  <div>
+                    <h3 className="modal-title-text">Edit / Modify Role</h3>
+                    <p className="modal-subtitle-text">Customize role display title, category badge tag, and functional description</p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="modal-title-text">Edit / Modify Role</h3>
-                  <p className="modal-subtitle-text">Customize role display title, category badge tag, and functional description</p>
-                </div>
+                <button type="button" className="icon-button" onClick={() => setEditRoleModal(false)} aria-label="Close modal">
+                  <X size={16} />
+                </button>
               </div>
-              <button type="button" className="icon-button" onClick={() => setEditRoleModal(false)} aria-label="Close modal">
-                <X size={16} />
-              </button>
+
+              <form onSubmit={handleSaveRoleEdit}>
+                <div className="modal-body-premium">
+                  <div>
+                    <label className="form-label-premium">System Role Identifier (Fixed Key)</label>
+                    <input
+                      type="text"
+                      className="text-input"
+                      value={editingRole.id || editingRole.roleId || ''}
+                      disabled
+                      style={{ backgroundColor: '#f1f5f9', cursor: 'not-allowed', color: '#64748b' }}
+                    />
+                    <span style={{ fontSize: '10.5px', color: 'var(--muted, #586D72)', marginTop: '3px', display: 'block' }}>
+                      Immutable internal security identifier used across permissions, assignments, and audit logs.
+                    </span>
+                  </div>
+
+                  <div>
+                    <label className="form-label-premium">Role Display Title *</label>
+                    <input
+                      type="text"
+                      className="text-input"
+                      placeholder="e.g. SDE, SDE Intern, Operations Executive"
+                      value={editRoleName}
+                      onChange={(e) => setEditRoleName(e.target.value)}
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="form-label-premium">Badge / Category Tag</label>
+                    <input
+                      type="text"
+                      className="text-input"
+                      placeholder="e.g. Engineering, Tech, Operations, Leadership, Intern"
+                      value={editRoleBadge}
+                      onChange={(e) => setEditRoleBadge(e.target.value)}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="form-label-premium">Role Description & Responsibilities</label>
+                    <textarea
+                      className="text-input"
+                      rows={3}
+                      placeholder="Describe key responsibilities and operational scope..."
+                      value={editRoleDesc}
+                      onChange={(e) => setEditRoleDesc(e.target.value)}
+                      style={{ resize: 'vertical', minHeight: '75px', fontFamily: 'inherit' }}
+                    />
+                  </div>
+                </div>
+
+                <div className="modal-footer-premium">
+                  <Button type="button" variant="secondary" onClick={() => setEditRoleModal(false)} disabled={isSavingRole}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" disabled={isSavingRole}>
+                    {isSavingRole ? <RefreshCw size={14} className="spin" /> : <Check size={14} />} Save Modifications
+                  </Button>
+                </div>
+              </form>
             </div>
-
-            <form onSubmit={handleSaveRoleEdit}>
-              <div className="modal-body-premium">
-                <div>
-                  <label className="form-label-premium">System Role Identifier (Fixed Key)</label>
-                  <input
-                    type="text"
-                    className="text-input"
-                    value={editingRole.id || editingRole.roleId || ''}
-                    disabled
-                    style={{ backgroundColor: '#f1f5f9', cursor: 'not-allowed', color: '#64748b' }}
-                  />
-                  <span style={{ fontSize: '10.5px', color: 'var(--muted, #586D72)', marginTop: '3px', display: 'block' }}>
-                    Immutable internal security identifier used across permissions, assignments, and audit logs.
-                  </span>
-                </div>
-
-                <div>
-                  <label className="form-label-premium">Role Display Title *</label>
-                  <input
-                    type="text"
-                    className="text-input"
-                    placeholder="e.g. SDE, SDE Intern, Operations Executive"
-                    value={editRoleName}
-                    onChange={(e) => setEditRoleName(e.target.value)}
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="form-label-premium">Badge / Category Tag</label>
-                  <input
-                    type="text"
-                    className="text-input"
-                    placeholder="e.g. Engineering, Tech, Operations, Leadership, Intern"
-                    value={editRoleBadge}
-                    onChange={(e) => setEditRoleBadge(e.target.value)}
-                  />
-                </div>
-
-                <div>
-                  <label className="form-label-premium">Role Description & Responsibilities</label>
-                  <textarea
-                    className="text-input"
-                    rows={3}
-                    placeholder="Describe key responsibilities and operational scope..."
-                    value={editRoleDesc}
-                    onChange={(e) => setEditRoleDesc(e.target.value)}
-                    style={{ resize: 'vertical', minHeight: '75px', fontFamily: 'inherit' }}
-                  />
-                </div>
-              </div>
-
-              <div className="modal-footer-premium">
-                <Button type="button" variant="secondary" onClick={() => setEditRoleModal(false)} disabled={isSavingRole}>
-                  Cancel
-                </Button>
-                <Button type="submit" disabled={isSavingRole}>
-                  {isSavingRole ? <RefreshCw size={14} className="spin" /> : <Check size={14} />} Save Modifications
-                </Button>
-              </div>
-            </form>
           </div>
-        </div>
         </AdminModalPortal>
       )}
     </div>
@@ -3008,6 +3015,13 @@ export function AdminDepartmentsModule() {
   const [assignFilter, setAssignFilter] = useState('all') // 'all' | 'assigned' | 'unassigned' | 'other'
   const [assignSaving, setAssignSaving] = useState(false)
 
+  // Squad / Team Member Assignment Modal States
+  const [assignTeam, setAssignTeam] = useState(null)
+  const [assignTeamSelectedIds, setAssignTeamSelectedIds] = useState(new Set())
+  const [assignTeamSearch, setAssignTeamSearch] = useState('')
+  const [assignTeamFilter, setAssignTeamFilter] = useState('all') // 'all' | 'assigned' | 'unassigned' | 'other'
+  const [assignTeamSaving, setAssignTeamSaving] = useState(false)
+
   // Team Modal States
   const [addTeamModal, setAddTeamModal] = useState(false)
   const [editTeam, setEditTeam] = useState(null)
@@ -3026,8 +3040,32 @@ export function AdminDepartmentsModule() {
   const departments = hrStore.getDepartments()
   const teams = hrStore.getTeams()
   const employees = storeState.employees || []
-  const availableManagers = employees.filter((e) => e.status === 'active' && ['director', 'manager', 'admin'].includes(e.role))
-  const availableLeads = employees.filter((e) => e.status === 'active' && ['team_lead', 'manager', 'director', 'employee'].includes(e.role))
+  const isLeadRole = (r) => {
+    const clean = String(r || '').toLowerCase().trim().replace(/[-\s]/g, '_')
+    return ['team_leader', 'team_lead', 'manager', 'director', 'managing_director', 'vertical_head', 'revenue_growth_manager', 'general_manager', 'senior_manager', 'employee'].includes(clean) || clean.includes('lead') || clean.includes('leader')
+  }
+
+  const isDesignationLead = (d) => {
+    const clean = String(d || '').toLowerCase().trim()
+    return clean.includes('team lead') || clean.includes('team leader') || clean.includes('tl') || clean.includes('lead') || clean.includes('leader')
+  }
+
+  const availableManagers = (employees || []).filter((e) => {
+    if (!e || e.status === 'inactive' || e.status === 'terminated') return false
+    const r = String(e.role || '').toLowerCase().trim().replace(/[-\s]/g, '_')
+    return ['director', 'managing_director', 'co_founder', 'vertical_head', 'revenue_growth_manager', 'general_manager', 'senior_manager', 'manager', 'admin'].includes(r) || r.includes('manager') || r.includes('director') || r.includes('head')
+  }).sort((a, b) => (a.displayName || a.name || '').localeCompare(b.displayName || b.name || ''))
+
+  const availableLeads = (employees || []).filter((e) => {
+    if (!e || e.status === 'inactive' || e.status === 'terminated') return false
+    return true
+  }).sort((a, b) => {
+    const aIsTL = ['team_leader', 'team_lead'].includes(String(a.role || '').toLowerCase().trim().replace(/[-\s]/g, '_')) || isDesignationLead(a.designation)
+    const bIsTL = ['team_leader', 'team_lead'].includes(String(b.role || '').toLowerCase().trim().replace(/[-\s]/g, '_')) || isDesignationLead(b.designation)
+    if (aIsTL && !bIsTL) return -1
+    if (!aIsTL && bIsTL) return 1
+    return (a.displayName || a.name || '').localeCompare(b.displayName || b.name || '')
+  })
 
   // Dynamic helper: matches an employee to a department via name, id, code, or standard synonyms
   function isEmployeeInDept(emp, dept) {
@@ -3175,6 +3213,107 @@ export function AdminDepartmentsModule() {
       return `${mName} (${count} ${count === 1 ? 'Team' : 'Teams'})`
     }).join(' • ')
   }, [teams, uniqueTeamManagers])
+
+  function isEmployeeInTeam(emp, team) {
+    if (!emp || !team) return false
+    const teamId = String(team.teamId || team.id || team._id || '').trim().toLowerCase()
+    const teamName = String(team.name || '').trim().toLowerCase()
+    const teamSlug = `team-${teamName.replace(/[^a-z0-9]/g, '_')}`
+    const empTeam = String(emp.team || '').trim().toLowerCase()
+    const empTeamId = String(emp.teamId || '').trim().toLowerCase()
+    const empSquad = String(emp.squad || '').trim().toLowerCase()
+    const empSquadId = String(emp.squadId || '').trim().toLowerCase()
+    return Boolean(
+      (empTeamId && (empTeamId === teamId || empTeamId === teamSlug)) ||
+      (empTeam && (empTeam === teamName || empTeam === teamId)) ||
+      (empSquadId && (empSquadId === teamId || empSquadId === teamSlug)) ||
+      (empSquad && (empSquad === teamName || empSquad === teamId))
+    )
+  }
+
+  function getTeamMembersList(team) {
+    if (!team) return []
+    return employees.filter((e) => isEmployeeInTeam(e, team))
+  }
+
+  const filteredAssignTeamEmployees = useMemo(() => {
+    if (!assignTeam) return []
+    return employees.filter((emp) => {
+      if (emp.status === 'terminated') return false
+      if (assignTeamSearch.trim()) {
+        const q = assignTeamSearch.toLowerCase().trim()
+        const nameMatch = (emp.displayName || emp.name || '').toLowerCase().includes(q)
+        const idMatch = (emp.employeeId || '').toLowerCase().includes(q)
+        const roleMatch = (emp.role || '').toLowerCase().includes(q)
+        const deptMatch = (emp.department || '').toLowerCase().includes(q)
+        const teamMatch = (emp.team || emp.squad || '').toLowerCase().includes(q)
+        const desigMatch = (emp.designation || '').toLowerCase().includes(q)
+        if (!nameMatch && !idMatch && !roleMatch && !deptMatch && !teamMatch && !desigMatch) {
+          return false
+        }
+      }
+      const isSelected = assignTeamSelectedIds.has(String(emp.id || emp._id))
+      const isHere = isEmployeeInTeam(emp, assignTeam)
+      const isUnassigned = !emp.team && !emp.teamId && !emp.squad && !emp.squadId
+
+      if (assignTeamFilter === 'assigned') {
+        return isSelected || isHere
+      }
+      if (assignTeamFilter === 'unassigned') {
+        return isUnassigned
+      }
+      if (assignTeamFilter === 'other') {
+        return !isHere && !isUnassigned
+      }
+      return true
+    })
+  }, [employees, assignTeam, assignTeamSearch, assignTeamFilter, assignTeamSelectedIds])
+
+  function openAssignTeamModal(team) {
+    setAssignTeam(team)
+    setAssignTeamSearch('')
+    setAssignTeamFilter('all')
+    const members = getTeamMembersList(team)
+    setAssignTeamSelectedIds(new Set(members.map((e) => String(e.id || e._id))))
+  }
+
+  function toggleAssignTeamEmployee(empId) {
+    const next = new Set(assignTeamSelectedIds)
+    const strId = String(empId)
+    if (next.has(strId)) {
+      next.delete(strId)
+    } else {
+      next.add(strId)
+    }
+    setAssignTeamSelectedIds(next)
+  }
+
+  function handleSelectAllTeamUnassigned() {
+    const next = new Set(assignTeamSelectedIds)
+    for (const emp of employees) {
+      if (emp.status !== 'terminated' && !emp.team && !emp.teamId && !emp.squad && !emp.squadId) {
+        next.add(String(emp.id || emp._id))
+      }
+    }
+    setAssignTeamSelectedIds(next)
+  }
+
+  async function handleSaveTeamAssignments() {
+    if (!assignTeam || assignTeamSaving) return
+    setAssignTeamSaving(true)
+    try {
+      const teamIdOrName = assignTeam.teamId || assignTeam.id || assignTeam.name
+      await hrStore.assignEmployeesToTeam(teamIdOrName, Array.from(assignTeamSelectedIds), user)
+      setStoreState(hrStore.getState())
+      setNotice(`Updated squad roster for ${assignTeam.name}: ${assignTeamSelectedIds.size} members assigned successfully.`)
+      setAssignTeam(null)
+      setTimeout(() => setNotice(''), 4500)
+    } catch (err) {
+      alert(err.message || 'Failed to update squad assignments.')
+    } finally {
+      setAssignTeamSaving(false)
+    }
+  }
 
   // Assign Modal Handlers
   function openAssignModal(dept) {
@@ -3361,13 +3500,18 @@ export function AdminDepartmentsModule() {
 
     setSaving(true)
     try {
+      const mgr = (employees || []).find((m) => String(m.id || m._id || m.employeeId) === String(teamFormManagerId))
+      const tl = (employees || []).find((m) => String(m.id || m._id || m.employeeId) === String(teamFormLeadId))
       await hrStore.addTeam({
         name,
         department: teamFormDept,
         managerId: teamFormManagerId || null,
+        managerName: mgr?.displayName || mgr?.name || '',
         teamLeadId: teamFormLeadId || null,
+        teamLeadName: tl?.displayName || tl?.name || '',
         description: teamFormDesc.trim(),
       })
+      setStoreState(hrStore.getState())
 
       setAddTeamModal(false)
       setTeamFormName('')
@@ -3392,15 +3536,20 @@ export function AdminDepartmentsModule() {
 
     setSaving(true)
     try {
+      const mgr = (employees || []).find((m) => String(m.id || m._id || m.employeeId) === String(editTeam.managerId))
+      const tl = (employees || []).find((m) => String(m.id || m._id || m.employeeId) === String(editTeam.teamLeadId))
       await hrStore.updateTeam(editTeam.id, {
         name,
         department: editTeam.department,
         managerId: editTeam.managerId,
+        managerName: mgr?.displayName || mgr?.name || editTeam.managerName || '',
         teamLeadId: editTeam.teamLeadId,
+        teamLeadName: tl?.displayName || tl?.name || editTeam.teamLeadName || '',
         description: editTeam.description || '',
         flaggedForVerification: Boolean(editTeam.flaggedForVerification),
         verificationNote: editTeam.verificationNote || '',
       })
+      setStoreState(hrStore.getState())
 
       setEditTeam(null)
       setNotice(`Team '${name}' settings updated successfully!`)
@@ -3413,18 +3562,13 @@ export function AdminDepartmentsModule() {
   }
 
   async function handleDeleteTeam(team) {
-    const isCore = INITIAL_TEAMS.some((t) => t.id === team.id)
-    if (isCore) {
-      alert(`Standard company team '${team.name}' cannot be deleted. You can reassign its Team Leader, manager, or assigned employees.`)
-      return
-    }
-
-    if (!window.confirm(`Are you sure you want to delete team '${team.name}'?`)) {
+    if (!window.confirm(`Are you sure you want to delete team '${team.name}'? This will unassign all squad members.`)) {
       return
     }
 
     try {
       await hrStore.deleteTeam(team.id)
+      setStoreState(hrStore.getState())
       setNotice(`Team '${team.name}' deleted.`)
       setTimeout(() => setNotice(''), 4000)
     } catch (err) {
@@ -3806,7 +3950,7 @@ export function AdminDepartmentsModule() {
                   </thead>
                   <tbody>
                     {filteredTeams.map((t) => {
-                      const isCore = INITIAL_TEAMS.some((item) => item.id === t.id)
+                      // manual team
                       return (
                         <tr key={t.id || t.name}>
                           <td>
@@ -3862,6 +4006,15 @@ export function AdminDepartmentsModule() {
                               <button
                                 type="button"
                                 className="ui-button secondary"
+                                style={{ padding: '4px 8px', fontSize: '11px', color: 'var(--teal)', borderColor: 'var(--teal)' }}
+                                onClick={() => openAssignTeamModal(t)}
+                                title="Assign / Remove Squad Members"
+                              >
+                                <UserPlus size={12} /> Assign Members
+                              </button>
+                              <button
+                                type="button"
+                                className="ui-button secondary"
                                 style={{ padding: '4px 8px', fontSize: '11px' }}
                                 onClick={() => setEditTeam({ ...t })}
                                 title="Edit Team Settings & Reporting Lines"
@@ -3879,8 +4032,7 @@ export function AdminDepartmentsModule() {
                                   <Check size={12} /> Verify
                                 </button>
                               )}
-                              {!isCore && (
-                                <button
+                              <button
                                   type="button"
                                   className="ui-button secondary"
                                   style={{ padding: '4px 8px', fontSize: '11px', color: '#c53030' }}
@@ -3889,7 +4041,6 @@ export function AdminDepartmentsModule() {
                                 >
                                   <Trash2 size={12} /> Delete
                                 </button>
-                              )}
                             </div>
                           </td>
                         </tr>
@@ -3909,89 +4060,89 @@ export function AdminDepartmentsModule() {
       {addDeptModal && (
         <AdminModalPortal>
           <div className="payslip-voucher-overlay" onClick={() => setAddDeptModal(false)}>
-          <div className="payslip-voucher" style={{ maxWidth: '480px' }} onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header-premium">
-              <div className="modal-title-group">
-                <div className="modal-icon-badge">
-                  <Building size={20} />
-                </div>
-                <div>
-                  <h3 className="modal-title-text">Create Department</h3>
-                  <p className="modal-subtitle-text">Structure operational business units and department leads</p>
-                </div>
-              </div>
-              <button type="button" className="icon-button" onClick={() => setAddDeptModal(false)} aria-label="Close modal">
-                <X size={16} />
-              </button>
-            </div>
-
-            <form onSubmit={handleCreateDepartment}>
-              <div className="modal-body-premium">
-                <div>
-                  <label className="form-label-premium">Department Name *</label>
-                  <input
-                    type="text"
-                    className="text-input"
-                    placeholder="e.g. Artificial Intelligence / Customer Success"
-                    value={formName}
-                    onChange={(e) => handleNameChange(e.target.value)}
-                    required
-                  />
-                </div>
-
-                <div className="form-row-2col">
+            <div className="payslip-voucher" style={{ maxWidth: '480px' }} onClick={(e) => e.stopPropagation()}>
+              <div className="modal-header-premium">
+                <div className="modal-title-group">
+                  <div className="modal-icon-badge">
+                    <Building size={20} />
+                  </div>
                   <div>
-                    <label className="form-label-premium">Department Code *</label>
+                    <h3 className="modal-title-text">Create Department</h3>
+                    <p className="modal-subtitle-text">Structure operational business units and department leads</p>
+                  </div>
+                </div>
+                <button type="button" className="icon-button" onClick={() => setAddDeptModal(false)} aria-label="Close modal">
+                  <X size={16} />
+                </button>
+              </div>
+
+              <form onSubmit={handleCreateDepartment}>
+                <div className="modal-body-premium">
+                  <div>
+                    <label className="form-label-premium">Department Name *</label>
                     <input
                       type="text"
                       className="text-input"
-                      style={{ textTransform: 'uppercase' }}
-                      placeholder="e.g. AI / CS"
-                      value={formCode}
-                      onChange={(e) => setFormCode(e.target.value.toUpperCase())}
-                      maxLength={10}
+                      placeholder="e.g. Artificial Intelligence / Customer Success"
+                      value={formName}
+                      onChange={(e) => handleNameChange(e.target.value)}
                       required
                     />
                   </div>
+
+                  <div className="form-row-2col">
+                    <div>
+                      <label className="form-label-premium">Department Code *</label>
+                      <input
+                        type="text"
+                        className="text-input"
+                        style={{ textTransform: 'uppercase' }}
+                        placeholder="e.g. AI / CS"
+                        value={formCode}
+                        onChange={(e) => setFormCode(e.target.value.toUpperCase())}
+                        maxLength={10}
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="form-label-premium">Department Head</label>
+                      <select
+                        className="select-control"
+                        value={formHead}
+                        onChange={(e) => setFormHead(e.target.value)}
+                      >
+                        <option value="Unassigned">-- Select Employee --</option>
+                        {employees.filter((e) => e.status === 'active').map((e) => (
+                          <option key={e.id || e._id} value={e.displayName || e.name}>
+                            {e.displayName || e.name} ({e.designation || e.role || 'Staff'})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
                   <div>
-                    <label className="form-label-premium">Department Head</label>
-                    <select
-                      className="select-control"
-                      value={formHead}
-                      onChange={(e) => setFormHead(e.target.value)}
-                    >
-                      <option value="Unassigned">-- Select Employee --</option>
-                      {employees.filter((e) => e.status === 'active').map((e) => (
-                        <option key={e.id || e._id} value={e.displayName || e.name}>
-                          {e.displayName || e.name} ({e.designation || e.role || 'Staff'})
-                        </option>
-                      ))}
-                    </select>
+                    <label className="form-label-premium">Description & Mandate</label>
+                    <textarea
+                      className="text-input"
+                      placeholder="Define the team mandate, focus areas, and functional responsibilities..."
+                      value={formDesc}
+                      onChange={(e) => setFormDesc(e.target.value)}
+                    />
                   </div>
                 </div>
 
-                <div>
-                  <label className="form-label-premium">Description & Mandate</label>
-                  <textarea
-                    className="text-input"
-                    placeholder="Define the team mandate, focus areas, and functional responsibilities..."
-                    value={formDesc}
-                    onChange={(e) => setFormDesc(e.target.value)}
-                  />
+                <div className="modal-footer-premium">
+                  <Button type="button" variant="secondary" onClick={() => setAddDeptModal(false)}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" disabled={saving}>
+                    <Plus size={14} /> {saving ? 'Creating...' : 'Create Department'}
+                  </Button>
                 </div>
-              </div>
-
-              <div className="modal-footer-premium">
-                <Button type="button" variant="secondary" onClick={() => setAddDeptModal(false)}>
-                  Cancel
-                </Button>
-                <Button type="submit" disabled={saving}>
-                  <Plus size={14} /> {saving ? 'Creating...' : 'Create Department'}
-                </Button>
-              </div>
-            </form>
+              </form>
+            </div>
           </div>
-        </div>
         </AdminModalPortal>
       )}
 
@@ -4001,107 +4152,107 @@ export function AdminDepartmentsModule() {
       {editDept && (
         <AdminModalPortal>
           <div className="payslip-voucher-overlay" onClick={() => setEditDept(null)}>
-          <div className="payslip-voucher" style={{ maxWidth: '480px' }} onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header-premium">
-              <div className="modal-title-group">
-                <div className="modal-icon-badge">
-                  <Edit size={18} />
-                </div>
-                <div>
-                  <h3 className="modal-title-text">Edit Department</h3>
-                  <p className="modal-subtitle-text">{editDept.name} ({editDept.code})</p>
-                </div>
-              </div>
-              <button type="button" className="icon-button" onClick={() => setEditDept(null)} aria-label="Close modal">
-                <X size={16} />
-              </button>
-            </div>
-
-            <form onSubmit={handleUpdateDepartment}>
-              <div className="modal-body-premium">
-                <div>
-                  <label className="form-label-premium">Department Name *</label>
-                  <input
-                    type="text"
-                    className="text-input"
-                    value={editDept.name}
-                    onChange={(e) => setEditDept({ ...editDept, name: e.target.value })}
-                    required
-                  />
-                </div>
-
-                <div className="form-row-2col">
+            <div className="payslip-voucher" style={{ maxWidth: '480px' }} onClick={(e) => e.stopPropagation()}>
+              <div className="modal-header-premium">
+                <div className="modal-title-group">
+                  <div className="modal-icon-badge">
+                    <Edit size={18} />
+                  </div>
                   <div>
-                    <label className="form-label-premium">Department Code *</label>
+                    <h3 className="modal-title-text">Edit Department</h3>
+                    <p className="modal-subtitle-text">{editDept.name} ({editDept.code})</p>
+                  </div>
+                </div>
+                <button type="button" className="icon-button" onClick={() => setEditDept(null)} aria-label="Close modal">
+                  <X size={16} />
+                </button>
+              </div>
+
+              <form onSubmit={handleUpdateDepartment}>
+                <div className="modal-body-premium">
+                  <div>
+                    <label className="form-label-premium">Department Name *</label>
                     <input
                       type="text"
                       className="text-input"
-                      style={{ textTransform: 'uppercase' }}
-                      value={editDept.code || ''}
-                      onChange={(e) => setEditDept({ ...editDept, code: e.target.value.toUpperCase() })}
-                      maxLength={10}
+                      value={editDept.name}
+                      onChange={(e) => setEditDept({ ...editDept, name: e.target.value })}
                       required
                     />
                   </div>
-                  <div>
-                    <label className="form-label-premium">Department Head</label>
-                    <select
-                      className="select-control"
-                      value={editDept.head || 'Unassigned'}
-                      onChange={(e) => setEditDept({ ...editDept, head: e.target.value })}
-                    >
-                      <option value="Unassigned">Unassigned</option>
-                      {employees.filter((e) => e.status === 'active').map((e) => (
-                        <option key={e.id || e._id} value={e.displayName || e.name}>
-                          {e.displayName || e.name} ({e.designation || e.role || 'Staff'})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
 
-                <div>
-                  <label className="form-label-premium">Description & Mandate</label>
-                  <textarea
-                    className="text-input"
-                    value={editDept.description || ''}
-                    onChange={(e) => setEditDept({ ...editDept, description: e.target.value })}
-                  />
-                </div>
-
-                <div style={{ marginTop: '12px', padding: '12px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <div>
-                    <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--ink)' }}>Department Workforce</div>
-                    <div style={{ fontSize: '11px', color: 'var(--muted)' }}>
-                      {(deptEmployeeMap.get(editDept.name.toLowerCase()) || []).length} assigned members
+                  <div className="form-row-2col">
+                    <div>
+                      <label className="form-label-premium">Department Code *</label>
+                      <input
+                        type="text"
+                        className="text-input"
+                        style={{ textTransform: 'uppercase' }}
+                        value={editDept.code || ''}
+                        onChange={(e) => setEditDept({ ...editDept, code: e.target.value.toUpperCase() })}
+                        maxLength={10}
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="form-label-premium">Department Head</label>
+                      <select
+                        className="select-control"
+                        value={editDept.head || 'Unassigned'}
+                        onChange={(e) => setEditDept({ ...editDept, head: e.target.value })}
+                      >
+                        <option value="Unassigned">Unassigned</option>
+                        {employees.filter((e) => e.status === 'active').map((e) => (
+                          <option key={e.id || e._id} value={e.displayName || e.name}>
+                            {e.displayName || e.name} ({e.designation || e.role || 'Staff'})
+                          </option>
+                        ))}
+                      </select>
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    className="ui-button secondary"
-                    style={{ fontSize: '11px', padding: '4px 10px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                    onClick={() => {
-                      const target = { ...editDept }
-                      setEditDept(null)
-                      openAssignModal(target)
-                    }}
-                  >
-                    <UserPlus size={12} /> Assign Members
-                  </button>
-                </div>
-              </div>
 
-              <div className="modal-footer-premium">
-                <Button type="button" variant="secondary" onClick={() => setEditDept(null)}>
-                  Cancel
-                </Button>
-                <Button type="submit" disabled={saving}>
-                  <Check size={14} /> {saving ? 'Saving...' : 'Save Changes'}
-                </Button>
-              </div>
-            </form>
+                  <div>
+                    <label className="form-label-premium">Description & Mandate</label>
+                    <textarea
+                      className="text-input"
+                      value={editDept.description || ''}
+                      onChange={(e) => setEditDept({ ...editDept, description: e.target.value })}
+                    />
+                  </div>
+
+                  <div style={{ marginTop: '12px', padding: '12px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div>
+                      <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--ink)' }}>Department Workforce</div>
+                      <div style={{ fontSize: '11px', color: 'var(--muted)' }}>
+                        {(deptEmployeeMap.get(editDept.name.toLowerCase()) || []).length} assigned members
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      className="ui-button secondary"
+                      style={{ fontSize: '11px', padding: '4px 10px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                      onClick={() => {
+                        const target = { ...editDept }
+                        setEditDept(null)
+                        openAssignModal(target)
+                      }}
+                    >
+                      <UserPlus size={12} /> Assign Members
+                    </button>
+                  </div>
+                </div>
+
+                <div className="modal-footer-premium">
+                  <Button type="button" variant="secondary" onClick={() => setEditDept(null)}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" disabled={saving}>
+                    <Check size={14} /> {saving ? 'Saving...' : 'Save Changes'}
+                  </Button>
+                </div>
+              </form>
+            </div>
           </div>
-        </div>
         </AdminModalPortal>
       )}
 
@@ -4111,317 +4262,513 @@ export function AdminDepartmentsModule() {
       {assignDept && (
         <AdminModalPortal>
           <div className="payslip-voucher-overlay" onClick={() => setAssignDept(null)}>
-          <div className="payslip-voucher" style={{ maxWidth: '640px', width: '95%' }} onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header-premium">
-              <div className="modal-title-group">
-                <div className="modal-icon-badge" style={{ background: '#eaf4f1', color: 'var(--teal)' }}>
-                  <UserPlus size={20} />
-                </div>
-                <div>
-                  <h3 className="modal-title-text" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    Assign Members: {assignDept.name}
-                    <span className="role-badge" style={{ fontSize: '11px', background: '#f0f4f8', color: '#334e68' }}>
-                      {assignDept.code}
-                    </span>
-                  </h3>
-                  <p className="modal-subtitle-text">
-                    Select employees to assign to {assignDept.name}. Headcount updates dynamically in real-time.
-                  </p>
-                </div>
-              </div>
-              <button type="button" className="icon-button" onClick={() => setAssignDept(null)} aria-label="Close modal">
-                <X size={16} />
-              </button>
-            </div>
-
-            <div className="modal-body-premium" style={{ gap: '14px', maxHeight: '68vh', overflowY: 'auto' }}>
-              {/* HEADCOUNT KPI STRIP */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', background: '#f8fafc', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-                <div>
-                  <span style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 600 }}>Selected Headcount</span>
-                  <div style={{ fontSize: '18px', fontWeight: 700, color: 'var(--teal)' }}>
-                    {assignSelectedIds.size} <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--ink)' }}>Members</span>
+            <div className="payslip-voucher" style={{ maxWidth: '640px', width: '95%' }} onClick={(e) => e.stopPropagation()}>
+              <div className="modal-header-premium">
+                <div className="modal-title-group">
+                  <div className="modal-icon-badge" style={{ background: '#eaf4f1', color: 'var(--teal)' }}>
+                    <UserPlus size={20} />
+                  </div>
+                  <div>
+                    <h3 className="modal-title-text" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      Assign Members: {assignDept.name}
+                      <span className="role-badge" style={{ fontSize: '11px', background: '#f0f4f8', color: '#334e68' }}>
+                        {assignDept.code}
+                      </span>
+                    </h3>
+                    <p className="modal-subtitle-text">
+                      Select employees to assign to {assignDept.name}. Headcount updates dynamically in real-time.
+                    </p>
                   </div>
                 </div>
-                <div>
-                  <span style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 600 }}>Department Head</span>
-                  <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--ink)', marginTop: '4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {assignDept.head || 'Unassigned'}
-                  </div>
-                </div>
-                <div>
-                  <span style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 600 }}>Unassigned In Org</span>
-                  <div style={{ fontSize: '18px', fontWeight: 700, color: unassignedCount > 0 ? '#dd6b20' : 'var(--muted)' }}>
-                    {unassignedCount} <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--ink)' }}>Available</span>
-                  </div>
-                </div>
+                <button type="button" className="icon-button" onClick={() => setAssignDept(null)} aria-label="Close modal">
+                  <X size={16} />
+                </button>
               </div>
 
-              {/* SEARCH & FILTER CONTROLS */}
-              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div style={{ position: 'relative', flex: '1 1 220px' }}>
-                  <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)' }} />
-                  <input
-                    type="text"
-                    className="text-input"
-                    style={{ width: '100%', paddingLeft: '32px', fontSize: '12px', height: '34px' }}
-                    placeholder="Search employees by name, ID, role, or department..."
-                    value={assignSearch}
-                    onChange={(e) => setAssignSearch(e.target.value)}
-                  />
-                </div>
-                <div style={{ display: 'flex', gap: '6px' }}>
-                  <button
-                    type="button"
-                    className="ui-button secondary"
-                    style={{ fontSize: '11px', padding: '4px 8px', height: '34px' }}
-                    onClick={handleSelectAllUnassigned}
-                    title="Select all staff currently without any department"
-                  >
-                    + Add All Unassigned ({unassignedCount})
-                  </button>
-                </div>
-              </div>
-
-              {/* FILTER PILLS */}
-              <div style={{ display: 'flex', gap: '6px', borderBottom: '1px solid #e2e8f0', paddingBottom: '8px' }}>
-                {[
-                  { id: 'all', label: `All Staff (${employees.length})` },
-                  { id: 'assigned', label: `Assigned Here (${assignSelectedIds.size})` },
-                  { id: 'unassigned', label: `Unassigned (${unassignedCount})` },
-                  { id: 'other', label: `Other Depts` },
-                ].map((f) => (
-                  <button
-                    key={f.id}
-                    type="button"
-                    onClick={() => setAssignFilter(f.id)}
-                    style={{
-                      fontSize: '11px',
-                      padding: '4px 10px',
-                      borderRadius: '14px',
-                      border: '1px solid',
-                      borderColor: assignFilter === f.id ? 'var(--teal)' : '#cbd5e1',
-                      background: assignFilter === f.id ? 'var(--teal)' : '#fff',
-                      color: assignFilter === f.id ? '#fff' : 'var(--ink)',
-                      fontWeight: assignFilter === f.id ? 600 : 500,
-                      cursor: 'pointer',
-                    }}
-                  >
-                    {f.label}
-                  </button>
-                ))}
-              </div>
-
-              {/* EMPLOYEE LIST */}
-              <div style={{ display: 'grid', gap: '6px', maxHeight: '360px', overflowY: 'auto', paddingRight: '4px' }}>
-                {filteredAssignEmployees.length === 0 ? (
-                  <div style={{ textAlign: 'center', padding: '30px 10px', color: 'var(--muted)', fontSize: '13px' }}>
-                    No employees match your search or filter.
+              <div className="modal-body-premium" style={{ gap: '14px', maxHeight: '68vh', overflowY: 'auto' }}>
+                {/* HEADCOUNT KPI STRIP */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', background: '#f8fafc', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                  <div>
+                    <span style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 600 }}>Selected Headcount</span>
+                    <div style={{ fontSize: '18px', fontWeight: 700, color: 'var(--teal)' }}>
+                      {assignSelectedIds.size} <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--ink)' }}>Members</span>
+                    </div>
                   </div>
-                ) : (
-                  filteredAssignEmployees.map((emp) => {
-                    const isSelected = assignSelectedIds.has(String(emp.id || emp._id))
-                    const isAlreadyHere = isEmployeeInDept(emp, assignDept)
-                    const empDept = emp.department || 'Unassigned'
-                    return (
-                      <div
-                        key={emp.id || emp._id}
-                        onClick={() => toggleAssignEmployee(emp.id || emp._id)}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          padding: '10px 12px',
-                          borderRadius: '8px',
-                          border: '1px solid',
-                          borderColor: isSelected ? 'var(--teal)' : '#e2e8f0',
-                          background: isSelected ? '#f0fdfa' : '#fff',
-                          cursor: 'pointer',
-                          transition: 'all 0.15s ease',
-                        }}
-                      >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            onChange={() => {}}
-                            style={{ cursor: 'pointer', width: '16px', height: '16px', accentColor: 'var(--teal)' }}
-                          />
-                          <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: isSelected ? '#ccfbf1' : '#f1f5f9', color: isSelected ? 'var(--teal)' : '#475569', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 700 }}>
-                            {emp.name ? emp.name.charAt(0).toUpperCase() : '?'}
+                  <div>
+                    <span style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 600 }}>Department Head</span>
+                    <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--ink)', marginTop: '4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {assignDept.head || 'Unassigned'}
+                    </div>
+                  </div>
+                  <div>
+                    <span style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 600 }}>Unassigned In Org</span>
+                    <div style={{ fontSize: '18px', fontWeight: 700, color: unassignedCount > 0 ? '#dd6b20' : 'var(--muted)' }}>
+                      {unassignedCount} <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--ink)' }}>Available</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* SEARCH & FILTER CONTROLS */}
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ position: 'relative', flex: '1 1 220px' }}>
+                    <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)' }} />
+                    <input
+                      type="text"
+                      className="text-input"
+                      style={{ width: '100%', paddingLeft: '32px', fontSize: '12px', height: '34px' }}
+                      placeholder="Search employees by name, ID, role, or department..."
+                      value={assignSearch}
+                      onChange={(e) => setAssignSearch(e.target.value)}
+                    />
+                  </div>
+                  <div style={{ display: 'flex', gap: '6px' }}>
+                    <button
+                      type="button"
+                      className="ui-button secondary"
+                      style={{ fontSize: '11px', padding: '4px 8px', height: '34px' }}
+                      onClick={handleSelectAllUnassigned}
+                      title="Select all staff currently without any department"
+                    >
+                      + Add All Unassigned ({unassignedCount})
+                    </button>
+                  </div>
+                </div>
+
+                {/* FILTER PILLS */}
+                <div style={{ display: 'flex', gap: '6px', borderBottom: '1px solid #e2e8f0', paddingBottom: '8px' }}>
+                  {[
+                    { id: 'all', label: `All Staff (${employees.length})` },
+                    { id: 'assigned', label: `Assigned Here (${assignSelectedIds.size})` },
+                    { id: 'unassigned', label: `Unassigned (${unassignedCount})` },
+                    { id: 'other', label: `Other Depts` },
+                  ].map((f) => (
+                    <button
+                      key={f.id}
+                      type="button"
+                      onClick={() => setAssignFilter(f.id)}
+                      style={{
+                        fontSize: '11px',
+                        padding: '4px 10px',
+                        borderRadius: '14px',
+                        border: '1px solid',
+                        borderColor: assignFilter === f.id ? 'var(--teal)' : '#cbd5e1',
+                        background: assignFilter === f.id ? 'var(--teal)' : '#fff',
+                        color: assignFilter === f.id ? '#fff' : 'var(--ink)',
+                        fontWeight: assignFilter === f.id ? 600 : 500,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* EMPLOYEE LIST */}
+                <div style={{ display: 'grid', gap: '6px', maxHeight: '360px', overflowY: 'auto', paddingRight: '4px' }}>
+                  {filteredAssignEmployees.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '30px 10px', color: 'var(--muted)', fontSize: '13px' }}>
+                      No employees match your search or filter.
+                    </div>
+                  ) : (
+                    filteredAssignEmployees.map((emp) => {
+                      const isSelected = assignSelectedIds.has(String(emp.id || emp._id))
+                      const isAlreadyHere = isEmployeeInDept(emp, assignDept)
+                      const empDept = emp.department || 'Unassigned'
+                      return (
+                        <div
+                          key={emp.id || emp._id}
+                          onClick={() => toggleAssignEmployee(emp.id || emp._id)}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '10px 12px',
+                            borderRadius: '8px',
+                            border: '1px solid',
+                            borderColor: isSelected ? 'var(--teal)' : '#e2e8f0',
+                            background: isSelected ? '#f0fdfa' : '#fff',
+                            cursor: 'pointer',
+                            transition: 'all 0.15s ease',
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => { }}
+                              style={{ cursor: 'pointer', width: '16px', height: '16px', accentColor: 'var(--teal)' }}
+                            />
+                            <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: isSelected ? '#ccfbf1' : '#f1f5f9', color: isSelected ? 'var(--teal)' : '#475569', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 700 }}>
+                              {emp.name ? emp.name.charAt(0).toUpperCase() : '?'}
+                            </div>
+                            <div>
+                              <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                {emp.displayName || emp.name}
+                                <span style={{ fontSize: '10px', color: 'var(--muted)', fontWeight: 500 }}>
+                                  #{emp.employeeId || 'ID-TBD'}
+                                </span>
+                              </div>
+                              <div style={{ fontSize: '11px', color: 'var(--muted)', display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
+                                <span>{emp.designation || emp.role || 'Staff'}</span>
+                                <span>•</span>
+                                <span style={{ textTransform: 'capitalize' }}>{emp.role?.replace(/_/g, ' ') || 'employee'}</span>
+                              </div>
+                            </div>
                           </div>
-                          <div>
-                            <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                              {emp.displayName || emp.name}
-                              <span style={{ fontSize: '10px', color: 'var(--muted)', fontWeight: 500 }}>
-                                #{emp.employeeId || 'ID-TBD'}
+
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            {isAlreadyHere ? (
+                              <span className="role-badge" style={{ fontSize: '10px', background: '#dcfce7', color: '#15803d', padding: '2px 8px' }}>
+                                Currently Here
                               </span>
-                            </div>
-                            <div style={{ fontSize: '11px', color: 'var(--muted)', display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
-                              <span>{emp.designation || emp.role || 'Staff'}</span>
-                              <span>•</span>
-                              <span style={{ textTransform: 'capitalize' }}>{emp.role?.replace(/_/g, ' ') || 'employee'}</span>
-                            </div>
+                            ) : empDept.toLowerCase() === 'unassigned' ? (
+                              <span className="role-badge" style={{ fontSize: '10px', background: '#fef3c7', color: '#b45309', padding: '2px 8px' }}>
+                                Unassigned
+                              </span>
+                            ) : (
+                              <span className="role-badge" style={{ fontSize: '10px', background: '#f1f5f9', color: '#475569', padding: '2px 8px' }}>
+                                In {empDept}
+                              </span>
+                            )}
+
+                            <button
+                              type="button"
+                              className={`ui-button ${isSelected ? 'secondary' : 'primary'}`}
+                              style={{ fontSize: '11px', padding: '3px 10px', height: '28px' }}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                toggleAssignEmployee(emp.id || emp._id)
+                              }}
+                            >
+                              {isSelected ? 'Remove' : '+ Assign'}
+                            </button>
                           </div>
                         </div>
-
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          {isAlreadyHere ? (
-                            <span className="role-badge" style={{ fontSize: '10px', background: '#dcfce7', color: '#15803d', padding: '2px 8px' }}>
-                              Currently Here
-                            </span>
-                          ) : empDept.toLowerCase() === 'unassigned' ? (
-                            <span className="role-badge" style={{ fontSize: '10px', background: '#fef3c7', color: '#b45309', padding: '2px 8px' }}>
-                              Unassigned
-                            </span>
-                          ) : (
-                            <span className="role-badge" style={{ fontSize: '10px', background: '#f1f5f9', color: '#475569', padding: '2px 8px' }}>
-                              In {empDept}
-                            </span>
-                          )}
-
-                          <button
-                            type="button"
-                            className={`ui-button ${isSelected ? 'secondary' : 'primary'}`}
-                            style={{ fontSize: '11px', padding: '3px 10px', height: '28px' }}
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              toggleAssignEmployee(emp.id || emp._id)
-                            }}
-                          >
-                            {isSelected ? 'Remove' : '+ Assign'}
-                          </button>
-                        </div>
-                      </div>
-                    )
-                  })
-                )}
+                      )
+                    })
+                  )}
+                </div>
               </div>
-            </div>
 
-            <div className="modal-footer-premium" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ fontSize: '12px', color: 'var(--ink)' }}>
-                Staged Headcount: <strong>{assignSelectedIds.size} employees</strong>
-              </div>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <Button type="button" variant="secondary" onClick={() => setAssignDept(null)}>
-                  Cancel
-                </Button>
-                <Button type="button" disabled={assignSaving} onClick={handleSaveAssignments}>
-                  <Check size={14} /> {assignSaving ? 'Updating...' : `Save ${assignSelectedIds.size} Assignments`}
-                </Button>
+              <div className="modal-footer-premium" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ fontSize: '12px', color: 'var(--ink)' }}>
+                  Staged Headcount: <strong>{assignSelectedIds.size} employees</strong>
+                </div>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <Button type="button" variant="secondary" onClick={() => setAssignDept(null)}>
+                    Cancel
+                  </Button>
+                  <Button type="button" disabled={assignSaving} onClick={handleSaveAssignments}>
+                    <Check size={14} /> {assignSaving ? 'Updating...' : `Save ${assignSelectedIds.size} Assignments`}
+                  </Button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
         </AdminModalPortal>
       )}
 
       {/* ============================================================== */}
+      {/* ============================================================== */}
+      {/* ASSIGN SQUAD / TEAM MEMBERS MODAL */}
+      {/* ============================================================== */}
+      {assignTeam && (
+        <AdminModalPortal>
+          <div className="payslip-voucher-overlay" onClick={() => setAssignTeam(null)}>
+            <div className="payslip-voucher" style={{ maxWidth: '640px', width: '95%' }} onClick={(e) => e.stopPropagation()}>
+              <div className="modal-header-premium">
+                <div className="modal-title-group">
+                  <div className="modal-icon-badge" style={{ background: '#f3e8ff', color: '#7e22ce' }}>
+                    <Users size={20} />
+                  </div>
+                  <div>
+                    <h3 className="modal-title-text" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      Assign Squad Members: {assignTeam.name}
+                      <span className="role-badge" style={{ fontSize: '11px', background: '#f3e8ff', color: '#7e22ce' }}>
+                        {assignTeam.department || 'Squad'}
+                      </span>
+                    </h3>
+                    <p className="modal-subtitle-text">
+                      Assign employees to this squad. Squad members will sync team lead & manager reporting lines.
+                    </p>
+                  </div>
+                </div>
+                <button type="button" className="icon-button" onClick={() => setAssignTeam(null)} aria-label="Close modal">
+                  <X size={16} />
+                </button>
+              </div>
+
+              <div className="modal-body-premium" style={{ gap: '14px', maxHeight: '68vh', overflowY: 'auto' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', background: '#f8fafc', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                  <div>
+                    <span style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 600 }}>Squad Members</span>
+                    <div style={{ fontSize: '18px', fontWeight: 700, color: '#7e22ce' }}>
+                      {assignTeamSelectedIds.size} <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--ink)' }}>Assigned</span>
+                    </div>
+                  </div>
+                  <div>
+                    <span style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 600 }}>Team Lead</span>
+                    <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--ink)', marginTop: '4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {assignTeam.teamLeadName || 'Unassigned'}
+                    </div>
+                  </div>
+                  <div>
+                    <span style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 600 }}>Manager</span>
+                    <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--ink)', marginTop: '4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {assignTeam.managerName || 'Unassigned'}
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                  <div className="input-group" style={{ flex: 1, minWidth: '180px', margin: 0 }}>
+                    <Search size={14} className="input-icon" />
+                    <input
+                      type="text"
+                      className="ui-input"
+                      style={{ paddingLeft: '32px', fontSize: '12.5px', height: '36px' }}
+                      placeholder="Search by name, ID, role, department..."
+                      value={assignTeamSearch}
+                      onChange={(e) => setAssignTeamSearch(e.target.value)}
+                    />
+                  </div>
+                  <div style={{ display: 'inline-flex', background: '#f1f5f9', borderRadius: '6px', padding: '2px' }}>
+                    {[
+                      { key: 'all', label: 'All' },
+                      { key: 'assigned', label: `In Squad (${assignTeamSelectedIds.size})` },
+                      { key: 'unassigned', label: 'Unassigned' },
+                    ].map((f) => (
+                      <button
+                        key={f.key}
+                        type="button"
+                        onClick={() => setAssignTeamFilter(f.key)}
+                        style={{
+                          border: 'none',
+                          background: assignTeamFilter === f.key ? '#fff' : 'transparent',
+                          color: assignTeamFilter === f.key ? '#7e22ce' : 'var(--muted)',
+                          fontWeight: assignTeamFilter === f.key ? 700 : 500,
+                          fontSize: '11px',
+                          padding: '5px 9px',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          boxShadow: assignTeamFilter === f.key ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
+                        }}
+                      >
+                        {f.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11.5px', padding: '4px 2px' }}>
+                  <span style={{ color: 'var(--muted)' }}>
+                    Showing <strong>{filteredAssignTeamEmployees.length}</strong> matching employees
+                  </span>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button
+                      type="button"
+                      className="link-button"
+                      style={{ fontSize: '11.5px', color: '#7e22ce' }}
+                      onClick={handleSelectAllTeamUnassigned}
+                    >
+                      + Add All Unassigned
+                    </button>
+                    <span style={{ color: '#cbd5e1' }}>|</span>
+                    <button
+                      type="button"
+                      className="link-button"
+                      style={{ fontSize: '11.5px', color: 'var(--muted)' }}
+                      onClick={() => setAssignTeamSelectedIds(new Set())}
+                    >
+                      Clear All
+                    </button>
+                  </div>
+                </div>
+
+                <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', maxHeight: '360px', overflowY: 'auto' }}>
+                  {filteredAssignTeamEmployees.length === 0 ? (
+                    <div style={{ padding: '30px', textAlign: 'center', color: 'var(--muted)', fontSize: '12.5px' }}>
+                      No employees match your search or filter.
+                    </div>
+                  ) : (
+                    filteredAssignTeamEmployees.map((emp) => {
+                      const empId = String(emp.id || emp._id)
+                      const isSelected = assignTeamSelectedIds.has(empId)
+                      const currentTeam = emp.team || emp.squad || 'Unassigned'
+                      return (
+                        <label
+                          key={empId}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '10px',
+                            padding: '9px 12px',
+                            borderBottom: '1px solid #f1f5f9',
+                            cursor: 'pointer',
+                            background: isSelected ? '#fbf8ff' : '#fff',
+                            transition: 'background 0.15s',
+                          }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => toggleAssignTeamEmployee(empId)}
+                            style={{ accentColor: '#7e22ce', width: '15px', height: '15px' }}
+                          />
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <strong style={{ fontSize: '12.5px', color: isSelected ? '#7e22ce' : 'var(--ink)' }}>
+                                {emp.displayName || emp.name}
+                              </strong>
+                              <span style={{ fontSize: '10.5px', color: 'var(--muted)' }}>
+                                ({emp.employeeId || 'N/A'})
+                              </span>
+                            </div>
+                            <div style={{ fontSize: '11px', color: 'var(--muted)', display: 'flex', gap: '8px', marginTop: '1px' }}>
+                              <span>{emp.designation || emp.role}</span>
+                              <span>•</span>
+                              <span>Dept: {emp.department || 'General'}</span>
+                              <span>•</span>
+                              <span style={{ color: currentTeam === assignTeam.name ? '#7e22ce' : '#64748b' }}>
+                                Current: {currentTeam}
+                              </span>
+                            </div>
+                          </div>
+                        </label>
+                      )
+                    })
+                  )}
+                </div>
+              </div>
+
+              <div className="modal-footer-premium" style={{ justifyContent: 'space-between' }}>
+                <span style={{ fontSize: '12px', color: 'var(--muted)' }}>
+                  <strong>{assignTeamSelectedIds.size}</strong> members will be in {assignTeam.name}
+                </span>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <Button type="button" variant="secondary" onClick={() => setAssignTeam(null)}>
+                    Cancel
+                  </Button>
+                  <Button type="button" disabled={assignTeamSaving} onClick={handleSaveTeamAssignments}>
+                    <Check size={14} /> {assignTeamSaving ? 'Saving...' : `Save ${assignTeamSelectedIds.size} Members`}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </AdminModalPortal>
+      )}
+
       {/* ADD TEAM MODAL */}
       {/* ============================================================== */}
       {addTeamModal && (
         <AdminModalPortal>
           <div className="payslip-voucher-overlay" onClick={() => setAddTeamModal(false)}>
-          <div className="payslip-voucher" style={{ maxWidth: '480px' }} onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header-premium">
-              <div className="modal-title-group">
-                <div className="modal-icon-badge" style={{ background: '#f3e8ff', color: '#7e22ce' }}>
-                  <Users size={20} />
-                </div>
-                <div>
-                  <h3 className="modal-title-text">Create Team / Squad</h3>
-                  <p className="modal-subtitle-text">Configure operational squad name, reporting manager, and team leader</p>
-                </div>
-              </div>
-              <button type="button" className="icon-button" onClick={() => setAddTeamModal(false)} aria-label="Close modal">
-                <X size={16} />
-              </button>
-            </div>
-
-            <form onSubmit={handleCreateTeam}>
-              <div className="modal-body-premium">
-                <div>
-                  <label className="form-label-premium">Team Name *</label>
-                  <input
-                    type="text"
-                    className="text-input"
-                    placeholder="e.g. Alpha / Hustlers / Falcons"
-                    value={teamFormName}
-                    onChange={(e) => setTeamFormName(e.target.value)}
-                    required
-                  />
-                </div>
-
-                <div className="form-row-2col">
+            <div className="payslip-voucher" style={{ maxWidth: '480px' }} onClick={(e) => e.stopPropagation()}>
+              <div className="modal-header-premium">
+                <div className="modal-title-group">
+                  <div className="modal-icon-badge" style={{ background: '#f3e8ff', color: '#7e22ce' }}>
+                    <Users size={20} />
+                  </div>
                   <div>
-                    <label className="form-label-premium">Department *</label>
-                    <select
-                      className="select-control"
-                      value={teamFormDept}
-                      onChange={(e) => setTeamFormDept(e.target.value)}
+                    <h3 className="modal-title-text">Create Team / Squad</h3>
+                    <p className="modal-subtitle-text">Configure operational squad name, reporting manager, and team leader</p>
+                  </div>
+                </div>
+                <button type="button" className="icon-button" onClick={() => setAddTeamModal(false)} aria-label="Close modal">
+                  <X size={16} />
+                </button>
+              </div>
+
+              <form onSubmit={handleCreateTeam}>
+                <div className="modal-body-premium">
+                  <div>
+                    <label className="form-label-premium">Team Name *</label>
+                    <input
+                      type="text"
+                      className="text-input"
+                      placeholder="e.g. Alpha / Hustlers / Falcons"
+                      value={teamFormName}
+                      onChange={(e) => setTeamFormName(e.target.value)}
                       required
-                    >
-                      {departments.map((d) => (
-                        <option key={d.id || d.name} value={d.name}>{d.name}</option>
-                      ))}
-                    </select>
+                    />
                   </div>
+
+                  <div className="form-row-2col">
+                    <div>
+                      <label className="form-label-premium">Department *</label>
+                      <select
+                        className="select-control"
+                        value={teamFormDept}
+                        onChange={(e) => setTeamFormDept(e.target.value)}
+                        required
+                      >
+                        {departments.map((d) => (
+                          <option key={d.id || d.name} value={d.name}>{d.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="form-label-premium">Reporting Manager</label>
+                      <select
+                        className="select-control"
+                        value={teamFormManagerId}
+                        onChange={(e) => setTeamFormManagerId(e.target.value)}
+                      >
+                        <option value="">-- Select Manager --</option>
+                        {availableManagers.map((m) => {
+                          const mId = m.id || m._id || m.employeeId
+                          return (
+                            <option key={mId} value={mId}>
+                              {m.displayName || m.name} ({m.designation})
+                            </option>
+                          )
+                        })}
+                      </select>
+                    </div>
+                  </div>
+
                   <div>
-                    <label className="form-label-premium">Reporting Manager</label>
+                    <label className="form-label-premium">Assigned Team Leader (TL)</label>
                     <select
                       className="select-control"
-                      value={teamFormManagerId}
-                      onChange={(e) => setTeamFormManagerId(e.target.value)}
+                      value={teamFormLeadId}
+                      onChange={(e) => setTeamFormLeadId(e.target.value)}
                     >
-                      <option value="">-- Select Manager --</option>
-                      {availableManagers.map((m) => (
-                        <option key={m.id} value={m.id}>
-                          {m.displayName || m.name} ({m.designation})
-                        </option>
-                      ))}
+                      <option value="">-- Select Team Leader --</option>
+                      {availableLeads.map((tl) => {
+                        const tlId = tl.id || tl._id || tl.employeeId
+                        return (
+                          <option key={tlId} value={tlId}>
+                            {tl.displayName || tl.name} ({tl.employeeId ? `${tl.employeeId} • ` : ''}{tl.designation || tl.role || 'Employee'})
+                          </option>
+                        )
+                      })}
                     </select>
+                  </div>
+
+                  <div>
+                    <label className="form-label-premium">Squad Description & Objective</label>
+                    <textarea
+                      className="text-input"
+                      placeholder="Describe delivery goals, business scope, or project assignments..."
+                      value={teamFormDesc}
+                      onChange={(e) => setTeamFormDesc(e.target.value)}
+                    />
                   </div>
                 </div>
 
-                <div>
-                  <label className="form-label-premium">Assigned Team Leader (TL)</label>
-                  <select
-                    className="select-control"
-                    value={teamFormLeadId}
-                    onChange={(e) => setTeamFormLeadId(e.target.value)}
-                  >
-                    <option value="">-- Select Team Leader --</option>
-                    {availableLeads.map((tl) => (
-                      <option key={tl.id} value={tl.id}>
-                        {tl.displayName || tl.name} ({tl.designation || tl.role})
-                      </option>
-                    ))}
-                  </select>
+                <div className="modal-footer-premium">
+                  <Button type="button" variant="secondary" onClick={() => setAddTeamModal(false)}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" disabled={saving}>
+                    <Plus size={14} /> {saving ? 'Creating...' : 'Create Team'}
+                  </Button>
                 </div>
-
-                <div>
-                  <label className="form-label-premium">Squad Description & Objective</label>
-                  <textarea
-                    className="text-input"
-                    placeholder="Describe delivery goals, business scope, or project assignments..."
-                    value={teamFormDesc}
-                    onChange={(e) => setTeamFormDesc(e.target.value)}
-                  />
-                </div>
-              </div>
-
-              <div className="modal-footer-premium">
-                <Button type="button" variant="secondary" onClick={() => setAddTeamModal(false)}>
-                  Cancel
-                </Button>
-                <Button type="submit" disabled={saving}>
-                  <Plus size={14} /> {saving ? 'Creating...' : 'Create Team'}
-                </Button>
-              </div>
-            </form>
+              </form>
+            </div>
           </div>
-        </div>
         </AdminModalPortal>
       )}
 
@@ -4431,142 +4778,148 @@ export function AdminDepartmentsModule() {
       {editTeam && (
         <AdminModalPortal>
           <div className="payslip-voucher-overlay" onClick={() => setEditTeam(null)}>
-          <div className="payslip-voucher" style={{ maxWidth: '480px' }} onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header-premium">
-              <div className="modal-title-group">
-                <div className="modal-icon-badge" style={{ background: '#f3e8ff', color: '#7e22ce' }}>
-                  <Edit size={18} />
+            <div className="payslip-voucher" style={{ maxWidth: '480px' }} onClick={(e) => e.stopPropagation()}>
+              <div className="modal-header-premium">
+                <div className="modal-title-group">
+                  <div className="modal-icon-badge" style={{ background: '#f3e8ff', color: '#7e22ce' }}>
+                    <Edit size={18} />
+                  </div>
+                  <div>
+                    <h3 className="modal-title-text">Edit Team / Squad</h3>
+                    <p className="modal-subtitle-text">{editTeam.name} ({editTeam.department})</p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="modal-title-text">Edit Team / Squad</h3>
-                  <p className="modal-subtitle-text">{editTeam.name} ({editTeam.department})</p>
-                </div>
+                <button type="button" className="icon-button" onClick={() => setEditTeam(null)} aria-label="Close modal">
+                  <X size={16} />
+                </button>
               </div>
-              <button type="button" className="icon-button" onClick={() => setEditTeam(null)} aria-label="Close modal">
-                <X size={16} />
-              </button>
-            </div>
 
-            <form onSubmit={handleUpdateTeam}>
-              <div className="modal-body-premium">
-                <div>
-                  <label className="form-label-premium">Team Name *</label>
-                  <input
-                    type="text"
-                    className="text-input"
-                    value={editTeam.name || ''}
-                    onChange={(e) => setEditTeam({ ...editTeam, name: e.target.value })}
-                    required
-                  />
-                </div>
-
-                <div className="form-row-2col">
+              <form onSubmit={handleUpdateTeam}>
+                <div className="modal-body-premium">
                   <div>
-                    <label className="form-label-premium">Department *</label>
-                    <select
-                      className="select-control"
-                      value={editTeam.department || ''}
-                      onChange={(e) => setEditTeam({ ...editTeam, department: e.target.value })}
-                      required
-                    >
-                      {departments.map((d) => (
-                        <option key={d.id || d.name} value={d.name}>{d.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="form-label-premium">Reporting Manager</label>
-                    <select
-                      className="select-control"
-                      value={editTeam.managerId || ''}
-                      onChange={(e) => {
-                        const m = availableManagers.find(x => x.id === e.target.value)
-                        setEditTeam({
-                          ...editTeam,
-                          managerId: e.target.value,
-                          managerName: m ? m.name : editTeam.managerName,
-                        })
-                      }}
-                    >
-                      <option value="">-- Select Manager --</option>
-                      {availableManagers.map((m) => (
-                        <option key={m.id} value={m.id}>
-                          {m.displayName || m.name} ({m.designation})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="form-label-premium">Team Leader (TL)</label>
-                  <select
-                    className="select-control"
-                    value={editTeam.teamLeadId || ''}
-                    onChange={(e) => {
-                      const tl = availableLeads.find(x => x.id === e.target.value)
-                      setEditTeam({
-                        ...editTeam,
-                        teamLeadId: e.target.value,
-                        teamLeadName: tl ? tl.name : editTeam.teamLeadName,
-                      })
-                    }}
-                  >
-                    <option value="">-- Select Team Leader --</option>
-                    {availableLeads.map((tl) => (
-                      <option key={tl.id} value={tl.id}>
-                        {tl.displayName || tl.name} ({tl.designation || tl.role})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 12px', background: '#faf9f5', borderRadius: '6px' }}>
-                  <input
-                    type="checkbox"
-                    id="team-verification-checkbox"
-                    checked={Boolean(editTeam.flaggedForVerification)}
-                    onChange={(e) => setEditTeam({ ...editTeam, flaggedForVerification: e.target.checked })}
-                  />
-                  <label htmlFor="team-verification-checkbox" style={{ fontSize: '12px', color: 'var(--ink)', cursor: 'pointer' }}>
-                    Flag assignment for administrator verification / review before finalization
-                  </label>
-                </div>
-
-                {editTeam.flaggedForVerification && (
-                  <div>
-                    <label className="form-label-premium">Verification Note / Reason</label>
+                    <label className="form-label-premium">Team Name *</label>
                     <input
                       type="text"
                       className="text-input"
-                      placeholder="e.g. Proposed Team Leader flagged for admin confirmation"
-                      value={editTeam.verificationNote || ''}
-                      onChange={(e) => setEditTeam({ ...editTeam, verificationNote: e.target.value })}
+                      value={editTeam.name || ''}
+                      onChange={(e) => setEditTeam({ ...editTeam, name: e.target.value })}
+                      required
                     />
                   </div>
-                )}
 
-                <div>
-                  <label className="form-label-premium">Squad Description & Objective</label>
-                  <textarea
-                    className="text-input"
-                    value={editTeam.description || ''}
-                    onChange={(e) => setEditTeam({ ...editTeam, description: e.target.value })}
-                  />
+                  <div className="form-row-2col">
+                    <div>
+                      <label className="form-label-premium">Department *</label>
+                      <select
+                        className="select-control"
+                        value={editTeam.department || ''}
+                        onChange={(e) => setEditTeam({ ...editTeam, department: e.target.value })}
+                        required
+                      >
+                        {departments.map((d) => (
+                          <option key={d.id || d.name} value={d.name}>{d.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="form-label-premium">Reporting Manager</label>
+                      <select
+                        className="select-control"
+                        value={editTeam.managerId || ''}
+                        onChange={(e) => {
+                          const m = availableManagers.find(x => String(x.id || x._id || x.employeeId) === String(e.target.value))
+                          setEditTeam({
+                            ...editTeam,
+                            managerId: e.target.value,
+                            managerName: m ? (m.displayName || m.name) : editTeam.managerName,
+                          })
+                        }}
+                      >
+                        <option value="">-- Select Manager --</option>
+                        {availableManagers.map((m) => {
+                          const mId = m.id || m._id || m.employeeId
+                          return (
+                            <option key={mId} value={mId}>
+                              {m.displayName || m.name} ({m.designation})
+                            </option>
+                          )
+                        })}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="form-label-premium">Team Leader (TL)</label>
+                    <select
+                      className="select-control"
+                      value={editTeam.teamLeadId || ''}
+                      onChange={(e) => {
+                        const tl = availableLeads.find(x => String(x.id || x._id || x.employeeId) === String(e.target.value))
+                        setEditTeam({
+                          ...editTeam,
+                          teamLeadId: e.target.value,
+                          teamLeadName: tl ? (tl.displayName || tl.name) : editTeam.teamLeadName,
+                        })
+                      }}
+                    >
+                      <option value="">-- Select Team Leader --</option>
+                      {availableLeads.map((tl) => {
+                        const tlId = tl.id || tl._id || tl.employeeId
+                        return (
+                          <option key={tlId} value={tlId}>
+                            {tl.displayName || tl.name} ({tl.employeeId ? `${tl.employeeId} • ` : ''}{tl.designation || tl.role || 'Employee'})
+                          </option>
+                        )
+                      })}
+                    </select>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 12px', background: '#faf9f5', borderRadius: '6px' }}>
+                    <input
+                      type="checkbox"
+                      id="team-verification-checkbox"
+                      checked={Boolean(editTeam.flaggedForVerification)}
+                      onChange={(e) => setEditTeam({ ...editTeam, flaggedForVerification: e.target.checked })}
+                    />
+                    <label htmlFor="team-verification-checkbox" style={{ fontSize: '12px', color: 'var(--ink)', cursor: 'pointer' }}>
+                      Flag assignment for administrator verification / review before finalization
+                    </label>
+                  </div>
+
+                  {editTeam.flaggedForVerification && (
+                    <div>
+                      <label className="form-label-premium">Verification Note / Reason</label>
+                      <input
+                        type="text"
+                        className="text-input"
+                        placeholder="e.g. Proposed Team Leader flagged for admin confirmation"
+                        value={editTeam.verificationNote || ''}
+                        onChange={(e) => setEditTeam({ ...editTeam, verificationNote: e.target.value })}
+                      />
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="form-label-premium">Squad Description & Objective</label>
+                    <textarea
+                      className="text-input"
+                      value={editTeam.description || ''}
+                      onChange={(e) => setEditTeam({ ...editTeam, description: e.target.value })}
+                    />
+                  </div>
                 </div>
-              </div>
 
-              <div className="modal-footer-premium">
-                <Button type="button" variant="secondary" onClick={() => setEditTeam(null)}>
-                  Cancel
-                </Button>
-                <Button type="submit" disabled={saving}>
-                  <Check size={14} /> {saving ? 'Saving...' : 'Save Changes'}
-                </Button>
-              </div>
-            </form>
+                <div className="modal-footer-premium">
+                  <Button type="button" variant="secondary" onClick={() => setEditTeam(null)}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" disabled={saving}>
+                    <Check size={14} /> {saving ? 'Saving...' : 'Save Changes'}
+                  </Button>
+                </div>
+              </form>
+            </div>
           </div>
-        </div>
         </AdminModalPortal>
       )}
     </div>
@@ -4635,6 +4988,11 @@ function AdminSettingsModule({ user: propUser }) {
   const [shiftStartTime, setShiftStartTime] = useState(initialShift.workStartTime || '')
   const [shiftEndTime, setShiftEndTime] = useState(initialShift.workEndTime || '')
   const [shiftGracePeriod, setShiftGracePeriod] = useState(initialShift.gracePeriodMinutes ?? 30)
+  const [lunchBreakAutoPause, setLunchBreakAutoPause] = useState(initialShift.lunchBreakAutoPause ?? true)
+  const [lunchBreakStart, setLunchBreakStart] = useState(initialShift.lunchBreakStart || '13:30')
+  const [lunchBreakEnd, setLunchBreakEnd] = useState(initialShift.lunchBreakEnd || '14:30')
+  const [autoPunchOutEnabled, setAutoPunchOutEnabled] = useState(initialShift.autoPunchOutEnabled ?? true)
+  const [autoPunchOutTime, setAutoPunchOutTime] = useState(initialShift.autoPunchOutTime || '21:30')
   const [shiftSaving, setShiftSaving] = useState(false)
 
   // Help Desk Configuration State
@@ -4673,6 +5031,11 @@ function AdminSettingsModule({ user: propUser }) {
       if (ar.maxGeofenceRadiusMeters !== undefined) setGlobalGeofenceRadius(ar.maxGeofenceRadiusMeters)
       if (ar.strictGeofenceRequired !== undefined) setStrictGeofenceRequired(ar.strictGeofenceRequired)
       if (ar.requireOfficeNetworkAndGps !== undefined) setRequireOfficeNetworkAndGps(ar.requireOfficeNetworkAndGps)
+      if (ar.lunchBreakAutoPause !== undefined) setLunchBreakAutoPause(Boolean(ar.lunchBreakAutoPause))
+      if (ar.lunchBreakStart) setLunchBreakStart(ar.lunchBreakStart)
+      if (ar.lunchBreakEnd) setLunchBreakEnd(ar.lunchBreakEnd)
+      if (ar.autoPunchOutEnabled !== undefined) setAutoPunchOutEnabled(Boolean(ar.autoPunchOutEnabled))
+      if (ar.autoPunchOutTime) setAutoPunchOutTime(ar.autoPunchOutTime)
     }
     // Sync help desk fields
     const hd = storeState.companySettings?.helpDeskSettings
@@ -5020,6 +5383,11 @@ function AdminSettingsModule({ user: propUser }) {
           workStartTime: shiftStartTime,
           workEndTime: shiftEndTime,
           gracePeriodMinutes: Number(shiftGracePeriod) || 0,
+          lunchBreakAutoPause: Boolean(lunchBreakAutoPause),
+          lunchBreakStart: lunchBreakStart || '13:30',
+          lunchBreakEnd: lunchBreakEnd || '14:30',
+          autoPunchOutEnabled: Boolean(autoPunchOutEnabled),
+          autoPunchOutTime: autoPunchOutTime || '21:30',
         },
       })
       try {
@@ -5857,6 +6225,140 @@ function AdminSettingsModule({ user: propUser }) {
                   </div>
                 )}
               </div>
+
+              {/* Automatic Lunch Break Configuration Card */}
+              <div style={{ marginTop: '16px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '8px', padding: '16px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                  <strong style={{ fontSize: '13.5px', color: '#92400e', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    🍱 Automatic Lunch Break & Timer Pause
+                  </strong>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 600, color: '#92400e', cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={lunchBreakAutoPause}
+                      onChange={(e) => setLunchBreakAutoPause(e.target.checked)}
+                      style={{ accentColor: '#d97706', width: '15px', height: '15px', cursor: 'pointer' }}
+                    />
+                    Enable Auto-Pause
+                  </label>
+                </div>
+                <p style={{ fontSize: '11.5px', color: '#78350f', margin: '0 0 12px' }}>
+                  When enabled, the employee active work timer automatically pauses during the scheduled lunch window and resumes automatically. Attendance records will deduct this break without requiring employees to manually start/end breaks.
+                </p>
+
+                {lunchBreakAutoPause && (
+                  <div style={{ display: 'grid', gap: '12px', gridTemplateColumns: '1fr 1fr' }}>
+                    <div>
+                      <label style={{ fontSize: '11px', display: 'block', color: '#92400e', marginBottom: '3px', fontWeight: 600 }}>
+                        Lunch Break Start Time
+                      </label>
+                      <input
+                        type="time"
+                        className="text-input"
+                        value={lunchBreakStart}
+                        onChange={(e) => setLunchBreakStart(e.target.value)}
+                        style={{ width: '100%', padding: '8px 10px', fontSize: '13px', background: '#fff' }}
+                        required={lunchBreakAutoPause}
+                      />
+                      <span style={{ fontSize: '10px', color: '#b45309', marginTop: '2px', display: 'block' }}>
+                        Default: 13:30 (1:30 PM)
+                      </span>
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '11px', display: 'block', color: '#92400e', marginBottom: '3px', fontWeight: 600 }}>
+                        Lunch Break End Time
+                      </label>
+                      <input
+                        type="time"
+                        className="text-input"
+                        value={lunchBreakEnd}
+                        onChange={(e) => setLunchBreakEnd(e.target.value)}
+                        style={{ width: '100%', padding: '8px 10px', fontSize: '13px', background: '#fff' }}
+                        required={lunchBreakAutoPause}
+                      />
+                      <span style={{ fontSize: '10px', color: '#b45309', marginTop: '2px', display: 'block' }}>
+                        Default: 14:30 (2:30 PM)
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {lunchBreakAutoPause && lunchBreakStart && lunchBreakEnd && (
+                  <div style={{ marginTop: '12px', padding: '8px 12px', background: '#fef3c7', borderRadius: '6px', fontSize: '12px', color: '#b45309', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span>🍱</span>
+                    <span>
+                      <strong>Configured Lunch Window:</strong> {(() => {
+                        const fmt = (t) => {
+                          const [h, m] = (t || '').split(':').map(Number);
+                          if (isNaN(h)) return t;
+                          const p = h >= 12 ? 'PM' : 'AM';
+                          return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${p}`;
+                        };
+                        const [sH, sM] = lunchBreakStart.split(':').map(Number);
+                        const [eH, eM] = lunchBreakEnd.split(':').map(Number);
+                        const diffMins = (eH * 60 + eM) - (sH * 60 + sM);
+                        return `${fmt(lunchBreakStart)} – ${fmt(lunchBreakEnd)} (${diffMins > 0 ? diffMins : 0} minutes auto-pause)`;
+                      })()}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Scheduled End-of-Day Auto Punch-Out Card */}
+              <div style={{ marginTop: '16px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '8px', padding: '16px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                  <strong style={{ fontSize: '13.5px', color: '#166534', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    ⏰ Scheduled End-of-Day Auto Punch-Out
+                  </strong>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 600, color: '#166534', cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={autoPunchOutEnabled}
+                      onChange={(e) => setAutoPunchOutEnabled(e.target.checked)}
+                      style={{ accentColor: '#16a34a', width: '15px', height: '15px', cursor: 'pointer' }}
+                    />
+                    Enable Auto Punch-Out
+                  </label>
+                </div>
+                <p style={{ fontSize: '11.5px', color: '#14532d', margin: '0 0 12px' }}>
+                  Employees will NOT be kicked or auto-punched out during their active working hours. Only at the scheduled cut-off time (e.g., 9:30 PM), if an employee has forgotten to punch out manually, the system will automatically close their shift.
+                </p>
+
+                {autoPunchOutEnabled && (
+                  <div style={{ display: 'grid', gap: '12px', gridTemplateColumns: '1fr 1fr' }}>
+                    <div>
+                      <label style={{ fontSize: '11px', display: 'block', color: '#166534', marginBottom: '3px', fontWeight: 600 }}>
+                        Auto Punch-Out Cut-off Time
+                      </label>
+                      <input
+                        type="time"
+                        className="text-input"
+                        value={autoPunchOutTime}
+                        onChange={(e) => setAutoPunchOutTime(e.target.value)}
+                        style={{ width: '100%', padding: '8px 10px', fontSize: '13px', background: '#fff' }}
+                        required={autoPunchOutEnabled}
+                      />
+                      <span style={{ fontSize: '10px', color: '#15803d', marginTop: '2px', display: 'block' }}>
+                        Default: 21:30 (9:30 PM IST)
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {autoPunchOutEnabled && autoPunchOutTime && (
+                  <div style={{ marginTop: '12px', padding: '8px 12px', background: '#dcfce7', borderRadius: '6px', fontSize: '12px', color: '#15803d', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span>⏰</span>
+                    <span>
+                      <strong>Cut-off Rule:</strong> Any employee who has checked in today and has not punched out by {(() => {
+                        const [h, m] = (autoPunchOutTime || '21:30').split(':').map(Number);
+                        if (isNaN(h)) return autoPunchOutTime;
+                        const p = h >= 12 ? 'PM' : 'AM';
+                        return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${p}`;
+                      })()} will be automatically punched out.
+                    </span>
+                  </div>
+                )}
+              </div>
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', alignItems: 'center' }}>
@@ -5925,7 +6427,7 @@ function AdminSettingsModule({ user: propUser }) {
                       <option value="">-- Choose Dedicated IT Support Employee from Staff List --</option>
                       {(storeState.employees || []).map((emp) => (
                         <option key={emp.id || emp._id} value={String(emp.id || emp._id || emp.employeeId)}>
-                          {emp.name} ({emp.employeeId || 'STAFF'}) — {emp.designation || emp.department || 'General'}
+                          {emp.name} ({emp.employeeId || 'STAFF'}) — {emp.designation || 'Pending Designation'}
                         </option>
                       ))}
                     </select>
@@ -5975,7 +6477,7 @@ function AdminSettingsModule({ user: propUser }) {
                       <option value="">-- Choose Dedicated General Support Employee from Staff List --</option>
                       {(storeState.employees || []).map((emp) => (
                         <option key={emp.id || emp._id} value={String(emp.id || emp._id || emp.employeeId)}>
-                          {emp.name} ({emp.employeeId || 'STAFF'}) — {emp.designation || emp.department || 'General'}
+                          {emp.name} ({emp.employeeId || 'STAFF'}) — {emp.designation || 'Pending Designation'}
                         </option>
                       ))}
                     </select>
@@ -6653,7 +7155,7 @@ function AdminSystemModule() {
     setPinging(true)
     try {
       // Warm up connection first to avoid cold TLS handshakes skewing latency
-      await fetch('/api/v1/health', { cache: 'no-store' }).catch(() => {})
+      await fetch('/api/v1/health', { cache: 'no-store' }).catch(() => { })
       const start = performance.now()
       const res = await fetch('/api/v1/health', { cache: 'no-store' })
       const end = performance.now()

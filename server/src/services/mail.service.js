@@ -158,7 +158,8 @@ export function createTransporter(type = 'hr') {
     secure: is465,
     auth: { user, pass },
     tls: {
-      rejectUnauthorized: false, // Prevents self-signed / local proxy cert errors
+      // Enforce strict TLS certificate verification in production, allow explicit opt-out via env var if needed
+      rejectUnauthorized: process.env.SMTP_TLS_REJECT_UNAUTHORIZED === 'false' ? false : true,
     },
     connectionTimeout: 15000,
     greetingTimeout: 15000,
@@ -193,16 +194,17 @@ export function createTransporter(type = 'hr') {
         }
       } catch (sendErr) {
         console.error(`[MailService:ERROR] Failed sending [${type.toUpperCase()}] to "${mailOptions.to}":`, sendErr?.message || sendErr)
-        if (type !== 'admin' && !isPlaceholder(config.adminPass, config.host)) {
-          console.warn(`[MailService] Primary transport failed for ${type.toUpperCase()}. Falling back to verified Admin channel (admin@edufyitech.in)...`)
+        if (type !== 'hr' && !isPlaceholder(config.hrPass, config.host)) {
+          console.warn(`[MailService] Primary transport failed for ${type.toUpperCase()}. Falling back to verified HR channel (hr@edufyitech.in)...`)
           try {
-            const adminT = createTransporter('admin')
-            return await adminT.sendMail({
-              replyTo: mailOptions.replyTo || (isIt ? config.itEmail : isSupport ? config.helpdeskEmail : user),
+            const hrT = createTransporter('hr')
+            return await hrT.sendMail({
               ...mailOptions,
+              from: hrT.from,
+              replyTo: mailOptions.replyTo || (isIt ? config.itEmail : isSupport ? config.helpdeskEmail : user),
             })
           } catch (fallbackErr) {
-            console.error('[MailService:ERROR] Admin fallback delivery also failed:', fallbackErr?.message || fallbackErr)
+            console.error('[MailService:ERROR] HR fallback delivery also failed:', fallbackErr?.message || fallbackErr)
           }
         }
         if (sendErr?.code === 'EAUTH' || sendErr?.responseCode === 535) {
@@ -437,7 +439,7 @@ export function wrapInEmailLayout({
             </td>
             <td class="header-text">
               <div class="company-title">${DEFAULT_COMPANY.legalName}</div>
-              <div class="sub-title">Human Capital Management</div>
+              <div class="sub-title">Human Resources</div>
             </td>
           </tr>
         </table>
@@ -497,7 +499,7 @@ function getLogoAttachment() {
 // 1. WELCOME EMAIL (On Account Creation / Employee Onboarding)
 // ---------------------------------------------------------------------------
 export async function sendWelcomeEmail({ employee, temporaryPassword, loginUrl }) {
-  const transporter = createTransporter('admin')
+  const transporter = createTransporter('hr')
   const to = employee.email
   if (!to) return { success: false, reason: 'No recipient email' }
 
@@ -510,7 +512,7 @@ export async function sendWelcomeEmail({ employee, temporaryPassword, loginUrl }
 
   const empName = employee.name || employee.displayName || 'Team Member'
   const empCode = employee.employeeId || 'Assigned on Login'
-  const designation = employee.designation || 'Staff Associate'
+  const designation = employee.designation || 'Pending Designation'
   const department = employee.department || 'Operations'
   const joiningDate = employee.joiningDate
     ? new Date(employee.joiningDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
@@ -594,7 +596,7 @@ export async function sendWelcomeEmail({ employee, temporaryPassword, loginUrl }
 // 2. PASSWORD RESET / CREDENTIALS UPDATE EMAIL
 // ---------------------------------------------------------------------------
 export async function sendPasswordResetEmail({ employee, user, newPassword, temporaryPassword, loginUrl }) {
-  const transporter = createTransporter('admin')
+  const transporter = createTransporter('hr')
   const target = employee || user || {}
   const to = target.email
   if (!to) return { success: false, reason: 'No recipient email' }
@@ -695,12 +697,94 @@ export async function sendPayslipEmail({ employee, record, month, settings = DEF
 }
 
 // ---------------------------------------------------------------------------
-// 4. LEAVE DECISION EMAIL (Approved / Rejected)
+// 4. LEAVE SUBMISSION & DECISION EMAILS (Submitted / Approved / Rejected / Cancelled)
 // ---------------------------------------------------------------------------
-export async function sendLeaveStatusEmail({ employee, leaveRequest, action, approver, reason }) {
+export async function sendLeaveSubmissionEmail({ employee, manager, leaveRequest }) {
+  const config = getMailConfig()
+  const to = manager?.email
+  if (!to) {
+    console.warn('[MailService:CONFIG_ERROR] No valid email for leave notification for employee:', employee?.email)
+    return { success: false, reason: 'Assigned reporting manager has no valid email' }
+  }
+  const transporter = createTransporter('hr')
+
+  const empName = employee?.name || 'Employee'
+  const empCode = employee?.employeeId || 'N/A'
+  const dept = employee?.department || 'General'
+  const leaveType = (leaveRequest?.leaveType || 'General Leave').toUpperCase()
+  const startDate = leaveRequest?.startDate ? new Date(leaveRequest.startDate).toLocaleDateString('en-GB') : 'N/A'
+  const endDate = leaveRequest?.endDate ? new Date(leaveRequest.endDate).toLocaleDateString('en-GB') : 'N/A'
+  const units = leaveRequest?.units ?? 1
+  const reason = leaveRequest?.reason || 'Personal / General'
+  const managerName = manager?.name || 'Reporting Manager'
+
+  const contentHtml = `
+    <h2 class="title-h2">New Leave Application Submitted</h2>
+    <p>Dear <strong>${managerName}</strong>,</p>
+    <p><strong>${empName}</strong> has applied for time off and requires your review.</p>
+
+    <div class="meta-box">
+      <table style="width: 100%; border-collapse: collapse;">
+        <tr>
+          <td style="padding: 6px 0; color: #64748b; font-size: 13px;"><strong>Employee:</strong></td>
+          <td style="padding: 6px 0; font-weight: 700; font-size: 13px; text-align: right;">${empName} (${empCode})</td>
+        </tr>
+        <tr>
+          <td style="padding: 6px 0; color: #64748b; font-size: 13px;"><strong>Department:</strong></td>
+          <td style="padding: 6px 0; font-size: 13px; text-align: right;">${dept}</td>
+        </tr>
+        <tr>
+          <td style="padding: 6px 0; color: #64748b; font-size: 13px;"><strong>Leave Type:</strong></td>
+          <td style="padding: 6px 0; font-weight: 700; font-size: 13px; text-align: right;">${leaveType}</td>
+        </tr>
+        <tr>
+          <td style="padding: 6px 0; color: #64748b; font-size: 13px;"><strong>Duration / Days:</strong></td>
+          <td style="padding: 6px 0; font-weight: 700; font-size: 13px; text-align: right;">${units} Day(s)</td>
+        </tr>
+        <tr>
+          <td style="padding: 6px 0; color: #64748b; font-size: 13px;"><strong>Date Range:</strong></td>
+          <td style="padding: 6px 0; font-weight: 600; font-size: 13px; text-align: right;">${startDate} to ${endDate}</td>
+        </tr>
+        <tr>
+          <td style="padding: 6px 0; color: #64748b; font-size: 13px;"><strong>Reason / Purpose:</strong></td>
+          <td style="padding: 6px 0; color: #0f172a; font-style: italic; font-size: 13px; text-align: right;">"${reason}"</td>
+        </tr>
+      </table>
+    </div>
+
+    <p style="font-size: 13px; color: #64748b;">
+      Please log in to the management portal to review, endorse, or decide this request.
+    </p>
+  `
+
+  const subject = `New Leave Application: ${empName} (${leaveType}) — ${startDate} to ${endDate}`
+  const html = wrapInEmailLayout({
+    title: subject,
+    preheader: `${empName} applied for ${units} day(s) of ${leaveType} (${startDate} to ${endDate}).`,
+    contentHtml,
+    callToAction: {
+      label: 'Review Leave Request in Portal',
+      url: `${config.publicUrl}/#/hr/leave`,
+    },
+  })
+
+  // Direct reporting manager ONLY. No CC to applicant, HR, or Director
+  return transporter.sendMail({
+    to,
+    subject,
+    html,
+    attachments: getLogoAttachment(),
+  })
+}
+
+export async function sendLeaveStatusEmail({ employee, manager, leaveRequest, action, approver, reason }) {
   const transporter = createTransporter('hr')
   const to = employee?.email
   if (!to) return { success: false, reason: 'No recipient email' }
+
+  const managerEmail = manager?.email
+  const config = getMailConfig()
+  const hrEmail = config.hrEmail || 'hr@edufyitech.in'
 
   const isApproved = action === 'approved' || action === 'approve'
   const isCancelled = action === 'cancelled' || action === 'cancel'
@@ -767,10 +851,11 @@ export async function sendLeaveStatusEmail({ employee, leaveRequest, action, app
     contentHtml,
     callToAction: {
       label: 'View Leave Balances & History',
-      url: `${process.env.APP_PUBLIC_URL || 'https://edufyione.edufyitech.in'}#/employee/leave`,
+      url: `${config.publicUrl}/#/employee/leave`,
     },
   })
 
+  // Applying employee ONLY. No CC to manager, HR, or Director
   return transporter.sendMail({
     to,
     subject,
@@ -848,6 +933,180 @@ export async function sendDocumentStatusEmail({ employee, documentName, docType,
 }
 
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// 5B. EXIT & OFFBOARDING NOTIFICATION EMAILS
+// ---------------------------------------------------------------------------
+export async function sendExitInitiatedEmail({ employee, manager, exitDetails = {}, actor }) {
+  const transporter = createTransporter('hr')
+  const to = employee?.email
+  const managerEmail = manager?.email
+  const config = getMailConfig()
+  const hrEmail = config.hrEmail || 'hr@edufyitech.in'
+
+  const recipients = [to, managerEmail, hrEmail].filter(Boolean)
+  if (recipients.length === 0) return { success: false, reason: 'No recipient email addresses' }
+
+  const empName = employee?.name || 'Employee'
+  const empCode = employee?.employeeId || 'N/A'
+  const dept = employee?.department || 'General'
+  const designation = employee?.designation || 'Pending Designation'
+  const managerName = manager?.name || employee?.reportingManager || 'Reporting Manager'
+  const resDate = exitDetails.resignationDate || new Date().toISOString().split('T')[0]
+  const lastWorkDay = exitDetails.lastWorkingDay || 'Under Review / Immediate'
+  const noticeDays = (exitDetails.noticePeriodDays !== undefined && exitDetails.noticePeriodDays !== null && exitDetails.noticePeriodDays !== '')
+    ? Number(exitDetails.noticePeriodDays)
+    : 30
+  const noticeDaysDisplay = noticeDays === 0 ? 'Immediate / 0 Days' : `${noticeDays} Days`
+  const reason = exitDetails.reason || 'Resignation'
+  const handoverAssignee = exitDetails.handoverAssignee || 'Unassigned'
+  const initiatedBy = actor?.displayName || actor?.name || 'HR Management'
+
+  const contentHtml = `
+    <h2 class="title-h2">Employee Departure Notice & Offboarding Scheduled</h2>
+    <p>Dear <strong>${empName}</strong> and <strong>${managerName}</strong>,</p>
+    <p>This is to formally confirm that the employee exit and clearance process has been initiated by <strong>${initiatedBy}</strong> in the Edufyi HR Portal.</p>
+
+    <div class="meta-box">
+      <table style="width: 100%; border-collapse: collapse;">
+        <tr>
+          <td style="padding: 6px 0; color: #64748b; font-size: 13px;"><strong>Employee:</strong></td>
+          <td style="padding: 6px 0; font-weight: 700; font-size: 13px; text-align: right;">${empName} (${empCode})</td>
+        </tr>
+        <tr>
+          <td style="padding: 6px 0; color: #64748b; font-size: 13px;"><strong>Designation & Dept:</strong></td>
+          <td style="padding: 6px 0; font-weight: 600; font-size: 13px; text-align: right;">${designation} (${dept})</td>
+        </tr>
+        <tr>
+          <td style="padding: 6px 0; color: #64748b; font-size: 13px;"><strong>Reporting Manager:</strong></td>
+          <td style="padding: 6px 0; font-weight: 600; font-size: 13px; text-align: right;">${managerName}</td>
+        </tr>
+        <tr>
+          <td style="padding: 6px 0; color: #64748b; font-size: 13px;"><strong>Resignation / Notice Date:</strong></td>
+          <td style="padding: 6px 0; font-weight: 600; font-size: 13px; text-align: right;">${resDate}</td>
+        </tr>
+        <tr>
+          <td style="padding: 6px 0; color: #64748b; font-size: 13px;"><strong>Notice Period Commitment:</strong></td>
+          <td style="padding: 6px 0; font-weight: 600; font-size: 13px; text-align: right;">${noticeDaysDisplay}</td>
+        </tr>
+        <tr>
+          <td style="padding: 6px 0; color: #64748b; font-size: 13px;"><strong>Last Working Day:</strong></td>
+          <td style="padding: 6px 0; font-weight: 700; color: #e11d48; font-size: 13px; text-align: right;">${lastWorkDay}</td>
+        </tr>
+        <tr>
+          <td style="padding: 6px 0; color: #64748b; font-size: 13px;"><strong>Separation Reason:</strong></td>
+          <td style="padding: 6px 0; font-style: italic; font-size: 13px; text-align: right;">${reason}</td>
+        </tr>
+        <tr>
+          <td style="padding: 6px 0; color: #64748b; font-size: 13px;"><strong>Handover Assignee:</strong></td>
+          <td style="padding: 6px 0; font-weight: 600; font-size: 13px; text-align: right;">${handoverAssignee}</td>
+        </tr>
+      </table>
+    </div>
+
+    <h3 style="font-size: 14px; color: #0f172a; margin: 18px 0 8px;">Required Clearance & Next Steps:</h3>
+    <ul style="font-size: 13px; color: #475569; padding-left: 20px; line-height: 1.6;">
+      <li><strong>Knowledge Transfer:</strong> Document ongoing projects and hand over all files and credentials to ${handoverAssignee}.</li>
+      <li><strong>Company Assets:</strong> Return all issued laptops, security fobs, and peripherals to the Facilities/IT team before the last working day.</li>
+      <li><strong>Building & ID Badge Access:</strong> Surrender physical ID badge and access cards.</li>
+      <li><strong>HR Exit Interview:</strong> A formal exit interview will be conducted by HR Operations.</li>
+      <li><strong>Final Settlement (FnF):</strong> Unencumbered leaves and final salary will be computed and processed within statutory timelines.</li>
+    </ul>
+
+    <p style="font-size: 12px; color: #64748b; margin-top: 14px;">
+      For queries regarding the offboarding process, feel free to contact HR Operations at <a href="mailto:${hrEmail}">${hrEmail}</a>.
+    </p>
+  `
+
+  const subject = `Notice of Departure & Offboarding Scheduled — ${empName} (${empCode})`
+  const html = wrapInEmailLayout({
+    title: subject,
+    preheader: `Offboarding initiated for ${empName}. Last working day: ${lastWorkDay}.`,
+    contentHtml,
+    callToAction: {
+      label: 'View Employee Profile & Clearance',
+      url: `${config.publicUrl}/#/hr/people`,
+    },
+  })
+
+  return transporter.sendMail({
+    to,
+    cc: [managerEmail, hrEmail].filter(Boolean),
+    subject,
+    html,
+    attachments: getLogoAttachment(),
+  })
+}
+
+export async function sendExitFinalizedEmail({ employee, manager, exitDetails = {}, actor }) {
+  const transporter = createTransporter('hr')
+  const to = employee?.email
+  const managerEmail = manager?.email
+  const config = getMailConfig()
+  const hrEmail = config.hrEmail || 'hr@edufyitech.in'
+
+  const recipients = [to, managerEmail, hrEmail].filter(Boolean)
+  if (recipients.length === 0) return { success: false, reason: 'No recipient email addresses' }
+
+  const empName = employee?.name || 'Employee'
+  const empCode = employee?.employeeId || 'N/A'
+  const dept = employee?.department || 'General'
+  const designation = employee?.designation || 'Pending Designation'
+  const completedBy = actor?.displayName || actor?.name || 'HR Management'
+  const lastWorkDay = exitDetails.lastWorkingDay || new Date().toISOString().split('T')[0]
+
+  const contentHtml = `
+    <h2 class="title-h2">Departure Finalized & Relieving Confirmation</h2>
+    <p>Dear <strong>${empName}</strong>,</p>
+    <p>This is to confirm that your official offboarding clearance with <strong>Edufyi Tech Solutions</strong> has been completed and finalized by <strong>${completedBy}</strong>.</p>
+
+    <div class="meta-box">
+      <div style="font-size: 13px; margin-bottom: 6px;">
+        <strong>Employee Name:</strong> ${empName} (${empCode})
+      </div>
+      <div style="font-size: 13px; margin-bottom: 6px;">
+        <strong>Role & Department:</strong> ${designation} — ${dept}
+      </div>
+      <div style="font-size: 13px; margin-bottom: 6px;">
+        <strong>Effective Departure Date:</strong> ${lastWorkDay}
+      </div>
+      <div style="font-size: 13px; margin-bottom: 6px;">
+        <strong>Clearance Status:</strong> <span class="badge-approved">All Clearances Completed</span>
+      </div>
+      <div style="font-size: 13px;">
+        <strong>System Status:</strong> Inactive / Exited
+      </div>
+    </div>
+
+    <p style="font-size: 13px; color: #334155; line-height: 1.6;">
+      We sincerely thank you for your contributions and dedication during your tenure with Edufyi Tech Solutions. Your official Relieving Letter and Experience Certificate will be issued to your personal email address following final settlement disbursement.
+    </p>
+
+    <p style="font-size: 13px; color: #334155;">
+      We wish you the very best in all your future professional endeavors!
+    </p>
+
+    <p style="font-size: 12px; color: #64748b; margin-top: 14px;">
+      For any post-employment queries, tax certificates, or FnF clarifications, please reach out to <a href="mailto:${hrEmail}">${hrEmail}</a>.
+    </p>
+  `
+
+  const subject = `Relieving Confirmation & Departure Finalized — ${empName} (${empCode})`
+  const html = wrapInEmailLayout({
+    title: subject,
+    preheader: `Offboarding departure finalized for ${empName}. Clearances completed.`,
+    contentHtml,
+  })
+
+  return transporter.sendMail({
+    to,
+    cc: [managerEmail, hrEmail].filter(Boolean),
+    subject,
+    html,
+    attachments: getLogoAttachment(),
+  })
+}
+
 // 6. GENERIC MULTI-PURPOSE NOTIFICATION EMAIL
 // ---------------------------------------------------------------------------
 export async function sendGenericNotification({
@@ -942,13 +1201,24 @@ export async function sendSupportTicketEmail({
   let heading = ''
   let contentHtml = ''
 
+  const isSupportTeam = recipientEmail.toLowerCase() === channelEmail.toLowerCase() ||
+    (config.helpdeskEmail && recipientEmail.toLowerCase() === config.helpdeskEmail.toLowerCase()) ||
+    (config.itEmail && recipientEmail.toLowerCase() === config.itEmail.toLowerCase()) ||
+    (config.hrEmail && recipientEmail.toLowerCase() === config.hrEmail.toLowerCase()) ||
+    (config.adminEmail && recipientEmail.toLowerCase() === config.adminEmail.toLowerCase())
+
+  const empName = employee?.name || ticket.employeeName || 'Team Member'
+
   if (type === 'created') {
     emailSubject = `[${channelName} #${ticketIdStr}] New Ticket: ${ticket.subject} [${ticket.priority || 'Medium'}]`
-    heading = `Support Ticket #${ticketIdStr} Logged`
+    heading = isSupportTeam ? `New Support Inquiry #${ticketIdStr} Logged` : `Support Ticket #${ticketIdStr} Logged`
+    const greetingText = isSupportTeam
+      ? `<p>Dear <strong>${channelName} Team</strong>,</p><p>A new support ticket has been submitted by <strong>${empName}</strong>.</p>`
+      : `<p>Dear <strong>${empName}</strong>,</p><p>Your support ticket has been registered with <strong>${channelName}</strong>. Our assigned support specialist is reviewing your inquiry.</p>`
+
     contentHtml = `
       <h2 class="title-h2">${heading}</h2>
-      <p>Hello <strong>${employee?.name || ticket.employeeName || 'Team Member'}</strong>,</p>
-      <p>Your support ticket has been registered with <strong>${channelName}</strong>. Our assigned support specialist is reviewing your inquiry.</p>
+      ${greetingText}
       
       <div class="meta-box">
         <div class="meta-row">
@@ -978,7 +1248,7 @@ export async function sendSupportTicketEmail({
     heading = `New Response on Ticket #${ticketIdStr}`
     contentHtml = `
       <h2 class="title-h2">${heading}</h2>
-      <p>Hello <strong>${employee?.name || ticket.employeeName || 'Team Member'}</strong>,</p>
+      <p>Dear <strong>${employee?.name || ticket.employeeName || 'Team Member'}</strong>,</p>
       <p><strong>${senderName}</strong> posted a response to your ticket:</p>
 
       <div style="background: #f0fdf4; border-left: 4px solid #16a34a; border-radius: 6px; padding: 14px 16px; margin: 16px 0; font-size: 13px; color: #166534; line-height: 1.5;">
@@ -1001,7 +1271,7 @@ export async function sendSupportTicketEmail({
     heading = `Ticket #${ticketIdStr} Resolved`
     contentHtml = `
       <h2 class="title-h2" style="color: #059669;">✔ Ticket Marked as Resolved</h2>
-      <p>Hello <strong>${employee?.name || ticket.employeeName || 'Team Member'}</strong>,</p>
+      <p>Dear <strong>${employee?.name || ticket.employeeName || 'Team Member'}</strong>,</p>
       <p>Your support ticket #${ticketIdStr} (<em>${ticket.subject}</em>) has been resolved by <strong>${senderName}</strong>.</p>
 
       ${replyText ? `
@@ -1236,8 +1506,11 @@ export const mailService = {
   sendWelcomeEmail,
   sendPasswordResetEmail,
   sendPayslipEmail,
+  sendLeaveSubmissionEmail,
   sendLeaveStatusEmail,
   sendDocumentStatusEmail,
+  sendExitInitiatedEmail,
+  sendExitFinalizedEmail,
   sendGenericNotification,
   sendSupportTicketEmail,
   sendAnnouncementEmailBroadcast,

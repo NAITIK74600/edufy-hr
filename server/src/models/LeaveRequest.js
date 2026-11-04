@@ -19,6 +19,8 @@ const leaveRequestSchema = new mongoose.Schema({
   endDate: { type: Date, required: true },
   units: { type: Number, required: true, min: 0 },
   paidUnits: { type: Number, default: 0 },
+  isHalfDay: { type: Boolean, default: false },
+  halfDayPeriod: { type: String, enum: ['first_half', 'second_half', null], default: null },
   isDoubleLop: { type: Boolean, default: false },
   doubleLopDays: { type: Number, default: 0 },
   reason: { type: String, required: true, trim: true, maxlength: 2000 },

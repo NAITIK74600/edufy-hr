@@ -63,6 +63,7 @@ export function getRoleBadgeLabel(role) {
   switch (role) {
     case 'admin':
       return 'Admin'
+    case 'director':
     case 'managing_director':
       return 'Managing Director'
     case 'co_founder':

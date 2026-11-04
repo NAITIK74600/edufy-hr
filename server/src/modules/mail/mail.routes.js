@@ -73,8 +73,9 @@ export function createMailRouter({ auth }) {
   router.post('/welcome', auth.authenticate, async (req, res, next) => {
     try {
       const user = req.auth.user
-      if (!['admin', 'hr'].includes(user.role)) {
-        return res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Only Admin and HR can send credentials emails.' } })
+      const isAllowed = ['admin', 'hr', 'hr_executive', 'director', 'managing_director', 'co_founder', 'vertical_head'].includes(user.role)
+      if (!isAllowed) {
+        return res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Only Admin, HR, and Executive Leadership can send credentials emails.' } })
       }
 
       const { employee, temporaryPassword, loginUrl } = req.body || {}
@@ -108,8 +109,9 @@ export function createMailRouter({ auth }) {
   router.post('/reset-password', auth.authenticate, async (req, res, next) => {
     try {
       const user = req.auth.user
-      if (!['admin', 'hr'].includes(user.role)) {
-        return res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Only Admin and HR can send password reset emails.' } })
+      const isAllowed = ['admin', 'hr', 'hr_executive', 'director', 'managing_director', 'co_founder', 'vertical_head'].includes(user.role)
+      if (!isAllowed) {
+        return res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Only Admin, HR, and Executive Leadership can send password reset emails.' } })
       }
 
       const { employee, temporaryPassword, loginUrl } = req.body || {}

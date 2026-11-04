@@ -1,3 +1,12 @@
+import { EnterpriseCalendar } from './calendar/EnterpriseCalendar'
+
+// ============================================================================
+// ENTERPRISE CALENDAR FEATURE LOCK
+// Set to true to unlock the new Enterprise Interactive Calendar & Matrix.
+// Set to false (default / LOCKED) to use the classic Holiday Showcase & Gallery.
+// ============================================================================
+export const FEATURE_ENTERPRISE_CALENDAR_UNLOCKED = false
+
 import { useState, useEffect, useRef } from 'react'
 import {
   Calendar,
@@ -24,7 +33,7 @@ import {
 import { Button, StatusBadge, Field } from './ui'
 import { hrStore } from '../services/hrStore'
 
-export function HolidayCalendarShowcase({ canManage = false, user = null }) {
+function LegacyHolidayCalendarShowcase({ canManage = false, user = null }) {
   const [storeState, setStoreState] = useState(() => hrStore.getState())
   const [activeIndex, setActiveIndex] = useState(0)
   const [isLightboxOpen, setIsLightboxOpen] = useState(false)
@@ -1141,3 +1150,19 @@ export function HolidayCalendarShowcase({ canManage = false, user = null }) {
     </div>
   )
 }
+
+
+export function HolidayCalendarShowcase(props) {
+  // Respect feature lock: default is false (classic calendar).
+  // Can also be toggled dynamically in runtime via window or localStorage if needed.
+  const isUnlocked = FEATURE_ENTERPRISE_CALENDAR_UNLOCKED || (typeof window !== 'undefined' && (Boolean(window.__UNLOCK_ENTERPRISE_CALENDAR__) || window.localStorage?.getItem('edufyi_unlock_enterprise_calendar') === 'true'))
+
+  if (isUnlocked) {
+    return <EnterpriseCalendar {...props} />
+  }
+
+  return <LegacyHolidayCalendarShowcase {...props} />
+}
+
+export { EnterpriseCalendar, LegacyHolidayCalendarShowcase }
+export default HolidayCalendarShowcase

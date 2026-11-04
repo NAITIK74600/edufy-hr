@@ -98,6 +98,15 @@ function formatTimerSeconds(totalSecs) {
   return `${String(h).padStart(2, '0')}h ${String(m).padStart(2, '0')}m ${String(s).padStart(2, '0')}s`
 }
 
+function format12Hour(timeStr) {
+  if (!timeStr) return ''
+  const [h, m] = String(timeStr).split(':').map(Number)
+  if (isNaN(h) || isNaN(m)) return timeStr
+  const period = h >= 12 ? 'PM' : 'AM'
+  const hour12 = h % 12 || 12
+  return `${hour12}:${String(m).padStart(2, '0')} ${period}`
+}
+
 function GPSAttendanceStation({ user, todayRecord, onPunch, onStartBreak, onEndBreak, currentTime }) {
   const [storeState, setStoreState] = useState(() => hrStore.getState())
 
@@ -284,15 +293,9 @@ function GPSAttendanceStation({ user, todayRecord, onPunch, onStartBreak, onEndB
     return () => { active = false }
   }, [customCoords, settings])
 
-  // Presence Heartbeat & Auto Punch-Out Detection (2 hours disconnected threshold)
+  // Presence Heartbeat: reports location/verification periodically without auto-punching out on disconnection
   useEffect(() => {
-    if (!isCheckedIn || isCompleted) {
-      setDisconnectedMinutes(0)
-      return
-    }
-
-    const empKey = user?.employeeId || user?.id || 'STAFF'
-    const storageKey = `att_disc_since_${todayStr}_${empKey}`
+    if (!isCheckedIn || isCompleted) return
 
     async function evaluatePresence() {
       let coords = customCoords
@@ -311,129 +314,16 @@ function GPSAttendanceStation({ user, todayRecord, onPunch, onStartBreak, onEndB
         const data = res.data?.data || res.data || {}
         setServerVerification(data)
         if (data.clientIp) setPublicIp(data.clientIp)
-
-        if (data.autoPunchedOut) {
-          setIsAutoPunchedOut(true)
-          if (typeof localStorage !== 'undefined') {
-            localStorage.removeItem(storageKey)
-            localStorage.removeItem(`att_disc_since_${empKey}`)
-          }
-          return
-        }
-
-        const isOfficeConnected = Boolean(data.isGpsVerified || data.isWifiVerified || data.isIpVerified)
-        if (isOfficeConnected) {
-          if (typeof localStorage !== 'undefined') {
-            localStorage.removeItem(storageKey)
-            localStorage.removeItem(`att_disc_since_${empKey}`)
-          }
-          setDisconnectedMinutes(0)
-        } else {
-          let since = typeof localStorage !== 'undefined' ? localStorage.getItem(storageKey) : null
-          let checkInEpoch = null
-          if (todayRecord?.checkInAt) {
-            const parsed = new Date(todayRecord.checkInAt).getTime()
-            if (!Number.isNaN(parsed) && parsed > 0) checkInEpoch = parsed
-          }
-          if (!checkInEpoch && todayRecord?.checkIn) {
-            const timeMatch = /(\d+):(\d+)(?::(\d+))?\s*(AM|PM)?/i.exec(todayRecord.checkIn)
-            if (timeMatch) {
-              let h = parseInt(timeMatch[1], 10)
-              const m = parseInt(timeMatch[2], 10)
-              const mer = timeMatch[4]?.toUpperCase()
-              if (mer === 'PM' && h < 12) h += 12
-              if (mer === 'AM' && h === 12) h = 0
-              const d = new Date()
-              d.setHours(h, m, 0, 0)
-              checkInEpoch = d.getTime()
-            }
-          }
-          if (!checkInEpoch) checkInEpoch = Date.now()
-
-          if (!since || Number(since) < checkInEpoch || Number(since) > Date.now()) {
-            since = String(Date.now())
-            if (typeof localStorage !== 'undefined') localStorage.setItem(storageKey, since)
-          }
-
-          const rawElapsedMins = Math.max(0, Math.floor((Date.now() - Number(since)) / 60000))
-          const totalMinsSinceCheckIn = Math.max(0, Math.floor((Date.now() - checkInEpoch) / 60000))
-          // Disconnection duration can NEVER exceed total elapsed minutes since check-in
-          const elapsedMins = Math.min(rawElapsedMins, totalMinsSinceCheckIn)
-          setDisconnectedMinutes(elapsedMins)
-
-          // STRICT SAFEGUARD: Auto punch out strictly requires at least 120 minutes (2 hours) since BOTH check-in and disconnection
-          if (elapsedMins >= 120 && totalMinsSinceCheckIn >= 120) {
-            if (typeof localStorage !== 'undefined') {
-              localStorage.removeItem(storageKey)
-              localStorage.removeItem(`att_disc_since_${empKey}`)
-            }
-            try {
-              await onPunch({
-                autoPunchOut: true,
-                punchOutReason: 'Auto Punch Out (GPS & WiFi disconnected for 2 hrs)',
-              })
-              setIsAutoPunchedOut(true)
-            } catch (err) {
-              setGpsError(err.message)
-            }
-          }
-        }
-      } catch (err) {
-        let since = typeof localStorage !== 'undefined' ? localStorage.getItem(storageKey) : null
-        let checkInEpoch = null
-        if (todayRecord?.checkInAt) {
-          const parsed = new Date(todayRecord.checkInAt).getTime()
-          if (!Number.isNaN(parsed) && parsed > 0) checkInEpoch = parsed
-        }
-        if (!checkInEpoch && todayRecord?.checkIn) {
-          const timeMatch = /(\d+):(\d+)(?::(\d+))?\s*(AM|PM)?/i.exec(todayRecord.checkIn)
-          if (timeMatch) {
-            let h = parseInt(timeMatch[1], 10)
-            const m = parseInt(timeMatch[2], 10)
-            const mer = timeMatch[4]?.toUpperCase()
-            if (mer === 'PM' && h < 12) h += 12
-            if (mer === 'AM' && h === 12) h = 0
-            const d = new Date()
-            d.setHours(h, m, 0, 0)
-            checkInEpoch = d.getTime()
-          }
-        }
-        if (!checkInEpoch) checkInEpoch = Date.now()
-
-        if (!since || Number(since) < checkInEpoch || Number(since) > Date.now()) {
-          since = String(Date.now())
-          if (typeof localStorage !== 'undefined') localStorage.setItem(storageKey, since)
-        }
-
-        const rawElapsedMins = Math.max(0, Math.floor((Date.now() - Number(since)) / 60000))
-        const totalMinsSinceCheckIn = Math.max(0, Math.floor((Date.now() - checkInEpoch) / 60000))
-        const elapsedMins = Math.min(rawElapsedMins, totalMinsSinceCheckIn)
-        setDisconnectedMinutes(elapsedMins)
-
-        if (elapsedMins >= 120 && totalMinsSinceCheckIn >= 120) {
-          if (typeof localStorage !== 'undefined') {
-            localStorage.removeItem(storageKey)
-            localStorage.removeItem(`att_disc_since_${empKey}`)
-          }
-          try {
-            await onPunch({
-              autoPunchOut: true,
-              punchOutReason: 'Auto Punch Out (GPS & WiFi disconnected for 2 hrs)',
-            })
-            setIsAutoPunchedOut(true)
-          } catch { }
-        }
-      }
+      } catch { }
     }
 
     const timer = setInterval(evaluatePresence, 60000)
     const initTimer = setTimeout(evaluatePresence, 8000)
-
     return () => {
       clearInterval(timer)
       clearTimeout(initTimer)
     }
-  }, [isCheckedIn, isCompleted, customCoords, user, todayRecord, todayStr])
+  }, [isCheckedIn, isCompleted, customCoords])
 
   const matchedOfficeNet = { label: serverVerification?.matchedNetworkLabel }
   const isRealOfficeIp = Boolean(serverVerification?.isIpVerified)
@@ -481,56 +371,17 @@ function GPSAttendanceStation({ user, todayRecord, onPunch, onStartBreak, onEndB
   const offCampusAccumKey = `att_offcampus_accum_${empKey}_${todayDate}`
   const offCampusStartKey = `att_offcampus_start_${empKey}_${todayDate}`
 
-  const [accumulatedOffCampusSec, setAccumulatedOffCampusSec] = useState(() => {
-    if (typeof localStorage === 'undefined') return 0
-    return Number(localStorage.getItem(offCampusAccumKey)) || 0
-  })
-
-  const [offCampusStartEpoch, setOffCampusStartEpoch] = useState(() => {
-    if (typeof localStorage === 'undefined') return null
-    const raw = localStorage.getItem(offCampusStartKey)
-    return raw ? Number(raw) : null
-  })
-
-  // Track off-campus transitions to freeze/pause timer when outside campus or disconnected
+  // Ensure clean state: purge any corrupted offcampus pause keys from localStorage
   useEffect(() => {
-    if (!isCheckedIn || isCompleted) {
-      if (isCompleted && typeof localStorage !== 'undefined') {
+    if (typeof localStorage !== 'undefined') {
+      try {
         localStorage.removeItem(offCampusStartKey)
-      }
-      return
+        localStorage.removeItem(offCampusAccumKey)
+      } catch { }
     }
+  }, [offCampusStartKey, offCampusAccumKey])
 
-    if (isOutsideCampus) {
-      if (!offCampusStartEpoch) {
-        const now = Date.now()
-        setOffCampusStartEpoch(now)
-        if (typeof localStorage !== 'undefined') {
-          localStorage.setItem(offCampusStartKey, String(now))
-        }
-      }
-    } else if (isInsideCampus) {
-      if (offCampusStartEpoch) {
-        const now = Date.now()
-        const added = Math.max(0, Math.floor((now - offCampusStartEpoch) / 1000))
-        const currentAccum = Number(localStorage.getItem(offCampusAccumKey)) || 0
-        const updatedTotal = currentAccum + added
-        setAccumulatedOffCampusSec(updatedTotal)
-        setOffCampusStartEpoch(null)
-        if (typeof localStorage !== 'undefined') {
-          localStorage.setItem(offCampusAccumKey, String(updatedTotal))
-          localStorage.removeItem(offCampusStartKey)
-        }
-      }
-    }
-  }, [isCheckedIn, isCompleted, isOutsideCampus, isInsideCampus, offCampusStartEpoch, offCampusStartKey, offCampusAccumKey])
-
-  const currentOffCampusSeconds = useMemo(() => {
-    if (!isOutsideCampus || !offCampusStartEpoch) return 0
-    return Math.max(0, Math.floor((currentTime.getTime() - offCampusStartEpoch) / 1000))
-  }, [isOutsideCampus, offCampusStartEpoch, currentTime])
-
-  const totalOffCampusSec = accumulatedOffCampusSec + currentOffCampusSeconds
+  const totalOffCampusSec = 0
 
   // Minimum attendance qualification standards: Full Day = 8 hours, Half Day = 4 hours
   const FULL_DAY_SECS = 8 * 3600 // 28,800s (8h)
@@ -538,22 +389,22 @@ function GPSAttendanceStation({ user, todayRecord, onPunch, onStartBreak, onEndB
 
   // Net active work & break timers calculation
   const checkInEpoch = useMemo(() => {
-    if (!todayRecord?.checkIn) return null
-    if (todayRecord.checkInAt) {
+    if (todayRecord?.checkInAt) {
       const parsed = new Date(todayRecord.checkInAt).getTime()
-      if (!isNaN(parsed)) return parsed
+      if (!isNaN(parsed) && parsed > 0) return parsed
     }
+    if (!todayRecord?.checkIn) return null
     try {
-      const match = /(\d+):(\d+)(?::(\d+))?\s*(AM|PM)?/i.exec(todayRecord.checkIn)
+      const clean = String(todayRecord.checkIn).trim().replace(/[\u202F\u00A0]/g, ' ')
+      const match = clean.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/i)
       if (match) {
         let h = parseInt(match[1], 10)
         const m = parseInt(match[2], 10)
-        const s = match[3] ? parseInt(match[3], 10) : 0
-        const meridiem = match[4]?.toUpperCase()
+        const meridiem = match[3]?.toUpperCase()
         if (meridiem === 'PM' && h < 12) h += 12
         if (meridiem === 'AM' && h === 12) h = 0
         const d = new Date()
-        d.setHours(h, m, s, 0)
+        d.setHours(h, m, 0, 0)
         return d.getTime()
       }
     } catch { }
@@ -575,20 +426,102 @@ function GPSAttendanceStation({ user, todayRecord, onPunch, onStartBreak, onEndB
     return currentTime.getTime()
   }, [isOnBreak, currentBreak?.startAt, currentTime])
 
-  // Net work timer: Pauses when on break AND pauses/freezes when outside campus or disconnected
+  // Dynamic Auto Lunch Break Pause logic (Admin configurable via Company Attendance Settings)
+  const attendanceRules = settings?.attendanceRules || {}
+  const lunchBreakAutoPause = attendanceRules.lunchBreakAutoPause ?? true
+  const lunchBreakStart = attendanceRules.lunchBreakStart || '13:30'
+  const lunchBreakEnd = attendanceRules.lunchBreakEnd || '14:30'
+
+  const { isAutoLunchActive, autoLunchBreakSec } = useMemo(() => {
+    if (!lunchBreakAutoPause || !checkInEpoch) {
+      return { isAutoLunchActive: false, autoLunchBreakSec: 0 }
+    }
+
+    const [startH, startM] = (lunchBreakStart || '13:30').split(':').map(Number)
+    const [endH, endM] = (lunchBreakEnd || '14:30').split(':').map(Number)
+
+    const nowD = currentTime || new Date()
+    const lStart = new Date(nowD.getFullYear(), nowD.getMonth(), nowD.getDate(), startH, startM, 0, 0).getTime()
+    const lEnd = new Date(nowD.getFullYear(), nowD.getMonth(), nowD.getDate(), endH, endM, 0, 0).getTime()
+
+    if (lEnd <= lStart) {
+      return { isAutoLunchActive: false, autoLunchBreakSec: 0 }
+    }
+
+    const nowEpoch = nowD.getTime()
+    const isActive = isCheckedIn && !isCompleted && !isOnBreak && nowEpoch >= lStart && nowEpoch < lEnd
+
+    const shiftEndEpoch = isCompleted && todayRecord?.checkOutAt
+      ? new Date(todayRecord.checkOutAt).getTime()
+      : nowEpoch
+
+    const effectiveStart = Math.max(checkInEpoch, lStart)
+    const effectiveEnd = Math.min(shiftEndEpoch, lEnd)
+
+    let lunchSec = 0
+    if (effectiveEnd > effectiveStart) {
+      lunchSec = Math.floor((effectiveEnd - effectiveStart) / 1000)
+    }
+
+    // Prevent double counting if manual break overlapped with the lunch window
+    const manualBreaks = Array.isArray(todayRecord?.breaks) ? todayRecord.breaks : []
+    let manualLunchOverlapSec = 0
+    for (const b of manualBreaks) {
+      if (b.isAutoLunch) continue
+      if (b.startAt && b.endAt) {
+        const bStart = new Date(b.startAt).getTime()
+        const bEnd = new Date(b.endAt).getTime()
+        const oStart = Math.max(bStart, lStart)
+        const oEnd = Math.min(bEnd, lEnd)
+        if (oEnd > oStart) {
+          manualLunchOverlapSec += Math.floor((oEnd - oStart) / 1000)
+        }
+      }
+    }
+
+    const netLunchSec = Math.max(0, lunchSec - manualLunchOverlapSec)
+
+    return {
+      isAutoLunchActive: isActive,
+      autoLunchBreakSec: netLunchSec,
+    }
+  }, [lunchBreakAutoPause, lunchBreakStart, lunchBreakEnd, checkInEpoch, currentTime, isCheckedIn, isCompleted, isOnBreak, todayRecord?.checkOutAt, todayRecord?.breaks])
+
+  // Net work timer: live second-by-second active timer, pausing smoothly when on break
   const netWorkSeconds = useMemo(() => {
     if (!checkInEpoch) return 0
-    if (isCompleted && todayRecord?.checkOutAt) {
-      const endEpoch = new Date(todayRecord.checkOutAt).getTime()
-      const recOffCampusSec = todayRecord.offCampusMinutes ? (todayRecord.offCampusMinutes * 60) : 0
-      return Math.max(0, Math.floor((endEpoch - checkInEpoch) / 1000) - completedBreaksDurationSec - recOffCampusSec)
+    if (isCompleted && (todayRecord?.checkOut || todayRecord?.checkOutAt)) {
+      let endEpoch = null
+      if (todayRecord.checkOutAt) {
+        const parsed = new Date(todayRecord.checkOutAt).getTime()
+        if (!isNaN(parsed) && parsed > 0) endEpoch = parsed
+      }
+      if (!endEpoch && todayRecord.checkOut) {
+        try {
+          const clean = String(todayRecord.checkOut).trim().replace(/[\u202F\u00A0]/g, ' ')
+          const match = clean.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/i)
+          if (match) {
+            let h = parseInt(match[1], 10)
+            const m = parseInt(match[2], 10)
+            const meridiem = match[3]?.toUpperCase()
+            if (meridiem === 'PM' && h < 12) h += 12
+            if (meridiem === 'AM' && h === 12) h = 0
+            const d = new Date(checkInEpoch)
+            d.setHours(h, m, 0, 0)
+            endEpoch = d.getTime()
+          }
+        } catch { }
+      }
+      if (endEpoch) {
+        return Math.max(0, Math.floor((endEpoch - checkInEpoch) / 1000) - completedBreaksDurationSec - autoLunchBreakSec)
+      }
     }
     if (isOnBreak && currentBreakStartEpoch) {
-      return Math.max(0, Math.floor((currentBreakStartEpoch - checkInEpoch) / 1000) - completedBreaksDurationSec - accumulatedOffCampusSec)
+      return Math.max(0, Math.floor((currentBreakStartEpoch - checkInEpoch) / 1000) - completedBreaksDurationSec - autoLunchBreakSec)
     }
-    // While outside campus, totalOffCampusSec increments synchronously with currentTime, freezing the output!
-    return Math.max(0, Math.floor((currentTime.getTime() - checkInEpoch) / 1000) - completedBreaksDurationSec - totalOffCampusSec)
-  }, [checkInEpoch, isCompleted, todayRecord?.checkOutAt, todayRecord?.offCampusMinutes, isOnBreak, currentBreakStartEpoch, currentTime, completedBreaksDurationSec, totalOffCampusSec, accumulatedOffCampusSec])
+    // Real-time live ticking work timer
+    return Math.max(0, Math.floor((currentTime.getTime() - checkInEpoch) / 1000) - completedBreaksDurationSec - autoLunchBreakSec)
+  }, [checkInEpoch, isCompleted, todayRecord?.checkOut, todayRecord?.checkOutAt, isOnBreak, currentBreakStartEpoch, currentTime, completedBreaksDurationSec, autoLunchBreakSec])
 
   const isFullDayQualified = netWorkSeconds >= FULL_DAY_SECS
   const isHalfDayQualified = netWorkSeconds >= HALF_DAY_SECS && netWorkSeconds < FULL_DAY_SECS
@@ -692,9 +625,8 @@ function GPSAttendanceStation({ user, todayRecord, onPunch, onStartBreak, onEndB
 
     if (isCheckedIn) {
       try {
-        const offCampusMinutes = Math.round(totalOffCampusSec / 60)
         await onPunch({
-          offCampusDurationMinutes: offCampusMinutes,
+          offCampusDurationMinutes: 0,
         })
       } catch (error) { setGpsError(error.message) }
       finally { setIsPunching(false) }
@@ -868,14 +800,14 @@ function GPSAttendanceStation({ user, todayRecord, onPunch, onStartBreak, onEndB
         {/* Right Column: Working Time Display & Shift Qualification */}
         <div className="ess-live-right">
           {isCheckedIn ? (
-            <div className={`ess-timer-box ${isOnBreak ? 'paused-break' : isOutsideCampus ? 'paused-offcampus' : 'active'}`}>
+            <div className={`ess-timer-box ${isOnBreak ? 'paused-break' : isAutoLunchActive ? 'paused-break' : 'active'}`}>
               <div className="ess-timer-header">
-                {isOnBreak ? <Pause size={13} /> : isOutsideCampus ? <Pause size={13} /> : <Play size={13} />}
+                {isOnBreak ? <Pause size={13} /> : isAutoLunchActive ? <Coffee size={13} /> : <Play size={13} />}
                 <span>
                   {isOnBreak
-                    ? 'Active Work (Paused — Break)'
-                    : isOutsideCampus
-                      ? 'Active Work (Paused — Outside Campus)'
+                    ? 'Active Work (Paused — Manual Break)'
+                    : isAutoLunchActive
+                      ? `Active Work (Paused — Lunch Break ${format12Hour(lunchBreakStart)} – ${format12Hour(lunchBreakEnd)})`
                       : 'Active Net Work Time'}
                 </span>
               </div>
@@ -951,7 +883,16 @@ function GPSAttendanceStation({ user, todayRecord, onPunch, onStartBreak, onEndB
         </div>
       </div>
 
-      {/* Warning Banners (Auto punch out, Outside campus, Disconnected) */}
+      {/* Warning Banners (Auto punch out, Lunch Break, Outside campus, Disconnected) */}
+      {isAutoLunchActive && !isOnBreak && (
+        <div style={{ background: '#fffbeb', border: '1px solid #fde68a', color: '#92400e', padding: '10px 14px', borderRadius: '10px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <Coffee size={16} style={{ color: '#d97706', flexShrink: 0 }} />
+          <div>
+            <strong>Company Lunch Break ({format12Hour(lunchBreakStart)} – {format12Hour(lunchBreakEnd)}):</strong> Active work timer is automatically paused for scheduled lunch break and will automatically resume at {format12Hour(lunchBreakEnd)}.
+          </div>
+        </div>
+      )}
+
       {isOnBreak && (
         <div style={{ background: '#fffbeb', border: '1px solid #fde68a', color: '#92400e', padding: '10px 14px', borderRadius: '10px', fontSize: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -970,9 +911,9 @@ function GPSAttendanceStation({ user, todayRecord, onPunch, onStartBreak, onEndB
       )}
 
       {hasAutoPunchedOut && (
-        <div style={{ background: '#fef3e2', border: '1px solid #fbd38d', color: '#92400e', padding: '10px 14px', borderRadius: '10px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <AlertCircle size={16} style={{ flexShrink: 0, color: '#b45309' }} />
-          <div><strong>Auto Punched Out:</strong> Device GPS and Office Wi-Fi were disconnected for 2 hours, so attendance was automatically closed.</div>
+        <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', color: '#166534', padding: '10px 14px', borderRadius: '10px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <CheckCircle2 size={16} style={{ flexShrink: 0, color: '#16a34a' }} />
+          <div><strong>Full Day Completed (Auto Punched Out):</strong> Completed 8 working hours. Attendance automatically closed at <strong>{todayRecord?.checkOut || 'end of 8h shift'}</strong>.</div>
         </div>
       )}
 
@@ -993,36 +934,20 @@ function GPSAttendanceStation({ user, todayRecord, onPunch, onStartBreak, onEndB
         </div>
       )}
 
-      {isCheckedIn && !isCompleted && disconnectedMinutes > 0 && (
-        <div style={{ background: '#fffbeb', border: '1px solid #fde68a', color: '#92400e', padding: '10px 14px', borderRadius: '10px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <AlertCircle size={16} style={{ flexShrink: 0, color: '#b45309' }} />
-          <div><strong>Office GPS & Wi-Fi Disconnected:</strong> Disconnected for <strong>{disconnectedMinutes} min{disconnectedMinutes === 1 ? '' : 's'}</strong>. Reconnect within <strong>{Math.max(0, 120 - disconnectedMinutes)} mins</strong> to avoid automatic punch out.</div>
-        </div>
-      )}
+      
 
       {/* 3. ATTENDANCE ACTION BUTTONS */}
       <div className="ess-actions-row">
-        {/* Break Button (if checked in and not completed) */}
-        {isCheckedIn && !isCompleted && (
-          isOnBreak ? (
-            <button
-              type="button"
-              className="ess-action-btn resume"
-              onClick={handleResumeFromBreak}
-              disabled={isBreaking}
-            >
-              <Play size={16} /> Resume Work
-            </button>
-          ) : (
-            <button
-              type="button"
-              className="ess-action-btn break"
-              onClick={() => handleTakeBreak('break')}
-              disabled={isBreaking}
-            >
-              <Coffee size={16} /> Take Break
-            </button>
-          )
+        {/* Resume Button (only if active break is in progress; manual 'Take Break' removed in favor of automatic break) */}
+        {isCheckedIn && !isCompleted && isOnBreak && (
+          <button
+            type="button"
+            className="ess-action-btn resume"
+            onClick={handleResumeFromBreak}
+            disabled={isBreaking}
+          >
+            <Play size={16} /> Resume Work
+          </button>
         )}
 
         {/* Main Punch Button */}
@@ -1265,11 +1190,20 @@ function ESSOverview({ user }) {
           return
         }
       }
+      let effectiveCheckOutTime = null
+      if (isAuto && opts.disconnectionTime) {
+        const d = new Date(opts.disconnectionTime)
+        if (!isNaN(d.getTime())) {
+          effectiveCheckOutTime = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })
+        }
+      }
+
       await hrStore.checkOut({
         employeeId: empId,
         employeeName: user?.displayName || 'Employee',
         date: todayStr,
         autoPunchOut: isAuto,
+        disconnectionTime: opts.disconnectionTime || null,
         punchOutReason: opts.punchOutReason || (isAuto ? 'Auto Punch Out (GPS & WiFi disconnected for 2 hrs)' : null),
       })
       if (typeof localStorage !== 'undefined') {
@@ -1277,7 +1211,7 @@ function ESSOverview({ user }) {
       }
       setPunchNotice(
         isAuto
-          ? 'Auto Punched Out: GPS and Office Wi-Fi were disconnected for 2 hours.'
+          ? `Full Day Completed: Successfully auto punched out after completing 8 working hours at ${effectiveCheckOutTime || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.`
           : 'Successfully punched out at ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       )
     }
@@ -1389,9 +1323,11 @@ function ESSOverview({ user }) {
   const myLeaveBalances = (storeState.leaveBalances ?? []).filter((b) => {
     if (!b) return false
     if (!b.employeeId) return true
-    const bEmp = String(b.employeeId).toUpperCase()
-    const matchEmp = currentEmpId && bEmp === String(currentEmpId).toUpperCase()
-    const matchUser = currentUserId && (bEmp === currentUserId || bEmp === currentEmpRef)
+    const bEmp = typeof b.employeeId === 'object'
+      ? String(b.employeeId.employeeId || b.employeeId._id || b.employeeId.id || '').toUpperCase()
+      : String(b.employeeId).toUpperCase()
+    const matchEmp = currentEmpId && (bEmp === String(currentEmpId).toUpperCase() || (typeof b.employeeId === 'object' && String(b.employeeId.employeeId || '').toUpperCase() === String(currentEmpId).toUpperCase()))
+    const matchUser = currentUserId && (bEmp === currentUserId || bEmp === currentEmpRef || (typeof b.employeeId === 'object' && String(b.employeeId._id || b.employeeId.id || '') === currentUserId))
     return Boolean(matchEmp || matchUser)
   })
   const availableLeave = myLeaveBalances.length
@@ -1844,7 +1780,34 @@ function ESSAttendanceView({ user }) {
     ...record,
     date: record.date, day: new Date(`${record.date}T12:00:00`).toLocaleDateString('en-US', { weekday: 'long' }),
     shift: record.shift || '—', in: record.checkIn || '-', out: record.checkOut || '-',
-    hours: record.totalHours || '-', wifi: record.ipVerified ? 'Server-verified network' : record.wifiSSID || '-',
+    hours: (() => {
+      if (record.checkIn && !record.checkOut) {
+        let liveMins = 0
+        if (record.checkInAt) {
+          liveMins = Math.max(0, Math.floor((Date.now() - new Date(record.checkInAt).getTime()) / 60000))
+        } else {
+          const clean = String(record.checkIn).trim().replace(/[\u202F\u00A0]/g, ' ')
+          const match = clean.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/i)
+          if (match) {
+            let h = parseInt(match[1], 10)
+            const m = parseInt(match[2], 10)
+            const meridiem = match[3]?.toUpperCase()
+            if (meridiem === 'PM' && h < 12) h += 12
+            if (meridiem === 'AM' && h === 12) h = 0
+            const inDate = new Date()
+            inDate.setHours(h, m, 0, 0)
+            liveMins = Math.max(0, Math.floor((Date.now() - inDate.getTime()) / 60000))
+          }
+        }
+        const bMins = Number(record.totalBreakMinutes) || 0
+        const netM = Math.max(0, liveMins - bMins)
+        const hh = Math.floor(netM / 60)
+        const mm = netM % 60
+        return `${hh}h ${String(mm).padStart(2, '0')}m (Active Live)`
+      }
+      return record.totalHours || '-'
+    })(),
+    wifi: record.ipVerified ? 'Server-verified network' : record.wifiSSID || '-',
     breaks: record.totalBreakMinutes ? `${record.totalBreakMinutes}m` : (record.breaks?.length ? `${record.breaks.length} breaks` : '–'),
     isOnBreak: record.isOnBreak,
     currentBreak: record.currentBreak,
@@ -1856,7 +1819,7 @@ function ESSAttendanceView({ user }) {
   }))
   const completedDurations = monthlyLogs.map((record) => /^(\d+)h (\d+)m/.exec(record.hours)).filter(Boolean).map((match) => Number(match[1]) * 60 + Number(match[2]))
   const averageMinutes = completedDurations.length ? Math.round(completedDurations.reduce((sum, value) => sum + value, 0) / completedDurations.length) : null
-  const approvedRequests = storeState.leaves.filter((leave) => leave.employeeId === empId && leave.status === 'approved' && leave.startDate.slice(0, 7) <= todayKey().slice(0, 7) && leave.endDate.slice(0, 7) >= todayKey().slice(0, 7))
+  const approvedRequests = (storeState.leaves || []).filter((leave) => leave && leave.employeeId === empId && leave.status === 'approved' && (leave.startDate || '').slice(0, 7) <= todayKey().slice(0, 7) && (leave.endDate || '').slice(0, 7) >= todayKey().slice(0, 7))
 
   const filteredLogs = monthlyLogs.filter((log) => {
     if (statusFilter === 'all') return true
@@ -1905,9 +1868,19 @@ function ESSAttendanceView({ user }) {
             <Clock3 size={20} />
           </div>
           <div className="metric-copy">
-            <span>Late In</span>
-            <strong>{monthlyLogs.filter((record) => record.status === 'late').length} Days</strong>
-            <small>Recorded late arrivals</small>
+            <span>Late / Early Out</span>
+            {(() => {
+              const lCount = monthlyLogs.filter((r) => r.status === 'late' || r.isLate).length
+              const eCount = monthlyLogs.filter((r) => r.status === 'early-logout' || r.isEarlyLogout).length
+              const total = lCount + eCount
+              const halfLop = Math.floor(total / 3) * 0.5
+              return (
+                <>
+                  <strong>{total} Times {halfLop > 0 ? `(${halfLop} LOP)` : ''}</strong>
+                  <small>{lCount} late, {eCount} early ({total > 0 && total % 3 === 0 ? `${halfLop} LOP applied` : `${3 - (total % 3)} to next 0.5 LOP`})</small>
+                </>
+              )
+            })()}
           </div>
         </div>
 
@@ -2040,7 +2013,7 @@ function ESSAttendanceView({ user }) {
                 <th>Break Taken</th>
                 <th>Network Verification</th>
                 <th>Status</th>
-                <th>Late Count</th>
+                <th>Late / Early Count</th>
               </tr>
             </thead>
             <tbody>
@@ -2165,7 +2138,7 @@ function ESSSalaryView({ user }) {
       employeeId: employee?.employeeId || user?.employeeId || 'ETS21206',
       employeeName: employee?.name || user?.displayName || 'Employee',
       department: employee?.department || 'Operations',
-      designation: employee?.designation || 'Associate',
+      designation: employee?.designation || 'Pending Designation',
       bankName: employee?.bankDetails?.bankName || 'HDFC Bank Limited',
       accountNumber: cleanAcc,
       ifscCode: employee?.bankDetails?.ifscCode || 'HDFC0001234',
@@ -3438,7 +3411,7 @@ function ESSProfileView({ user }) {
             <span className="role-badge" style={{ fontSize: '9px' }}>{employee?.employeeId || user?.employeeId || 'ETS21206'}</span>
           </div>
           <p style={{ margin: '4px 0 0', color: 'var(--muted)', fontSize: '12px' }}>
-            {employee?.designation || user?.designation || 'Staff Member'} • {employee?.department || user?.department || 'Operations'}
+            {employee?.designation || user?.designation || 'Pending Designation'} • {employee?.department || user?.department || 'Operations'}
           </p>
         </div>
 
@@ -3565,7 +3538,7 @@ function ESSProfileView({ user }) {
             </div>
             <div className="profile-detail-row">
               <span>Designation</span>
-              <strong>{employee?.designation || user?.designation || 'Product Designer'}</strong>
+              <strong>{employee?.designation || user?.designation || 'Pending Designation'}</strong>
             </div>
             <div className="profile-detail-row">
               <span>Department</span>
@@ -3723,8 +3696,8 @@ function ESSTeamView({ user }) {
   const teamMembers = useMemo(() => {
     if (!currentEmp) return []
 
-    // If Director or Admin: show all team members or all employees
-    if (['director', 'admin', 'hr'].includes(currentEmp.role)) {
+    // If Director, Managing Director or Admin: show all team members or all employees
+    if (['director', 'managing_director', 'admin', 'hr', 'co_founder', 'vertical_head'].includes(currentEmp.role)) {
       return allEmployees.filter((e) => e.id !== currentEmp.id && e.role !== 'admin')
     }
 
@@ -3741,7 +3714,7 @@ function ESSTeamView({ user }) {
     }
 
     // If Team Lead: show all members assigned to their team
-    if (currentEmp.role === 'team_lead') {
+    if (currentEmp.role === 'team_lead' || currentEmp.role === 'team_leader' || /lead|leader|tl/i.test(currentEmp.role) || /team\s*lead|team\s*leader|\btl\b/i.test(currentEmp.designation)) {
       const myTeam = userTeams[0] || hrStore.getTeam(currentEmp.teamId || currentEmp.team)
       return allEmployees.filter((e) => {
         if (e.id === currentEmp.id) return false
@@ -5271,6 +5244,7 @@ function ESSRewardsView({ user }) {
 // 16. ESS NOTIFICATIONS CENTER VIEW
 // ==============================================================
 function ESSNotificationsView() {
+  const { user } = useAuth()
   const [storeState, setStoreState] = useState(() => hrStore.getState())
   const [filterType, setFilterType] = useState('all')
 
@@ -5278,7 +5252,7 @@ function ESSNotificationsView() {
     return hrStore.subscribe((state) => setStoreState(state))
   }, [])
 
-  const notifs = storeState.notifications || []
+  const notifs = hrStore.getUserNotifications ? hrStore.getUserNotifications(user) : (storeState.notifications || [])
 
   const filteredNotifs = notifs.filter((n) => {
     if (filterType === 'all') return true

@@ -1,8 +1,8 @@
 const DEFAULT_POLICIES = [
-  { leaveType: 'casual', label: 'Casual Leave (CL)', maxDaysPerYear: 12, requiresManagerApproval: true, requiresHrReview: false, noticeDays: 1 },
-  { leaveType: 'sick', label: 'Sick / Medical Leave (SL)', maxDaysPerYear: 10, requiresManagerApproval: true, requiresHrReview: false, noticeDays: 0 },
-  { leaveType: 'earned', label: 'Earned / Privilege Leave (EL)', maxDaysPerYear: 15, requiresManagerApproval: true, requiresHrReview: true, noticeDays: 7 },
-  { leaveType: 'comp_off', label: 'Compensatory Off', maxDaysPerYear: 5, requiresManagerApproval: true, requiresHrReview: false, noticeDays: 1 },
+  { leaveType: 'casual', label: 'Casual Leave (CL)', maxDaysPerYear: 12, requiresManagerApproval: true, requiresHrReview: false, noticeDays: 1, configured: true },
+  { leaveType: 'sick', label: 'Sick / Medical Leave (SL)', maxDaysPerYear: 10, requiresManagerApproval: true, requiresHrReview: false, noticeDays: 0, configured: true },
+  { leaveType: 'earned', label: 'Earned / Privilege Leave (EL)', maxDaysPerYear: 15, requiresManagerApproval: true, requiresHrReview: true, noticeDays: 7, configured: true },
+  { leaveType: 'comp_off', label: 'Compensatory Off', maxDaysPerYear: 5, requiresManagerApproval: true, requiresHrReview: false, noticeDays: 1, configured: true },
 ]
 
 const DEFAULT_BALANCES = [
@@ -64,7 +64,7 @@ export function createMemoryLeaveRepository() {
     async listRequests(filters = {}) {
       return requests.filter((r) =>
         (!filters.employeeId || r.employeeId === filters.employeeId) &&
-        (!filters.managerId || r.managerId === filters.managerId) &&
+        (!filters.managerId || r.managerId === filters.managerId || (filters.managerIds && filters.managerIds.includes(r.managerId))) &&
         (!filters.status || r.status === filters.status) &&
         (!filters.leaveType || r.leaveType === filters.leaveType)
       )
@@ -103,17 +103,23 @@ export function createMemoryLeaveRepository() {
       })
       return request
     },
-    async findOverlap({ employeeId, startDate, endDate, excludeId }) {
-      return (
-        requests.find(
-          (r) =>
-            r.employeeId === employeeId &&
-            r.id !== excludeId &&
-            ['pending_tl', 'pending_manager', 'pending_director', 'pending_hr', 'pending_admin', 'approved'].includes(r.status) &&
-            new Date(r.startDate) <= endDate &&
-            new Date(r.endDate) >= startDate
-        ) ?? null
+    async findOverlap({ employeeId, startDate, endDate, excludeId, isHalfDay = false, halfDayPeriod = null }) {
+      const candidates = requests.filter(
+        (r) =>
+          r.employeeId === employeeId &&
+          r.id !== excludeId &&
+          ['pending_tl', 'pending_manager', 'pending_director', 'pending_hr', 'pending_admin', 'approved'].includes(r.status) &&
+          new Date(r.startDate) <= endDate &&
+          new Date(r.endDate) >= startDate
       )
+      if (!candidates.length) return null
+      for (const cand of candidates) {
+        if (!isHalfDay || !cand.isHalfDay) return cand
+        const candPeriod = cand.halfDayPeriod || 'first_half'
+        const reqPeriod = halfDayPeriod || 'first_half'
+        if (candPeriod === reqPeriod) return cand
+      }
+      return null
     },
     async getPolicy(leaveType) {
       return policies.find((p) => p.leaveType === leaveType) ?? null
@@ -135,34 +141,46 @@ export function createMemoryLeaveRepository() {
                (!filters.year || b.year === filters.year)
       )
     },
-    async reserveBalance(employeeId, leaveType, year, days) {
-      const balance = balances.find((b) => b.employeeId === employeeId && b.leaveType === leaveType)
-      if (balance) {
-        balance.reserved = (balance.reserved ?? 0) + days
-        balance.remaining = Math.max(0, balance.allocated - balance.used - balance.reserved)
+    async reserveBalance(employeeId, leaveType, yearOrUnits, maybeDays) {
+      const units = maybeDays !== undefined ? maybeDays : yearOrUnits
+      let balance = balances.find((b) => b.employeeId === employeeId && b.leaveType === leaveType)
+      if (!balance) {
+        balance = { employeeId, leaveType, allocated: 12, used: 0, reserved: 0, remaining: 12, year: 2026 }
+        balances.push(balance)
       }
+      const available = (balance.allocated ?? 12) - (balance.used ?? 0) - (balance.reserved ?? 0)
+      if (available < units) return false
+      balance.reserved = (balance.reserved ?? 0) + units
+      balance.remaining = Math.max(0, (balance.allocated ?? 12) - (balance.used ?? 0) - balance.reserved)
+      return true
     },
-    async releaseReservation(employeeId, leaveType, year, days) {
+    async releaseReservation(employeeId, leaveType, yearOrUnits, maybeDays) {
+      const units = maybeDays !== undefined ? maybeDays : yearOrUnits
       const balance = balances.find((b) => b.employeeId === employeeId && b.leaveType === leaveType)
       if (balance) {
-        balance.reserved = Math.max(0, (balance.reserved ?? 0) - days)
-        balance.remaining = Math.max(0, balance.allocated - balance.used - balance.reserved)
+        balance.reserved = Math.max(0, (balance.reserved ?? 0) - units)
+        balance.remaining = Math.max(0, (balance.allocated ?? 12) - (balance.used ?? 0) - balance.reserved)
       }
+      return true
     },
-    async commitReservation(employeeId, leaveType, year, days) {
+    async commitReservation(employeeId, leaveType, yearOrUnits, maybeDays) {
+      const units = maybeDays !== undefined ? maybeDays : yearOrUnits
       const balance = balances.find((b) => b.employeeId === employeeId && b.leaveType === leaveType)
       if (balance) {
-        balance.reserved = Math.max(0, (balance.reserved ?? 0) - days)
-        balance.used = (balance.used ?? 0) + days
-        balance.remaining = Math.max(0, balance.allocated - balance.used - balance.reserved)
+        balance.reserved = Math.max(0, (balance.reserved ?? 0) - units)
+        balance.used = (balance.used ?? 0) + units
+        balance.remaining = Math.max(0, (balance.allocated ?? 12) - balance.used - balance.reserved)
       }
+      return true
     },
-    async restoreCommittedBalance(employeeId, leaveType, year, days) {
+    async restoreCommittedBalance(employeeId, leaveType, yearOrUnits, maybeDays) {
+      const units = maybeDays !== undefined ? maybeDays : yearOrUnits
       const balance = balances.find((b) => b.employeeId === employeeId && b.leaveType === leaveType)
       if (balance) {
-        balance.used = Math.max(0, (balance.used ?? 0) - days)
-        balance.remaining = Math.max(0, balance.allocated - balance.used - balance.reserved)
+        balance.used = Math.max(0, (balance.used ?? 0) - units)
+        balance.remaining = Math.max(0, (balance.allocated ?? 12) - balance.used - balance.reserved)
       }
+      return true
     },
     async deleteRequest(id) {
       const index = requests.findIndex((r) => r.id === String(id) || r._id === String(id))

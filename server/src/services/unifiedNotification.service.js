@@ -1,9 +1,36 @@
+import fs from 'fs'
+import mongoose from 'mongoose'
+import { EventEmitter } from 'events'
+
+export const notificationBus = new EventEmitter()
+notificationBus.setMaxListeners(300)
 import { Notification } from '../models/Notification.js'
 import { PushSubscription } from '../models/PushSubscription.js'
 import { workspaceModels } from '../models/Workspace.js'
 
 let webpushInstance = null
 let isVapidInitialized = false
+
+let activeVapidPublicKey = process.env.VAPID_PUBLIC_KEY || ''
+
+export function getVapidPublicKey() {
+  if (activeVapidPublicKey) return activeVapidPublicKey
+  if (process.env.VAPID_PUBLIC_KEY) {
+    activeVapidPublicKey = process.env.VAPID_PUBLIC_KEY
+    return activeVapidPublicKey
+  }
+  try {
+    const keyFile = '.vapid_keys.json'
+    if (fs.existsSync(keyFile)) {
+      const saved = JSON.parse(fs.readFileSync(keyFile, 'utf8'))
+      if (saved?.publicKey) {
+        activeVapidPublicKey = saved.publicKey
+        return activeVapidPublicKey
+      }
+    }
+  } catch {}
+  return activeVapidPublicKey || ''
+}
 
 export async function getWebPush() {
   if (webpushInstance) return webpushInstance
@@ -19,14 +46,38 @@ export async function getWebPush() {
 }
 
 export function initWebPush() {
-  const publicKey = process.env.VAPID_PUBLIC_KEY
-  const privateKey = process.env.VAPID_PRIVATE_KEY
+  let publicKey = process.env.VAPID_PUBLIC_KEY
+  let privateKey = process.env.VAPID_PRIVATE_KEY
   const subject = process.env.VAPID_SUBJECT || 'mailto:admin@edufyitech.in'
+
+  if (!publicKey || !privateKey) {
+    try {
+      const keyFile = '.vapid_keys.json'
+      if (fs.existsSync(keyFile)) {
+        const saved = JSON.parse(fs.readFileSync(keyFile, 'utf8'))
+        if (saved?.publicKey && saved?.privateKey) {
+          publicKey = saved.publicKey
+          privateKey = saved.privateKey
+          activeVapidPublicKey = publicKey
+        }
+      } else if (webpushInstance?.generateVAPIDKeys) {
+        const generated = webpushInstance.generateVAPIDKeys()
+        publicKey = generated.publicKey
+        privateKey = generated.privateKey
+        activeVapidPublicKey = publicKey
+        fs.writeFileSync(keyFile, JSON.stringify(generated, null, 2), 'utf8')
+        console.log('🔑 Auto-generated and persisted fallback VAPID keypair in .vapid_keys.json')
+      }
+    } catch (keyErr) {
+      console.warn('[Web Push] Fallback key generation notice:', keyErr.message)
+    }
+  }
 
   if (webpushInstance && publicKey && privateKey) {
     try {
       webpushInstance.setVapidDetails(subject, publicKey, privateKey)
       isVapidInitialized = true
+      activeVapidPublicKey = publicKey
       console.log('✅ Web Push VAPID initialized successfully.')
     } catch (err) {
       console.warn('⚠️ Web Push VAPID initialization warning:', err.message)
@@ -73,7 +124,7 @@ export async function createUnifiedNotification({
   const notificationId = `notif_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
 
   // 2. Persist notification in MongoDB
-  const notificationDoc = await Notification.create({
+  const docData = {
     notificationId,
     recipientId: targetRecipientId,
     ownerId: targetRecipientId,
@@ -88,14 +139,44 @@ export async function createUnifiedNotification({
     read: false,
     readAt: null,
     pushDeliveryStatus: 'pending',
-    idempotencyKey,
     metadata,
-  })
+  }
+  if (idempotencyKey && typeof idempotencyKey === 'string' && idempotencyKey.trim()) {
+    docData.idempotencyKey = idempotencyKey.trim()
+  }
+
+  let notificationDoc
+  try {
+    notificationDoc = await Notification.create(docData)
+  } catch (createErr) {
+    if (createErr?.code === 11000) {
+      if (docData.idempotencyKey) {
+        const existing = await Notification.findOne({ idempotencyKey: docData.idempotencyKey }).lean()
+        if (existing) return existing
+      }
+      docData.idempotencyKey = `auto_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
+      docData.notificationId = `notif_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
+      try {
+        notificationDoc = await Notification.create(docData)
+      } catch (fallbackErr) {
+        return {
+          notificationId: docData.notificationId,
+          recipientId: targetRecipientId,
+          title,
+          message,
+          category,
+          eventType,
+        }
+      }
+    } else {
+      throw createErr
+    }
+  }
 
   // Also sync to WorkspaceNotification model for backward compatibility
   try {
     if (workspaceModels?.notifications) {
-      await workspaceModels.notifications.create({
+      const workspaceNotifData = {
         ownerId: targetRecipientId,
         recipientId: targetRecipientId,
         title,
@@ -104,12 +185,39 @@ export async function createUnifiedNotification({
         read: false,
         event: eventType,
         entityId: relatedEntityId ? String(relatedEntityId) : null,
-        dedupeKey: idempotencyKey || notificationId,
         recipientRole: recipientRole || null,
-      })
+      }
+      if (docData.idempotencyKey) {
+        workspaceNotifData.dedupeKey = docData.idempotencyKey
+      }
+      await workspaceModels.notifications.create(workspaceNotifData)
     }
   } catch (err) {
-    console.warn('[Notification Mirror Notice]:', err.message)
+    if (err?.code !== 11000) {
+      console.warn('[Notification Mirror Notice]:', err.message)
+    }
+  }
+
+    // 2b. Broadcast to real-time SSE stream bus
+  try {
+    notificationBus.emit('new_notification', {
+      id: notificationId,
+      _id: String(notificationDoc?._id || notificationId),
+      notificationId,
+      title,
+      message,
+      category,
+      type: category,
+      eventType,
+      recipientId: targetRecipientId,
+      recipientRole: recipientRole || null,
+      priority,
+      targetUrl,
+      createdAt: notificationDoc?.createdAt || new Date(),
+      read: false,
+    })
+  } catch (busErr) {
+    console.warn('[Notification Bus Emit Notice]:', busErr.message)
   }
 
   // 3. Send Web Push to registered devices
@@ -146,8 +254,32 @@ export async function createUnifiedNotification({
  * Delivers Web Push notification to all active devices registered for an employee
  */
 async function deliverDevicePush(employeeId, { notificationId, title, message, category, eventType, targetUrl, idempotencyKey }) {
+  // Push notifications disabled per user policy - in-app bell & email channels active
+  return 'disabled'
+}
+
+async function _deliverDevicePushOld(employeeId, { notificationId, title, message, category, eventType, targetUrl, idempotencyKey }) {
+  if (!employeeId) return 'skipped'
+  const candidateIds = new Set([String(employeeId)])
+  if (mongoose?.connection?.readyState === 1) {
+    try {
+      const { Employee } = await import('../models/Employee.js')
+      const emp = mongoose.isValidObjectId(employeeId)
+        ? await Employee.findById(employeeId).lean()
+        : await Employee.findOne({ $or: [{ employeeId: String(employeeId).toUpperCase() }, { email: String(employeeId).toLowerCase() }] }).lean()
+      if (emp) {
+        if (emp._id) candidateIds.add(String(emp._id))
+        if (emp.id) candidateIds.add(String(emp.id))
+        if (emp.employeeId) {
+          candidateIds.add(String(emp.employeeId))
+          candidateIds.add(String(emp.employeeId).toUpperCase())
+        }
+        if (emp.email) candidateIds.add(String(emp.email).toLowerCase())
+      }
+    } catch {}
+  }
   const subscriptions = await PushSubscription.find({
-    employeeId,
+    employeeId: { $in: Array.from(candidateIds) },
     active: true,
   })
 
@@ -166,7 +298,7 @@ async function deliverDevicePush(employeeId, { notificationId, title, message, c
     body: message,
     icon: '/icon-192.png',
     badge: '/icon-192.png',
-    tag: idempotencyKey || notificationId,
+    tag: `edufyi-${idempotencyKey || notificationId}`,
     data: {
       notificationId,
       targetUrl: targetUrl || '#/employee',

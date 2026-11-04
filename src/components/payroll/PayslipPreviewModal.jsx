@@ -324,7 +324,7 @@ export function PayslipPreviewModal({
   )
 
   // Portal to document.body ensures the modal is never trapped inside transformed layout elements
-  return typeof document !== 'undefined'
+  return (typeof document !== 'undefined' && document?.body)
     ? createPortal(modalNode, document.body)
     : modalNode
 }

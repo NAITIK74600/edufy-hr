@@ -224,9 +224,18 @@ export function LeavePolicySettings({ employees = [], onSwitchTab, allRequests }
     }
     setBusy(true)
     try {
+      const targetEmp = (employees || []).find((e) => (e._id || e.id || e.employeeId) === balance.employeeId)
+      const targetId = String(targetEmp?._id || targetEmp?.id || balance.employeeId)
       const targetAllowance = Number(balance.allowance ?? 0)
-      await apiClient.put(`/leave/hr/balances/${balance.employeeId}/${balance.leaveType}`, { allowance: targetAllowance })
-      await hrStore.refresh()
+      await apiClient.put(`/leave/hr/balances/${targetId}/${balance.leaveType}`, { allowance: targetAllowance })
+      const storeBals = hrStore.getState().leaveBalances || []
+      const existing = storeBals.find((b) => {
+        const bEmpId = typeof b.employeeId === 'object' ? (b.employeeId?._id || b.employeeId?.id) : b.employeeId
+        return String(bEmpId) === targetId && b.leaveType === balance.leaveType
+      })
+      if (existing) existing.allowance = targetAllowance
+      hrStore.notify?.()
+      hrStore.refresh().catch(() => {})
       setNotice('Employee leave entitlement quota saved successfully.')
       setNoticeType('success')
       setTimeout(() => setNotice(''), 4500)
@@ -638,8 +647,8 @@ export function LeavePolicySettings({ employees = [], onSwitchTab, allRequests }
               style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid var(--line)', background: '#fff', fontSize: '12px' }}
             >
               <option value="">Choose employee…</option>
-              {employees.map((employee) => (
-                <option key={employee.id || employee._id} value={employee.id || employee._id || employee.employeeId}>
+              {employees.filter(Boolean).map((employee) => (
+                <option key={employee.id || employee._id || employee.employeeId} value={employee.id || employee._id || employee.employeeId}>
                   {employee.name} ({employee.employeeId || 'No Code'})
                 </option>
               ))}
@@ -1039,7 +1048,7 @@ export function AllInOneQuotaModal({ open, onClose, targetEmployee, employees = 
     if (!open) return
     setErrorMsg('')
     const target = targetEmployee || (employees.length > 0 ? employees[0] : null)
-    const chosenId = target?.id || target?._id || target?.employeeId || ''
+    const chosenId = target?._id || target?.id || target?.employeeId || ''
     setEmpId(chosenId)
 
     const isIntern = isInternEmployee(target)
@@ -1086,14 +1095,24 @@ export function AllInOneQuotaModal({ open, onClose, targetEmployee, employees = 
     setErrorMsg('')
     try {
       const types = ['casual', 'sick', 'earned', 'comp_off', 'maternity', 'lop']
-      const targetEmpRecord = employees.find((e) => (e.id || e._id || e.employeeId) === empId) || targetEmployee
-      const finalEmpId = String(targetEmpRecord?._id || targetEmpRecord?.employeeId || targetEmpRecord?.id || empId)
+      const targetEmpRecord = employees.find((e) => (e._id || e.id || e.employeeId) === empId) || targetEmployee
+      const finalEmpId = String(targetEmpRecord?._id || targetEmpRecord?.id || empId)
       for (const type of types) {
         const raw = quotas[type]
         const val = Math.max(0, Number(raw === '' || raw === undefined ? 0 : raw))
         await apiClient.put(`/leave/hr/balances/${finalEmpId}/${type}`, { allowance: val })
       }
-      await hrStore.refresh()
+      const storeBals = hrStore.getState().leaveBalances || []
+      for (const type of types) {
+        const val = Math.max(0, Number(quotas[type] || 0))
+        const existing = storeBals.find((b) => {
+          const bEmpId = typeof b.employeeId === 'object' ? (b.employeeId?._id || b.employeeId?.id) : b.employeeId
+          return String(bEmpId) === finalEmpId && b.leaveType === type
+        })
+        if (existing) existing.allowance = val
+      }
+      hrStore.notify?.()
+      hrStore.refresh().catch(() => {})
       if (onSuccess) {
         onSuccess(`All leave quotas for ${activeEmp?.name || 'employee'} saved successfully!`)
       }
@@ -1216,8 +1235,8 @@ export function AllInOneQuotaModal({ open, onClose, targetEmployee, employees = 
                 disabled={Boolean(targetEmployee)}
                 style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid var(--line)', background: targetEmployee ? '#f1f5f9' : '#fff', fontSize: '13px' }}
               >
-                {employees.map((emp) => (
-                  <option key={emp.id || emp._id} value={emp.id || emp._id || emp.employeeId}>
+                {employees.filter(Boolean).map((emp) => (
+                  <option key={emp._id || emp.id || emp.employeeId} value={emp._id || emp.id || emp.employeeId}>
                     {emp.name} ({emp.employeeId || 'ID'} - {emp.department || 'General'})
                   </option>
                 ))}
@@ -1335,7 +1354,7 @@ export function AllInOneQuotaModal({ open, onClose, targetEmployee, employees = 
     </div>
   )
 
-  return typeof document !== 'undefined' ? createPortal(modalContent, document.body) : modalContent
+  return typeof document !== 'undefined' && document?.body ? createPortal(modalContent, document.body) : modalContent
 }
 
 export function CompanyDefaultsModal({ open, onClose, currentDefaults, employees = [], onSaveDefaults, onBulkApply }) {
@@ -1505,7 +1524,7 @@ export function CompanyDefaultsModal({ open, onClose, currentDefaults, employees
     </div>
   )
 
-  return typeof document !== 'undefined' ? createPortal(modalContent, document.body) : modalContent
+  return typeof document !== 'undefined' && document?.body ? createPortal(modalContent, document.body) : modalContent
 }
 
 export function LeaveBalanceTable({ balances = [], employees = [], onSwitchTab }) {
@@ -1550,16 +1569,17 @@ export function LeaveBalanceTable({ balances = [], employees = [], onSwitchTab }
   const employeeMap = new Map()
 
   // 1. Register active employees
-  for (const emp of rawEmployees) {
-    const key = emp.id || emp._id || emp.employeeId
+  for (const emp of (rawEmployees || []).filter(Boolean)) {
+    const key = emp?.id || emp?._id || emp?.employeeId
     if (key) {
+      const cleanName = (emp.name && emp.name !== 'Employee' ? emp.name : (emp.displayName || emp.name || emp.username || (emp.email ? emp.email.split('@')[0] : 'Staff Member')))
       employeeMap.set(String(key), {
-        id: emp.id || emp._id,
-        _id: emp._id || emp.id,
-        name: emp.name || 'Unnamed Employee',
+        id: emp._id || emp.id || key,
+        _id: emp._id || emp.id || key,
+        name: cleanName,
         employeeId: emp.employeeId || '',
         department: emp.department || 'General',
-        designation: emp.designation || emp.role || 'Team Member',
+        designation: emp.designation || 'Pending Designation',
         employmentType: emp.employmentType || '',
         avatar: emp.avatar || '',
         balances: {},
@@ -1584,13 +1604,14 @@ export function LeaveBalanceTable({ balances = [], employees = [], onSwitchTab }
       const realId = String(empObj._id || empObj.id || empObj.employeeId || '')
       if (!realId) continue
 
+      const cleanObjName = (empObj.name && empObj.name !== 'Employee' ? empObj.name : (empObj.displayName || empObj.name || empObj.username || (empObj.email ? empObj.email.split('@')[0] : 'Staff Member')))
       const empEntry = {
         id: realId,
         _id: String(empObj._id || empObj.id || realId),
-        name: empObj.name || empObj.displayName || 'Unnamed Staff',
+        name: cleanObjName,
         employeeId: empObj.employeeId || '',
         department: empObj.department || 'General',
-        designation: empObj.designation || empObj.role || 'Team Member',
+        designation: empObj.designation || 'Pending Designation',
         employmentType: empObj.employmentType || '',
         avatar: empObj.avatar || empObj.avatarUrl || '',
         balances: {},
@@ -1705,7 +1726,7 @@ export function LeaveBalanceTable({ balances = [], employees = [], onSwitchTab }
     if (expandedEmpIds.size === filteredStaff.length && filteredStaff.length > 0) {
       setExpandedEmpIds(new Set())
     } else {
-      setExpandedEmpIds(new Set(filteredStaff.map((e) => e.id || e._id || e.employeeId)))
+      setExpandedEmpIds(new Set(filteredStaff.filter(Boolean).map((e) => e?.id || e?._id || e?.employeeId).filter(Boolean)))
     }
   }
 
@@ -1728,8 +1749,9 @@ export function LeaveBalanceTable({ balances = [], employees = [], onSwitchTab }
     } catch {
       // Fallback: save individually
       try {
-        for (const emp of allStaffList) {
-          const empId = emp.id || emp._id || emp.employeeId
+        for (const emp of allStaffList.filter(Boolean)) {
+          const empId = emp?.id || emp?._id || emp?.employeeId
+          if (!empId) continue
           const isIntern = isInternEmployee(emp)
           await apiClient.put(`/leave/hr/balances/${empId}/casual`, { allowance: isIntern ? 0 : 1 })
           await apiClient.put(`/leave/hr/balances/${empId}/sick`, { allowance: 1 })
@@ -1751,12 +1773,21 @@ export function LeaveBalanceTable({ balances = [], employees = [], onSwitchTab }
   // Quick apply standard policy to a single employee
   const handleApplyPolicyToSingleEmployee = async (emp, e) => {
     if (e) e.stopPropagation()
-    const empId = String(emp._id || emp.employeeId || emp.id || '')
+    const empId = String(emp._id || emp.id || emp.employeeId || '')
     const isIntern = isInternEmployee(emp)
     try {
       await apiClient.put(`/leave/hr/balances/${empId}/casual`, { allowance: isIntern ? 0 : 1 })
       await apiClient.put(`/leave/hr/balances/${empId}/sick`, { allowance: 1 })
-      await hrStore.refresh()
+      const storeBals = hrStore.getState().leaveBalances || []
+      for (const [k, val] of Object.entries({ casual: isIntern ? 0 : 1, sick: 1 })) {
+        const existing = storeBals.find((b) => {
+          const bEmpId = typeof b.employeeId === 'object' ? (b.employeeId?._id || b.employeeId?.id) : b.employeeId
+          return String(bEmpId) === empId && b.leaveType === k
+        })
+        if (existing) existing.allowance = val
+      }
+      hrStore.notify?.()
+      hrStore.refresh().catch(() => {})
       setNotice(`Applied ${isIntern ? 'Intern Policy (1 SL)' : 'Full-Time Policy (1 CL + 1 SL)'} to ${emp.name}!`)
       setNoticeType('success')
       setTimeout(() => setNotice(''), 4000)
@@ -2115,8 +2146,8 @@ export function LeaveBalanceTable({ balances = [], employees = [], onSwitchTab }
         </div>
       ) : (
         <div>
-          {filteredStaff.map((emp) => {
-            const empKey = emp.id || emp._id || emp.employeeId
+          {filteredStaff.filter(Boolean).map((emp) => {
+            const empKey = emp?.id || emp?._id || emp?.employeeId || 'staff'
             const isExpanded = expandedEmpIds.has(empKey)
 
             // Extract ONLY leave types where allowance > 0 (prevents 4-5 zero-badges clutter!)

@@ -237,19 +237,21 @@ export function AuthProvider({ children }) {
       const loggedUser = result.data.user
 
       // Client-side portal role enforcement guarantee
-      if (portal === 'admin' && loggedUser.role !== 'admin') {
+      const isExec = ['director', 'managing_director', 'co_founder', 'vertical_head'].includes(loggedUser.role) || loggedUser.email === 'jagadishbabu@edufyitech.in'
+
+      if (portal === 'admin' && loggedUser.role !== 'admin' && !isExec) {
         clearSession()
         throw new Error('Access denied: Employee credentials cannot be used to log into the Admin portal. Please use Employee Self-Service.')
       }
-      if (portal === 'hr' && !['hr', 'admin'].includes(loggedUser.role)) {
+      if (portal === 'hr' && !['hr', 'admin'].includes(loggedUser.role) && !isExec) {
         clearSession()
         throw new Error('Access denied: Employee credentials cannot be used to log into the HR portal. Please use Employee Self-Service.')
       }
-      if (portal === 'management' && !['hr', 'admin'].includes(loggedUser.role)) {
+      if (portal === 'management' && !['hr', 'admin'].includes(loggedUser.role) && !isExec) {
         clearSession()
         throw new Error('Access denied: Employee credentials cannot be used to log into the Management Console. Please use Employee Self-Service.')
       }
-      if (portal === 'employee' && ['admin', 'hr'].includes(loggedUser.role)) {
+      if (portal === 'employee' && ['admin', 'hr'].includes(loggedUser.role) && !isExec) {
         clearSession()
         throw new Error('Access denied: Administrative accounts must sign into the Management Console. Please switch to the Management portal.')
       }

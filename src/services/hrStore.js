@@ -5,10 +5,10 @@ import { workspaceKeys } from './workspaceStore.js'
 import { playNotificationSound } from '../utils/soundHelper.js'
 import { apiClient } from './apiClient.js'
 
-const STORAGE_KEY = 'edufyi_hr_store_v2'
-const STORAGE_PERSISTED_NOTIFICATIONS_KEY = 'edufyi_persisted_notifications_v2'
-const STORAGE_CLEARED_NOTIFICATIONS_KEY = 'edufyi_notifications_cleared_v2'
-const STORAGE_DELETED_NOTIFICATIONS_KEY = 'edufyi_deleted_notifications_v2'
+const STORAGE_KEY = 'edufyi_hr_store_v3'
+const STORAGE_PERSISTED_NOTIFICATIONS_KEY = 'edufyi_persisted_notifications_v3'
+const STORAGE_CLEARED_NOTIFICATIONS_KEY = 'edufyi_notifications_cleared_v3'
+const STORAGE_DELETED_NOTIFICATIONS_KEY = 'edufyi_deleted_notifications_v3'
 
 
 export const INITIAL_ROLES = [
@@ -670,27 +670,6 @@ export const INITIAL_ROLES = [
       'holidays.read',
     ],
   },
-  {
-    id: 'employee',
-    name: 'Employee',
-    description: 'Standard enterprise employee account with self-service attendance, leave, tasks, salary slips, and company documents.',
-    badge: 'Employee',
-    isSystem: true,
-    permissions: [
-      'dashboard.read',
-      'leave.self.read',
-      'leave.self.write',
-      'attendance.read',
-      'attendance.write',
-      'payroll.self.read',
-      'tasks.read',
-      'training.read',
-      'documents.read',
-      'helpdesk.read',
-      'announcements.read',
-      'holidays.read',
-    ],
-  },
 ];
 
 export const INITIAL_DEPARTMENTS = [
@@ -1261,15 +1240,21 @@ export const DEPARTMENT_DESIGNATIONS = {
     'Strategy & Operations Associate',
   ],
   'operations': [
-    'Senior Manager',
-    'Operations Executive',
+    'Associate',
+    'Operations Associate',
+    'Junior Operations Associate',
     'Senior Operations Executive',
+    'Operations Executive',
     'Operations Specialist',
     'Process Coordinator',
     'Operations Team Leader',
+    'Vertical Head',
     'Operations Manager',
+    'Senior Manager',
   ],
   'b2b': [
+    'B2B Sales Manager',
+    'B2B Sales Executive',
     'B2B Account Manager',
     'Corporate Sales Executive',
     'Institutional Partnerships Lead',
@@ -1369,7 +1354,7 @@ const INITIAL_USERS = [
     "name": "Jagadish Babu",
     "displayName": "Jagadish Babu (Managing Director)",
     "email": "jagadishbabu@edufyitech.in",
-    "role": "director",
+    "role": "managing_director",
     "department": "Executive Leadership",
     "team": null,
     "teamId": null,
@@ -1379,20 +1364,7 @@ const INITIAL_USERS = [
     "managerId": null,
     "teamLeadId": null,
     "permissions": [
-      "dashboard.read",
-      "employees.read",
-      "employees.write",
-      "employees.manager.assign",
-      "leave.self.read",
-      "leave.team.read",
-      "leave.team.approve",
-      "attendance.read",
-      "payroll.self.read",
-      "tasks.read",
-      "training.read",
-      "documents.read",
-      "helpdesk.read",
-      "reports.read"
+      "*"
     ]
   },
   {
@@ -3472,6 +3444,11 @@ const INITIAL_COMPANY_SETTINGS = {
     gpsVerificationRequired: true,
     wifiVerificationRequired: true,
     requireOfficeNetworkAndGps: false,
+    lunchBreakAutoPause: true,
+    lunchBreakStart: '13:30',
+    lunchBreakEnd: '14:30',
+    autoPunchOutEnabled: true,
+    autoPunchOutTime: '21:30',
   },
   leavePolicies: {
     casualQuota: 12,
@@ -3494,92 +3471,11 @@ const INITIAL_COMPANY_SETTINGS = {
   holidayCalendarImages: [],
 }
 
-const INITIAL_ATTENDANCE = [
-  { id: 'att-1', employeeId: 'ETS21206', employeeName: 'Chandana Somaih', date: '2026-09-30', checkIn: '09:22 AM', checkOut: null, status: 'present', wifiSSID: 'Edufyi-Office-5G', wifiVerified: true, latitude: 12.9716, longitude: 77.5946, distanceMeters: 24, gpsVerified: true, locationName: 'Bengaluru - Main Campus', totalHours: 'Active (Live)' },
-  { id: 'att-2', employeeId: 'EDU-MGR-002', employeeName: 'Sarah Chen', date: '2026-09-30', checkIn: '09:14 AM', checkOut: null, status: 'present', wifiSSID: 'Edufyi-Office-5G', wifiVerified: true, latitude: 37.7891, longitude: -122.4014, distanceMeters: 14, gpsVerified: true, locationName: 'HQ - San Francisco', totalHours: 'Active (Live)' },
-  { id: 'att-3', employeeId: 'EDU-HR-001', employeeName: 'HR', date: '2026-09-30', checkIn: '09:05 AM', checkOut: null, status: 'present', wifiSSID: 'Edufyi-Office-5G', wifiVerified: true, latitude: 37.7893, longitude: -122.4016, distanceMeters: 35, gpsVerified: true, locationName: 'HQ - San Francisco', totalHours: 'Active (Live)' },
-  { id: 'att-4', employeeId: 'EDU-EMP-205', employeeName: 'Marcus Vance', date: '2026-09-30', checkIn: '09:52 AM', checkOut: null, status: 'present', wifiSSID: 'Edufyi-Corp-Secure', wifiVerified: true, latitude: 37.7889, longitude: -122.4012, distanceMeters: 52, gpsVerified: true, locationName: 'HQ - San Francisco', totalHours: 'Active (Live)' },
-  { id: 'att-5', employeeId: 'EDU-EMP-309', employeeName: 'Priya Sharma', date: '2026-09-30', checkIn: '09:10 AM', checkOut: null, status: 'present', wifiSSID: 'Home-Fiber-WiFi', wifiVerified: false, latitude: 37.7649, longitude: -122.4662, distanceMeters: 6200, gpsVerified: false, locationName: 'Remote (Outside Geofence)', totalHours: 'Active (Remote)' },
-  { id: 'att-6', employeeId: 'EDU-EMP-410', employeeName: 'David Kim', date: '2026-09-30', checkIn: null, checkOut: null, status: 'on-leave', wifiSSID: null, wifiVerified: false, distanceMeters: null, gpsVerified: false, locationName: null, totalHours: '0.0 hrs' },
-  { id: 'att-7', employeeId: 'EDU-EMP-512', employeeName: 'Elena Rostova', date: '2026-09-30', checkIn: '09:30 AM', checkOut: null, status: 'present', wifiSSID: 'Edufyi-Office-5G', wifiVerified: true, latitude: 37.7891, longitude: -122.4015, distanceMeters: 22, gpsVerified: true, locationName: 'HQ - San Francisco', totalHours: 'Active (Live)' },
-]
+const INITIAL_ATTENDANCE = []
 
-const INITIAL_LEAVES = [
-  {
-    id: 'leave-101',
-    employeeId: 'ETS21206',
-    employeeName: 'Chandana Somaih',
-    department: 'Operations',
-    leaveType: 'casual',
-    startDate: '2026-10-08',
-    endDate: '2026-10-09',
-    days: 2,
-    reason: 'Attending family wedding ceremony out of town.',
-    status: 'approved',
-    managerId: 'emp-r6',
-    managerName: 'Basir Bashir',
-    managerComment: 'Approved. Enjoy the celebration!',
-    hrComment: 'Approved in line with leave policy.',
-    createdAt: '2026-09-26',
-  },
-  {
-    id: 'leave-102',
-    employeeId: 'EDU-EMP-410',
-    employeeName: 'David Kim',
-    department: 'Engineering',
-    leaveType: 'sick',
-    startDate: '2026-09-30',
-    endDate: '2026-09-30',
-    days: 1,
-    reason: 'Severe migraine; resting as advised by clinic.',
-    status: 'approved',
-    managerId: 'EDU-MGR-002',
-    managerComment: 'Get well soon David.',
-    hrComment: 'Logged as sick leave.',
-    createdAt: '2026-09-30',
-  },
-  {
-    id: 'leave-103',
-    employeeId: 'EDU-EMP-205',
-    employeeName: 'Marcus Vance',
-    department: 'Design',
-    leaveType: 'earned',
-    startDate: '2026-10-18',
-    endDate: '2026-10-22',
-    days: 5,
-    reason: 'Annual vacation with family to national parks.',
-    status: 'pending_manager',
-    managerId: 'EDU-MGR-002',
-    managerComment: null,
-    hrComment: null,
-    createdAt: '2026-09-28',
-  },
-  {
-    id: 'leave-104',
-    employeeId: 'EDU-EMP-309',
-    employeeName: 'Priya Sharma',
-    department: 'Product',
-    leaveType: 'casual',
-    startDate: '2026-10-12',
-    endDate: '2026-10-13',
-    days: 2,
-    reason: 'Relocating to new apartment in city center.',
-    status: 'pending_hr',
-    managerId: 'EDU-MGR-002',
-    managerComment: 'Approved from product team perspective.',
-    hrComment: null,
-    createdAt: '2026-09-27',
-  },
-]
+const INITIAL_LEAVES = []
 
-const INITIAL_TASKS = [
-  { id: 'task-1', title: 'Prepare Q3 operations delivery performance report', assigneeId: 'ETS21206', assigneeName: 'Chandana Somaih', priority: 'High', status: 'in_progress', dueDate: '2026-10-02', category: 'Operations' },
-  { id: 'task-2', title: 'Review and sign revised NDA document', assigneeId: 'ETS21206', assigneeName: 'Chandana Somaih', priority: 'Medium', status: 'todo', dueDate: '2026-10-05', category: 'Compliance' },
-  { id: 'task-3', title: 'Complete annual Cybersecurity awareness module', assigneeId: 'ETS21206', assigneeName: 'Chandana Somaih', priority: 'High', status: 'in_progress', dueDate: '2026-10-04', category: 'Training' },
-  { id: 'task-4', title: 'Finalize September payroll disbursement schedule', assigneeId: 'EDU-HR-001', assigneeName: 'HR', priority: 'Urgent', status: 'in_progress', dueDate: '2026-09-30', category: 'Payroll' },
-  { id: 'task-5', title: 'Schedule technical round for Senior Fullstack candidate', assigneeId: 'EDU-HR-001', assigneeName: 'HR', priority: 'High', status: 'todo', dueDate: '2026-10-01', category: 'Recruitment' },
-  { id: 'task-6', title: 'Update Company Wi-Fi SSID geofence policies', assigneeId: 'EDU-ADM-001', assigneeName: 'Admin', priority: 'Medium', status: 'completed', dueDate: '2026-09-29', category: 'Infrastructure' },
-]
+const INITIAL_TASKS = []
 
 const INITIAL_COURSES = [
   {
@@ -3628,91 +3524,9 @@ const INITIAL_COURSES = [
   },
 ]
 
-const INITIAL_TICKETS = [
-  {
-    id: 'TICK-1049',
-    employeeId: 'ETS21206',
-    employeeName: 'Chandana Somaih',
-    subject: 'Request for secondary 4K monitor authorization',
-    category: 'IT Support',
-    priority: 'Medium',
-    status: 'in_progress',
-    createdAt: '2026-09-29',
-    assignedTo: 'IT Hardware Team',
-    responses: [
-      { sender: 'Chandana Somaih', text: 'Submitted request with manager approval for dual-monitor workflow.', time: '2026-09-29 11:20' },
-      { sender: 'IT Team', text: 'Hardware inventory checked. Model Dell UltraSharp 27" approved for dispatch.', time: '2026-09-29 15:40' },
-    ],
-  },
-  {
-    id: 'TICK-1050',
-    employeeId: 'EDU-EMP-205',
-    employeeName: 'Marcus Vance',
-    subject: 'PF passbook contribution discrepancy query',
-    category: 'Payroll',
-    priority: 'High',
-    status: 'open',
-    createdAt: '2026-09-30',
-    assignedTo: 'HR Payroll Desk',
-    responses: [
-      { sender: 'Marcus Vance', text: 'August PF contribution is not yet showing in the EPFO portal. Please check UAN linkage.', time: '2026-09-30 08:30' },
-    ],
-  },
-  {
-    id: 'TICK-1045',
-    employeeId: 'ETS21206',
-    employeeName: 'Chandana Somaih',
-    subject: 'Health insurance e-card download issue',
-    category: 'HR Query',
-    priority: 'Low',
-    status: 'resolved',
-    createdAt: '2026-09-20',
-    assignedTo: 'HR Operations',
-    responses: [
-      { sender: 'Chandana Somaih', text: 'Unable to download policy e-card from insurance portal.', time: '2026-09-20 10:00' },
-      { sender: 'HR', text: 'Attached policy document directly and resent portal reset link.', time: '2026-09-20 14:15' },
-    ],
-  },
-]
+const INITIAL_TICKETS = []
 
-const INITIAL_ANNOUNCEMENTS = [
-  {
-    id: 'ann-1',
-    title: 'Edufyi Annual Hackathon 2026 Announced!',
-    category: 'Event',
-    priority: 'High',
-    targetAudience: 'All Employees',
-    content: 'Get ready for 48 hours of innovation, AI building, and collaboration on October 24-25. Exciting prizes and mentorship opportunities for all participating teams!',
-    date: '2026-09-28',
-    author: 'Admin (System)',
-    likes: 38,
-    pinned: true,
-  },
-  {
-    id: 'ann-2',
-    title: 'Updated Hybrid Work & Attendance Wi-Fi Policy',
-    category: 'Policy',
-    priority: 'Normal',
-    targetAudience: 'All Employees',
-    content: 'Starting October 1st, seamless check-in is enabled across all offices via Wi-Fi SSID auto-verification (Edufyi-Office-5G). Remote employees can continue using the verified remote check-in feature.',
-    date: '2026-09-25',
-    author: 'HR (People Ops)',
-    likes: 24,
-    pinned: false,
-  },
-  {
-    id: 'ann-3',
-    title: 'Upcoming National Holiday: Gandhi Jayanti (Oct 2)',
-    category: 'Holiday',
-    priority: 'Normal',
-    targetAudience: 'All Employees',
-    content: 'Please note that Edufyi offices will remain closed on Friday, October 2nd, 2026. Have a restful long weekend with your loved ones!',
-    date: '2026-09-27',
-    author: 'People Operations',
-    likes: 42,
-    pinned: false,
-  },
-]
+const INITIAL_ANNOUNCEMENTS = []
 
 const INITIAL_HOLIDAYS = [
   { id: 'hol-1', date: '2026-10-02', name: 'Gandhi Jayanti', title: 'Gandhi Jayanti', type: 'National Holiday', day: 'Friday' },
@@ -3738,378 +3552,15 @@ const INITIAL_REQUISITIONS = [
   { id: 'req-4', title: 'Security & DevOps Lead', department: 'Engineering', location: 'San Francisco', openings: 1, applicants: 19, stage: 'Technical Review', status: 'Active' },
 ]
 
-const INITIAL_DAILY_REPORTS = [
-  {
-    id: 'dwr-1',
-    employeeId: 'ETS21206',
-    employeeName: 'Chandana Somaih',
-    date: '2026-09-29',
-    hoursLogged: 8.5,
-    tasksSummary: 'Refactored employee leave approval flow, integrated real-time state persistence, and added UI tests.',
-    challenges: 'Ensuring seamless offline fallback when MongoDB connection is not supplied.',
-    tomorrowPlan: 'Build comprehensive attendance Wi-Fi verification and payslip PDF generation.',
-    submittedAt: '2026-09-29 18:25',
-  },
-]
+const INITIAL_DAILY_REPORTS = []
 
-const INITIAL_EXPENSES = [
-  { id: 'exp-1', employeeId: 'ETS21206', employeeName: 'Chandana Somaih', category: 'Travel', amount: 145.50, merchant: 'Bengaluru Cab & Airport Transit', date: '2026-09-22', status: 'reimbursed', comments: 'Travel to client site review' },
-  { id: 'exp-2', employeeId: 'ETS21206', employeeName: 'Chandana Somaih', category: 'Software Tool', amount: 48.00, merchant: 'Workflow Automation Subscription', date: '2026-09-25', status: 'approved', comments: 'Monthly workflow license' },
-  { id: 'exp-3', employeeId: 'EDU-EMP-205', employeeName: 'Marcus Vance', category: 'Supplies', amount: 89.90, merchant: 'Ergonomic Desk Accessories', date: '2026-09-28', status: 'submitted', comments: 'Home office wellness stipend' },
-]
+const INITIAL_EXPENSES = []
 
-const INITIAL_KUDOS = [
-  { id: 'kud-1', from: 'Basir Bashir', to: 'Chandana Somaih', badge: 'Sprint Star', message: 'Outstanding work polishing the new operations workflows ahead of the release!', date: 'Yesterday' },
-  { id: 'kud-2', from: 'HR', to: 'David Kim', badge: 'Fast Learner', message: 'Great onboarding momentum David! Welcome to Edufyi.', date: '2 days ago' },
-  { id: 'kud-3', from: 'Chandana Somaih', to: 'Marcus Vance', badge: 'Creative Genius', message: 'The new operations system looks incredible!', date: '3 days ago' },
-]
+const INITIAL_KUDOS = []
 
-const INITIAL_NOTIFICATIONS = [
-  { id: 'notif-1', title: 'Leave Approved', message: 'Your casual leave request for Oct 8-9 was approved by HR.', time: '10 mins ago', type: 'leave', read: false },
-  { id: 'notif-2', title: 'September Salary Processed', message: 'Your September payslip is ready. Download it from My Salary.', time: '2 hours ago', type: 'salary', read: false },
-  { id: 'notif-3', title: 'New Announcement', message: 'Admin posted: Edufyi Annual Hackathon 2026!', time: 'Yesterday', type: 'announcement', read: true },
-  { id: 'notif-4', title: 'Upcoming Birthday', message: "It's Marcus Vance's birthday tomorrow! Send warm wishes.", time: '1 day ago', type: 'birthday', read: true },
-]
+const INITIAL_NOTIFICATIONS = []
 
-const INITIAL_PAYROLL_RECORDS = [
-  {
-    id: 'pay-emp-r1-2026-10',
-    employeeId: 'ETS21206',
-    employeeRef: 'emp-r1',
-    employeeName: 'Chandana Somaih',
-    department: 'Operations',
-    designation: 'Operations Specialist',
-    month: 'October 2026',
-    workingDays: 31,
-    paidDays: 31,
-    lopDays: 0,
-    bankName: 'HDFC Bank',
-    accountNumber: '50100488577650',
-    ifscCode: 'HDFC0001234',
-    panTaxId: 'BROPJ5764Q',
-    uanNumber: '101595355837',
-    earnings: {
-      basic: 40000,
-      hra: 20000,
-      specialAllowance: 15000,
-      conveyance: 3000,
-      medicalAllowance: 2000,
-      performanceBonus: 0,
-      overtime: 0,
-    },
-    deductions: {
-      pf: 4800,
-      esi: 0,
-      professionalTax: 200,
-      tdsTax: 3500,
-      loanAdvance: 0,
-      lossOfPay: 0,
-      otherDeductions: 0,
-    },
-    status: 'Processed',
-    paymentDate: '2026-10-31',
-    notes: 'October payroll disbursement',
-  },
-  {
-    id: 'pay-emp-r1-2026-09',
-    employeeId: 'ETS21206',
-    employeeRef: 'emp-r1',
-    employeeName: 'Chandana Somaih',
-    department: 'Operations',
-    designation: 'Operations Specialist',
-    month: 'September 2026',
-    workingDays: 30,
-    paidDays: 30,
-    lopDays: 0,
-    bankName: 'HDFC Bank',
-    accountNumber: '50100488577650',
-    ifscCode: 'HDFC0001234',
-    panTaxId: 'BROPJ5764Q',
-    uanNumber: '101595355837',
-    earnings: {
-      basic: 40000,
-      hra: 20000,
-      specialAllowance: 15000,
-      conveyance: 3000,
-      medicalAllowance: 2000,
-      performanceBonus: 0,
-      overtime: 0,
-    },
-    deductions: {
-      pf: 4800,
-      esi: 0,
-      professionalTax: 200,
-      tdsTax: 3500,
-      loanAdvance: 0,
-      lossOfPay: 0,
-      otherDeductions: 0,
-    },
-    status: 'Processed',
-    paymentDate: '2026-09-30',
-    notes: 'September payroll disbursement',
-  },
-
-  {
-    id: 'pay-emp-2-2026-09',
-    employeeId: 'EDU-MGR-002',
-    employeeName: 'Sarah Chen',
-    department: 'Engineering',
-    designation: 'Engineering Director',
-    month: 'September 2026',
-    workingDays: 30,
-    paidDays: 30,
-    lopDays: 0,
-    bankName: 'ICICI Bank',
-    accountNumber: '5010049281290',
-    ifscCode: 'ICIC0000492',
-    panTaxId: 'SRH-4412-C',
-    uanNumber: '100984120991',
-    earnings: {
-      basic: 75000,
-      hra: 37500,
-      specialAllowance: 24000,
-      conveyance: 4000,
-      medicalAllowance: 3000,
-      performanceBonus: 4000,
-      overtime: 0,
-    },
-    deductions: {
-      pf: 9000,
-      esi: 0,
-      professionalTax: 200,
-      tdsTax: 14500,
-      loanAdvance: 0,
-      lossOfPay: 0,
-      otherDeductions: 0,
-    },
-    status: 'processed',
-    paymentDate: '2026-09-30',
-    notes: 'Director grade compensation package',
-  },
-  {
-    id: 'pay-emp-3-2026-09',
-    employeeId: 'EDU-ADM-001',
-    employeeName: 'Admin',
-    department: 'Executive',
-    designation: 'System Administrator',
-    month: 'September 2026',
-    workingDays: 30,
-    paidDays: 30,
-    lopDays: 0,
-    bankName: 'State Bank of India',
-    accountNumber: '5010049287731',
-    ifscCode: 'SBIN0000182',
-    panTaxId: 'ELN-1109-V',
-    uanNumber: '100984120101',
-    earnings: {
-      basic: 110000,
-      hra: 55000,
-      specialAllowance: 32000,
-      conveyance: 5000,
-      medicalAllowance: 4000,
-      performanceBonus: 8000,
-      overtime: 0,
-    },
-    deductions: {
-      pf: 13200,
-      esi: 0,
-      professionalTax: 200,
-      tdsTax: 26500,
-      loanAdvance: 0,
-      lossOfPay: 0,
-      otherDeductions: 0,
-    },
-    status: 'processed',
-    paymentDate: '2026-09-30',
-    notes: 'Executive leadership CTC disbursement',
-  },
-  {
-    id: 'pay-emp-4-2026-09',
-    employeeId: 'EDU-HR-001',
-    employeeName: 'HR',
-    department: 'Human Resources',
-    designation: 'HR Operations',
-    month: 'September 2026',
-    workingDays: 30,
-    paidDays: 30,
-    lopDays: 0,
-    bankName: 'Axis Bank',
-    accountNumber: '5010049284490',
-    ifscCode: 'UTIB0000843',
-    panTaxId: 'MYA-5591-L',
-    uanNumber: '100984120442',
-    earnings: {
-      basic: 55000,
-      hra: 27500,
-      specialAllowance: 16000,
-      conveyance: 3500,
-      medicalAllowance: 2500,
-      performanceBonus: 2000,
-      overtime: 0,
-    },
-    deductions: {
-      pf: 6600,
-      esi: 0,
-      professionalTax: 200,
-      tdsTax: 7800,
-      loanAdvance: 0,
-      lossOfPay: 0,
-      otherDeductions: 0,
-    },
-    status: 'processed',
-    paymentDate: '2026-09-30',
-    notes: 'People Operations leadership compensation',
-  },
-  {
-    id: 'pay-emp-5-2026-09',
-    employeeId: 'EDU-EMP-205',
-    employeeName: 'Marcus Vance',
-    department: 'Design',
-    designation: 'Principal Product Designer',
-    month: 'September 2026',
-    workingDays: 30,
-    paidDays: 30,
-    lopDays: 0,
-    bankName: 'Kotak Mahindra Bank',
-    accountNumber: '5010049285521',
-    ifscCode: 'KKBK0000219',
-    panTaxId: 'MRC-8832-V',
-    uanNumber: '100984120551',
-    earnings: {
-      basic: 50000,
-      hra: 25000,
-      specialAllowance: 14500,
-      conveyance: 3000,
-      medicalAllowance: 2500,
-      performanceBonus: 1500,
-      overtime: 0,
-    },
-    deductions: {
-      pf: 6000,
-      esi: 0,
-      professionalTax: 200,
-      tdsTax: 6100,
-      loanAdvance: 0,
-      lossOfPay: 0,
-      otherDeductions: 0,
-    },
-    status: 'processed',
-    paymentDate: '2026-09-30',
-    notes: 'Design team lead monthly salary',
-  },
-  {
-    id: 'pay-emp-6-2026-09',
-    employeeId: 'EDU-EMP-208',
-    employeeName: 'Elena Rostova',
-    department: 'Quality Assurance',
-    designation: 'QA Lead',
-    month: 'September 2026',
-    workingDays: 30,
-    paidDays: 30,
-    lopDays: 0,
-    bankName: 'HDFC Bank',
-    accountNumber: '5010049289081',
-    ifscCode: 'HDFC0001234',
-    panTaxId: 'ELN-7721-Q',
-    uanNumber: '100984120612',
-    earnings: {
-      basic: 42000,
-      hra: 21000,
-      specialAllowance: 11000,
-      conveyance: 3000,
-      medicalAllowance: 2000,
-      performanceBonus: 1000,
-      overtime: 0,
-    },
-    deductions: {
-      pf: 5040,
-      esi: 0,
-      professionalTax: 200,
-      tdsTax: 3500,
-      loanAdvance: 0,
-      lossOfPay: 0,
-      performanceDeduction: 2500,
-      otherDeductions: 0,
-    },
-    status: 'processed',
-    paymentDate: '2026-09-30',
-    notes: 'QA department disbursement',
-  },
-  {
-    id: 'pay-emp-7-2026-09',
-    employeeId: 'EDU-EMP-301',
-    employeeName: 'Jordan Lee',
-    department: 'DevOps & Infrastructure',
-    designation: 'Staff Site Reliability Engineer',
-    month: 'September 2026',
-    workingDays: 30,
-    paidDays: 30,
-    lopDays: 0,
-    bankName: 'ICICI Bank',
-    accountNumber: '5010049283341',
-    ifscCode: 'ICIC0000492',
-    panTaxId: 'JRD-9901-L',
-    uanNumber: '100984120771',
-    earnings: {
-      basic: 48000,
-      hra: 24000,
-      specialAllowance: 14000,
-      conveyance: 3000,
-      medicalAllowance: 2500,
-      performanceBonus: 1500,
-      overtime: 0,
-    },
-    deductions: {
-      pf: 5760,
-      esi: 0,
-      professionalTax: 200,
-      tdsTax: 5500,
-      loanAdvance: 0,
-      lossOfPay: 0,
-      otherDeductions: 0,
-    },
-    status: 'processed',
-    paymentDate: '2026-09-30',
-    notes: 'SRE on-call compensation included',
-  },
-  {
-    id: 'pay-emp-8-2026-09',
-    employeeId: 'EDU-EMP-402',
-    employeeName: 'David Kim',
-    department: 'Product Growth',
-    designation: 'Growth Product Specialist',
-    month: 'September 2026',
-    workingDays: 30,
-    paidDays: 30,
-    lopDays: 0,
-    bankName: 'State Bank of India',
-    accountNumber: '5010049286112',
-    ifscCode: 'SBIN0000182',
-    panTaxId: 'DVD-5521-K',
-    uanNumber: '100984120883',
-    earnings: {
-      basic: 38000,
-      hra: 19000,
-      specialAllowance: 10000,
-      conveyance: 2500,
-      medicalAllowance: 2000,
-      performanceBonus: 1000,
-      overtime: 0,
-    },
-    deductions: {
-      pf: 4560,
-      esi: 0,
-      professionalTax: 200,
-      tdsTax: 2800,
-      loanAdvance: 0,
-      lossOfPay: 0,
-      otherDeductions: 0,
-    },
-    status: 'processed',
-    paymentDate: '2026-09-30',
-    notes: 'Growth team disbursement',
-  },
-]
+const INITIAL_PAYROLL_RECORDS = []
 
 // Persistent Notifications retrieval and state sync
 function getPersistedNotifications() {
@@ -4206,15 +3657,8 @@ function loadStore() {
         parsed.dataErrors = {}
 
         // Teams initialization & synchronization
-        if (!Array.isArray(parsed.teams) || parsed.teams.length === 0) {
-          parsed.teams = [...INITIAL_TEAMS]
-        } else {
-          const existingTeamIds = new Set(parsed.teams.map((t) => t.id))
-          for (const initTeam of INITIAL_TEAMS) {
-            if (!existingTeamIds.has(initTeam.id)) {
-              parsed.teams.push({ ...initTeam })
-            }
-          }
+        if (!Array.isArray(parsed.teams)) {
+          parsed.teams = []
         }
         if (Array.isArray(parsed.departments) && parsed.departments.length > 0) {
           const deptMap = new Map()
@@ -4277,6 +3721,7 @@ function loadStore() {
       kudos: [],
       notifications: fallbackNotifs !== null ? fallbackNotifs : [],
       payroll: [],
+      leavePolicies: [],
       roles: INITIAL_ROLES,
       customRolePermissions: {},
       auditLogs: [],
@@ -4307,12 +3752,10 @@ function loadStore() {
     kudos: INITIAL_KUDOS,
     notifications: fallbackNotifs !== null ? fallbackNotifs : INITIAL_NOTIFICATIONS,
     payroll: INITIAL_PAYROLL_RECORDS,
+    leavePolicies: [],
     roles: INITIAL_ROLES,
     customRolePermissions: {},
-    auditLogs: [
-      { id: 'log-1', timestamp: '2026-09-30 08:00:12', actor: 'System', action: 'SYSTEM_BOOT', details: 'All services initialized with security headers and JWT verification.' },
-      { id: 'log-2', timestamp: '2026-09-30 09:22:04', actor: 'Chandana Somaih', action: 'ATTENDANCE_CHECKIN', details: 'Checked in via verified office Wi-Fi: Edufyi-Office-5G' },
-    ],
+    auditLogs: [],
     dataReady: true,
     dataError: '',
     dataErrors: {},
@@ -4400,7 +3843,7 @@ const localStore = {
       email: userData.email.toLowerCase(),
       role: userData.role || 'employee',
       department: userData.department || 'General',
-      designation: userData.designation || 'Specialist',
+      designation: userData.designation || 'Pending Designation',
       status: 'active',
       avatarTone: 'blue',
       permissions: userData.role === 'admin' ? ['*'] : (userData.permissions || this.getRolePermissions(userData.role || 'employee') || ['dashboard.read']),
@@ -4484,7 +3927,7 @@ const localStore = {
         name: updates.name || existing?.name || 'Employee',
         email: existing?.email || '',
         department: updates.department || existing?.department || 'General',
-        designation: updates.designation || existing?.designation || 'Specialist',
+        designation: updates.designation || existing?.designation || 'Pending Designation',
         role: updates.role || existing?.role || 'employee',
         status: updates.status || existing?.status || 'active',
         joiningDate: new Date().toISOString().split('T')[0],
@@ -4687,30 +4130,93 @@ const localStore = {
   // ---------------------------------------------------------
   getTeams() {
     const rawTeams = storeState.teams || []
-    const defaultMap = new Map(INITIAL_TEAMS.map((t) => [t.id, { ...t }]))
+    const defaultMap = new Map()
     for (const t of rawTeams) {
-      if (t.id) {
-        defaultMap.set(t.id, { ...(defaultMap.get(t.id) || {}), ...t })
+      const key = t.teamId || t.id || t._id || (t.name ? `team-${t.name.toLowerCase().replace(/[^a-z0-9]/g, '_')}` : null)
+      if (key) {
+        defaultMap.set(key, { ...(defaultMap.get(key) || {}), ...t, id: t.id || key, teamId: t.teamId || key })
       }
     }
     const teams = Array.from(defaultMap.values())
     const employees = storeState.employees || []
     return teams.map((team) => {
-      const members = employees.filter(
-        (e) =>
-          (e.team && (e.team.toLowerCase() === team.name.toLowerCase() || e.team === team.id)) ||
-          e.teamId === team.id
-      )
+      const teamKey = String(team.teamId || team.id || '').toLowerCase()
+      const teamNameKey = String(team.name || '').toLowerCase()
+      const teamSlug = `team-${teamNameKey.replace(/[^a-z0-9]/g, '_')}`
+
+      const members = employees.filter((e) => {
+        if (e.status === 'terminated') return false
+        const eTeam = String(e.team || '').toLowerCase()
+        const eTeamId = String(e.teamId || '').toLowerCase()
+        const eSquad = String(e.squad || '').toLowerCase()
+        const eSquadId = String(e.squadId || '').toLowerCase()
+        return (
+          (eTeamId && (eTeamId === teamKey || eTeamId === teamSlug)) ||
+          (eTeam && (eTeam === teamNameKey || eTeam === teamKey)) ||
+          (eSquadId && (eSquadId === teamKey || eSquadId === teamSlug)) ||
+          (eSquad && (eSquad === teamNameKey || eSquad === teamKey))
+        )
+      })
+
+      const tl = team.teamLeadId ? employees.find((e) => String(e.id || e._id) === String(team.teamLeadId) || e.employeeId === team.teamLeadId) : (team.teamLeadName ? employees.find((e) => (e.displayName || e.name || '').toLowerCase() === team.teamLeadName.toLowerCase()) : null)
+      const mgr = team.managerId ? employees.find((e) => String(e.id || e._id) === String(team.managerId) || e.employeeId === team.managerId) : (team.managerName ? employees.find((e) => (e.displayName || e.name || '').toLowerCase() === team.managerName.toLowerCase()) : null)
+
       return {
         ...team,
+        teamLeadName: tl?.displayName || tl?.name || team.teamLeadName || '',
+        managerName: mgr?.displayName || mgr?.name || team.managerName || '',
         memberCount: members.length,
-        members: members.map((m) => ({ id: m.id, name: m.name, role: m.role, designation: m.designation, employeeId: m.employeeId })),
+        members: members.map((m) => ({ id: m.id || m._id, name: m.name, role: m.role, designation: m.designation, employeeId: m.employeeId })),
       }
     })
   },
   getTeam(teamId) {
     if (!teamId) return null
-    return this.getTeams().find((t) => t.id === teamId || t.name.toLowerCase() === String(teamId).toLowerCase()) || null
+    return this.getTeams().find((t) => t.id === teamId || t.teamId === teamId || t.name.toLowerCase() === String(teamId).toLowerCase()) || null
+  },
+  assignEmployeesToTeam(teamIdOrName, employeeIds = [], actor) {
+    const cleanTarget = String(teamIdOrName || '').toLowerCase().trim()
+    const targetTeam = this.getTeams().find((t) =>
+      String(t.id || t.teamId || '').toLowerCase() === cleanTarget ||
+      String(t.name || '').toLowerCase() === cleanTarget
+    )
+    const teamName = targetTeam?.name || teamIdOrName
+    const teamId = targetTeam?.id || targetTeam?.teamId || `team-${teamName.toLowerCase().replace(/[^a-z0-9]/g, '_')}`
+    const targetDept = targetTeam?.department || null
+    const selectedSet = new Set(employeeIds.map(String))
+
+    storeState.employees = (storeState.employees || []).map((emp) => {
+      const empId = String(emp.id || emp._id)
+      const isCurrentInTeam =
+        String(emp.teamId || emp.squadId || '') === String(teamId) ||
+        String(emp.team || emp.squad || '').toLowerCase() === teamName.toLowerCase()
+
+      if (selectedSet.has(empId)) {
+        return {
+          ...emp,
+          team: teamName,
+          teamId: teamId,
+          squad: teamName,
+          squadId: teamId,
+          ...(targetTeam?.teamLeadId ? { teamLeadId: targetTeam.teamLeadId, teamLeadName: targetTeam.teamLeadName || '' } : {}),
+          ...(targetTeam?.managerId ? { managerId: targetTeam.managerId, managerName: targetTeam.managerName || '' } : {}),
+          ...(targetDept && (!emp.department || emp.department === 'Unassigned') ? { department: targetDept } : {}),
+        }
+      } else if (isCurrentInTeam) {
+        return {
+          ...emp,
+          team: '',
+          teamId: '',
+          squad: '',
+          squadId: '',
+        }
+      }
+      return emp
+    })
+
+    this.addAuditLog(actor?.name || 'Admin', 'TEAM_ASSIGN', `Assigned ${selectedSet.size} members to team '${teamName}'`)
+    notifyListeners()
+    return { success: true, teamId, teamName, count: selectedSet.size }
   },
   addTeam(data) {
     const name = (data.name || '').trim()
@@ -4745,7 +4251,7 @@ const localStore = {
     const mgr = updates.managerId ? (storeState.employees || []).find((e) => e.id === updates.managerId || e._id === updates.managerId) : null
     const tl = updates.teamLeadId ? (storeState.employees || []).find((e) => e.id === updates.teamLeadId || e._id === updates.teamLeadId) : null
 
-    storeState.teams = (storeState.teams || INITIAL_TEAMS).map((t) => {
+    storeState.teams = (storeState.teams || []).map((t) => {
       if (t.id === teamId || t.name.toLowerCase() === prevTeam.name.toLowerCase()) {
         updatedTeam = {
           ...t,
@@ -4761,14 +4267,14 @@ const localStore = {
     // If team name changed, update linked employees' team name attribute
     if (updates.name && updates.name !== oldName) {
       storeState.employees = (storeState.employees || []).map((e) => {
-        if (e.team === oldName || e.teamId === teamId) {
-          return { ...e, team: updates.name, teamId }
+        if (e.team === oldName || e.squad === oldName || e.teamId === teamId || e.squadId === teamId) {
+          return { ...e, team: updates.name, teamId, squad: updates.name, squadId: teamId }
         }
         return e
       })
       storeState.users = (storeState.users || []).map((u) => {
-        if (u.team === oldName || u.teamId === teamId) {
-          return { ...u, team: updates.name, teamId }
+        if (u.team === oldName || u.squad === oldName || u.teamId === teamId || u.squadId === teamId) {
+          return { ...u, team: updates.name, teamId, squad: updates.name, squadId: teamId }
         }
         return u
       })
@@ -4781,17 +4287,22 @@ const localStore = {
   deleteTeam(teamId) {
     const team = this.getTeam(teamId)
     if (!team) throw new Error('Team not found.')
-    const isCore = INITIAL_TEAMS.some((t) => t.id === teamId)
-    if (isCore) {
-      throw new Error(`Standard company team '${team.name}' cannot be deleted. You can reassign its Team Leader, manager, or members.`)
-    }
-    storeState.teams = (storeState.teams || []).filter((t) => t.id !== teamId)
+    // All teams can be manually deleted
+    const teamName = team.name
+    storeState.teams = (storeState.teams || []).filter((t) => t.id !== teamId && t.teamId !== teamId)
+    // Clear squad assignment from employees in this team
+    storeState.employees = (storeState.employees || []).map((e) => {
+      if (e.teamId === teamId || e.squadId === teamId || (teamName && (e.team === teamName || e.squad === teamName))) {
+        return { ...e, team: '', teamId: '', squad: '', squadId: '' }
+      }
+      return e
+    })
     this.addAuditLog('Admin', 'TEAM_DELETE', `Deleted team '${team.name}'`)
     notifyListeners()
     return true
   },
   verifyTeamAssignment(teamId) {
-    storeState.teams = (storeState.teams || INITIAL_TEAMS).map((t) => {
+    storeState.teams = (storeState.teams || []).map((t) => {
       if (t.id === teamId || t.name.toLowerCase() === String(teamId).toLowerCase()) {
         return { ...t, flaggedForVerification: false, verificationNote: 'Verified and confirmed by administrator' }
       }
@@ -4802,9 +4313,16 @@ const localStore = {
     return true
   },
   getTeamLeads() {
-    return (storeState.employees || []).filter(
-      (e) => e.status === 'active' && ['team_lead', 'manager', 'director'].includes(e.role)
-    )
+    return (storeState.employees || []).filter((e) => {
+      if (!e || e.status === 'inactive' || e.status === 'terminated') return false
+      const r = String(e.role || '').toLowerCase().trim().replace(/[-\s]/g, '_')
+      const des = String(e.designation || '').toLowerCase().trim()
+      return (
+        ['team_leader', 'team_lead', 'manager', 'director', 'managing_director', 'vertical_head', 'revenue_growth_manager'].includes(r) ||
+        r.includes('lead') || r.includes('leader') || r.includes('tl') ||
+        des.includes('team lead') || des.includes('team leader') || des.includes('tl') || des.includes('lead')
+      )
+    }).sort((a, b) => (a.displayName || a.name || '').localeCompare(b.displayName || b.name || ''))
   },
 
   // Department Management
@@ -5334,7 +4852,7 @@ const localStore = {
       email: empData.email,
       phone: empData.phone || '+91 98765 43210',
       department: empData.department || 'Engineering',
-      designation: empData.designation || 'Specialist',
+      designation: empData.designation || 'Pending Designation',
       campus: empData.campus || 'Ignite Campus',
       location: empData.location || empData.campus || 'Ignite Campus',
       role: empData.role || 'employee',
@@ -5510,6 +5028,82 @@ const localStore = {
     }
     return emp
   },
+  uploadDocument(id, docKey, fileData) {
+    const emp = storeState.employees.find((e) => e.id === id || e._id === id || e.employeeId === id)
+    if (!emp) return false
+    const docs = { ...(emp.onboardingDocs || {}) }
+    const currentDoc = docs[docKey] ? { ...docs[docKey] } : null
+    const hasExistingFile = Boolean(currentDoc && (currentDoc.url || currentDoc.fileName || (Array.isArray(currentDoc.files) && currentDoc.files.length > 0)))
+    const isReuploadAuthorized = Boolean(
+      currentDoc && (
+        currentDoc.reuploadRequested === true ||
+        currentDoc.status === 'reupload_requested' ||
+        currentDoc.status === 'rejected'
+      )
+    )
+
+    if (hasExistingFile && !isReuploadAuthorized) {
+      throw new Error(`Document "${docKey}" is already submitted and locked. You cannot re-upload unless HR explicitly requests a change.`)
+    }
+
+    const currentVersion = Number(currentDoc?.version || 1)
+    const currentHistory = Array.isArray(currentDoc?.history) ? [...currentDoc.history] : []
+    if (hasExistingFile) {
+      currentHistory.push({
+        version: currentVersion,
+        fileName: currentDoc.fileName,
+        url: currentDoc.url,
+        size: currentDoc.size,
+        files: currentDoc.files,
+        uploadedAt: currentDoc.uploadedAt,
+        submittedAt: currentDoc.submittedAt,
+        status: currentDoc.status,
+        rejectionReason: currentDoc.rejectionReason,
+        reuploadRemarks: currentDoc.reuploadRemarks,
+        verifiedAt: currentDoc.verifiedAt,
+        verifiedBy: currentDoc.verifiedBy,
+        archivedAt: new Date().toISOString(),
+      })
+    }
+
+    const rawName = String(fileData.fileName || `${docKey}.pdf`).trim()
+    const safeName = rawName.replace(/[/\\]/g, '_').slice(0, 100)
+    docs[docKey] = {
+      status: 'submitted',
+      fileName: safeName,
+      url: fileData.url,
+      size: fileData.size || `${Math.round((fileData.url?.length || 1000) * 0.75 / 1024)} KB`,
+      files: fileData.files || (fileData.url ? [{ name: safeName, url: fileData.url, size: fileData.size }] : []),
+      uploadedAt: new Date().toISOString().slice(0, 10),
+      submittedAt: new Date().toISOString(),
+      version: hasExistingFile ? currentVersion + 1 : 1,
+      reuploadRequested: false,
+      reuploadRequestedAt: null,
+      reuploadRequestedBy: null,
+      reuploadRemarks: null,
+      rejectionReason: null,
+      verifiedAt: null,
+      verifiedBy: null,
+      history: currentHistory,
+    }
+    if (docKey === 'aadharCard') docs.aadharDoc = { ...docs[docKey] }
+    if (docKey === 'panCard') docs.panDoc = { ...docs[docKey] }
+    emp.onboardingDocs = docs
+    emp.onboardingStatus = 'submitted'
+    emp.onboardingSubmittedAt = new Date().toISOString()
+
+    storeState = {
+      ...storeState,
+      employees: storeState.employees.map((e) => (e.id === emp.id || e._id === emp._id || e.employeeId === emp.employeeId) ? { ...emp } : e),
+    }
+    this.addAuditLog('Employee', 'DOCUMENT_UPLOAD', `Uploaded ${docKey} for ${emp.name}`)
+    notifyListeners()
+    if (typeof apiClient !== 'undefined') {
+      const realId = emp.id || emp._id || emp.employeeId || id
+      apiClient.post(`/employees/${encodeURIComponent(realId)}/documents/${encodeURIComponent(docKey)}/upload`, fileData).catch((err) => console.warn('Backend document upload sync error:', err?.message || err))
+    }
+    return emp
+  },
   approveDocument(id, docKey, body = {}) {
     const emp = storeState.employees.find((e) => e.id === id || e._id === id || e.employeeId === id)
     if (!emp) return false
@@ -5518,9 +5112,11 @@ const localStore = {
     docs[docKey] = {
       ...currentDoc,
       status: 'verified',
+      reuploadRequested: false,
+      reuploadRemarks: null,
+      rejectionReason: null,
       verifiedAt: new Date().toISOString(),
       verifiedBy: body.verifiedBy || 'HR Management',
-      rejectionReason: null,
       comments: body.comments || currentDoc.comments,
     }
     if (docKey === 'aadharCard') docs.aadharDoc = { ...docs[docKey] }
@@ -5553,7 +5149,11 @@ const localStore = {
     const currentDoc = docs[docKey] ? { ...docs[docKey] } : {}
     docs[docKey] = {
       ...currentDoc,
-      status: 'rejected',
+      status: 'reupload_requested',
+      reuploadRequested: true,
+      reuploadRequestedAt: new Date().toISOString(),
+      reuploadRequestedBy: body.rejectedBy || 'HR Management',
+      reuploadRemarks: reason,
       rejectedAt: new Date().toISOString(),
       rejectedBy: body.rejectedBy || 'HR Management',
       rejectionReason: reason,
@@ -5886,7 +5486,7 @@ const localStore = {
           exitDetails: {
             resignationDate: exitData.resignationDate || new Date().toISOString().split('T')[0],
             lastWorkingDay: exitData.lastWorkingDay,
-            noticePeriodDays: Number(exitData.noticePeriodDays) || 30,
+            noticePeriodDays: (exitData.noticePeriodDays !== undefined && exitData.noticePeriodDays !== null && exitData.noticePeriodDays !== '') ? (isNaN(Number(exitData.noticePeriodDays)) ? 30 : Number(exitData.noticePeriodDays)) : 30,
             reason: exitData.reason,
             handoverAssignee: exitData.handoverAssignee || 'Unassigned',
             handoverStatus: 'Initiated',
@@ -6180,55 +5780,70 @@ const localStore = {
     }
   },
   checkOut(...args) {
-    let employeeId, employeeName, date, offCampusDurationMinutes = 0
+    let employeeId, employeeName, date, offCampusDurationMinutes = 0, autoPunchOut = false, completionTime = null, disconnectionTime = null, punchOutReason = null
     if (typeof args[0] === 'object' && args[0] !== null) {
       employeeId = args[0].employeeId
       employeeName = args[0].employeeName
       date = args[0].date || '2026-09-30'
       offCampusDurationMinutes = Number(args[0].offCampusDurationMinutes) || 0
+      autoPunchOut = Boolean(args[0].autoPunchOut)
+      completionTime = args[0].completionTime
+      disconnectionTime = args[0].disconnectionTime
+      punchOutReason = args[0].punchOutReason
     } else {
       [employeeId, employeeName, date = '2026-09-30'] = args
     }
 
     const now = new Date()
-    const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })
+    let effectiveDate = now
+    const targetTime = completionTime || disconnectionTime
+    if (autoPunchOut && targetTime) {
+      const parsed = new Date(targetTime)
+      if (!isNaN(parsed.getTime())) effectiveDate = parsed
+    }
+    const timeStr = effectiveDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })
     storeState.attendance = storeState.attendance.map((att) => {
       if (att.employeeId === employeeId && att.date === date) {
         let totalBreak = att.totalBreakMinutes || 0
         let breaks = Array.isArray(att.breaks) ? [...att.breaks] : []
         if (att.isOnBreak && att.currentBreak?.startAt) {
-          const autoMins = Math.max(1, Math.round((now - new Date(att.currentBreak.startAt)) / 60000))
+          const breakStart = new Date(att.currentBreak.startAt)
+          const breakEnd = (autoPunchOut && effectiveDate < now) ? effectiveDate : now
+          const autoMins = Math.max(1, Math.round((breakEnd - breakStart) / 60000))
           totalBreak += autoMins
           breaks.push({
             type: att.currentBreak.type || 'lunch',
             startTime: att.currentBreak.startTime || timeStr,
             endTime: timeStr,
+            startAt: breakStart,
+            endAt: breakEnd,
             durationMinutes: autoMins,
           })
         }
 
         let elapsedMins = 0
         if (att.checkInAt) {
-          elapsedMins = Math.max(0, Math.floor((now.getTime() - new Date(att.checkInAt).getTime()) / 60000))
+          elapsedMins = Math.max(0, Math.floor((effectiveDate.getTime() - new Date(att.checkInAt).getTime()) / 60000))
         } else if (att.checkIn) {
-          const match = /(\d+):(\d+)(?::(\d+))?\s*(AM|PM)?/i.exec(att.checkIn)
+          const clean = String(att.checkIn).trim().replace(/[\u202F\u00A0]/g, ' ')
+          const match = clean.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/i)
           if (match) {
             let h = parseInt(match[1], 10)
             const m = parseInt(match[2], 10)
-            const meridiem = match[4]?.toUpperCase()
+            const meridiem = match[3]?.toUpperCase()
             if (meridiem === 'PM' && h < 12) h += 12
             if (meridiem === 'AM' && h === 12) h = 0
-            const inDate = new Date(now)
+            const inDate = new Date(effectiveDate)
             inDate.setHours(h, m, 0, 0)
-            elapsedMins = Math.max(0, Math.floor((now.getTime() - inDate.getTime()) / 60000))
+            elapsedMins = Math.max(0, Math.floor((effectiveDate.getTime() - inDate.getTime()) / 60000))
           }
         }
 
-        const netWorkMinutes = Math.max(0, elapsedMins - totalBreak - offCampusDurationMinutes)
+        const netWorkMinutes = Math.max(0, elapsedMins - totalBreak)
         const hours = Math.floor(netWorkMinutes / 60)
         const mins = netWorkMinutes % 60
-        const breakStr = totalBreak > 0 ? ` · ${totalBreak}m Break` : ''
-        const offCampusStr = offCampusDurationMinutes > 0 ? ` · ${offCampusDurationMinutes}m Off-Campus` : ''
+        const tag = autoPunchOut ? 'Auto Punch Out' : 'Completed'
+        const breakStr = totalBreak > 0 ? ` • ${totalBreak}m Break` : ''
 
         let newStatus = att.status || 'present'
         if (att.status !== 'on-leave') {
@@ -6241,24 +5856,27 @@ const localStore = {
           }
         }
 
-        // Neutral baseline check-out: records actual checkout timestamp & duration.
-        // Early logout penalties, month-end LOP, and grace rules are removed pending replacement policy.
+        const reasonToSet = punchOutReason || (autoPunchOut ? 'Auto Punch Out' : '')
+
         return {
           ...att,
           checkOut: timeStr,
-          checkOutAt: now.toISOString(),
+          checkOutAt: effectiveDate.toISOString(),
+          autoPunchOut: Boolean(autoPunchOut),
+          punchOutType: autoPunchOut ? 'auto' : 'manual',
+          punchOutReason: reasonToSet,
           isOnBreak: false,
           currentBreak: null,
           breaks,
           totalBreakMinutes: totalBreak,
-          offCampusMinutes: offCampusDurationMinutes,
+          offCampusMinutes: 0,
           status: newStatus,
           isEarlyLogout: false,
           isLop: false,
           isHalfDay: newStatus === 'half-day' || Boolean(att.isHalfDay),
           earlyLogoutCount: att.earlyLogoutCount || 0,
           notes: att.notes || '',
-          totalHours: `${hours}h ${mins}m (Completed)${breakStr}${offCampusStr}`,
+          totalHours: `${hours}h ${mins}m (Completed)${breakStr}`,
         }
       }
       return att
@@ -6372,7 +5990,36 @@ const localStore = {
         isLate: isNowPresent ? false : (record.isLate !== undefined ? record.isLate : (finalStatus === 'late')),
         lateCount: isNowPresent ? 0 : (record.lateCount ?? existing.lateCount ?? 0),
         earlyLogoutCount: record.earlyLogoutCount ?? existing.earlyLogoutCount ?? 0,
-        totalHours: record.totalHours || existing.totalHours || 'Active (Live)',
+        totalHours: (() => {
+          const tIn = record.checkIn || existing.checkIn;
+          const tOut = record.checkOut !== undefined ? record.checkOut : existing.checkOut;
+          if (!tOut || tOut === '—' || !tIn) return record.totalHours || existing.totalHours || 'Active (Live)';
+          const parse = (t) => {
+            if (!t) return null;
+            const m = String(t).trim().match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?$/i);
+            if (!m) return null;
+            let h = parseInt(m[1], 10);
+            const min = parseInt(m[2], 10);
+            const meridiem = m[3]?.toUpperCase();
+            if (meridiem === 'PM' && h < 12) h += 12;
+            if (meridiem === 'AM' && h === 12) h = 0;
+            return h * 60 + min;
+          };
+          const iM = parse(tIn);
+          const oM = parse(tOut);
+          if (iM !== null && oM !== null) {
+            let diff = oM - iM;
+            if (diff < 0) diff += 1440;
+            const b = Math.max(0, Number(record.totalBreakMinutes ?? existing.totalBreakMinutes ?? 0));
+            const net = Math.max(0, diff - b);
+            const h = Math.floor(net / 60);
+            const min = net % 60;
+            const bPart = b > 0 ? ` • ${b}m Break` : '';
+            const tag = (record.autoPunchOut ?? existing.autoPunchOut) ? 'Auto Punch Out' : 'Completed';
+            return `${h}h ${min}m (${tag})${bPart}`;
+          }
+          return record.totalHours || existing.totalHours || 'Active (Live)';
+        })(),
         notes: record.notes ?? existing.notes ?? '',
         date,
         wifiVerified: isVerified,
@@ -6485,6 +6132,12 @@ const localStore = {
       applicantUser?.department ||
       'General'
 
+    const isHalfDay = Boolean(requestData.isHalfDay || requestData.days === 0.5)
+    const halfDayPeriod = isHalfDay ? (requestData.halfDayPeriod || 'first_half') : null
+    const leaveDays = isHalfDay ? 0.5 : (Number(requestData.days) || 1)
+    const effStartDate = requestData.startDate
+    const effEndDate = isHalfDay ? effStartDate : (requestData.endDate || effStartDate)
+
     // Calculate month-end 25th LOP status
     let doubleLopDays = 0
     let isDoubleLop = Boolean(requestData.isDoubleLop)
@@ -6518,92 +6171,75 @@ const localStore = {
 
     const hasExplicitRole = Boolean(requestData.applicantRole || applicantUser?.role)
 
+    const leavePolicies = storeState.leavePolicies || []
+    const matchedPolicy = leavePolicies.find(p => p.leaveType === (requestData.leaveType || 'casual')) || {}
+    const configuredStage = String(matchedPolicy.approvalStage || 'manager').toLowerCase().trim()
+
+    // Resolve assigned reporting manager
+    const directReportsTo = (applicantEmp?.managerId && employees.find(e => String(e.id || e._id) === String(applicantEmp.managerId) || e.employeeId === applicantEmp.managerId))
+      || (applicantEmp?.reportingManager && employees.find(e => e.name?.toLowerCase() === applicantEmp.reportingManager?.toLowerCase() || e.displayName?.toLowerCase() === applicantEmp.reportingManager?.toLowerCase() || e.email?.toLowerCase() === applicantEmp.reportingManager?.toLowerCase()))
+      || (applicantEmp?.teamLeadId && employees.find(e => String(e.id || e._id) === String(applicantEmp.teamLeadId) || e.employeeId === applicantEmp.teamLeadId))
+      || employees.find(e => (e.role === 'manager' || e.role === 'team_lead') && e.department === department && String(e.id || e._id) !== String(empId))
+      || null
+
     if (requestData.status === 'approved') {
       status = 'approved'
       currentApproverRole = null
     } else if (isLopMonthLeave) {
-      // 25th Month LOP Leave:
-      // Policy requires 25th month LOP leave to go to HR Panel, and upon HR approval, to Admin Panel for LOP approval
       status = 'pending_hr'
       currentApproverRole = 'hr'
       approverId = 'emp-4'
       approverName = 'HR Operations'
-      const mgr = (applicantEmp?.managerId && employees.find(e => String(e.id || e._id) === String(applicantEmp.managerId) || e.employeeId === applicantEmp.managerId))
-        || employees.find(e => (e.role === 'manager' || e.role?.includes('manager')) && e.department === department)
-        || null
-      managerId = mgr?.id || 'emp-r2'
-      managerName = mgr?.name || 'Department Manager'
-    } else if (!hasExplicitRole) {
-      // Legacy uncontextualized direct call (e.g., system-flowchart test fixture)
-      status = 'pending_manager'
-      currentApproverRole = 'manager'
-      managerId = requestData.managerId || 'EDU-MGR-002'
-      managerName = requestData.managerName || 'Sarah Chen'
-      approverId = managerId
-      approverName = managerName
-    } else if (applicantRole === 'manager' || applicantRole === 'revenue_growth_manager' || applicantRole === 'vertical_head') {
+      managerId = directReportsTo?.id || 'emp-r2'
+      managerName = directReportsTo?.name || 'Department Manager'
+    } else if (configuredStage === 'hr') {
+      status = 'pending_hr'
+      currentApproverRole = 'hr'
+      approverId = 'emp-4'
+      approverName = 'HR Operations'
+      managerId = directReportsTo?.id || 'emp-4'
+      managerName = directReportsTo?.name || 'HR Operations'
+    } else if (configuredStage === 'director') {
       status = 'pending_director'
       currentApproverRole = 'director'
       approverId = 'emp-director'
       approverName = 'Managing Director'
-    } else if (applicantRole === 'team_lead') {
-      status = 'pending_manager'
-      currentApproverRole = 'manager'
-      // Find TL's manager
-      const mgr = (applicantEmp?.managerId && employees.find(e => String(e.id || e._id) === String(applicantEmp.managerId) || e.employeeId === applicantEmp.managerId))
-        || employees.find(e => (e.role === 'manager' || e.role?.includes('manager')) && e.department === department)
-        || employees.find(e => e.role === 'manager' || e.role?.includes('manager'))
-      approverId = mgr?.id || 'emp-r2'
-      approverName = mgr?.name || 'Department Manager'
+      managerId = approverId
+      managerName = approverName
+    } else if (configuredStage === 'tl') {
+      status = 'pending_tl'
+      currentApproverRole = 'team_lead'
+      approverId = directReportsTo?.id || 'emp-tl'
+      approverName = directReportsTo?.name || 'Team Lead'
+      managerId = approverId
+      managerName = approverName
+    } else if (applicantRole === 'director' || applicantRole === 'managing_director') {
+      status = 'approved'
+      currentApproverRole = null
+    } else if ((applicantRole === 'manager' || applicantRole === 'revenue_growth_manager' || applicantRole === 'vertical_head') && (!directReportsTo || ['director', 'managing_director'].includes(directReportsTo.role))) {
+      status = 'pending_director'
+      currentApproverRole = 'director'
+      approverId = 'emp-director'
+      approverName = 'Managing Director'
+      managerId = approverId
+      managerName = approverName
+    } else if (directReportsTo) {
+      // Default: Employee has an assigned reporting manager -> Routes directly to assigned manager!
+      const isTL = directReportsTo.role === 'team_lead' || directReportsTo.role === 'team_leader'
+      status = isTL ? 'pending_tl' : 'pending_manager'
+      currentApproverRole = isTL ? 'team_lead' : 'manager'
+      approverId = directReportsTo.id || directReportsTo._id || directReportsTo.employeeId
+      approverName = directReportsTo.name || directReportsTo.displayName || 'Reporting Manager'
       managerId = approverId
       managerName = approverName
     } else {
-      // Regular employee -> Approval goes to their assigned Manager! Team Lead and squad get notified.
-      status = 'pending_manager'
-      currentApproverRole = 'manager'
-
-      // Check who the employee directly reports to:
-      const directReportsTo = (applicantEmp?.managerId && employees.find(e => String(e.id || e._id) === String(applicantEmp.managerId) || e.employeeId === applicantEmp.managerId))
-        || (applicantEmp?.reportingManager && employees.find(e => e.name?.toLowerCase() === applicantEmp.reportingManager?.toLowerCase() || e.displayName?.toLowerCase() === applicantEmp.reportingManager?.toLowerCase()))
-        || null
-
-      let assignedTL = null
-      let assignedMgr = null
-
-      if (directReportsTo) {
-        if (directReportsTo.role === 'team_lead') {
-          // Employee reports to a TL -> That TL is assignedTL, and assignedMgr is TL's manager
-          assignedTL = directReportsTo
-          assignedMgr = (assignedTL.managerId && employees.find(e => String(e.id || e._id) === String(assignedTL.managerId) || e.employeeId === assignedTL.managerId))
-            || employees.find(e => (e.role === 'manager' || e.role?.includes('manager')) && e.department === department)
-            || employees.find(e => e.role === 'manager' || e.role?.includes('manager'))
-            || null
-        } else if (['manager', 'revenue_growth_manager', 'vertical_head'].includes(directReportsTo.role) || directReportsTo.role?.includes('manager')) {
-          // Employee reports directly to a Manager
-          assignedMgr = directReportsTo
-          assignedTL = (applicantEmp?.teamLeadId && employees.find(e => String(e.id || e._id) === String(applicantEmp.teamLeadId)))
-            || employees.find(e => e.role === 'team_lead' && e.department === department)
-            || null
-        } else if (directReportsTo.role === 'director' || directReportsTo.role === 'managing_director') {
-          assignedMgr = directReportsTo
-        }
-      }
-
-      if (!assignedMgr) {
-        assignedMgr = employees.find(e => (e.role === 'manager' || e.role?.includes('manager')) && e.department === department)
-          || employees.find(e => e.role === 'manager' || e.role?.includes('manager'))
-          || null
-      }
-      if (!assignedTL) {
-        assignedTL = employees.find(e => e.role === 'team_lead' && e.department === department) || null
-      }
-
-      managerId = assignedMgr?.id || 'emp-r2'
-      managerName = assignedMgr?.name || 'Department Manager'
-      approverId = managerId
-      approverName = managerName
-      tlId = assignedTL?.id || null
-      tlName = assignedTL?.name || null
+      // Fallback when no manager is configured
+      status = 'pending_hr'
+      currentApproverRole = 'hr'
+      approverId = 'emp-4'
+      approverName = 'HR Operations'
+      managerId = approverId
+      managerName = approverName
     }
 
     const newLeave = {
@@ -6613,9 +6249,11 @@ const localStore = {
       department,
       applicantRole,
       leaveType: requestData.leaveType || 'casual',
-      startDate: requestData.startDate,
-      endDate: requestData.endDate,
-      days: Number(requestData.days) || 1,
+      startDate: effStartDate,
+      endDate: effEndDate,
+      days: leaveDays,
+      isHalfDay,
+      halfDayPeriod,
       reason: requestData.reason,
       status: requestData.status || status,
       currentApproverRole,
@@ -6768,7 +6406,7 @@ const localStore = {
       || null
 
     // Managing Director lookup
-    const directorEmp = employees.find(e => e.role === 'director' || e.role === 'managing_director')
+    const directorEmp = employees.find(e => e.role === 'director' || e.role === 'managing_director' || e.email === 'jagadishbabu@edufyitech.in')
       || null
 
     // Team lead lookup
@@ -7035,7 +6673,7 @@ const localStore = {
       }
     }
     // Case 3: Manager leave approved by Managing Director (pending_director -> approved -> HR Panel)
-    else if (reviewerRole === 'director' || req.status === 'pending_director') {
+    else if (['director', 'managing_director'].includes(reviewerRole) || req.status === 'pending_director') {
       storeState.leaves = storeState.leaves.map((l) =>
         l.id === leaveId
           ? {
@@ -7238,7 +6876,7 @@ const localStore = {
       })
     }
     // If Director rejected a Manager request -> HR Panel gets notified
-    else if (reviewerRole === 'director' || req.applicantRole === 'manager') {
+    else if (['director', 'managing_director'].includes(reviewerRole) || req.applicantRole === 'manager') {
       this.addNotification({
         title: '[HR Record] Manager Leave Declined by Director',
         message: `Managing Director declined leave request for Manager ${req.employeeName}. Reason: ${reason}`,
@@ -8192,7 +7830,7 @@ const localStore = {
         employeeId: emp.employeeId || emp.id,
         employeeRef: emp._id || emp.id,
         employeeName: emp.name,
-        designation: emp.designation || 'Specialist',
+        designation: emp.designation || 'Pending Designation',
         department: emp.department || 'General',
         location: emp.location || 'Headquarters',
         month: month || 'October 2026',
@@ -8302,12 +7940,10 @@ const localStore = {
       const name = String(emp.name || '').trim().toLowerCase()
       return (
         empId === 'EDU-ADM-001' ||
+        empId === 'EDU-ADM-002' ||
         id === 'emp-3' ||
         id === 'user-admin-1' ||
-        (role === 'admin' && (name === 'admin' || empId === 'EDU-ADM-001')) ||
-        empId === 'EDU-HR-001' ||
-        id === 'emp-4' ||
-        (role === 'hr' && (name === 'hr' || empId === 'EDU-HR-001'))
+        (role === 'admin' && (name === 'admin' || empId.includes('ADM')))
       )
     }
 
@@ -8318,7 +7954,7 @@ const localStore = {
     employees.forEach((emp) => {
       const id = String(emp.id || emp._id)
       let effectiveManagerId = emp.managerId ? String(emp.managerId) : null
-      if (effectiveManagerId === 'emp-3' || effectiveManagerId === 'EDU-ADM-001' || effectiveManagerId === 'emp-4' || effectiveManagerId === 'EDU-HR-001') {
+      if (effectiveManagerId === 'emp-3' || effectiveManagerId === 'EDU-ADM-001' || effectiveManagerId === 'user-admin-1') {
         effectiveManagerId = null
       }
       byId.set(id, { ...emp, id, managerId: effectiveManagerId, children: [] })
@@ -8469,18 +8105,46 @@ const localStore = {
         roots = [byId.get(String(primaryRoot.id || primaryRoot._id))]
       }
     } else {
-      roots = employees
-        .filter((emp) => {
-          const node = byId.get(String(emp.id || emp._id))
-          const mgrId = node?.managerId ? String(node.managerId) : null
-          return !mgrId || !byId.has(mgrId)
-        })
-        .map((emp) => byId.get(String(emp.id || emp._id)))
-        .filter(Boolean)
+      // Prioritize Managing Director / CEO as the primary single top root
+      const topDirector = employees.find((e) =>
+        e.role === 'managing_director' ||
+        (e.role === 'director' && !e.managerId) ||
+        (e.designation && e.designation.toLowerCase().includes('managing director')) ||
+        (e.name && /jagadish\s*babu/i.test(e.name))
+      )
 
-      roots.forEach((root) => {
-        calculateTeamCounts(String(root.id || root._id))
-      })
+      if (topDirector && !rootId) {
+        const topDirectorId = String(topDirector.id || topDirector._id)
+        // If any employees have broken or missing manager IDs, safely re-parent under topDirector so no orphaned roots exist
+        employees.forEach((emp) => {
+          const id = String(emp.id || emp._id)
+          if (id !== topDirectorId) {
+            const node = byId.get(id)
+            const mgrId = node?.managerId ? String(node.managerId) : null
+            if (!mgrId || !byId.has(mgrId)) {
+              if (!childrenMap.has(topDirectorId)) childrenMap.set(topDirectorId, [])
+              if (!childrenMap.get(topDirectorId).includes(id)) {
+                childrenMap.get(topDirectorId).push(id)
+              }
+            }
+          }
+        })
+        calculateTeamCounts(topDirectorId)
+        roots = [byId.get(topDirectorId)]
+      } else {
+        roots = employees
+          .filter((emp) => {
+            const node = byId.get(String(emp.id || emp._id))
+            const mgrId = node?.managerId ? String(node.managerId) : null
+            return !mgrId || !byId.has(mgrId)
+          })
+          .map((emp) => byId.get(String(emp.id || emp._id)))
+          .filter(Boolean)
+
+        roots.forEach((root) => {
+          calculateTeamCounts(String(root.id || root._id))
+        })
+      }
     }
 
     const deptMap = new Map()
@@ -8600,7 +8264,7 @@ const localStore = {
     return updated
   },
 
-  transferEmployeeDepartment(employeeId, newDepartment, newManagerId, actor = 'System') {
+  transferEmployeeDepartment(employeeId, newDepartment, newManagerId, actor = 'System', extra = {}) {
     if (newManagerId) {
       const validation = this.validateManagerAssignment(employeeId, newManagerId)
       if (!validation.valid) {
@@ -8615,7 +8279,7 @@ const localStore = {
     if (newManagerId !== undefined) {
       if (newManagerId) {
         const mgr = this.getEmployee(newManagerId)
-        newMgrName = mgr ? mgr.name : null
+        newMgrName = mgr ? (mgr.displayName || mgr.name) : null
       } else {
         newMgrName = null
       }
@@ -8624,6 +8288,9 @@ const localStore = {
     const updated = this.updateEmployee(emp.id, {
       department: newDepartment,
       ...(newManagerId !== undefined ? { managerId: newManagerId || null, managerName: newMgrName } : {}),
+      ...(extra.squad !== undefined ? { squad: extra.squad, team: extra.squad } : {}),
+      ...(extra.designation !== undefined ? { designation: extra.designation } : {}),
+      ...(extra.role !== undefined ? { role: extra.role } : {}),
     })
 
     this.addAuditLog(

@@ -144,19 +144,20 @@ export function getDailyAttendanceStatus(r, attendanceRules = null) {
 }
 
 /**
- * Returns late occurrence count for the month and corresponding LOP day deduction dynamically:
- * - Only counts if the punch-in was late
- * - 3 late logins = 0.5 LOP day
- * - 6 late logins = 1.0 LOP day
+ * Returns late & early logout occurrence count for the month and corresponding LOP day deduction:
+ * - Policy: Late Login and Early Logout are combined together
+ * - Every 3 occurrences (e.g. 2 early logout + 1 late login = 3) = 0.5 LOP day
+ * - 6 occurrences = 1.0 LOP day
  */
 export function getLateCountInfo(r, allAttendance = [], targetDate = '', attendanceRules = null) {
-  if (!r) return { count: 0, lopDays: 0 }
+  if (!r) return { count: 0, lopDays: 0, lateCount: 0, earlyLogoutCount: 0, isLate: false, isEarlyLogout: false }
   const empCode = String(r.employeeId || '').toUpperCase()
   const dateStr = r.date || targetDate || ''
   const monthPrefix = dateStr.slice(0, 7)
 
   // Dynamically test if a record is late under active shift rules
   const isRecordLate = (record) => {
+    if (record.isLate || record.status === 'late') return true
     if (record.checkIn) {
       const inM = parseTimeToMinutes(record.checkIn)
       const startM = attendanceRules?.workStartTime ? parseTimeToMinutes(attendanceRules.workStartTime) : 660
@@ -167,25 +168,114 @@ export function getLateCountInfo(r, allAttendance = [], targetDate = '', attenda
         return inM > (startM + grace)
       }
     }
-    return Boolean(record.isLate || record.status === 'late')
+    return false
   }
 
-  const isCurrentRecordLate = isRecordLate(r)
-  if (!isCurrentRecordLate) {
-    return { count: 0, lopDays: 0 }
+  // Dynamically test if a record is early logout under active shift rules
+  const isRecordEarlyLogout = (record) => {
+    if (record.isEarlyLogout || record.status === 'early-logout') return true
+    if (record.checkIn && record.checkOut && record.checkOut !== '—' && record.checkOut !== '-' && !String(record.checkOut).includes('Active')) {
+      const inM = parseTimeToMinutes(record.checkIn)
+      const outM = parseTimeToMinutes(record.checkOut)
+      if (inM !== null && outM !== null) {
+        let diff = outM - inM
+        if (diff < 0) diff += 1440
+        const netMinutes = Math.max(0, diff - (Number(record.totalBreakMinutes) || 0))
+        const workedHours = netMinutes / 60
+        // 6.5 <= workedHours < 8 -> Early Logout
+        if (workedHours >= 6.5 && workedHours < 8) return true
+      }
+      if (outM !== null && attendanceRules?.workEndTime) {
+        const endM = parseTimeToMinutes(attendanceRules.workEndTime)
+        if (endM !== null && outM < endM && outM >= (endM - 90)) {
+          return true
+        }
+      }
+    }
+    return false
   }
 
-  // Find all attendance records of this employee in the month up to this date that were late
-  const monthLates = (allAttendance || []).filter(
+  const isCurrentLate = isRecordLate(r)
+  const isCurrentEarly = isRecordEarlyLogout(r)
+
+  // If current record is neither late nor early logout, it has no active infraction
+  if (!isCurrentLate && !isCurrentEarly) {
+    return { count: 0, lopDays: 0, lateCount: 0, earlyLogoutCount: 0, isLate: false, isEarlyLogout: false }
+  }
+
+  // Find all attendance records of this employee in the month up to this date
+  const empMonthRecords = (allAttendance || []).filter(
     (a) => String(a.employeeId || '').toUpperCase() === empCode &&
            a.date && a.date.startsWith(monthPrefix) &&
-           a.date <= dateStr &&
-           isRecordLate(a)
-  ).length
+           a.date <= dateStr
+  )
 
-  const count = Math.max(1, monthLates)
-  // On every 3 late logins = 0.5 LOP, for 6 = 1.0 LOP
-  const lopDays = count > 0 ? Math.floor(count / 3) * 0.5 : 0
+  let lateCount = 0
+  let earlyLogoutCount = 0
+  for (const a of empMonthRecords) {
+    if (isRecordLate(a)) lateCount++
+    if (isRecordEarlyLogout(a)) earlyLogoutCount++
+  }
 
-  return { count, lopDays }
+  const totalInfractions = lateCount + earlyLogoutCount
+  // Rule: Any 3 combined (late logins + early logouts) = 0.5 LOP day
+  const lopDays = totalInfractions > 0 ? Math.floor(totalInfractions / 3) * 0.5 : 0
+
+  return {
+    count: Math.max(1, totalInfractions),
+    totalInfractions,
+    lateCount,
+    earlyLogoutCount,
+    lopDays,
+    isLate: isCurrentLate,
+    isEarlyLogout: isCurrentEarly,
+  }
+}
+
+/**
+ * Returns month total infractions (late logins + early logouts) and resulting LOP days for an employee
+ */
+export function getMonthInfractionsSummary(employeeId, allAttendance = [], monthStr = '', attendanceRules = null) {
+  const empCode = String(employeeId || '').toUpperCase()
+  const mPrefix = (monthStr || '').slice(0, 7)
+  const records = (allAttendance || []).filter(
+    (a) => String(a.employeeId || '').toUpperCase() === empCode &&
+           a.date && a.date.startsWith(mPrefix)
+  )
+
+  let lateCount = 0
+  let earlyLogoutCount = 0
+  for (const a of records) {
+    let isLate = a.isLate || a.status === 'late'
+    if (!isLate && a.checkIn) {
+      const inM = parseTimeToMinutes(a.checkIn)
+      const startM = attendanceRules?.workStartTime ? parseTimeToMinutes(attendanceRules.workStartTime) : 660
+      const grace = Number.isFinite(Number(attendanceRules?.gracePeriodMinutes)) ? Number(attendanceRules.gracePeriodMinutes) : 30
+      if (inM !== null && startM !== null) isLate = inM > (startM + grace)
+    }
+    if (isLate) lateCount++
+
+    let isEarly = a.isEarlyLogout || a.status === 'early-logout'
+    if (!isEarly && a.checkIn && a.checkOut && a.checkOut !== '—' && a.checkOut !== '-' && !String(a.checkOut).includes('Active')) {
+      const inM = parseTimeToMinutes(a.checkIn)
+      const outM = parseTimeToMinutes(a.checkOut)
+      if (inM !== null && outM !== null) {
+        let diff = outM - inM
+        if (diff < 0) diff += 1440
+        const workedHours = Math.max(0, diff - (Number(a.totalBreakMinutes) || 0)) / 60
+        if (workedHours >= 6.5 && workedHours < 8) isEarly = true
+      }
+    }
+    if (isEarly) earlyLogoutCount++
+  }
+
+  const combinedCount = lateCount + earlyLogoutCount
+  const lopDays = Math.floor(combinedCount / 3) * 0.5
+
+  return {
+    lateCount,
+    earlyLogoutCount,
+    combinedCount,
+    lopDays,
+  }
 }

@@ -22,6 +22,7 @@ import {
   LifeBuoy,
 } from 'lucide-react'
 import { hrStore } from '../services/hrStore'
+import { apiClient } from '../services/apiClient'
 import { workspaceAction } from '../services/workspaceStore'
 import { useAuth } from '../auth/AuthContext'
 import { formatINR } from '../utils/currency'
@@ -781,7 +782,8 @@ export function WorkspaceNotifications() {
         <div style={{ display: 'flex', gap: '8px' }}>
           <Button
             variant="secondary"
-            onClick={action(() => {
+            onClick={action(async () => {
+              try { await apiClient.patch('/notifications/read-all', {}) } catch {}
               hrStore.markAllNotificationsRead()
               showNotice('All notifications marked as read.')
             })}
@@ -791,8 +793,9 @@ export function WorkspaceNotifications() {
           </Button>
           <Button
             variant="danger"
-            onClick={action(() => {
+            onClick={action(async () => {
               if (window.confirm('Are you sure you want to clear all notifications?')) {
+                try { await apiClient.delete('/notifications/clear-all') } catch {}
                 hrStore.clearAllNotifications()
                 showNotice('All notifications cleared.')
               }

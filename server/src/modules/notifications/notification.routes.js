@@ -1,9 +1,13 @@
 import express from 'express'
+import mongoose from 'mongoose'
 import { Notification } from '../../models/Notification.js'
 import { PushSubscription } from '../../models/PushSubscription.js'
+import { workspaceModels } from '../../models/Workspace.js'
 import {
   createUnifiedNotification,
   broadcastUnifiedNotification,
+  getVapidPublicKey,
+  notificationBus,
 } from '../../services/unifiedNotification.service.js'
 
 export function createNotificationRouter({ auth }) {
@@ -11,9 +15,10 @@ export function createNotificationRouter({ auth }) {
 
   // 1. Get VAPID Public Key for PWA Push Registration
   router.get('/vapid-public-key', (req, res) => {
-    const publicKey = process.env.VAPID_PUBLIC_KEY || ''
+    const publicKey = getVapidPublicKey() || process.env.VAPID_PUBLIC_KEY || ''
     return res.json({
       success: true,
+      publicKey,
       data: {
         publicKey,
         enabled: Boolean(publicKey),
@@ -24,12 +29,89 @@ export function createNotificationRouter({ auth }) {
   // All endpoints below require authentication
   router.use(auth.authenticate)
 
+  // Real-time SSE event stream for instantaneous updates across portals
+  router.get('/stream', async (req, res) => {
+    res.setHeader('Content-Type', 'text/event-stream')
+    res.setHeader('Cache-Control', 'no-cache, no-transform')
+    res.setHeader('Connection', 'keep-alive')
+    res.setHeader('X-Accel-Buffering', 'no')
+    res.flushHeaders?.()
+
+    const user = req.auth.user
+    const candidateIds = new Set([
+      user.employeeId,
+      user.id,
+      user._id ? String(user._id) : null,
+      user.email,
+    ].filter(Boolean).map((s) => String(s).toLowerCase()))
+
+    const userRole = String(user.role || 'employee').toLowerCase()
+    const isLeadership = ['admin', 'hr', 'director', 'managing_director', 'co_founder', 'vertical_head'].includes(userRole)
+    const isManager = isLeadership || ['manager', 'revenue_growth_manager', 'senior_manager', 'team_lead'].includes(userRole)
+
+    // Send connected handshake
+    res.write(`data: ${JSON.stringify({ type: 'connected', timestamp: Date.now() })}\n\n`)
+
+    const onNotification = (notif) => {
+      try {
+        if (!notif) return
+        const targetRec = String(notif.recipientId || notif.employeeId || notif.ownerId || '').toLowerCase()
+        const recRole = String(notif.recipientRole || '').toLowerCase()
+
+        let matches = false
+        if (targetRec && candidateIds.has(targetRec)) {
+          matches = true
+        } else if (recRole === 'all') {
+          matches = true
+        } else if (recRole === 'management' && (isLeadership || isManager)) {
+          matches = true
+        } else if (recRole === 'director' && ['director', 'managing_director', 'co_founder'].includes(userRole)) {
+          matches = true
+        } else if (recRole === 'hr' && (userRole === 'hr' || userRole === 'admin')) {
+          matches = true
+        } else if (recRole === 'admin' && userRole === 'admin') {
+          matches = true
+        } else if (recRole === userRole) {
+          matches = true
+        }
+
+        if (matches) {
+          res.write(`data: ${JSON.stringify({ type: 'notification', data: notif })}\n\n`)
+        }
+      } catch (err) {
+        // Stream writing failed, client probably disconnected
+      }
+    }
+
+    notificationBus.on('new_notification', onNotification)
+
+    // Keep-alive heartbeat every 25 seconds
+    const heartbeat = setInterval(() => {
+      try {
+        res.write(`: heartbeat ${Date.now()}\n\n`)
+      } catch {
+        clearInterval(heartbeat)
+      }
+    }, 25000)
+
+    req.on('close', () => {
+      clearInterval(heartbeat)
+      notificationBus.off('new_notification', onNotification)
+    })
+  })
+
   // 2. Register or update device push subscription
   router.post('/push-subscription', async (req, res, next) => {
     try {
       const user = req.auth.user
       const employeeId = user.employeeId || user.id || String(user._id)
-      const { endpoint, keys, userAgent, platform, deviceType, preferences } = req.body || {}
+      const sub = req.body?.subscription || req.body || {}
+      const endpoint = req.body?.endpoint || sub?.endpoint
+      const keys = req.body?.keys || sub?.keys
+      const platform = req.body?.platform || sub?.platform || 'web'
+      const deviceType = req.body?.deviceType || sub?.deviceType || 'web'
+      const userAgent = req.body?.userAgent || sub?.userAgent || req.headers['user-agent'] || null
+      const preferences = req.body?.preferences || sub?.preferences
 
       if (!endpoint || !keys?.p256dh || !keys?.auth) {
         return res.status(400).json({
@@ -126,26 +208,48 @@ export function createNotificationRouter({ auth }) {
   router.get('/', async (req, res, next) => {
     try {
       const user = req.auth.user
-      const employeeId = user.employeeId || user.id || String(user._id)
-      const { category, unreadOnly, limit = 40, page = 1 } = req.query
+      const candidateIds = Array.from(new Set([
+        user.employeeId,
+        user.id,
+        user._id ? String(user._id) : null,
+        user.email,
+      ].filter(Boolean)))
 
-      const query = {
-        $or: [
-          { recipientId: employeeId },
-          { employeeId: employeeId },
-          { ownerId: employeeId },
-        ],
-      }
+      const { category, unreadOnly, limit = 50, page = 1 } = req.query
 
-      if (['admin', 'hr', 'director', 'manager'].includes(user.role)) {
-        query.$or.push(
+      const userMatches = candidateIds.flatMap((cid) => [
+        { recipientId: cid },
+        { employeeId: cid },
+        { ownerId: cid },
+      ])
+
+      const userRole = String(user.role || 'employee').toLowerCase()
+      const isLeadership = ['admin', 'hr', 'director', 'managing_director', 'co_founder', 'vertical_head'].includes(userRole)
+      const isManager = isLeadership || ['manager', 'revenue_growth_manager', 'senior_manager', 'team_lead'].includes(userRole)
+
+      if (isLeadership) {
+        userMatches.push(
+          { recipientRole: 'management' },
+          { recipientRole: 'leadership' },
+          { recipientRole: 'all' },
+          { recipientRole: user.role },
+          ...(userRole === 'managing_director' || userRole === 'director' ? [{ recipientRole: 'director' }, { recipientRole: 'managing_director' }] : []),
+          ...(userRole === 'admin' ? [{ recipientRole: 'hr' }, { recipientRole: 'director' }] : [])
+        )
+      } else if (isManager) {
+        userMatches.push(
           { recipientRole: 'management' },
           { recipientRole: 'all' },
           { recipientRole: user.role }
         )
       } else {
-        query.$or.push({ recipientRole: 'all' })
+        userMatches.push(
+          { recipientRole: 'all' },
+          { recipientRole: 'employee' }
+        )
       }
+
+      const query = { $or: userMatches }
 
       if (category && category !== 'all') {
         query.category = category
@@ -171,8 +275,8 @@ export function createNotificationRouter({ auth }) {
         data: items.map((item) => ({
           id: item.notificationId || String(item._id),
           _id: String(item._id),
-          title: item.title,
-          message: item.message,
+          title: item.title || item.event || 'Notification',
+          message: item.message || '',
           category: item.category || 'system',
           type: item.category || item.eventType || 'notification',
           eventType: item.eventType,
@@ -200,17 +304,47 @@ export function createNotificationRouter({ auth }) {
     try {
       const { id } = req.params
       const user = req.auth.user
-      const employeeId = user.employeeId || user.id || String(user._id)
+      const candidateIds = Array.from(new Set([
+        user.employeeId,
+        user.id,
+        user._id ? String(user._id) : null,
+        user.email,
+      ].filter(Boolean)))
+
+      const userMatches = candidateIds.flatMap((cid) => [
+        { recipientId: cid },
+        { employeeId: cid },
+        { ownerId: cid },
+      ])
+
+      const idConditions = [{ notificationId: id }]
+      if (mongoose.isValidObjectId(id)) {
+        idConditions.push({ _id: id })
+      }
 
       await Notification.updateOne(
         {
-          $or: [{ _id: id }, { notificationId: id }],
-          $or: [{ recipientId: employeeId }, { employeeId }, { ownerId: employeeId }],
+          $and: [
+            { $or: idConditions },
+            { $or: userMatches },
+          ],
         },
         {
           $set: { read: true, readAt: new Date() },
         }
       )
+
+      if (workspaceModels?.notifications) {
+        await workspaceModels.notifications.updateOne(
+          {
+            $and: [
+              { $or: idConditions },
+              { $or: userMatches },
+            ],
+          },
+          { $set: { read: true } }
+        ).catch(() => {})
+      }
 
       return res.json({ success: true, message: 'Notification marked as read.' })
     } catch (err) {
@@ -218,15 +352,71 @@ export function createNotificationRouter({ auth }) {
     }
   })
 
-  // 7. Mark all notifications read
+  // 7. Delete single notification
+  router.delete('/:id', async (req, res, next) => {
+    try {
+      const { id } = req.params
+      const user = req.auth.user
+      const candidateIds = Array.from(new Set([
+        user.employeeId,
+        user.id,
+        user._id ? String(user._id) : null,
+        user.email,
+      ].filter(Boolean)))
+
+      const userMatches = candidateIds.flatMap((cid) => [
+        { recipientId: cid },
+        { employeeId: cid },
+        { ownerId: cid },
+      ])
+
+      const idConditions = [{ notificationId: id }]
+      if (mongoose.isValidObjectId(id)) {
+        idConditions.push({ _id: id })
+      }
+
+      await Notification.deleteOne({
+        $and: [
+          { $or: idConditions },
+          { $or: userMatches },
+        ],
+      })
+
+      if (workspaceModels?.notifications) {
+        await workspaceModels.notifications.deleteOne({
+          $and: [
+            { $or: idConditions },
+            { $or: userMatches },
+          ],
+        }).catch(() => {})
+      }
+
+      return res.json({ success: true, message: 'Notification removed.' })
+    } catch (err) {
+      return next(err)
+    }
+  })
+
+  // 8. Mark all notifications read
   router.patch('/read-all', async (req, res, next) => {
     try {
       const user = req.auth.user
-      const employeeId = user.employeeId || user.id || String(user._id)
+      const candidateIds = Array.from(new Set([
+        user.employeeId,
+        user.id,
+        user._id ? String(user._id) : null,
+        user.email,
+      ].filter(Boolean)))
+
+      const userMatches = candidateIds.flatMap((cid) => [
+        { recipientId: cid },
+        { employeeId: cid },
+        { ownerId: cid },
+      ])
 
       await Notification.updateMany(
         {
-          $or: [{ recipientId: employeeId }, { employeeId }, { ownerId: employeeId }],
+          $or: userMatches,
           read: false,
         },
         {
@@ -234,21 +424,50 @@ export function createNotificationRouter({ auth }) {
         }
       )
 
+      if (workspaceModels?.notifications) {
+        await workspaceModels.notifications.updateMany(
+          {
+            $or: userMatches,
+            read: false,
+          },
+          {
+            $set: { read: true },
+          }
+        ).catch(() => {})
+      }
+
       return res.json({ success: true, message: 'All notifications marked as read.' })
     } catch (err) {
       return next(err)
     }
   })
 
-  // 8. Clear all notifications
+  // 9. Clear all notifications
   router.delete('/clear-all', async (req, res, next) => {
     try {
       const user = req.auth.user
-      const employeeId = user.employeeId || user.id || String(user._id)
+      const candidateIds = Array.from(new Set([
+        user.employeeId,
+        user.id,
+        user._id ? String(user._id) : null,
+        user.email,
+      ].filter(Boolean)))
+
+      const userMatches = candidateIds.flatMap((cid) => [
+        { recipientId: cid },
+        { employeeId: cid },
+        { ownerId: cid },
+      ])
 
       await Notification.deleteMany({
-        $or: [{ recipientId: employeeId }, { employeeId }, { ownerId: employeeId }],
+        $or: userMatches,
       })
+
+      if (workspaceModels?.notifications) {
+        await workspaceModels.notifications.deleteMany({
+          $or: userMatches,
+        }).catch(() => {})
+      }
 
       return res.json({ success: true, message: 'Notifications cleared.' })
     } catch (err) {
@@ -256,11 +475,11 @@ export function createNotificationRouter({ auth }) {
     }
   })
 
-  // 9. Admin Broadcast Notification
+  // 10. Admin Broadcast Notification
   router.post('/broadcast', async (req, res, next) => {
     try {
       const user = req.auth.user
-      if (!['admin', 'hr', 'director'].includes(user.role)) {
+      if (!['admin', 'hr', 'director', 'managing_director'].includes(user.role)) {
         return res.status(403).json({
           success: false,
           error: { message: 'Only administrators and HR managers can broadcast notifications.' },
@@ -297,11 +516,12 @@ export function createNotificationRouter({ auth }) {
     }
   })
 
-  // 10. Test Push to My Device
+  // 11. Test Push to My Device
   router.post('/test-push', async (req, res, next) => {
     try {
       const user = req.auth.user
       const employeeId = user.employeeId || user.id || String(user._id)
+      const uniqueTestKey = `test_push_${employeeId}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
 
       const result = await createUnifiedNotification({
         employeeId,
@@ -311,6 +531,7 @@ export function createNotificationRouter({ auth }) {
         eventType: 'TEST_PUSH',
         targetUrl: '#/employee',
         priority: 'high',
+        idempotencyKey: uniqueTestKey,
       })
 
       return res.json({
@@ -325,4 +546,3 @@ export function createNotificationRouter({ auth }) {
 
   return router
 }
-

@@ -12,18 +12,34 @@ export function currentPayrollMonth() {
 }
 
 export function normalizeEmployee(employee) {
+  const mgrObj = typeof employee?.managerId === 'object' ? employee.managerId : null
+  const mgrId = mgrObj?._id ? String(mgrObj._id) : (employee?.managerId ? String(employee.managerId) : null)
+  const managerName = mgrObj?.name || employee?.managerName || employee?.reportingManager || ''
+
+  const team = employee?.team || employee?.squad || ''
+  const teamId = employee?.teamId || employee?.squadId || ''
+  const squad = employee?.squad || employee?.team || ''
+  const squadId = employee?.squadId || employee?.teamId || ''
+
   return {
-    ...employee, id: String(employee.id ?? employee._id),
-    managerName: employee.managerId?.name ?? '',
-    managerId: employee.managerId?._id ? String(employee.managerId._id) : employee.managerId,
+    ...employee,
+    id: String(employee?.id ?? employee?._id),
+    managerName,
+    managerId: mgrId,
+    team,
+    teamId,
+    squad,
+    squadId,
+    teamLeadId: employee?.teamLeadId || '',
+    teamLeadName: employee?.teamLeadName || '',
     joiningDate: employee.joiningDate?.slice(0, 10) ?? '',
     employmentEndDate: employee.employmentEndDate?.slice(0, 10) ?? '',
     exitDetails: employee.exitDetails
       ? {
-          ...employee.exitDetails,
-          resignationDate: employee.exitDetails.resignationDate ? String(employee.exitDetails.resignationDate).slice(0, 10) : '',
-          lastWorkingDay: employee.exitDetails.lastWorkingDay ? String(employee.exitDetails.lastWorkingDay).slice(0, 10) : '',
-        }
+        ...employee.exitDetails,
+        resignationDate: employee.exitDetails.resignationDate ? String(employee.exitDetails.resignationDate).slice(0, 10) : '',
+        lastWorkingDay: employee.exitDetails.lastWorkingDay ? String(employee.exitDetails.lastWorkingDay).slice(0, 10) : '',
+      }
       : null,
     offboardingChecklist: Array.isArray(employee.offboardingChecklist) ? employee.offboardingChecklist : [],
   }
@@ -51,10 +67,12 @@ export function normalizeLeave(request, employees) {
     employeeId,
     employeeName,
     department,
-    managerId: request.managerId?.employeeId ?? request.managerId,
+    managerId: request.managerId?._id ? String(request.managerId._id) : (request.managerId?.employeeId ?? (typeof request.managerId === 'string' ? request.managerId : (request.managerId ? String(request.managerId) : null))),
     startDate: request.startDate ? String(request.startDate).slice(0, 10) : '',
     endDate: request.endDate ? String(request.endDate).slice(0, 10) : '',
-    days: request.units ?? request.days ?? 1,
+    isHalfDay: Boolean(request.isHalfDay || request.days === 0.5 || request.units === 0.5),
+    halfDayPeriod: request.halfDayPeriod || null,
+    days: Boolean(request.isHalfDay || request.days === 0.5 || request.units === 0.5) ? 0.5 : (request.units ?? request.days ?? 1),
   }
 }
 
@@ -82,7 +100,8 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
     const activeGeneration = generation
     const actor = user
     refreshing = (async () => {
-      const management = ['admin', 'hr'].includes(actor.role)
+      const isExecutive = ['director', 'managing_director', 'co_founder', 'vertical_head'].includes(actor.role) || actor.email === 'jagadishbabu@edufyitech.in'
+      const management = ['admin', 'hr', 'hr_executive'].includes(actor.role) || isExecutive
       const permissions = actor.permissions ?? []
       const can = (permission) => permissions.includes('*') || permissions.includes(permission)
       const payrollAllowed = management
@@ -112,8 +131,9 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
         leaves: apiClient.get(management ? '/leave/hr/requests' : '/leave/self'),
         payroll: payrollAllowed ? apiClient.get('/payroll') : Promise.resolve({ data: [] }),
         balances: apiClient.get(management ? '/leave/hr/balances' : '/leave/balances'),
-        users: management ? apiClient.get('/auth/users') : Promise.resolve({ data: [] }),
+        users: management ? apiClient.get('/auth/users').catch(() => ({ data: [] })) : Promise.resolve({ data: [] }),
         teamLeaves: !management && can('leave.team.read') ? apiClient.get('/leave/team') : Promise.resolve({ data: [] }),
+        leavePolicies: apiClient.get('/leave/policies').catch(() => ({ data: [] })),
         config: apiClient.get('/attendance/config'),
         payrollSettings: apiClient.get('/payroll/settings').catch(() => ({ data: {} })),
         directory: management ? Promise.resolve({ data: [] }) : apiClient.get('/hierarchy/directory'),
@@ -193,37 +213,30 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
       })
       const finalDepts = Array.from(deptMap.values())
 
-      const baseTeams = rawLocal.getTeams ? rawLocal.getTeams() : []
-      const currentTeams = (state().teams && state().teams.length > 0)
-        ? state().teams
-        : baseTeams
-      const serverTeams = Array.isArray(data.workspace?.teams) ? data.workspace.teams : []
-
-      const teamMap = new Map()
-      currentTeams.forEach((t) => {
-        if (!t) return
-        const key = (t.teamId || t.id || t.name || '').toLowerCase()
-        if (key) teamMap.set(key, { ...t })
-      })
-      baseTeams.forEach((t) => {
-        if (!t) return
-        const key = (t.teamId || t.id || t.name || '').toLowerCase()
-        if (key && !teamMap.has(key)) teamMap.set(key, { ...t })
-      })
-      serverTeams.forEach((s) => {
-        if (!s) return
-        const key = (s.teamId || s.id || s.name || '').toLowerCase()
-        if (key) {
-          const prev = teamMap.get(key) || {}
-          teamMap.set(key, {
-            ...prev,
-            ...s,
-            id: s.id || s.teamId || prev.id,
-            teamId: s.teamId || s.id || prev.teamId,
-          })
-        }
-      })
-      const finalTeams = Array.from(teamMap.values())
+      const serverTeams = Array.isArray(data.workspace?.teams) ? data.workspace.teams : null
+      let finalTeams = []
+      if (serverTeams !== null) {
+        finalTeams = serverTeams.map((s) => ({
+          ...s,
+          id: s.id || s.teamId || s._id,
+          teamId: s.teamId || s.id || s._id,
+        }))
+      } else {
+        const baseTeams = rawLocal.getTeams ? rawLocal.getTeams() : []
+        const currentTeams = (state().teams && state().teams.length > 0) ? state().teams : baseTeams
+        const teamMap = new Map()
+        currentTeams.forEach((t) => {
+          if (!t) return
+          const key = (t.teamId || t.id || t.name || '').toLowerCase()
+          if (key) teamMap.set(key, { ...t })
+        })
+        baseTeams.forEach((t) => {
+          if (!t) return
+          const key = (t.teamId || t.id || t.name || '').toLowerCase()
+          if (key && !teamMap.has(key)) teamMap.set(key, { ...t })
+        })
+        finalTeams = Array.from(teamMap.values())
+      }
 
       const baseRoles = rawLocal.getRoles ? rawLocal.getRoles() : []
       const currentRoles = (state().roles && state().roles.length > 0)
@@ -275,6 +288,8 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
         ...(data.payrollSettings || {}),
       }
       if (rawLocal.getState) {
+        rawLocal.getState().departments = finalDepts
+        rawLocal.getState().teams = finalTeams
         rawLocal.getState().roles = finalRoles
         rawLocal.getState().companySettings = finalCompanySettings
       }
@@ -287,8 +302,8 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
       const serverNotifs = isCleared
         ? []
         : (data.workspace?.notifications ?? [])
-            .filter((n) => n && n.id && !deletedIds.has(n.id))
-            .map((n) => ({ ...n, read: Boolean(n.read || readIds.has(n.id)) }))
+          .filter((n) => n && n.id && !deletedIds.has(n.id))
+          .map((n) => ({ ...n, read: Boolean(n.read || readIds.has(n.id)) }))
 
       Object.assign(state(), {
         ...Object.fromEntries(workspaceKeys.map((key) => [key, data.workspace[key] ?? []])),
@@ -299,6 +314,7 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
         employees: finalEmployees,
         users: resolvedUsers, attendance: data.attendance,
         leaves: [...new Map([...data.leaves, ...data.teamLeaves].map((request) => [request.id ?? request._id, request])).values()].map((request) => normalizeLeave(request, employees)),
+        leavePolicies: Array.isArray(data.leavePolicies?.data) ? data.leavePolicies.data : (Array.isArray(data.leavePolicies) ? data.leavePolicies : []),
         payroll: (data.payroll || []).map((record) => {
           const gross = record.grossEarnings || Object.values(record.earnings ?? {}).reduce((sum, value) => sum + value, 0)
           const totalDeductions = record.totalDeductions || Object.values(record.deductions ?? {}).reduce((sum, value) => sum + value, 0)
@@ -335,22 +351,31 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
       if (refreshing) await refreshing
       if (actorGeneration !== generation || !user) throw new Error('Your session changed. Sign in before saving.')
       const result = await operation()
-      if (actorGeneration === generation) await refresh()
+      if (actorGeneration === generation) {
+        refresh().catch((err) => console.warn('[connectedStore] Background sync error:', err?.message || err))
+      }
       return result && result.data !== undefined ? result.data : result
     })
     mutationQueue = pending.then(() => undefined, () => undefined)
     return pending
   }
   function employeePayload(data) {
-    const allowed = ['employeeId', 'name', 'email', 'password', 'phone', 'department', 'designation', 'location', 'campus', 'employmentType', 'joiningDate', 'employmentEndDate', 'onboardingChecklist', 'offboardingChecklist', 'exitDetails', 'emergencyContact', 'role', 'status', 'salary', 'salaryStructure', 'parentsContact', 'onboardingDocs', 'documents', 'identity', 'onboardingStatus', 'onboardingSubmittedAt', 'onboardingVerifiedAt', 'onboardingVerifiedBy', 'onboardingNotes', 'onboardingRejectionReason', 'financeDetails', 'reportingManager', 'policyConsents', 'complianceDocs']
+    const allowed = ['employeeId', 'name', 'displayName', 'email', 'password', 'phone', 'department', 'team', 'teamId', 'squad', 'squadId', 'teamLeadId', 'teamLeadName', 'managerId', 'managerName', 'designation', 'location', 'campus', 'employmentType', 'joiningDate', 'employmentEndDate', 'onboardingChecklist', 'offboardingChecklist', 'exitDetails', 'emergencyContact', 'role', 'status', 'salary', 'salaryStructure', 'parentsContact', 'onboardingDocs', 'documents', 'identity', 'onboardingStatus', 'onboardingSubmittedAt', 'onboardingVerifiedAt', 'onboardingVerifiedBy', 'onboardingNotes', 'onboardingRejectionReason', 'financeDetails', 'reportingManager', 'policyConsents', 'complianceDocs', 'avatarUrl']
     const payload = Object.fromEntries(allowed.filter((key) => data[key] !== undefined).map((key) => [key, data[key]]))
+    if (payload.team && !payload.squad) payload.squad = payload.team
+    if (payload.squad && !payload.team) payload.team = payload.squad
+    if (payload.teamId && !payload.squadId) payload.squadId = payload.teamId
+    if (payload.squadId && !payload.teamId) payload.teamId = payload.squadId
     if (data.employmentType) {
       const et = String(data.employmentType).trim().toLowerCase().replace(/[-\s]/g, '_')
       payload.employmentType = et === 'contract' ? 'contractor' : (['full_time', 'part_time', 'contractor', 'intern'].includes(et) ? et : 'full_time')
     } else if (data.role && (data.role === 'intern' || String(data.role).toLowerCase().includes('intern'))) {
       payload.employmentType = 'intern'
     }
-    if (data.managerId !== undefined) payload.managerId = data.managerId || null
+    if (data.managerId !== undefined) {
+      const cleanMgr = String(data.managerId || '').trim()
+      payload.managerId = cleanMgr && cleanMgr !== 'null' && cleanMgr !== 'undefined' && cleanMgr !== 'none' ? cleanMgr : null
+    }
     if (data.salary !== undefined) payload.salary = Number(data.salary)
     if (data.salaryStructure !== undefined) payload.salaryStructure = data.salaryStructure
     if (data.policyConsents !== undefined) payload.policyConsents = data.policyConsents
@@ -370,12 +395,224 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
     return payload
   }
   function employee(id) {
-    const record = store.getEmployee(id) || store.getState().employees?.find((e) => e.id === id || e._id === id || e.employeeId === id)
-    if (!record) throw new Error('Employee not found. Refresh the directory and try again.')
+    if (!id) return null
+    const cleanId = String(id).trim()
+    const record = store.getEmployee(cleanId) || store.getState().employees?.find((e) => String(e.id) === cleanId || String(e._id) === cleanId || String(e.employeeId).toUpperCase() === cleanId.toUpperCase())
+    if (!record) return { id: cleanId, _id: cleanId, name: 'Reporting Manager' }
     return record
   }
   return {
     ...createWorkspaceStore(store, mutate, () => user, rawLocal),
+    assignEmployeesToTeam(teamIdOrName, employeeIds, actor) {
+      if (rawLocal.assignEmployeesToTeam) {
+        rawLocal.assignEmployeesToTeam(teamIdOrName, employeeIds, actor)
+      }
+      const cleanTarget = String(teamIdOrName || '').toLowerCase().trim()
+      const allTeams = state().teams || []
+      const targetTeam = allTeams.find(
+        (t) => String(t.id || t.teamId || '').toLowerCase() === cleanTarget || String(t.name || '').toLowerCase() === cleanTarget
+      )
+      const teamName = targetTeam?.name || teamIdOrName
+      const teamId = targetTeam?.id || targetTeam?.teamId || `team-${teamName.toLowerCase().replace(/[^a-z0-9]/g, '_')}`
+      const targetDept = targetTeam?.department || null
+      const selectedSet = new Set((employeeIds || []).map(String))
+
+      state().employees = (state().employees || []).map((emp) => {
+        const empId = String(emp.id || emp._id)
+        const isCurrentInTeam =
+          String(emp.teamId || emp.squadId || '') === String(teamId) ||
+          String(emp.team || emp.squad || '').toLowerCase() === teamName.toLowerCase()
+
+        if (selectedSet.has(empId)) {
+          return {
+            ...emp,
+            team: teamName,
+            teamId: teamId,
+            squad: teamName,
+            squadId: teamId,
+            ...(targetTeam?.teamLeadId ? { teamLeadId: targetTeam.teamLeadId, teamLeadName: targetTeam.teamLeadName || '' } : {}),
+            ...(targetTeam?.managerId ? { managerId: targetTeam.managerId, managerName: targetTeam.managerName || '' } : {}),
+            ...(targetDept && (!emp.department || emp.department === 'Unassigned') ? { department: targetDept } : {}),
+          }
+        } else if (isCurrentInTeam) {
+          return {
+            ...emp,
+            team: '',
+            teamId: '',
+            squad: '',
+            squadId: '',
+          }
+        }
+        return emp
+      })
+      notify()
+
+      if (!user) return Promise.resolve({ success: true })
+      return mutate(async () => {
+        const res = await apiClient.post(`/workspace/teams/${encodeURIComponent(teamIdOrName)}/assign`, {
+          employeeIds: Array.from(employeeIds || []),
+        })
+        return res
+      })
+    },
+    addTeam(data) {
+      if (rawLocal.addTeam) rawLocal.addTeam(data)
+      const name = (data.name || '').trim()
+      const teamId = data.id || data.teamId || `team-${name.toLowerCase().replace(/[^a-z0-9]/g, '_')}`
+      const newTeam = {
+        ...data,
+        id: teamId,
+        teamId,
+        name,
+        department: data.department || 'Revenue Growth',
+        managerId: data.managerId || null,
+        managerName: data.managerName || '',
+        teamLeadId: data.teamLeadId || null,
+        teamLeadName: data.teamLeadName || '',
+        description: data.description || '',
+      }
+      state().teams = [...(state().teams || []).filter((t) => (t.id || t.teamId) !== teamId && t.name?.toLowerCase() !== name.toLowerCase()), newTeam]
+      if (rawLocal.getState) {
+        rawLocal.getState().teams = state().teams
+      }
+      notify()
+      if (!user) return Promise.resolve(newTeam)
+      return mutate(async () => {
+        const res = await apiClient.post('/workspace/teams', {
+          teamId,
+          name,
+          department: newTeam.department,
+          managerId: newTeam.managerId,
+          managerName: newTeam.managerName,
+          teamLeadId: newTeam.teamLeadId,
+          teamLeadName: newTeam.teamLeadName,
+          description: newTeam.description,
+        })
+        return res?.data || newTeam
+      })
+    },
+    updateTeam(teamId, updates) {
+      if (rawLocal.updateTeam) rawLocal.updateTeam(teamId, updates)
+      state().teams = (state().teams || []).map((t) => {
+        if ((t.id || t.teamId) === teamId || t.name?.toLowerCase() === String(teamId).toLowerCase()) {
+          return { ...t, ...updates }
+        }
+        return t
+      })
+      if (rawLocal.getState) {
+        rawLocal.getState().teams = state().teams
+      }
+      notify()
+      if (!user) return Promise.resolve({ success: true })
+      return mutate(async () => {
+        const res = await apiClient.patch(`/workspace/teams/${encodeURIComponent(teamId)}`, updates)
+        return res?.data
+      })
+    },
+    deleteTeam(teamId) {
+      if (!teamId) throw new Error('Team ID is required.')
+      const res = rawLocal.deleteTeam ? rawLocal.deleteTeam(teamId) : true
+      state().teams = (state().teams || []).filter(
+        (t) => (t.id || t.teamId) !== teamId && t.name?.toLowerCase() !== String(teamId).toLowerCase()
+      )
+      if (rawLocal.getState) {
+        rawLocal.getState().teams = state().teams
+      }
+      notify()
+      if (!user) return res
+      return mutate(() => apiClient.delete(`/workspace/teams/${encodeURIComponent(teamId)}`)).then(() => res)
+    },
+    addRole(roleData) {
+      if (rawLocal.addRole) rawLocal.addRole(roleData)
+      const roleId = roleData.id || roleData.roleId || roleData.name.toLowerCase().replace(/[^a-z0-9]/g, '_')
+      const newRole = {
+        ...roleData,
+        id: roleId,
+        roleId,
+        name: roleData.name,
+        description: roleData.description || '',
+        badge: roleData.badge || 'Custom Role',
+        isSystem: false,
+        permissions: roleData.permissions || ['dashboard.read'],
+      }
+      state().roles = [...(state().roles || []).filter((r) => (r.id || r.roleId) !== roleId), newRole]
+      if (rawLocal.getState) {
+        rawLocal.getState().roles = state().roles
+      }
+      notify()
+      if (!user) return Promise.resolve(newRole)
+      return mutate(async () => {
+        const res = await apiClient.post('/workspace/roles', {
+          roleId,
+          name: newRole.name,
+          description: newRole.description,
+          badge: newRole.badge,
+          isSystem: false,
+          permissions: newRole.permissions,
+        })
+        return res?.data || newRole
+      })
+    },
+    updateRole(roleId, updates) {
+      if (rawLocal.updateRole) rawLocal.updateRole(roleId, updates)
+      state().roles = (state().roles || []).map((r) => {
+        if ((r.id || r.roleId) === roleId) {
+          return { ...r, ...updates }
+        }
+        return r
+      })
+      if (rawLocal.getState) {
+        rawLocal.getState().roles = state().roles
+      }
+      notify()
+      if (!user) return Promise.resolve({ success: true })
+      return mutate(async () => {
+        const res = await apiClient.patch(`/workspace/roles/${encodeURIComponent(roleId)}`, updates)
+        return res?.data
+      })
+    },
+    updateRolePermissions(roleId, newPermissions) {
+      if (rawLocal.updateRolePermissions) rawLocal.updateRolePermissions(roleId, newPermissions)
+      state().roles = (state().roles || []).map((r) => {
+        if ((r.id || r.roleId) === roleId) {
+          return { ...r, permissions: newPermissions }
+        }
+        return r
+      })
+      if (rawLocal.getState) {
+        rawLocal.getState().roles = state().roles
+      }
+      notify()
+      if (!user) return Promise.resolve({ success: true })
+      return mutate(async () => {
+        const res = await apiClient.patch(`/workspace/roles/${encodeURIComponent(roleId)}`, {
+          permissions: newPermissions,
+        })
+        return res?.data
+      })
+    },
+    resetRolePermissions(roleId) {
+      if (rawLocal.resetRolePermissions) rawLocal.resetRolePermissions(roleId)
+      notify()
+      if (!user) return Promise.resolve(true)
+      const targetRole = (state().roles || []).find((r) => (r.id || r.roleId) === roleId)
+      return mutate(async () => {
+        const res = await apiClient.patch(`/workspace/roles/${encodeURIComponent(roleId)}`, {
+          permissions: targetRole?.permissions || ['dashboard.read'],
+        })
+        return res?.data
+      })
+    },
+    deleteRole(roleId) {
+      if (rawLocal.deleteRole) rawLocal.deleteRole(roleId)
+      state().roles = (state().roles || []).filter((r) => (r.id || r.roleId) !== roleId)
+      if (rawLocal.getState) {
+        rawLocal.getState().roles = state().roles
+      }
+      notify()
+      if (!user) return Promise.resolve(true)
+      return mutate(() => apiClient.delete(`/workspace/roles/${encodeURIComponent(roleId)}`))
+    },
     deleteDepartment(deptId) {
       if (!deptId) throw new Error('Department ID is required.')
       const res = rawLocal.deleteDepartment ? rawLocal.deleteDepartment(deptId) : true
@@ -453,11 +690,24 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
     refresh,
     updateEmployeeManager(id, managerId) {
       if (!user && rawLocal.updateEmployeeManager) return rawLocal.updateEmployeeManager(id, managerId)
-      return this.updateEmployee(id, { managerId: managerId ? employee(managerId).id : null })
+      const targetMgr = managerId ? employee(managerId) : null
+      const mgrId = targetMgr ? (targetMgr._id || targetMgr.id) : null
+      const mgrName = targetMgr ? (targetMgr.displayName || targetMgr.name) : ''
+      return this.updateEmployee(id, { managerId: mgrId, managerName: mgrName })
     },
-    transferEmployeeDepartment(id, department, managerId) {
-      if (!user && rawLocal.transferEmployeeDepartment) return rawLocal.transferEmployeeDepartment(id, department, managerId)
-      return this.updateEmployee(id, { department, ...(managerId !== undefined ? { managerId: managerId ? employee(managerId).id : null } : {}) })
+    transferEmployeeDepartment(id, department, managerId, extra = {}) {
+      if (!user && rawLocal.transferEmployeeDepartment) return rawLocal.transferEmployeeDepartment(id, department, managerId, extra)
+      const targetMgr = managerId ? employee(managerId) : null
+      const mgrId = managerId !== undefined ? (targetMgr ? (targetMgr._id || targetMgr.id) : null) : undefined
+      const mgrName = managerId !== undefined ? (targetMgr ? (targetMgr.displayName || targetMgr.name) : '') : undefined
+      const payload = {
+        department,
+        ...(extra.squad !== undefined ? { squad: extra.squad, team: extra.squad } : {}),
+        ...(extra.designation !== undefined ? { designation: extra.designation } : {}),
+        ...(extra.role !== undefined ? { role: extra.role } : {}),
+        ...(mgrId !== undefined ? { managerId: mgrId, managerName: mgrName } : {})
+      }
+      return this.updateEmployee(id, payload)
     },
     assignEmployeesToDepartment(deptIdOrName, employeeIds, actor) {
       if (!user && rawLocal.assignEmployeesToDepartment) return rawLocal.assignEmployeesToDepartment(deptIdOrName, employeeIds, actor)
@@ -532,14 +782,15 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
             if (rawLocal.getState) rawLocal.getState().companySettings = updatedCompanySettings
           }
           try {
-            const management = ['admin', 'hr'].includes(user?.role)
+            const isExecutive = ['director', 'managing_director', 'co_founder', 'vertical_head'].includes(user?.role) || user?.email === 'jagadishbabu@edufyitech.in'
+            const management = ['admin', 'hr', 'hr_executive'].includes(user?.role) || isExecutive
             const freshAtt = await apiClient.get(management ? '/attendance' : '/attendance/self')
             if (freshAtt?.data) {
               state().attendance = freshAtt.data
               if (rawLocal.getState) rawLocal.getState().attendance = freshAtt.data
               notify()
             }
-          } catch {}
+          } catch { }
         }
         if (hasPayroll || (!hasAttendance && !hasPayroll)) {
           const payrollPayload = Object.fromEntries(payrollKeys.filter((k) => updates[k] !== undefined).map((k) => [k, updates[k]]))
@@ -660,7 +911,7 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
       if (typeof window !== 'undefined' && window.localStorage) {
         try {
           window.localStorage.setItem('edufyi_holiday_calendar_images_v1', JSON.stringify(updated))
-        } catch (_) {}
+        } catch (_) { }
       }
       if (!user) {
         notify()
@@ -684,7 +935,7 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
       if (typeof window !== 'undefined' && window.localStorage) {
         try {
           window.localStorage.setItem('edufyi_holiday_calendar_images_v1', JSON.stringify(updated))
-        } catch (_) {}
+        } catch (_) { }
       }
       if (!user) {
         notify()
@@ -831,10 +1082,12 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
             docs[docKey] = {
               ...currentDoc,
               status: 'verified',
+              reuploadRequested: false,
+              reuploadRemarks: null,
+              rejectionReason: null,
               verifiedAt: vAt,
               verifiedBy: reviewer,
               ...(validUserId ? { reviewerId: validUserId } : {}),
-              rejectionReason: null,
               comments: body?.comments || currentDoc.comments,
             }
             if (docKey === 'aadharCard') docs.aadharDoc = { ...docs[docKey] }
@@ -878,7 +1131,11 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
             const validUserId = typeof (user?.id ?? user?._id) === 'string' && /^[0-9a-fA-F]{24}$/.test(user?.id ?? user?._id) ? (user.id ?? user._id) : undefined
             docs[docKey] = {
               ...currentDoc,
-              status: 'rejected',
+              status: 'reupload_requested',
+              reuploadRequested: true,
+              reuploadRequestedAt: rAt,
+              reuploadRequestedBy: reviewer,
+              reuploadRemarks: reason,
               rejectedAt: rAt,
               rejectedBy: reviewer,
               ...(validUserId ? { reviewerId: validUserId } : {}),
@@ -1004,6 +1261,11 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
         const emp = employee(id)
         try {
           const res = await apiClient.post(`/employees/${emp.id}/onboarding/reject`, { reason })
+          if (emp) {
+            emp.onboardingStatus = 'action_required'
+            emp.onboardingRejectionReason = reason
+          }
+          notify()
           return res.data
         } catch (err) {
           const isNotFound = err?.status === 404 || err?.statusCode === 404 || err?.response?.status === 404 || err?.code === 'NOT_FOUND' || (typeof err?.message === 'string' && (err.message.toLowerCase().includes('not found') || err.message.includes('404')))
@@ -1013,6 +1275,11 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
                 onboardingStatus: 'action_required',
                 onboardingRejectionReason: reason,
               })
+              if (emp) {
+                emp.onboardingStatus = 'action_required'
+                emp.onboardingRejectionReason = reason
+              }
+              notify()
               return res.data
             } catch (patchErr) {
               if (patchErr?.message?.includes('not editable')) {
@@ -1023,6 +1290,12 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
                   }
                 }
                 const res = await apiClient.patch(`/employees/${emp.id}`, { onboardingDocs: docs })
+                if (emp) {
+                  emp.onboardingStatus = 'action_required'
+                  emp.onboardingRejectionReason = reason
+                  emp.onboardingDocs = docs
+                }
+                notify()
                 return res.data
               }
               throw patchErr
@@ -1030,6 +1303,34 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
           }
           throw err
         }
+      })
+    },
+    approveDocument(id, docKey, body = {}) {
+      if (!user && rawLocal.approveDocument) return rawLocal.approveDocument(id, docKey, body)
+      return mutate(async () => {
+        const emp = employee(id)
+        const res = await apiClient.post(`/employees/${emp.id}/documents/${docKey}/approve`, body)
+        if (emp && emp.onboardingDocs && emp.onboardingDocs[docKey]) {
+          emp.onboardingDocs[docKey].status = 'verified'
+          emp.onboardingDocs[docKey].verifiedAt = new Date().toISOString()
+          emp.onboardingDocs[docKey].verifiedBy = user?.displayName || user?.name || 'HR Reviewer'
+        }
+        notify()
+        return res.data
+      })
+    },
+    rejectDocument(id, docKey, reason, body = {}) {
+      if (!user && rawLocal.rejectDocument) return rawLocal.rejectDocument(id, docKey, reason, body)
+      return mutate(async () => {
+        const emp = employee(id)
+        const res = await apiClient.post(`/employees/${emp.id}/documents/${docKey}/reject`, { reason, ...body })
+        if (emp && emp.onboardingDocs && emp.onboardingDocs[docKey]) {
+          emp.onboardingDocs[docKey].status = 'reupload_requested'
+          emp.onboardingDocs[docKey].reuploadRequested = true
+          emp.onboardingDocs[docKey].reuploadRemarks = reason
+        }
+        notify()
+        return res.data
       })
     },
     initiateExit(employeeId, exitData) {
@@ -1047,10 +1348,13 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
         const checklist = Array.isArray(emp.offboardingChecklist) && emp.offboardingChecklist.length > 0
           ? emp.offboardingChecklist
           : defaultChecklist
+        const parsedNoticeDays = (exitData.noticePeriodDays !== undefined && exitData.noticePeriodDays !== null && exitData.noticePeriodDays !== '')
+          ? Number(exitData.noticePeriodDays)
+          : 30
         const exitDetails = {
           resignationDate: exitData.resignationDate || new Date().toISOString().split('T')[0],
           lastWorkingDay: exitData.lastWorkingDay ? new Date(exitData.lastWorkingDay).toISOString().split('T')[0] : '',
-          noticePeriodDays: Number(exitData.noticePeriodDays) || 30,
+          noticePeriodDays: isNaN(parsedNoticeDays) ? 30 : parsedNoticeDays,
           reason: exitData.reason || 'Resignation',
           handoverAssignee: exitData.handoverAssignee || 'Unassigned',
           handoverStatus: 'Initiated',
@@ -1212,7 +1516,7 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
           const fresh = payloadData ? normalizeEmployee(payloadData) : { ...record, ...data }
           state().employees = (state().employees || []).map((e) => ((e.id === record.id || e._id === record._id || e.employeeId === record.employeeId) ? { ...e, ...fresh } : e))
           if (rawLocal.updateEmployee) {
-            try { rawLocal.updateEmployee(targetId, data) } catch {}
+            try { rawLocal.updateEmployee(targetId, data) } catch { }
           }
           notify()
           return fresh
@@ -1232,7 +1536,7 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
               const fresh = resData ? normalizeEmployee(resData) : { ...record, ...clean }
               state().employees = (state().employees || []).map((e) => ((e.id === record.id || e._id === record._id || e.employeeId === record.employeeId) ? { ...e, ...fresh } : e))
               if (rawLocal.updateEmployee) {
-                try { rawLocal.updateEmployee(targetId, clean) } catch {}
+                try { rawLocal.updateEmployee(targetId, clean) } catch { }
               }
               notify()
               return fresh
@@ -1624,7 +1928,7 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
             if (rawLocal.getState) rawLocal.getState().attendance = freshAtt.data
             notify()
           }
-        } catch {}
+        } catch { }
         return res?.data?.data || res?.data || { success: true }
       })
     },
@@ -1684,6 +1988,9 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
             reason: data.reason || 'Granted by HR Operations',
             status: data.status || 'approved',
             hrComment: data.hrComment || 'Approved by HR Operations',
+            isHalfDay: Boolean(data.isHalfDay || data.days === 0.5),
+            halfDayPeriod: data.halfDayPeriod || null,
+            days: data.days || (data.isHalfDay ? 0.5 : 1),
           })
           if (rawLocal.applyLeave) rawLocal.applyLeave(data, activeUser)
           return res.data
@@ -1694,8 +2001,27 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
             endDate: data.endDate,
             reason: data.reason || 'Leave application',
             replaceOverlap: Boolean(data.replaceOverlap),
+            isHalfDay: Boolean(data.isHalfDay || data.days === 0.5),
+            halfDayPeriod: data.halfDayPeriod || null,
+            days: data.days || (data.isHalfDay ? 0.5 : 1),
           })
-          if (rawLocal.applyLeave) rawLocal.applyLeave(data, activeUser)
+          if (res?.data) {
+            const newRecord = normalizeLeave(res.data)
+            state().leaves = [newRecord, ...(state().leaves || []).filter((l) => l.id !== newRecord.id && l._id !== newRecord._id)]
+          } else if (rawLocal.applyLeave) {
+            rawLocal.applyLeave(data, activeUser)
+          }
+          try {
+            const isExec = ['director', 'managing_director', 'co_founder', 'vertical_head'].includes(user?.role) || user?.email === 'jagadishbabu@edufyitech.in'
+            const isMgmt = ['admin', 'hr', 'hr_executive'].includes(user?.role) || isExec
+            const [freshBal, freshLeaves] = await Promise.all([
+              apiClient.get(isMgmt ? '/leave/hr/balances' : '/leave/balances'),
+              apiClient.get(isMgmt ? '/leave/hr/requests' : '/leave/self')
+            ])
+            if (Array.isArray(freshBal?.data)) state().leaveBalances = freshBal.data
+            if (Array.isArray(freshLeaves?.data)) state().leaves = freshLeaves.data.map(normalizeLeave)
+          } catch { }
+          notify()
           return res.data
         }
       })
@@ -1712,6 +2038,19 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
         try {
           const res = await apiClient.post(endpoint, { comment: comment || 'Approved.' })
           if (rawLocal.approveLeave) rawLocal.approveLeave(leaveId, reviewerRole, comment, activeUser)
+          const target = (state().leaves || []).find((l) => String(l.id) === String(leaveId) || String(l._id) === String(leaveId))
+          if (target) {
+            target.status = res?.data?.status || 'approved'
+            if (res?.data) Object.assign(target, normalizeLeave(res.data))
+          }
+          try {
+            const isExec = ['director', 'managing_director', 'co_founder', 'vertical_head'].includes(user?.role) || user?.email === 'jagadishbabu@edufyitech.in'
+            const isMgmt = ['admin', 'hr', 'hr_executive'].includes(user?.role) || isExec
+            apiClient.get(isMgmt ? '/leave/hr/balances' : '/leave/balances').then((b) => {
+              if (Array.isArray(b?.data)) { state().leaveBalances = b.data; notify() }
+            }).catch(() => { })
+          } catch { }
+          notify()
           return res.data
         } catch (postErr) {
           const fallbackEndpoint = isAdmin
@@ -1719,6 +2058,19 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
             : (isManager ? `/leave/hr/${leaveId}/approve` : `/leave/team/${leaveId}/approve`)
           const res = await apiClient.post(fallbackEndpoint, { comment: comment || 'Approved.' })
           if (rawLocal.approveLeave) rawLocal.approveLeave(leaveId, reviewerRole, comment, activeUser)
+          const target = (state().leaves || []).find((l) => String(l.id) === String(leaveId) || String(l._id) === String(leaveId))
+          if (target) {
+            target.status = res?.data?.status || 'approved'
+            if (res?.data) Object.assign(target, normalizeLeave(res.data))
+          }
+          try {
+            const isExec = ['director', 'managing_director', 'co_founder', 'vertical_head'].includes(user?.role) || user?.email === 'jagadishbabu@edufyitech.in'
+            const isMgmt = ['admin', 'hr', 'hr_executive'].includes(user?.role) || isExec
+            apiClient.get(isMgmt ? '/leave/hr/balances' : '/leave/balances').then((b) => {
+              if (Array.isArray(b?.data)) { state().leaveBalances = b.data; notify() }
+            }).catch(() => { })
+          } catch { }
+          notify()
           return res.data
         }
       })
@@ -1727,7 +2079,7 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
       const activeUser = rejectorUser || user
       if (!user && rawLocal.rejectLeave) return rawLocal.rejectLeave(leaveId, roleOrReason, maybeReason, activeUser)
       return mutate(async () => {
-        const isRole = ['team_lead', 'manager', 'director', 'hr', 'admin'].includes(roleOrReason)
+        const isRole = ['team_lead', 'team_leader', 'manager', 'director', 'hr', 'admin'].includes(roleOrReason)
         const reviewerRole = isRole ? roleOrReason : 'hr'
         const reason = (isRole ? maybeReason : roleOrReason) || 'Declined.'
         if (reviewerRole === 'employee') {
@@ -1736,13 +2088,20 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
           return res.data
         }
         const isAdmin = reviewerRole === 'admin'
-        const isManager = reviewerRole === 'manager' || reviewerRole === 'team_lead'
+        const isManager = reviewerRole === 'manager' || reviewerRole === 'team_lead' || reviewerRole === 'team_leader'
         const endpoint = isAdmin
           ? `/leave/admin/${leaveId}/reject`
           : (isManager ? `/leave/team/${leaveId}/reject` : `/leave/hr/${leaveId}/reject`)
         try {
           const res = await apiClient.post(endpoint, { reason })
           if (rawLocal.rejectLeave) rawLocal.rejectLeave(leaveId, roleOrReason, maybeReason, activeUser)
+          const target = (state().leaves || []).find((l) => String(l.id) === String(leaveId) || String(l._id) === String(leaveId))
+          if (target) {
+            target.status = 'rejected'
+            target.decisionReason = reason
+            if (res?.data) Object.assign(target, res.data)
+          }
+          notify()
           return res.data
         } catch (postErr) {
           const fallbackEndpoint = isAdmin
@@ -1750,6 +2109,13 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
             : (isManager ? `/leave/hr/${leaveId}/reject` : `/leave/team/${leaveId}/reject`)
           const res = await apiClient.post(fallbackEndpoint, { reason })
           if (rawLocal.rejectLeave) rawLocal.rejectLeave(leaveId, roleOrReason, maybeReason, activeUser)
+          const target = (state().leaves || []).find((l) => String(l.id) === String(leaveId) || String(l._id) === String(leaveId))
+          if (target) {
+            target.status = 'rejected'
+            target.decisionReason = reason
+            if (res?.data) Object.assign(target, res.data)
+          }
+          notify()
           return res.data
         }
       })
@@ -1759,6 +2125,11 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
       return mutate(async () => {
         const res = await apiClient.post(`/leave/requests/${leaveId}/cancel`)
         if (rawLocal.cancelLeave) rawLocal.cancelLeave(leaveId)
+        const target = (state().leaves || []).find((l) => String(l.id) === String(leaveId) || String(l._id) === String(leaveId))
+        if (target) {
+          target.status = 'cancelled'
+        }
+        notify()
         return res.data
       })
     },

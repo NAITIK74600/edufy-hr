@@ -104,6 +104,7 @@ function AttendanceModule() {
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [campusFilter, setCampusFilter] = useState('all')
+  const [presenceViewMode, setPresenceViewMode] = useState('all') // 'all' | 'working' | 'not_punched' | 'punched_out'
 
   const [showMarkModal, setShowMarkModal] = useState(false)
   const [markForm, setMarkForm] = useState({
@@ -168,7 +169,7 @@ function AttendanceModule() {
   }, [storeState.companySettings?.locations, storeState.employees])
 
   // Filtered by selected date, search, status, and campus
-  const dailyAttendance = allAttendance.filter((item) => {
+  const baseDailyAttendance = allAttendance.filter((item) => {
     if (item.date !== selectedDate) return false
     if (search) {
       const q = search.toLowerCase()
@@ -188,6 +189,16 @@ function AttendanceModule() {
     return true
   })
 
+  const dailyAttendance = useMemo(() => {
+    if (presenceViewMode === 'working') {
+      return baseDailyAttendance.filter((a) => Boolean(a.checkIn) && !a.checkOut)
+    }
+    if (presenceViewMode === 'punched_out') {
+      return baseDailyAttendance.filter((a) => Boolean(a.checkIn) && Boolean(a.checkOut))
+    }
+    return baseDailyAttendance
+  }, [baseDailyAttendance, presenceViewMode])
+
   const summaryEmployees = allEmployees.filter((emp) => {
     if (campusFilter !== 'all') {
       const empCampus = emp.campus || emp.location || emp.branch || 'Ignite Campus'
@@ -198,6 +209,37 @@ function AttendanceModule() {
 
   // KPIs for the selected date
   const dayRecords = allAttendance.filter((a) => a.date === selectedDate)
+
+  const punchedInWorking = useMemo(() => {
+    return dayRecords.filter((a) => Boolean(a.checkIn) && !a.checkOut)
+  }, [dayRecords])
+
+  const punchedOutList = useMemo(() => {
+    return dayRecords.filter((a) => Boolean(a.checkIn) && Boolean(a.checkOut))
+  }, [dayRecords])
+
+  const notPunchedInList = useMemo(() => {
+    const punchedEmpIdSet = new Set(
+      dayRecords
+        .filter((a) => Boolean(a.checkIn))
+        .flatMap((a) => [
+          String(a.employeeId || '').toUpperCase(),
+          String(a.employeeName || '').toLowerCase(),
+          String(a.id || a._id || '').toLowerCase(),
+        ])
+    )
+    return summaryEmployees.filter((emp) => {
+      if (emp.status !== 'active') return false
+      const code = String(emp.employeeId || '').toUpperCase()
+      const name = String(emp.name || '').toLowerCase()
+      const id = String(emp.id || emp._id || '').toLowerCase()
+      if (search) {
+        const q = search.toLowerCase()
+        if (!name.includes(q) && !code.includes(q)) return false
+      }
+      return !punchedEmpIdSet.has(code) && !punchedEmpIdSet.has(name) && !punchedEmpIdSet.has(id)
+    })
+  }, [dayRecords, summaryEmployees, search])
   const presentCount = dayRecords.filter((a) => a.status === 'present').length
   const lateCount = dayRecords.filter((a) => a.status === 'late').length
   const halfDayCount = dayRecords.filter((a) => a.status === 'half-day').length
@@ -258,6 +300,39 @@ function AttendanceModule() {
     showFeedback(`Recorded attendance for ${emp.name} as ${markForm.status.toUpperCase()}.`)
   })
 
+  function computeWorkDuration(checkIn, checkOut, totalBreakMinutes = 0, isAutoPunchOut = false) {
+    if (!checkIn) return '—'
+    if (!checkOut || checkOut === '—' || String(checkOut).trim() === '') {
+      return 'Active (Live)'
+    }
+    const parseTime = (timeStr) => {
+      if (!timeStr) return null
+      const clean = String(timeStr).trim().replace(/[\u202F\u00A0]/g, ' ')
+      const match = clean.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/i)
+      if (!match) return null
+      let hours = parseInt(match[1], 10)
+      const minutes = parseInt(match[2], 10)
+      const meridiem = match[3]?.toUpperCase()
+      if (meridiem === 'PM' && hours < 12) hours += 12
+      if (meridiem === 'AM' && hours === 12) hours = 0
+      return hours * 60 + minutes
+    }
+    const inMins = parseTime(checkIn)
+    const outMins = parseTime(checkOut)
+    if (inMins === null || outMins === null) {
+      return 'Active (Live)'
+    }
+    let diffMins = outMins - inMins
+    if (diffMins < 0) diffMins += 24 * 60
+    const breaks = Math.max(0, Number(totalBreakMinutes) || 0)
+    const netMinutes = Math.max(0, diffMins - breaks)
+    const hours = Math.floor(netMinutes / 60)
+    const mins = netMinutes % 60
+    const breakStr = breaks > 0 ? ` • ${breaks}m Break` : ''
+    const tag = isAutoPunchOut ? 'Auto Punch Out' : 'Completed'
+    return `${hours}h ${mins}m (${tag})${breakStr}`
+  }
+
   const handleUpdateAttendance = storeAction(async (e) => {
     e.preventDefault()
     if (!editingAttendance) return
@@ -277,9 +352,12 @@ function AttendanceModule() {
       isLop: isNowPresent ? false : Boolean(editingAttendance.isLop ?? (editingAttendance.status === 'lop')),
       totalHours: isCheckOutCleared
         ? 'Active (Live)'
-        : (isNowPresent && typeof editingAttendance.totalHours === 'string' && editingAttendance.totalHours.includes('Late')
-            ? (editingAttendance.checkOut ? '8.0 hrs' : 'Active (Live)')
-            : editingAttendance.totalHours),
+        : computeWorkDuration(
+            editingAttendance.checkIn,
+            editingAttendance.checkOut,
+            editingAttendance.totalBreakMinutes || 0,
+            Boolean(editingAttendance.autoPunchOut)
+          ),
       notes: isNowPresent && typeof editingAttendance.notes === 'string' && (editingAttendance.notes.includes('Late') || editingAttendance.notes.includes('Auto Punch Out'))
         ? 'Verified Attendance (General Shift)'
         : (editingAttendance.notes || ''),
@@ -459,22 +537,46 @@ function AttendanceModule() {
         </button>
       </div>
 
-      {/* KPI Cards */}
-      <section className="module-kpi-grid">
-        <div className="panel module-kpi">
-          <span>Present on-site ({selectedDate})</span>
-          <strong>{presentCount} Staff</strong>
-          <small>Verified via office Wi-Fi network</small>
+      {/* KPI Cards - Interactive Pulse */}
+      <section className="module-kpi-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '12px', marginBottom: '16px' }}>
+        <div
+          className="panel module-kpi"
+          onClick={() => setPresenceViewMode('working')}
+          style={{ cursor: 'pointer', transition: 'all 0.2s ease', border: presenceViewMode === 'working' ? '2px solid #059669' : '1px solid rgba(5, 150, 105, 0.3)', background: presenceViewMode === 'working' ? '#ecfdf5' : 'rgba(5, 150, 105, 0.05)', borderRadius: '10px', padding: '14px 16px' }}
+        >
+          <span style={{ fontSize: '10.5px', color: '#047857', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>🟢 Working Now (Punched In)</span>
+          <strong style={{ font: '700 28px "Space Grotesk", sans-serif', color: '#047857', lineHeight: 1.1, margin: '4px 0' }}>{punchedInWorking.length} Staff</strong>
+          <small style={{ color: '#059669', fontSize: '11px' }}>Click to view on-duty staff</small>
         </div>
-        <div className="panel module-kpi">
-          <span>Active check-ins</span>
-          <strong style={{ color: 'var(--teal)' }}>{dayRecords.filter((a) => Boolean(a.checkIn) && !a.checkOut).length} Staff</strong>
-          <small>Currently checked-in live</small>
+
+        <div
+          className="panel module-kpi"
+          onClick={() => setPresenceViewMode('punched_out')}
+          style={{ cursor: 'pointer', transition: 'all 0.2s ease', border: presenceViewMode === 'punched_out' ? '2px solid #0284c7' : '1px solid rgba(2, 132, 199, 0.3)', background: presenceViewMode === 'punched_out' ? '#eff6ff' : 'rgba(2, 132, 199, 0.05)', borderRadius: '10px', padding: '14px 16px' }}
+        >
+          <span style={{ fontSize: '10.5px', color: '#0284c7', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>🔵 Punched Out</span>
+          <strong style={{ font: '700 28px "Space Grotesk", sans-serif', color: '#0369a1', lineHeight: 1.1, margin: '4px 0' }}>{punchedOutList.length} Staff</strong>
+          <small style={{ color: '#0284c7', fontSize: '11px' }}>Click to view completed shifts</small>
         </div>
-        <div className="panel module-kpi">
-          <span>Approved leaves / Out</span>
-          <strong>{onLeaveCount} Staff</strong>
-          <small>Authorized absence</small>
+
+        <div
+          className="panel module-kpi"
+          onClick={() => setPresenceViewMode('not_punched')}
+          style={{ cursor: 'pointer', transition: 'all 0.2s ease', border: presenceViewMode === 'not_punched' ? '2px solid #dc2626' : '1px solid rgba(239, 68, 68, 0.3)', background: presenceViewMode === 'not_punched' ? '#fef2f2' : 'rgba(239, 68, 68, 0.05)', borderRadius: '10px', padding: '14px 16px' }}
+        >
+          <span style={{ fontSize: '10.5px', color: '#dc2626', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>🔴 Not Punched In</span>
+          <strong style={{ font: '700 28px "Space Grotesk", sans-serif', color: '#dc2626', lineHeight: 1.1, margin: '4px 0' }}>{notPunchedInList.length} Staff</strong>
+          <small style={{ color: '#dc2626', fontSize: '11px' }}>Click to view missing punches</small>
+        </div>
+
+        <div
+          className="panel module-kpi"
+          onClick={() => setPresenceViewMode('all')}
+          style={{ cursor: 'pointer', transition: 'all 0.2s ease', border: presenceViewMode === 'all' ? '2px solid var(--teal)' : '1px solid var(--border)', background: presenceViewMode === 'all' ? 'var(--soft-teal)' : '#fff', borderRadius: '10px', padding: '14px 16px' }}
+        >
+          <span style={{ fontSize: '10.5px', color: 'var(--muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>📋 All Logs / On-site</span>
+          <strong style={{ font: '700 28px "Space Grotesk", sans-serif', color: 'var(--ink)', lineHeight: 1.1, margin: '4px 0' }}>{presentCount} Present</strong>
+          <small style={{ color: 'var(--muted)', fontSize: '11px' }}>{onLeaveCount} on leave · Click to view all</small>
         </div>
       </section>
 
@@ -488,6 +590,73 @@ function AttendanceModule() {
             </div>
 
             <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', width: '100%', marginBottom: '6px' }}>
+                <button
+                  type="button"
+                  onClick={() => setPresenceViewMode('all')}
+                  className="ui-button"
+                  style={{
+                    fontSize: '11px',
+                    padding: '5px 12px',
+                    background: presenceViewMode === 'all' ? 'var(--teal)' : '#fff',
+                    color: presenceViewMode === 'all' ? '#fff' : 'var(--ink)',
+                    border: '1px solid var(--line)',
+                    borderRadius: '6px',
+                    fontWeight: 700,
+                  }}
+                >
+                  All Logs ({baseDailyAttendance.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPresenceViewMode('working')}
+                  className="ui-button"
+                  style={{
+                    fontSize: '11px',
+                    padding: '5px 12px',
+                    background: presenceViewMode === 'working' ? '#047857' : '#ecfdf5',
+                    color: presenceViewMode === 'working' ? '#fff' : '#047857',
+                    border: '1px solid #a7f3d0',
+                    borderRadius: '6px',
+                    fontWeight: 700,
+                  }}
+                >
+                  🟢 Working Now (Punched In, No Out) ({punchedInWorking.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPresenceViewMode('not_punched')}
+                  className="ui-button"
+                  style={{
+                    fontSize: '11px',
+                    padding: '5px 12px',
+                    background: presenceViewMode === 'not_punched' ? '#b91c1c' : '#fef2f2',
+                    color: presenceViewMode === 'not_punched' ? '#fff' : '#b91c1c',
+                    border: '1px solid #fecaca',
+                    borderRadius: '6px',
+                    fontWeight: 700,
+                  }}
+                >
+                  🔴 Not Punched In Today ({notPunchedInList.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPresenceViewMode('punched_out')}
+                  className="ui-button"
+                  style={{
+                    fontSize: '11px',
+                    padding: '5px 12px',
+                    background: presenceViewMode === 'punched_out' ? '#1d4ed8' : '#eff6ff',
+                    color: presenceViewMode === 'punched_out' ? '#fff' : '#1d4ed8',
+                    border: '1px solid #bfdbfe',
+                    borderRadius: '6px',
+                    fontWeight: 700,
+                  }}
+                >
+                  🔵 Punched Out ({punchedOutList.length})
+                </button>
+              </div>
+
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#f7f6f2', border: '1px solid var(--line)', borderRadius: '8px', padding: '0 10px', height: '36px' }}>
                 <span style={{ fontSize: '10px', color: 'var(--muted)', fontWeight: 600 }}>Date:</span>
                 <input
@@ -548,6 +717,72 @@ function AttendanceModule() {
           </div>
 
 
+
+          {/* DEDICATED NOT PUNCHED IN LIST VIEW */}
+          {presenceViewMode === 'not_punched' && (
+            <div style={{ marginTop: '14px' }}>
+              <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', padding: '12px 16px', marginBottom: '14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <AlertCircle size={16} style={{ color: '#dc2626' }} />
+                  <strong style={{ fontSize: '12.5px', color: '#991b1b' }}>
+                    Active Employees Not Punched In on {selectedDate} ({notPunchedInList.length} Staff)
+                  </strong>
+                </div>
+                <span style={{ fontSize: '11px', color: '#b91c1c' }}>
+                  These active team members have not recorded check-in for this work date.
+                </span>
+              </div>
+
+              {notPunchedInList.length === 0 ? (
+                <EmptyState title="All active staff have punched in!" message="Every active employee has recorded attendance for this date." />
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '12px' }}>
+                  {notPunchedInList.map((emp) => (
+                    <div key={emp.id || emp._id || emp.employeeId} style={{ background: '#fff', border: '1px solid #fee2e2', borderRadius: '8px', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <div style={{ width: '34px', height: '34px', borderRadius: '50%', background: '#fee2e2', color: '#dc2626', display: 'grid', placeItems: 'center', fontWeight: 800, fontSize: '12px' }}>
+                            {String(emp.name || 'E').split(' ').map((n) => n[0]).slice(0, 2).join('').toUpperCase()}
+                          </div>
+                          <div>
+                            <strong style={{ fontSize: '13px', color: 'var(--ink)' }}>{emp.name}</strong>
+                            <div style={{ fontSize: '10.5px', color: 'var(--muted)' }}>
+                              {emp.employeeId} · {emp.department || 'General'}
+                            </div>
+                          </div>
+                        </div>
+                        <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '999px', background: '#fee2e2', color: '#dc2626' }}>
+                          Not Punched In
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '6px', borderTop: '1px solid #f8fafc', fontSize: '11px', color: 'var(--muted)' }}>
+                        <span>Designation: {emp.designation || 'Pending Designation'}</span>
+                        <button
+                          type="button"
+                          className="ui-button secondary"
+                          style={{ fontSize: '10px', padding: '3px 8px' }}
+                          onClick={() => {
+                            setMarkForm({
+                              employeeId: emp.employeeId || emp.id || '',
+                              date: selectedDate,
+                              status: 'present',
+                              checkIn: '09:15 AM',
+                              checkOut: '06:15 PM',
+                              wifiSSID: storeState.companySettings?.allowedWifiSSIDs?.[0] || 'Edufyi',
+                              notes: 'Manually logged by HR',
+                            })
+                            setShowMarkModal(true)
+                          }}
+                        >
+                          + Record Punch
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Mobile Attendance Cards for HR */}
           <div className="attendance-cards-mobile" style={{ display: 'none', gap: '10px', marginTop: '14px' }}>
@@ -695,7 +930,8 @@ function AttendanceModule() {
             )}
           </div>
 
-          <div className="attendance-table-desktop">
+          {presenceViewMode !== 'not_punched' && (
+            <div className="attendance-table-desktop">
             <DataTable
               caption="Daily attendance log"
               columns={[
@@ -768,7 +1004,30 @@ function AttendanceModule() {
                     const isLateStatus = r.status === 'late'
                     let displayHours = r.totalHours || '—'
                     if (!r.checkOut || (typeof displayHours === 'string' && displayHours.includes('Active'))) {
-                      displayHours = 'Active (Live)'
+                      let liveMins = 0
+                      if (r.checkInAt) {
+                        liveMins = Math.max(0, Math.floor((Date.now() - new Date(r.checkInAt).getTime()) / 60000))
+                      } else if (r.checkIn) {
+                        const clean = String(r.checkIn).trim().replace(/[\u202F\u00A0]/g, ' ')
+                        const match = clean.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/i)
+                        if (match) {
+                          let h = parseInt(match[1], 10)
+                          const m = parseInt(match[2], 10)
+                          const meridiem = match[3]?.toUpperCase()
+                          if (meridiem === 'PM' && h < 12) h += 12
+                          if (meridiem === 'AM' && h === 12) h = 0
+                          const inDate = new Date()
+                          inDate.setHours(h, m, 0, 0)
+                          liveMins = Math.max(0, Math.floor((Date.now() - inDate.getTime()) / 60000))
+                        }
+                      }
+                      const bMins = Number(r.totalBreakMinutes) || 0
+                      const netM = Math.max(0, liveMins - bMins)
+                      const hh = Math.floor(netM / 60)
+                      const mm = netM % 60
+                      displayHours = `${hh}h ${String(mm).padStart(2, '0')}m (Active)`
+                    } else if (r.checkIn && r.checkOut && (displayHours === '0h 0m' || String(displayHours).startsWith('0h 0m') || displayHours === '8.0 hrs' || displayHours === '—')) {
+                      displayHours = computeWorkDuration(r.checkIn, r.checkOut, r.totalBreakMinutes, r.autoPunchOut)
                     }
                     return (
                       <div>
@@ -839,10 +1098,10 @@ function AttendanceModule() {
                 },
                 {
                   key: 'lateCount',
-                  label: 'Late Count',
+                  label: 'Late / Early Count',
                   render: (r) => {
-                    const { count, lopDays } = getLateCountInfo(r, storeState.attendance, selectedDate, storeState.companySettings?.attendanceRules)
-                    if (!count || count <= 0) {
+                    const info = getLateCountInfo(r, storeState.attendance, selectedDate, storeState.companySettings?.attendanceRules)
+                    if (!info || info.count <= 0) {
                       return <span style={{ color: 'var(--muted)', fontSize: '12px' }}>—</span>
                     }
                     return (
@@ -856,23 +1115,28 @@ function AttendanceModule() {
                             borderRadius: '6px',
                             fontSize: '11px',
                             fontWeight: 700,
-                            background: count >= 3 ? '#fee2e2' : '#fef3c7',
-                            color: count >= 3 ? '#b91c1c' : '#b45309',
-                            border: `1px solid ${count >= 3 ? '#fca5a5' : '#fde68a'}`,
+                            background: info.count >= 3 ? '#fee2e2' : '#fef3c7',
+                            color: info.count >= 3 ? '#b91c1c' : '#b45309',
+                            border: `1px solid ${info.count >= 3 ? '#fca5a5' : '#fde68a'}`,
                           }}
+                          title={`Combined: ${info.count} (${info.lateCount} Late, ${info.earlyLogoutCount} Early Logout)`}
                         >
-                          #{count}
+                          #{info.count}
                         </span>
-                        {lopDays > 0 && (
+                        {info.lopDays > 0 && (
                           <span
                             style={{
                               fontSize: '10.5px',
                               fontWeight: 700,
                               color: '#dc2626',
                               whiteSpace: 'nowrap',
+                              background: '#fef2f2',
+                              padding: '1px 5px',
+                              borderRadius: '4px',
+                              border: '1px solid #fecaca',
                             }}
                           >
-                            {lopDays} LOP
+                            {info.lopDays} LOP
                           </span>
                         )}
                       </div>
@@ -921,6 +1185,7 @@ function AttendanceModule() {
               emptyMessage={`No attendance entries recorded for ${selectedDate}. Click "Auto-Fill Shift" or "Record Attendance" above to log punches.`}
             />
           </div>
+          )}
         </section>
       )}
 
@@ -992,9 +1257,45 @@ function AttendanceModule() {
                 label: 'Late Check-ins',
                 render: (emp) => {
                   const lCount = monthlyAttendance.filter(
-                    (a) => a.employeeId === emp.employeeId && a.status === 'late'
+                    (a) => a.employeeId === emp.employeeId && (a.status === 'late' || a.isLate)
                   ).length
                   return lCount
+                },
+              },
+              {
+                key: 'earlyDays',
+                label: 'Early Logouts',
+                render: (emp) => {
+                  const eCount = monthlyAttendance.filter(
+                    (a) => a.employeeId === emp.employeeId && (a.status === 'early-logout' || a.isEarlyLogout)
+                  ).length
+                  return eCount
+                },
+              },
+              {
+                key: 'combinedInfractions',
+                label: 'Late + Early (Total)',
+                render: (emp) => {
+                  const lCount = monthlyAttendance.filter(
+                    (a) => a.employeeId === emp.employeeId && (a.status === 'late' || a.isLate)
+                  ).length
+                  const eCount = monthlyAttendance.filter(
+                    (a) => a.employeeId === emp.employeeId && (a.status === 'early-logout' || a.isEarlyLogout)
+                  ).length
+                  const total = lCount + eCount
+                  const halfLop = Math.floor(total / 3) * 0.5
+                  return (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <strong>{total}</strong>
+                      {halfLop > 0 ? (
+                        <span style={{ fontSize: '10.5px', fontWeight: 700, color: '#dc2626', background: '#fef2f2', padding: '1px 5px', borderRadius: '4px', border: '1px solid #fecaca' }}>
+                          {halfLop} LOP
+                        </span>
+                      ) : total > 0 ? (
+                        <span style={{ fontSize: '10px', color: '#b45309' }}>({3 - (total % 3)} left to 0.5 LOP)</span>
+                      ) : null}
+                    </div>
+                  )
                 },
               },
               {
@@ -1015,7 +1316,26 @@ function AttendanceModule() {
                   const absents = monthlyAttendance.filter(
                     (a) => a.employeeId === emp.employeeId && a.status === 'absent'
                   ).length
-                  return <span style={{ color: absents ? 'var(--coral)' : 'inherit' }}>{absents} days</span>
+                  const lCount = monthlyAttendance.filter(
+                    (a) => a.employeeId === emp.employeeId && (a.status === 'late' || a.isLate)
+                  ).length
+                  const eCount = monthlyAttendance.filter(
+                    (a) => a.employeeId === emp.employeeId && (a.status === 'early-logout' || a.isEarlyLogout)
+                  ).length
+                  const infractionLop = Math.floor((lCount + eCount) / 3) * 0.5
+                  const totalLop = absents + infractionLop
+                  return (
+                    <div>
+                      <strong style={{ color: totalLop > 0 ? 'var(--coral)' : 'inherit' }}>
+                        {totalLop} days
+                      </strong>
+                      {infractionLop > 0 && (
+                        <div style={{ fontSize: '9.5px', color: '#dc2626', fontWeight: 600 }}>
+                          ({infractionLop}d from 3x late/early)
+                        </div>
+                      )}
+                    </div>
+                  )
                 },
               },
               {
@@ -1577,7 +1897,7 @@ function PayrollModule() {
       employeeId: defaultEmp.employeeId || '',
       employeeName: defaultEmp.name || 'Employee',
       department: defaultEmp.department || 'Operations',
-      designation: defaultEmp.designation || 'Specialist',
+      designation: defaultEmp.designation || 'Pending Designation',
       month: 'September 2026',
       workingDays: 30,
       paidDays: 30,
@@ -2649,7 +2969,7 @@ function PayrollModule() {
       {/* ======================================================== */}
       {/* 2. OFFICIAL PRINTABLE INDIAN PAYSLIP MODAL (INR ₹)       */}
       {/* ======================================================== */}
-      {selectedPayslip && typeof document !== 'undefined' && createPortal(
+      {selectedPayslip && typeof document !== 'undefined' && document?.body && createPortal(
         <div
           className="hr-modal-backdrop"
           onClick={() => setSelectedPayslip(null)}
@@ -3729,7 +4049,7 @@ function HelpDeskModule() {
                       <option value="">-- Choose Dedicated IT Support Employee from Staff List --</option>
                       {(storeState.employees || []).map((emp) => (
                         <option key={emp.id || emp._id} value={String(emp.id || emp._id || emp.employeeId)}>
-                          {emp.name} ({emp.employeeId || 'STAFF'}) — {emp.designation || emp.department || 'IT Specialist'}
+                          {emp.name} ({emp.employeeId || 'STAFF'}) — {emp.designation || 'Pending Designation'}
                         </option>
                       ))}
                     </select>
@@ -3779,7 +4099,7 @@ function HelpDeskModule() {
                       <option value="">-- Choose Dedicated General Support Employee from Staff List --</option>
                       {(storeState.employees || []).map((emp) => (
                         <option key={emp.id || emp._id} value={String(emp.id || emp._id || emp.employeeId)}>
-                          {emp.name} ({emp.employeeId || 'STAFF'}) — {emp.designation || emp.department || 'General'}
+                          {emp.name} ({emp.employeeId || 'STAFF'}) — {emp.designation || 'Pending Designation'}
                         </option>
                       ))}
                     </select>

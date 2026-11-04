@@ -5,6 +5,7 @@
 #   2. HTTP/2 protocol negotiation (h2, h2c, http/1.1)
 #   5. Long-term immutable caching for fingerprinted assets, fonts & images
 #   7. Gzip and Brotli compression for text, scripts, styles, and fonts
+#   8. ACME / Let's Encrypt SSL automated verification
 # ==============================================================================
 
 # 1. Enable HTTP/2 Protocol (if mod_http2 is loaded)
@@ -14,13 +15,18 @@
 
 RewriteEngine On
 
-# 2. FIX 1: Canonical Single-Hop HTTPS & Domain Enforcement
-# If request arrives via old empoyee typo or www, redirect directly to https://employee.edufyitechsolutions.com
+# --- CRITICAL: Let's Encrypt / ACME Challenge Exemption ---
+# Must NOT redirect or proxy .well-known/acme-challenge requests
+RewriteRule ^\.well-known/acme-challenge/ - [L]
+
+# 2. Canonical Single-Hop HTTPS & Domain Enforcement (Exempting ACME)
+RewriteCond %{REQUEST_URI} !^/\.well-known/acme-challenge/
 RewriteCond %{HTTP_HOST} ^(www\.)?empoyee\.edufyitechsolutions\.com$ [NC,OR]
 RewriteCond %{HTTP_HOST} ^www\.employee\.edufyitechsolutions\.com$ [NC]
 RewriteRule ^ https://employee.edufyitechsolutions.com%{REQUEST_URI} [R=301,L]
 
-# Enforce HTTPS on current host
+# Enforce HTTPS on current host (Exempting ACME)
+RewriteCond %{REQUEST_URI} !^/\.well-known/acme-challenge/
 RewriteCond %{HTTPS} off
 RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [R=301,L]
 
@@ -72,7 +78,7 @@ SetEnvIf Request_URI "^/api/v1/events" is_sse=1
   ExpiresByType image/x-icon "access plus 1 year"
 </IfModule>
 
-# 5. FIX 7: Compression (Brotli & Gzip)
+# 5. Compression (Brotli & Gzip)
 <IfModule mod_brotli.c>
   AddOutputFilterByType BROTLI_COMPRESS text/html text/plain text/xml text/css text/javascript
   AddOutputFilterByType BROTLI_COMPRESS application/javascript application/x-javascript
@@ -87,8 +93,9 @@ SetEnvIf Request_URI "^/api/v1/events" is_sse=1
   AddOutputFilterByType DEFLATE image/svg+xml font/woff2 application/font-woff2
 </IfModule>
 
-# 6. Proxy all requests to local Node.js application (Port 3000)
+# 6. Proxy all requests to local Node.js application (Port 30005), EXCLUDING .well-known
 <IfModule mod_proxy.c>
-  RewriteRule ^(.*)$ http://127.0.0.1:3000/$1 [P,L]
-  ProxyPassReverse / http://127.0.0.1:3000/
+  RewriteCond %{REQUEST_URI} !^/\.well-known/acme-challenge/
+  RewriteRule ^(.*)$ http://127.0.0.1:30005/$1 [P,L]
+  ProxyPassReverse / http://127.0.0.1:30005/
 </IfModule>

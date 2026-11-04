@@ -1,5 +1,5 @@
 // Edufyi HR Progressive Web App (PWA) Service Worker
-const CACHE_NAME = 'edufyi-hr-pwa-v10'
+const CACHE_NAME = 'edufyi-hr-pwa-v11'
 const PRECACHE_ASSETS = [
   '/',
   '/index.html',
@@ -100,7 +100,7 @@ self.addEventListener('push', (event) => {
     body: data.body || '',
     icon: data.icon || '/icon-192.png',
     badge: data.badge || '/icon-192.png',
-    tag: data.tag || 'edufyi-notification',
+    tag: (data.tag && String(data.tag).startsWith('edufyi-')) ? String(data.tag) : `edufyi-${data.tag || 'notification'}`,
     data: data.data || {},
     vibrate: [100, 50, 100],
     renotify: true,

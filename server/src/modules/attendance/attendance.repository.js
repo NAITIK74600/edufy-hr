@@ -1,6 +1,43 @@
 import { AttendanceRecord } from '../../models/AttendanceRecord.js'
 import { Employee } from '../../models/Employee.js'
 
+function calculateRecordWorkDuration(record) {
+  if (!record.checkOut || record.checkOut === '—' || !record.checkIn) {
+    return record.totalHours || 'Active (Live)'
+  }
+  const clean = String(record.totalHours || '').trim()
+  if (clean && !clean.startsWith('0h 0m') && clean !== '8.0 hrs' && clean !== 'Active (Live)' && clean !== '0.0 hrs' && clean !== '—') {
+    return record.totalHours
+  }
+
+  const parseTime = (str) => {
+    if (!str) return null
+    const c = String(str).trim().replace(/[\u202F\u00A0]/g, ' ')
+    const m = c.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/i)
+    if (!m) return null
+    let h = parseInt(m[1], 10)
+    const min = parseInt(m[2], 10)
+    const meridiem = m[3]?.toUpperCase()
+    if (meridiem === 'PM' && h < 12) h += 12
+    if (meridiem === 'AM' && h === 12) h = 0
+    return h * 60 + min
+  }
+
+  const inM = parseTime(record.checkIn)
+  const outM = parseTime(record.checkOut)
+  if (inM === null || outM === null) return record.totalHours || 'Active (Live)'
+
+  let diff = outM - inM
+  if (diff < 0) diff += 1440
+  const breaks = Math.max(0, Number(record.totalBreakMinutes) || 0)
+  const net = Math.max(0, diff - breaks)
+  const h = Math.floor(net / 60)
+  const m = net % 60
+  const breakPart = breaks > 0 ? ` · ${breaks}m Break` : ''
+  const tag = record.autoPunchOut ? 'Auto Punch Out' : 'Completed'
+  return `${h}h ${m}m (${tag})${breakPart}`
+}
+
 async function punchIdentity(record) {
   const { id, _id, ...data } = record
   const empCode = String(data.employeeId || '').trim()
@@ -106,12 +143,13 @@ export function createMongoAttendanceRepository() {
         )
       }
     },
-    async findActiveTodayRecords(date) {
-      return AttendanceRecord.find({
-        date,
+        async findActiveTodayRecords(date) {
+      const query = {
         checkIn: { $nin: [null, ''] },
         checkOut: { $in: [null, ''] },
-      }).lean()
+      }
+      if (date) query.date = date
+      return AttendanceRecord.find(query).lean()
     },
     async findByEmployeeAndDate(employeeId, date) {
       const empCode = String(employeeId || '').trim()
@@ -171,6 +209,7 @@ export function createMongoAttendanceRepository() {
       const docs = await AttendanceRecord.find(query).populate('userId', 'name displayName employeeId department').sort({ createdAt: -1 }).lean()
       return docs.map((record) => ({
         ...record, id: String(record._id),
+        totalHours: calculateRecordWorkDuration(record),
         userId: record.userId ? String(record.userId._id ?? record.userId) : null,
         employeeName: record.userId?.displayName || record.userId?.name || record.employeeName,
         department: record.userId?.department,

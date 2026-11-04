@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import {
   ArrowRight,
   ArrowUpRight,
@@ -26,8 +26,10 @@ import { hasPermission } from '../auth/permissions'
 import { findRoute } from '../app/routes'
 import { hrStore } from '../services/hrStore'
 import { Button, PageHeader, StatusBadge } from '../components/ui'
-import { getTimeOfDayGreeting } from '../utils/greeting'
+import { getTimeOfDayGreeting, resolveUserDisplayName } from '../utils/greeting'
 import { todayKey, currentPayrollMonth } from '../services/connectedStore'
+import { CalendarWidgets } from '../components/calendar/CalendarWidgets'
+import { FEATURE_ENTERPRISE_CALENDAR_UNLOCKED } from '../components/HolidayCalendarShowcase'
 
 const metricIcons = {
   activeHeadcount: Users,
@@ -277,6 +279,187 @@ function DashboardWidgets({ storeState }) {
   )
 }
 
+
+function TodayAttendancePulseWidget({ storeState }) {
+  const [pulseTab, setPulseTab] = useState('working') // 'working' | 'not_punched' | 'punched_out'
+  const todayStr = todayKey()
+  const todayAttendance = (storeState?.attendance || []).filter((a) => a.date === todayStr)
+  const workingStaff = todayAttendance.filter((a) => Boolean(a.checkIn) && !a.checkOut)
+  const punchedOutStaff = todayAttendance.filter((a) => Boolean(a.checkIn) && Boolean(a.checkOut))
+
+  const checkedInEmpIds = new Set(
+    todayAttendance
+      .filter((a) => Boolean(a.checkIn))
+      .flatMap((a) => [
+        String(a.employeeId || '').toUpperCase(),
+        String(a.employeeName || '').toLowerCase(),
+        String(a.id || a._id || '').toLowerCase(),
+      ])
+  )
+  const notPunchedStaff = (storeState?.employees || []).filter((emp) => {
+    if (emp.status !== 'active') return false
+    const code = String(emp.employeeId || '').toUpperCase()
+    const name = String(emp.name || '').toLowerCase()
+    const id = String(emp.id || emp._id || '').toLowerCase()
+    return !checkedInEmpIds.has(code) && !checkedInEmpIds.has(name) && !checkedInEmpIds.has(id)
+  })
+
+  const activeList = pulseTab === 'working' ? workingStaff : pulseTab === 'not_punched' ? notPunchedStaff : punchedOutStaff
+
+  return (
+    <section className="panel" style={{ marginTop: '16px', marginBottom: '16px', border: '1px solid var(--line)' }}>
+      <div className="panel-heading" style={{ flexWrap: 'wrap', gap: '10px' }}>
+        <div>
+          <p className="section-kicker">Live Workforce Attendance</p>
+          <h2>Today&apos;s Attendance Pulse ({todayStr})</h2>
+        </div>
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            className="ui-button"
+            onClick={() => setPulseTab('working')}
+            style={{
+              fontSize: '11.5px',
+              fontWeight: 700,
+              padding: '6px 14px',
+              background: pulseTab === 'working' ? '#047857' : '#ecfdf5',
+              color: pulseTab === 'working' ? '#fff' : '#047857',
+              border: '1px solid #a7f3d0',
+              borderRadius: '8px',
+            }}
+          >
+            🟢 Punched In / Working ({workingStaff.length})
+          </button>
+          <button
+            type="button"
+            className="ui-button"
+            onClick={() => setPulseTab('not_punched')}
+            style={{
+              fontSize: '11.5px',
+              fontWeight: 700,
+              padding: '6px 14px',
+              background: pulseTab === 'not_punched' ? '#b91c1c' : '#fef2f2',
+              color: pulseTab === 'not_punched' ? '#fff' : '#b91c1c',
+              border: '1px solid #fecaca',
+              borderRadius: '8px',
+            }}
+          >
+            🔴 Not Punched In ({notPunchedStaff.length})
+          </button>
+          <button
+            type="button"
+            className="ui-button"
+            onClick={() => setPulseTab('punched_out')}
+            style={{
+              fontSize: '11.5px',
+              fontWeight: 700,
+              padding: '6px 14px',
+              background: pulseTab === 'punched_out' ? '#1d4ed8' : '#eff6ff',
+              color: pulseTab === 'punched_out' ? '#fff' : '#1d4ed8',
+              border: '1px solid #bfdbfe',
+              borderRadius: '8px',
+            }}
+          >
+            🔵 Punched Out ({punchedOutStaff.length})
+          </button>
+          <a
+            href="#/hr/attendance"
+            className="ui-button secondary"
+            style={{ fontSize: '11.5px', padding: '6px 14px', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+          >
+            Full Attendance Roster &rarr;
+          </a>
+        </div>
+      </div>
+
+      <div style={{ padding: '14px 16px' }}>
+        {activeList.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '24px 10px', color: 'var(--muted)', fontSize: '12px' }}>
+            {pulseTab === 'not_punched' ? '🎉 All active employees have punched in today!' : pulseTab === 'working' ? 'No staff currently checked-in without checkout.' : 'No completed check-outs yet today.'}
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '10px' }}>
+            {activeList.slice(0, 12).map((item) => {
+              const isEmpRecord = pulseTab === 'not_punched'
+              const name = isEmpRecord ? item.name : item.employeeName
+              const code = isEmpRecord ? item.employeeId : item.employeeId
+              const dept = isEmpRecord ? item.department : (item.department || 'General')
+              const initials = String(name || 'E').split(' ').map((n) => n[0]).slice(0, 2).join('').toUpperCase()
+
+              return (
+                <div
+                  key={isEmpRecord ? (item.id || item._id || item.employeeId) : (item.id || item._id)}
+                  style={{
+                    background: '#f8fafc',
+                    border: '1px solid var(--line)',
+                    borderRadius: '8px',
+                    padding: '10px 12px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: '10px',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+                    <div
+                      style={{
+                        width: '32px',
+                        height: '32px',
+                        borderRadius: '50%',
+                        background: pulseTab === 'working' ? '#dcfce7' : pulseTab === 'not_punched' ? '#fee2e2' : '#dbeafe',
+                        color: pulseTab === 'working' ? '#15803d' : pulseTab === 'not_punched' ? '#b91c1c' : '#1d4ed8',
+                        display: 'grid',
+                        placeItems: 'center',
+                        fontWeight: 800,
+                        fontSize: '11px',
+                        flexShrink: 0,
+                      }}
+                    >
+                      {initials}
+                    </div>
+                    <div style={{ minWidth: 0 }}>
+                      <strong style={{ fontSize: '12.5px', color: 'var(--ink)', display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {name}
+                      </strong>
+                      <span style={{ fontSize: '10px', color: 'var(--muted)', display: 'block' }}>
+                        {code} · {dept}
+                      </span>
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                    {pulseTab === 'working' ? (
+                      <div>
+                        <span style={{ fontSize: '11px', fontWeight: 700, color: '#15803d' }}>{item.checkIn || 'In'}</span>
+                        <small style={{ display: 'block', fontSize: '9px', color: 'var(--muted)' }}>Checked In</small>
+                      </div>
+                    ) : pulseTab === 'not_punched' ? (
+                      <span style={{ fontSize: '10px', fontWeight: 700, color: '#b91c1c', background: '#fee2e2', padding: '2px 6px', borderRadius: '4px' }}>
+                        Absent / Not In
+                      </span>
+                    ) : (
+                      <div>
+                        <span style={{ fontSize: '11px', fontWeight: 700, color: '#1d4ed8' }}>{item.checkOut || 'Done'}</span>
+                        <small style={{ display: 'block', fontSize: '9px', color: 'var(--muted)' }}>Punched Out</small>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+        {activeList.length > 12 && (
+          <div style={{ textAlign: 'center', marginTop: '10px' }}>
+            <a href="#/hr/attendance" style={{ fontSize: '11.5px', color: 'var(--teal)', fontWeight: 600, textDecoration: 'none' }}>
+              + View all {activeList.length} staff in Attendance Module &rarr;
+            </a>
+          </div>
+        )}
+      </div>
+    </section>
+  )
+}
+
 export function OverviewPage() {
   const { user } = useAuth()
   const [storeState, setStoreState] = useState(() => hrStore.getState())
@@ -317,6 +500,14 @@ export function OverviewPage() {
   ]
 
   const isAdmin = user?.role === 'admin'
+  const isExecutive = ['director', 'managing_director', 'co_founder', 'vertical_head'].includes(user?.role) || user?.email === 'jagadishbabu@edufyitech.in'
+  const greetingName = isAdmin
+    ? 'Admin'
+    : isExecutive
+    ? (user?.displayName || user?.name || resolveUserDisplayName(user, storeState?.employees || []) || 'Jagadish Babu')
+    : (user?.role === 'hr' || user?.role === 'hr_executive')
+    ? 'HR'
+    : resolveUserDisplayName(user, storeState?.employees || [])
 
   // Dynamic live Daily HR Priorities
   const currentMonth = currentPayrollMonth()
@@ -452,15 +643,17 @@ export function OverviewPage() {
   return (
     <>
       <PageHeader
-        eyebrow={isAdmin ? 'Executive Administration' : 'Enterprise HR Operations'}
-        title={`${getTimeOfDayGreeting()}, ${isAdmin ? 'Admin' : 'HR'} ${isAdmin ? '🛡️' : '✦'}`}
+        eyebrow={isAdmin ? 'Executive Administration' : isExecutive ? 'Executive Leadership Console' : 'Enterprise HR Operations'}
+        title={`${getTimeOfDayGreeting()}, ${greetingName} ${isAdmin ? '🛡️' : isExecutive ? '👔' : '✦'}`}
         description={
-          isAdmin
+          isExecutive
+            ? 'Executive overview of workforce operations, attendance rhythm, and organizational analytics.'
+            : isAdmin
             ? 'Centralized administration, user account provisioning, office Wi-Fi security parameters, and live workforce telemetry.'
             : 'Comprehensive workforce management, real-time presence verification, automated payroll, and employee self-service.'
         }
       >
-        <Button as="a" href={isAdmin ? '#/admin/users' : '#/hr/people'}>
+        <Button as="a" href={isAdmin ? '#/admin/users' : isExecutive ? '#/hr/people' : '#/hr/people'}>
           <Users size={16} /> {isAdmin ? 'Manage System Users' : 'View Employee Directory'}
         </Button>
       </PageHeader>
@@ -569,7 +762,13 @@ export function OverviewPage() {
       </section>
 
       {/* Interactive Charts & Action Board */}
+      <TodayAttendancePulseWidget storeState={storeState} />
+
+      {/* Interactive Charts & Action Board */}
       <DashboardWidgets storeState={storeState} />
+
+      {/* Enterprise Calendar & Celebrations Widgets (Feature Locked) */}
+      {FEATURE_ENTERPRISE_CALENDAR_UNLOCKED && <CalendarWidgets user={user} />}
 
       {/* Focus & Priority Section */}
       <section className="advanced-grid">

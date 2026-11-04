@@ -110,6 +110,28 @@ const DEFAULT_ATTENDANCE_RULES = {
   maxGeofenceRadiusMeters: 30,
   strictGeofenceRequired: false,
   requireOfficeNetworkAndGps: true,
+  lunchBreakAutoPause: true,
+  lunchBreakStart: '13:30',
+  lunchBreakEnd: '14:30',
+  autoPunchOutEnabled: true,
+  autoPunchOutTime: '21:30',
+}
+
+export function calculateTimeOverlapMinutes(startA, endA, startB, endB) {
+  const sAM = parseTimeToMinutes(startA)
+  const eAM = parseTimeToMinutes(endA)
+  const sBM = parseTimeToMinutes(startB)
+  const eBM = parseTimeToMinutes(endB)
+
+  if (sAM === null || eAM === null || sBM === null || eBM === null) return 0
+
+  const overlapStart = Math.max(sAM, sBM)
+  const overlapEnd = Math.min(eAM, eBM)
+
+  if (overlapEnd > overlapStart) {
+    return overlapEnd - overlapStart
+  }
+  return 0
 }
 
 export function calculateDistanceMeters(lat1, lon1, lat2, lon2) {
@@ -620,27 +642,19 @@ export function createAttendanceService({ repository, companySettings = {} }) {
     },
 
     async getTodayRecord(employeeId, date = getTodayString()) {
-      if (date === getTodayString()) {
-        await this.autoPunchOutDisconnectedRecords().catch(() => { })
-      }
       return repository.findByEmployeeAndDate(employeeId, date)
     },
 
     async listSelf(user, filters = {}) {
-      await this.autoPunchOutDisconnectedRecords().catch(() => { })
       const employeeId = user.employeeId || user.id
       return repository.list({ ...filters, employeeId })
     },
 
     async listAll(filters = {}) {
-      await this.autoPunchOutDisconnectedRecords().catch(() => { })
       return repository.list(filters)
     },
 
     async getSummary(date = getTodayString()) {
-      if (date === getTodayString()) {
-        await this.autoPunchOutDisconnectedRecords().catch(() => { })
-      }
       return repository.getSummary(date)
     },
 
@@ -864,9 +878,9 @@ export function createAttendanceService({ repository, companySettings = {} }) {
       return repository.save(updated)
     },
 
-    async checkOut({ employeeId, employeeName, date, autoPunchOut = false, punchOutReason = null, offCampusDurationMinutes = 0 }) {
+    async checkOut({ employeeId, employeeName, date, autoPunchOut = false, punchOutReason = null, offCampusDurationMinutes = 0, completionTime = null, disconnectionTime = null }) {
       const workDate = date || getTodayString()
-      if (workDate !== getTodayString()) throw Object.assign(new Error('Self-service attendance can only be recorded for today. Ask HR to correct historical attendance.'), { statusCode: 400, code: 'INVALID_ATTENDANCE_DATE' })
+      if (!autoPunchOut && workDate !== getTodayString()) throw Object.assign(new Error('Self-service attendance can only be recorded for today. Ask HR to correct historical attendance.'), { statusCode: 400, code: 'INVALID_ATTENDANCE_DATE' })
       let existing = await repository.findByEmployeeAndDate(employeeId, workDate)
 
       if (!existing || !existing.checkIn) {
@@ -897,24 +911,72 @@ export function createAttendanceService({ repository, companySettings = {} }) {
         }
       }
 
+      // Determine effective checkout date and checkout time
+      let effectiveCheckOutDate = now
+      let checkOutTime = formatCurrentTime()
+
+      const targetTime = completionTime || disconnectionTime
+      if (autoPunchOut && targetTime) {
+        const parsed = new Date(targetTime).getTime()
+        if (!isNaN(parsed) && parsed > 0) {
+          effectiveCheckOutDate = new Date(parsed)
+          const hh = effectiveCheckOutDate.getHours()
+          const mm = effectiveCheckOutDate.getMinutes()
+          const ampm = hh >= 12 ? 'PM' : 'AM'
+          const formattedH = (hh % 12) || 12
+          const formattedM = String(mm).padStart(2, '0')
+          checkOutTime = `${String(formattedH).padStart(2, '0')}:${formattedM} ${ampm}`
+        }
+      }
+
       // Automatically end active break if employee punches out while on break
       let totalBreakMinutes = Number(existing.totalBreakMinutes || 0)
       let breaksList = Array.isArray(existing.breaks) ? [...existing.breaks] : []
       if (existing.isOnBreak && existing.currentBreak?.startAt) {
         const breakStart = new Date(existing.currentBreak.startAt)
-        const autoDuration = Math.max(1, Math.round((now - breakStart) / 60000))
+        const breakEnd = (autoPunchOut && effectiveCheckOutDate < now) ? effectiveCheckOutDate : now
+        const autoDuration = Math.max(1, Math.round((breakEnd - breakStart) / 60000))
         breaksList.push({
           type: existing.currentBreak.type || 'lunch',
-          startTime: existing.currentBreak.startTime || formatCurrentTime(),
+          startTime: existing.currentBreak.startTime || checkOutTime,
           startAt: breakStart,
-          endTime: formatCurrentTime(),
-          endAt: now,
+          endTime: checkOutTime,
+          endAt: breakEnd,
           durationMinutes: autoDuration,
         })
         totalBreakMinutes += autoDuration
       }
 
-      const checkOutTime = formatCurrentTime()
+      // Dynamic Auto Lunch Break Pause (Admin Configurable, default 1:30 PM to 2:30 PM)
+      const rules = attendanceRules || {}
+      const autoLunchPause = rules.lunchBreakAutoPause ?? true
+      const lStart = rules.lunchBreakStart || '13:30'
+      const lEnd = rules.lunchBreakEnd || '14:30'
+
+      if (autoLunchPause && existing.checkIn) {
+        const overlapMins = calculateTimeOverlapMinutes(existing.checkIn, checkOutTime, lStart, lEnd)
+        if (overlapMins > 0) {
+          let manualOverlapMins = 0
+          for (const b of breaksList) {
+            if (b.isAutoLunch) continue
+            if (b.startTime && b.endTime) {
+              const bOverlap = calculateTimeOverlapMinutes(b.startTime, b.endTime, lStart, lEnd)
+              manualOverlapMins += bOverlap
+            }
+          }
+          const netLunchOverlap = Math.max(0, overlapMins - manualOverlapMins)
+          if (netLunchOverlap > 0) {
+            breaksList.push({
+              type: 'lunch',
+              startTime: lStart,
+              endTime: lEnd,
+              durationMinutes: netLunchOverlap,
+              isAutoLunch: true,
+            })
+            totalBreakMinutes += netLunchOverlap
+          }
+        }
+      }
       const inMins = parseTimeToMinutes(existing.checkIn)
       const outMins = parseTimeToMinutes(checkOutTime)
 
@@ -922,23 +984,36 @@ export function createAttendanceService({ repository, companySettings = {} }) {
       let newStatus = existing.status
 
       const offCampusMinutes = Math.max(0, Math.round(Number(offCampusDurationMinutes) || 0))
-      const elapsed = existing.checkInAt ? Math.floor((now - new Date(existing.checkInAt)) / 60000) : (inMins !== null && outMins !== null ? outMins - inMins : null)
+      let elapsed = null
+      if (inMins !== null && outMins !== null) {
+        let diff = outMins - inMins
+        if (diff < 0) diff += 1440
+        elapsed = diff
+      } else if (existing.checkInAt) {
+        elapsed = Math.floor((now - new Date(existing.checkInAt)) / 60000)
+      }
       if (elapsed !== null && Number.isFinite(elapsed) && elapsed >= 0) {
-        const netWorkMinutes = Math.max(0, elapsed - totalBreakMinutes - offCampusMinutes)
+        const netWorkMinutes = Math.max(0, elapsed - totalBreakMinutes)
         const hours = Math.floor(netWorkMinutes / 60)
         const mins = netWorkMinutes % 60
         const breakPart = totalBreakMinutes > 0 ? ` · ${totalBreakMinutes}m Break` : ''
-        const offCampusPart = offCampusMinutes > 0 ? ` · ${offCampusMinutes}m Off-Campus` : ''
         const tag = autoPunchOut ? 'Auto Punch Out' : 'Completed'
-        totalHoursStr = `${hours}h ${mins}m (${tag})${breakPart}${offCampusPart}`
+        totalHoursStr = `${hours}h ${mins}m (${tag})${breakPart}`
         newStatus = existing.status || 'present'
       }
 
       // Authoritative policy check-out: resolves early logout window & verified campus presence
+      const currentConfig = this.getConfig ? this.getConfig() : null
+      const configGrace = currentConfig?.attendanceRules?.gracePeriodMinutes
       let resolvedOutShift = null
       if (existing.shift) {
         const extracted = extractShiftTimes(existing.shift)
-        resolvedOutShift = normalizeShiftConfig({ shiftId: existing.shiftCode, name: existing.shift, ...extracted })
+        resolvedOutShift = normalizeShiftConfig({
+          shiftId: existing.shiftCode,
+          name: existing.shift,
+          ...(configGrace !== undefined ? { gracePeriodMinutes: configGrace } : {}),
+          ...extracted,
+        })
       } else {
         const resShift = await resolveEmployeeShift(employeeId, workDate)
         resolvedOutShift = resShift.shift
@@ -987,7 +1062,11 @@ export function createAttendanceService({ repository, companySettings = {} }) {
         finalStatus = 'half-day'
       }
 
-      const defaultReason = autoPunchOut ? 'Auto Punch Out (GPS & WiFi disconnected for 2 hrs)' : ''
+      const defaultReason = autoPunchOut ? 'Auto Punch Out (Completed 8 working hours)' : ''
+      if (autoPunchOut) {
+        finalStatus = 'present'
+        finalHalfDay = false
+      }
       const reasonToSet = punchOutReason || defaultReason
 
       const notesArr = [existing.notes, reasonToSet, checkoutEval.notes].filter(Boolean)
@@ -996,7 +1075,7 @@ export function createAttendanceService({ repository, companySettings = {} }) {
       const updated = {
         ...existing,
         checkOut: checkOutTime,
-        checkOutAt: now,
+        checkOutAt: effectiveCheckOutDate,
         totalHours: totalHoursStr,
         status: finalStatus,
         isEarlyLogout: checkoutEval.isEarlyLogout,
@@ -1025,139 +1104,68 @@ export function createAttendanceService({ repository, companySettings = {} }) {
       const isConnected = Boolean(verification.isGpsVerified || verification.isWifiVerified || verification.isIpVerified)
       const workDate = getTodayString()
 
-      const existingBefore = await repository.findByEmployeeAndDate(employeeId, workDate)
-      const wasDisconnected = existingBefore && existingBefore.disconnectedSince
-
       if (repository.updatePresence) {
         await repository.updatePresence(employeeId, workDate, isConnected)
       }
-      let autoPunchedOut = false
-      if (!isConnected) {
-        if (existingBefore && existingBefore.checkIn && !existingBefore.checkOut) {
-          const checkInTimeMs = existingBefore.checkInAt ? new Date(existingBefore.checkInAt).getTime() : null
-          const TWO_HOURS_MS = 2 * 60 * 60 * 1000
-          if (checkInTimeMs && (Date.now() - checkInTimeMs) >= TWO_HOURS_MS) {
-            const disconnectedSince = existingBefore.disconnectedSince ? new Date(existingBefore.disconnectedSince).getTime() : null
-            if (disconnectedSince && disconnectedSince >= checkInTimeMs) {
-              const elapsedMins = (Date.now() - disconnectedSince) / (60 * 1000)
 
-              if (elapsedMins >= 15 && elapsedMins < 25) {
-                dispatchAttendanceNotification({
-                  employeeId,
-                  eventType: 'ATTENDANCE_WARNING_15',
-                  minutesDisconnected: Math.round(elapsedMins),
-                  record: existingBefore,
-                }).catch(() => {})
-              }
-              if (elapsedMins >= 60 && elapsedMins < 75) {
-                dispatchAttendanceNotification({
-                  employeeId,
-                  eventType: 'ATTENDANCE_WARNING_60',
-                  minutesDisconnected: Math.round(elapsedMins),
-                  record: existingBefore,
-                }).catch(() => {})
-              }
-              if (elapsedMins >= 110 && elapsedMins < 120) {
-                dispatchAttendanceNotification({
-                  employeeId,
-                  eventType: 'ATTENDANCE_WARNING_110',
-                  minutesDisconnected: Math.round(elapsedMins),
-                  record: existingBefore,
-                }).catch(() => {})
-              }
-              if (elapsedMins >= 120) {
-                await this.checkOut({
-                  employeeId,
-                  employeeName: existingBefore.employeeName,
-                  date: workDate,
-                  autoPunchOut: true,
-                  punchOutReason: 'Auto Punch Out completed due to 2 hours of inactive office presence.',
-                })
-                autoPunchedOut = true
-                dispatchAttendanceNotification({
-                  employeeId,
-                  eventType: 'AUTO_PUNCH_OUT_COMPLETED',
-                  minutesDisconnected: Math.round(elapsedMins),
-                  record: existingBefore,
-                }).catch(() => {})
-              }
-            }
-          }
-        }
-      } else {
-        if (wasDisconnected) {
-          dispatchAttendanceNotification({
-            employeeId,
-            eventType: 'ATTENDANCE_RESTORED',
-            record: existingBefore,
-          }).catch(() => {})
-        }
-      }
       return {
         ...verification,
         isConnected,
-        autoPunchedOut,
+        autoPunchedOut: false,
+      }
+    },
+
+    async autoPunchOutScheduledCutoff() {
+      try {
+        const settings = await this.getSettings()
+        const rules = settings?.attendanceRules || {}
+        if (rules.autoPunchOutEnabled === false) return []
+
+        const cutOffTimeStr = rules.autoPunchOutTime || '21:30'
+        const cutOffMinutes = parseTimeToMinutes(cutOffTimeStr) ?? (21 * 60 + 30)
+
+        // Compare current time in Asia/Kolkata (IST)
+        const nowIst = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }))
+        const currentMins = nowIst.getHours() * 60 + nowIst.getMinutes()
+
+        if (currentMins < cutOffMinutes) {
+          return [] // Cut-off time not yet reached today
+        }
+
+        const workDate = getTodayString()
+        const activeRecords = await repository.findActiveTodayRecords(workDate)
+        if (!activeRecords || activeRecords.length === 0) return []
+
+        const formattedCutoff = formatTime12(cutOffTimeStr) || '9:30 PM'
+        const results = []
+
+        for (const record of activeRecords) {
+          try {
+            const updated = await this.checkOut({
+              employeeId: record.employeeId,
+              employeeName: record.employeeName,
+              date: workDate,
+              autoPunchOut: true,
+              punchOutReason: `Auto Punch Out (Scheduled cut-off at ${formattedCutoff})`,
+            })
+            results.push(updated)
+          } catch (err) {
+            console.error(`[AutoPunchCutoff] Failed to auto punch out employee ${record.employeeId}:`, err.message)
+          }
+        }
+        return results
+      } catch (err) {
+        console.error('[AutoPunchCutoff] Error executing scheduled cutoff:', err.message)
+        return []
       }
     },
 
     async autoPunchOutDisconnectedRecords() {
-      if (!repository.findActiveTodayRecords) return []
-      const workDate = getTodayString()
-      const activeRecords = await repository.findActiveTodayRecords(workDate)
-      const TWO_HOURS_MS = 2 * 60 * 60 * 1000
-      const punchedOut = []
-      const now = Date.now()
+      return this.autoPunchOutScheduledCutoff()
+    },
 
-      for (const record of activeRecords) {
-        if (!record.checkIn || record.checkOut) continue
-        const checkInTimeMs = record.checkInAt ? new Date(record.checkInAt).getTime() : null
-        if (!checkInTimeMs || (now - checkInTimeMs) < TWO_HOURS_MS) continue
-
-        let shouldAutoPunch = false
-        const reason = 'Auto Punch Out completed due to 2 hours of inactive office presence.'
-
-        if (record.disconnectedSince) {
-          const discMs = new Date(record.disconnectedSince).getTime()
-          if (discMs >= checkInTimeMs) {
-            const elapsedMins = (now - discMs) / (60 * 1000)
-
-            if (elapsedMins >= 110 && elapsedMins < 120) {
-              dispatchAttendanceNotification({
-                employeeId: record.employeeId,
-                eventType: 'ATTENDANCE_WARNING_110',
-                minutesDisconnected: Math.round(elapsedMins),
-                record,
-              }).catch(() => {})
-            }
-
-            if (elapsedMins >= 120) {
-              shouldAutoPunch = true
-            }
-          }
-        }
-
-        if (shouldAutoPunch) {
-          try {
-            const res = await this.checkOut({
-              employeeId: record.employeeId,
-              employeeName: record.employeeName,
-              date: record.date,
-              autoPunchOut: true,
-              punchOutReason: reason,
-            })
-            punchedOut.push(res)
-            dispatchAttendanceNotification({
-              employeeId: record.employeeId,
-              eventType: 'AUTO_PUNCH_OUT_COMPLETED',
-              minutesDisconnected: 120,
-              record,
-            }).catch(() => {})
-          } catch (err) {
-            // continue
-          }
-        }
-      }
-      return punchedOut
+    async autoPunchOutCompletedWorkHours() {
+      return this.autoPunchOutScheduledCutoff()
     },
 
     async saveRecord(recordData) {
@@ -1171,10 +1179,57 @@ export function createAttendanceService({ repository, companySettings = {} }) {
       const workDate = recordData.date || getTodayString()
       const verification = verifyLocation(recordData.latitude, recordData.longitude, recordData.wifiSSID, recordData.clientIp)
 
+      let checkInAt = recordData.checkInAt
+      if (recordData.checkIn) {
+        const inMins = parseTimeToMinutes(recordData.checkIn)
+        if (inMins !== null && typeof workDate === 'string' && workDate.includes('-')) {
+          const [y, m, d] = workDate.split('-').map(Number)
+          const inH = Math.floor(inMins / 60)
+          const inM = inMins % 60
+          const inDate = new Date(y, m - 1, d, inH, inM, 0, 0)
+          if (!isNaN(inDate.getTime())) checkInAt = inDate
+        }
+      }
+
+      let checkOutAt = recordData.checkOutAt
+      let totalHours = recordData.totalHours
+      const isCheckOutCleared = !recordData.checkOut || recordData.checkOut === '—' || String(recordData.checkOut).trim() === ''
+      if (isCheckOutCleared) {
+        checkOutAt = null
+        totalHours = 'Active (Live)'
+      } else if (recordData.checkIn && recordData.checkOut) {
+        const inMins = parseTimeToMinutes(recordData.checkIn)
+        const outMins = parseTimeToMinutes(recordData.checkOut)
+        if (outMins !== null && typeof workDate === 'string' && workDate.includes('-')) {
+          const [y, m, d] = workDate.split('-').map(Number)
+          const outH = Math.floor(outMins / 60)
+          const outM = outMins % 60
+          const outDate = new Date(y, m - 1, d, outH, outM, 0, 0)
+          if (!isNaN(outDate.getTime())) checkOutAt = outDate
+        }
+
+        if (inMins !== null && outMins !== null) {
+          let diffMins = outMins - inMins
+          if (diffMins < 0) diffMins += 24 * 60
+          const totalBreaks = Math.max(0, Number(recordData.totalBreakMinutes) || 0)
+          const netMins = Math.max(0, diffMins - totalBreaks)
+          const h = Math.floor(netMins / 60)
+          const m = netMins % 60
+          const breakPart = totalBreaks > 0 ? ` · ${totalBreaks}m Break` : ''
+          const tag = recordData.autoPunchOut ? 'Auto Punch Out' : 'Completed'
+          totalHours = `${h}h ${m}m (${tag})${breakPart}`
+        }
+      }
+
       const record = {
         ...recordData,
         employeeId: recordData.employeeId.toUpperCase(),
         date: workDate,
+        checkIn: recordData.checkIn,
+        checkInAt,
+        checkOut: isCheckOutCleared ? null : recordData.checkOut,
+        checkOutAt,
+        totalHours: totalHours || 'Active (Live)',
         isEarlyLogout: recordData.isEarlyLogout !== undefined ? recordData.isEarlyLogout : (recordData.status === 'early-logout'),
         isLop: recordData.isLop !== undefined ? recordData.isLop : (recordData.status === 'lop'),
         wifiVerified: recordData.wifiVerified !== undefined ? recordData.wifiVerified : verification.isWifiVerified,

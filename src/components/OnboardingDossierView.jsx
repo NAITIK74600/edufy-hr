@@ -34,18 +34,91 @@ import { unmaskBankAccount } from '../utils/payrollMatcher'
 
 import { VERIFICATION_TEMPLATES } from '../constants/verificationConstants.js'
 
+
+function ModalDocInput({ doc, currentDoc, onSelect }) {
+  const hasFile = Boolean(currentDoc && (currentDoc.url || currentDoc.fileName || (Array.isArray(currentDoc.files) && currentDoc.files.length > 0)))
+  const isReuploadRequested = Boolean(
+    currentDoc && (
+      currentDoc.reuploadRequested === true ||
+      currentDoc.status === 'reupload_requested' ||
+      currentDoc.status === 'rejected'
+    )
+  )
+  const isLocked = hasFile && !isReuploadRequested
+
+  return (
+    <div style={{ padding: '10px', border: '1px solid var(--border-color)', borderRadius: '8px', background: isReuploadRequested ? '#fff5f5' : (isLocked ? '#f8fafc' : '#fcfdfd') }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+        <span style={{ fontSize: '12px', fontWeight: 600 }}>
+          {doc.label} {doc.multiple ? '(Multiple Files Allowed)' : ''}
+        </span>
+        {isLocked ? (
+          <span style={{ fontSize: '9.5px', padding: '1px 6px', borderRadius: '4px', background: '#e2e8f0', color: '#475569', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+            <Lock size={9} /> {currentDoc.status === 'verified' ? 'VERIFIED' : 'LOCKED'}
+          </span>
+        ) : isReuploadRequested ? (
+          <span style={{ fontSize: '9.5px', padding: '1px 6px', borderRadius: '4px', background: '#fee2e2', color: '#b91c1c', fontWeight: 700 }}>
+            RE-UPLOAD REQUESTED
+          </span>
+        ) : null}
+      </div>
+
+      {isReuploadRequested && (currentDoc?.reuploadRemarks || currentDoc?.rejectionReason) && (
+        <div style={{ padding: '4px 6px', background: '#fee2e2', border: '1px solid #fecaca', borderRadius: '4px', fontSize: '10px', color: '#991b1b', marginBottom: '6px' }}>
+          <strong>HR Note:</strong> {currentDoc.reuploadRemarks || currentDoc.rejectionReason}
+        </div>
+      )}
+
+      {isLocked ? (
+        <div style={{ padding: '6px 8px', background: '#e2e8f0', borderRadius: '4px', fontSize: '11px', color: '#475569', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+            <Lock size={11} /> Locked (Awaiting HR review)
+          </span>
+          <span style={{ fontWeight: 600, color: 'var(--teal)', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '140px' }}>
+            {currentDoc.fileName || 'Attached'}
+          </span>
+        </div>
+      ) : (
+        <input
+          type="file"
+          accept="*/*"
+          multiple={Boolean(doc.multiple)}
+          style={{ fontSize: '11px', width: '100%' }}
+          onChange={(e) => onSelect(doc.key, e)}
+        />
+      )}
+
+      {!isLocked && currentDoc?.fileName && (
+        <div style={{ marginTop: '6px', fontSize: '11px', color: 'var(--teal)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+          <CheckCircle2 size={12} /> {currentDoc.fileName}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function OnboardingDossierView({ employee, canEdit = false, canVerify = false, onUpdated, initialTab = 'verification' }) {
   const { user } = useAuth()
   const userRoleNormalized = String(user?.role || '').toLowerCase().trim().replace(/[\s-]+/g, '_')
-  const isStaffRole = ['hr', 'admin', 'superadmin', 'hr_executive', 'managing_director', 'director', 'co_founder', 'vertical_head'].includes(userRoleNormalized)
+  const isSelf = Boolean(
+    user && employee && (
+      String(user.id) === String(employee.id || employee._id) ||
+      String(user._id) === String(employee.id || employee._id) ||
+      (user.employeeId && employee.employeeId && String(user.employeeId).toUpperCase() === String(employee.employeeId).toUpperCase()) ||
+      (user.email && employee.email && user.email.toLowerCase() === employee.email.toLowerCase())
+    )
+  )
 
-  // In HR & Admin management views (or whenever accessed by staff or canVerify is true), the user is acting as HR/Admin:
-  const isHRorAdmin = Boolean(canVerify) || isStaffRole
-  const isSelfServiceUser = !isHRorAdmin
+  const isEmployeePortal = typeof window !== 'undefined' && window.location.hash.startsWith('#/employee')
+  const isDirectorOrHR = ['admin', 'hr', 'director', 'managing_director', 'co_founder', 'hr_executive', 'vertical_head'].includes(userRoleNormalized)
 
-  // Strictly enforce: HR and Admin can NEVER upload documents for any employee.
-  // ONLY non-staff employees who are viewing their OWN record can upload files.
-  const canUpload = Boolean(canEdit) && !isHRorAdmin && !isStaffRole
+  // Document verification is STRICTLY reserved for Director/HR/Admin reviewing OTHER employees' files
+  const canVerifyDocs = Boolean(canVerify) && isDirectorOrHR && !isSelf && !isEmployeePortal
+  const isHRorAdmin = canVerifyDocs
+  const isSelfServiceUser = !canVerifyDocs
+
+  // Employees, Managers, HR, and Directors can upload their initial compliance documents ONLY on their OWN profile
+  const canUpload = (Boolean(canEdit) || isSelf) && !canVerifyDocs
 
   const [activeTab, setActiveTab] = useState(initialTab || 'verification')
 
@@ -388,11 +461,16 @@ export function OnboardingDossierView({ employee, canEdit = false, canVerify = f
         onboardingSubmittedAt: new Date().toISOString(),
       }
 
-      if (hrStore.updateOnboardingDocs) {
+      if (hrStore.approveOnboarding) {
+        await hrStore.approveOnboarding(empId)
+      } else if (hrStore.updateOnboardingDocs) {
         await hrStore.updateOnboardingDocs(empId, payload)
       } else {
         await hrStore.updateEmployee(empId, payload)
       }
+      setLocalStatus('verified')
+      setLocalDocs(verifiedDocs)
+      setLocalDocOverrides(verifiedDocs)
 
       hrStore.addNotification({
         id: `notif-doc-uploaded-${Date.now()}`,
@@ -519,6 +597,12 @@ export function OnboardingDossierView({ employee, canEdit = false, canVerify = f
 
       // Immediately record in local state so UI updates and subsequent verifies do not overwrite this
       setLocalDocOverrides((prev) => ({
+        ...prev,
+        [docKey]: verifiedDocObj,
+        ...(docKey === 'aadharCard' ? { aadharDoc: verifiedDocObj } : {}),
+        ...(docKey === 'panCard' ? { panDoc: verifiedDocObj } : {}),
+      }))
+      setLocalDocs((prev) => ({
         ...prev,
         [docKey]: verifiedDocObj,
         ...(docKey === 'aadharCard' ? { aadharDoc: verifiedDocObj } : {}),
@@ -700,6 +784,7 @@ export function OnboardingDossierView({ employee, canEdit = false, canVerify = f
           onboardingRejectionReason: reason.trim(),
         })
       }
+      setLocalStatus('action_required')
       hrStore.addNotification({
         id: `notif-onboard-reject-${Date.now()}`,
         type: 'onboarding_rejected',
@@ -2496,18 +2581,27 @@ function DocumentCard({
   isHRorAdmin,
   allowMultiple = false,
 }) {
-  const isUploaded = Boolean(
-    docData?.status === 'submitted' ||
-    docData?.status === 'verified' ||
-    docData?.status === 'rejected' ||
+  const [showHistory, setShowHistory] = useState(false)
+  const hasFile = Boolean(
     docData?.url ||
     docData?.fileName ||
-    (docData?.files && docData.files.length > 0) ||
-    (numberValue && numberValue !== 'Not registered')
+    (Array.isArray(docData?.files) && docData.files.length > 0) ||
+    docData?.status === 'submitted' ||
+    docData?.status === 'verified' ||
+    docData?.status === 'reupload_requested' ||
+    docData?.status === 'rejected'
   )
-  const isVerified = docData?.status === 'verified'
-  const isRejected = docData?.status === 'rejected'
+  const isUploaded = hasFile
+  const isVerified = docData?.status === 'verified' || docData?.status === 'approved'
+  const isReuploadRequested = Boolean(
+    docData?.reuploadRequested === true ||
+    docData?.status === 'reupload_requested' ||
+    docData?.status === 'rejected'
+  )
+  const isLocked = hasFile && !isReuploadRequested
   const fileCount = docData?.files?.length || (docData?.url ? 1 : 0)
+  const docVersion = docData?.version || 1
+  const historyList = Array.isArray(docData?.history) ? docData.history : []
 
   return (
     <div
@@ -2518,23 +2612,36 @@ function DocumentCard({
         flexDirection: 'column',
         justifyContent: 'space-between',
         gap: '10px',
-        borderColor: isRejected ? '#fca5a5' : isVerified ? '#86efac' : undefined,
-        background: isRejected ? '#fffbfb' : undefined,
+        borderColor: isReuploadRequested ? '#fca5a5' : isVerified ? '#86efac' : undefined,
+        background: isReuploadRequested ? '#fffbfb' : undefined,
       }}
     >
       <div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px', marginBottom: '8px' }}>
           <h5 style={{ margin: 0, fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <FileText size={15} style={{ color: isRejected ? '#dc2626' : isUploaded ? 'var(--teal)' : 'var(--text-secondary)' }} />
+            <FileText size={15} style={{ color: isReuploadRequested ? '#dc2626' : isVerified ? '#16a34a' : isUploaded ? 'var(--teal)' : 'var(--text-secondary)' }} />
             {title}
+            {isUploaded && (
+              <span style={{ fontSize: '10px', padding: '1px 5px', borderRadius: '4px', background: '#f1f5f9', color: '#64748b', fontWeight: 600 }}>
+                v{docVersion}
+              </span>
+            )}
           </h5>
-          {isRejected ? (
-            <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '4px', background: '#fee2e2', color: '#b91c1c', fontWeight: 700 }}>
-              REVISION REQUIRED
+          {isVerified ? (
+            <span style={{ fontSize: '10px', padding: '2px 8px', borderRadius: '4px', background: '#dcfce7', color: '#15803d', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+              <Lock size={10} /> VERIFIED · LOCKED
             </span>
-          ) : (badge || isVerified) && (
-            <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '4px', background: isVerified ? '#dcfce7' : '#f1f5f9', color: isVerified ? '#15803d' : '#475569', fontWeight: 600 }}>
-              {isVerified ? 'VERIFIED' : badge}
+          ) : isReuploadRequested ? (
+            <span style={{ fontSize: '10px', padding: '2px 8px', borderRadius: '4px', background: '#fee2e2', color: '#b91c1c', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+              <AlertCircle size={10} /> RE-UPLOAD REQUESTED
+            </span>
+          ) : isUploaded ? (
+            <span style={{ fontSize: '10px', padding: '2px 8px', borderRadius: '4px', background: '#e0f2fe', color: '#0369a1', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+              <Lock size={10} /> SUBMITTED · LOCKED
+            </span>
+          ) : (
+            <span style={{ fontSize: '10px', padding: '2px 8px', borderRadius: '4px', background: '#f1f5f9', color: '#64748b', fontWeight: 600 }}>
+              PENDING UPLOAD
             </span>
           )}
         </div>
@@ -2546,18 +2653,18 @@ function DocumentCard({
           </div>
         )}
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', marginTop: '4px' }}>
           {isVerified ? (
             <span style={{ color: '#16a34a', display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 600 }}>
-              <CheckCircle2 size={13} /> Verified by HR
+              <CheckCircle2 size={13} /> Verified by HR ({docData?.verifiedBy || 'HR'}) · Document is locked
             </span>
-          ) : isRejected ? (
+          ) : isReuploadRequested ? (
             <span style={{ color: '#dc2626', display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 600 }}>
-              <AlertCircle size={13} /> Revision Required
+              <AlertCircle size={13} /> HR requested revision · Upload corrected copy
             </span>
           ) : isUploaded ? (
             <span style={{ color: '#0d9488', display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 600 }}>
-              <Clock size={13} /> {fileCount > 1 ? `${fileCount} Files Attached` : (docData?.fileName || 'Attached (Pending Review)')}
+              <Clock size={13} /> {fileCount > 1 ? `${fileCount} Files Attached` : (docData?.fileName || 'Attached')} · Awaiting HR verification
             </span>
           ) : (
             <span style={{ color: '#94a3b8', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
@@ -2566,14 +2673,56 @@ function DocumentCard({
           )}
         </div>
 
-        {isRejected && docData?.rejectionReason && (
-          <div style={{ padding: '6px 8px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '6px', fontSize: '11px', color: '#991b1b', marginTop: '6px' }}>
-            <strong>HR Reason:</strong> {docData.rejectionReason}
+        {/* HR Remarks Alert Box */}
+        {isReuploadRequested && (docData?.reuploadRemarks || docData?.rejectionReason) && (
+          <div style={{ padding: '8px 10px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '6px', fontSize: '11px', color: '#991b1b', marginTop: '8px', lineHeight: '1.4' }}>
+            <strong style={{ display: 'block', marginBottom: '2px' }}>⚠️ HR Correction Request / Remarks:</strong>
+            {docData.reuploadRemarks || docData.rejectionReason}
+          </div>
+        )}
+
+        {/* Version History Drawer Toggle */}
+        {historyList.length > 0 && (
+          <div style={{ marginTop: '6px' }}>
+            <button
+              type="button"
+              onClick={() => setShowHistory((prev) => !prev)}
+              style={{ background: 'none', border: 'none', padding: 0, fontSize: '10.5px', color: 'var(--teal)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px', textDecoration: 'underline' }}
+            >
+              📜 {showHistory ? 'Hide' : 'View'} Version History ({historyList.length} prior {historyList.length === 1 ? 'version' : 'versions'})
+            </button>
+            {showHistory && (
+              <div style={{ marginTop: '6px', padding: '8px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '10.5px', display: 'grid', gap: '6px' }}>
+                <div style={{ fontWeight: 700, color: '#334155' }}>Current: v{docVersion} · {docData?.fileName} ({docData?.size || 'Attached'})</div>
+                {historyList.map((h, idx) => (
+                  <div key={idx} style={{ padding: '4px 6px', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '4px', color: '#64748b' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <strong style={{ color: '#1e293b' }}>v{h.version || (idx + 1)} · {h.fileName}</strong>
+                      <span style={{ fontSize: '9.5px' }}>{h.uploadedAt || h.submittedAt?.slice(0, 10)}</span>
+                    </div>
+                    {(h.reuploadRemarks || h.rejectionReason) && (
+                      <div style={{ color: '#b91c1c', marginTop: '2px', fontStyle: 'italic' }}>
+                        Remarks: {h.reuploadRemarks || h.rejectionReason}
+                      </div>
+                    )}
+                    {h.url && (
+                      <button
+                        type="button"
+                        onClick={() => onView({ title: `${title} (v${h.version})`, fileName: h.fileName, url: h.url, size: h.size })}
+                        style={{ background: 'none', border: 'none', padding: 0, color: 'var(--teal)', fontSize: '10px', cursor: 'pointer', marginTop: '3px', textDecoration: 'underline' }}
+                      >
+                        Preview v{h.version}
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>
 
-      <div style={{ display: 'flex', gap: '8px', marginTop: '6px', flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: '8px', marginTop: '8px', flexWrap: 'wrap' }}>
         {isUploaded && (
           <button
             type="button"
@@ -2584,64 +2733,134 @@ function DocumentCard({
             <Eye size={12} /> View Document Preview
           </button>
         )}
+
+        {/* EMPLOYEE CONTROLS: Strictly enforce locking */}
         {!isHRorAdmin && canEdit && onQuickUpload && (
-          <label
-            style={{
-              flex: 1,
-              minWidth: '120px',
-              fontSize: '11px',
-              padding: '6px 10px',
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '5px',
-              borderRadius: '6px',
-              border: '1px solid var(--border-color)',
-              background: isUploaded ? '#f8fafc' : 'rgba(0, 110, 111, 0.08)',
-              color: isUploaded ? 'var(--text-primary)' : 'var(--teal)',
-              fontWeight: 600,
-              cursor: 'pointer',
-              textAlign: 'center',
-            }}
-            title={allowMultiple ? "Upload one or more files for this document" : "Upload or replace file / media for this document"}
-          >
-            <Upload size={12} /> {allowMultiple ? (isUploaded ? 'Add / Upload More' : 'Upload Files (Multiple)') : (isVerified ? 'Re-upload / Revise Media' : (isUploaded ? 'Re-upload Media' : 'Upload File / Media'))}
-            <input
-              type="file"
-              accept="*/*"
-              multiple={Boolean(allowMultiple)}
-              style={{ display: 'none' }}
-              onChange={(e) => {
-                const files = allowMultiple ? e.target.files : e.target.files?.[0]
-                if (files) {
-                  onQuickUpload(docKey, title, files)
-                  e.target.value = ''
-                }
-              }}
-            />
-          </label>
+          <>
+            {isLocked ? (
+              <div
+                style={{
+                  flex: 1,
+                  minWidth: '120px',
+                  fontSize: '11px',
+                  padding: '6px 10px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '5px',
+                  borderRadius: '6px',
+                  background: '#f1f5f9',
+                  color: '#64748b',
+                  border: '1px solid #cbd5e1',
+                  fontWeight: 600,
+                  userSelect: 'none',
+                }}
+                title={isVerified ? "This document is verified and locked by HR." : "Document submitted and awaiting HR verification. Replacement is locked."}
+              >
+                <Lock size={12} /> {isVerified ? 'Verified & Locked' : 'Submitted · Locked'}
+              </div>
+            ) : isReuploadRequested ? (
+              <label
+                style={{
+                  flex: 1,
+                  minWidth: '140px',
+                  fontSize: '11px',
+                  padding: '6px 10px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '5px',
+                  borderRadius: '6px',
+                  border: '1px solid #fca5a5',
+                  background: '#fef2f2',
+                  color: '#b91c1c',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  textAlign: 'center',
+                }}
+                title="HR has requested a re-upload for this document. Click to choose your corrected file."
+              >
+                <Upload size={12} /> Re-upload Corrected Document
+                <input
+                  type="file"
+                  accept="*/*"
+                  multiple={Boolean(allowMultiple)}
+                  style={{ display: 'none' }}
+                  onChange={(e) => {
+                    const files = allowMultiple ? e.target.files : e.target.files?.[0]
+                    if (files) {
+                      onQuickUpload(docKey, title, files)
+                      e.target.value = ''
+                    }
+                  }}
+                />
+              </label>
+            ) : (
+              <label
+                style={{
+                  flex: 1,
+                  minWidth: '120px',
+                  fontSize: '11px',
+                  padding: '6px 10px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '5px',
+                  borderRadius: '6px',
+                  border: '1px solid var(--border-color)',
+                  background: 'rgba(0, 110, 111, 0.08)',
+                  color: 'var(--teal)',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  textAlign: 'center',
+                }}
+                title="Upload required document"
+              >
+                <Upload size={12} /> {allowMultiple ? 'Upload Files (Multiple)' : 'Upload File / Media'}
+                <input
+                  type="file"
+                  accept="*/*"
+                  multiple={Boolean(allowMultiple)}
+                  style={{ display: 'none' }}
+                  onChange={(e) => {
+                    const files = allowMultiple ? e.target.files : e.target.files?.[0]
+                    if (files) {
+                      onQuickUpload(docKey, title, files)
+                      e.target.value = ''
+                    }
+                  }}
+                />
+              </label>
+            )}
+          </>
         )}
-        {isHRorAdmin && !isVerified && onRejectSingle && (
-          <button
-            type="button"
-            onClick={() => onRejectSingle(docKey, title)}
-            className="ui-button secondary"
-            style={{ fontSize: '11px', padding: '6px 8px', justifyContent: 'center', borderColor: '#fca5a5', color: '#b91c1c' }}
-            title="Reject document with reason"
-          >
-            <AlertCircle size={12} /> Reject
-          </button>
-        )}
-        {isHRorAdmin && !isVerified && onVerifySingle && (
-          <button
-            type="button"
-            onClick={() => onVerifySingle(docKey, title)}
-            className="ui-button primary"
-            style={{ fontSize: '11px', padding: '6px 10px', justifyContent: 'center', background: '#059669', borderColor: '#059669', color: '#fff' }}
-            title="Verify this document"
-          >
-            <CheckCircle2 size={12} /> Verify
-          </button>
+
+        {/* HR / ADMIN CONTROLS */}
+        {isHRorAdmin && (
+          <>
+            {isUploaded && !isReuploadRequested && onRejectSingle && (
+              <button
+                type="button"
+                onClick={() => onRejectSingle(docKey, title)}
+                className="ui-button secondary"
+                style={{ fontSize: '11px', padding: '6px 8px', justifyContent: 'center', borderColor: '#fca5a5', color: '#b91c1c' }}
+                title="Request re-upload / reject document with mandatory remarks"
+              >
+                <AlertCircle size={12} /> Request Re-upload
+              </button>
+            )}
+            {isUploaded && !isVerified && onVerifySingle && (
+              <button
+                type="button"
+                onClick={() => onVerifySingle(docKey, title)}
+                className="ui-button primary"
+                style={{ fontSize: '11px', padding: '6px 10px', justifyContent: 'center', background: '#059669', borderColor: '#059669', color: '#fff' }}
+                title="Approve and verify this document"
+              >
+                <CheckCircle2 size={12} /> Approve Document
+              </button>
+            )}
+          </>
         )}
       </div>
     </div>
@@ -2659,15 +2878,24 @@ function VerificationFormCard({
   onVerifySingle,
   onRejectSingle,
 }) {
-  const isUploaded = Boolean(
+  const hasFile = Boolean(
     docData?.status === 'submitted' ||
     docData?.status === 'verified' ||
+    docData?.status === 'reupload_requested' ||
     docData?.status === 'rejected' ||
     docData?.url ||
     docData?.fileName
   )
+  const isUploaded = hasFile
   const isDocVerified = docData?.status === 'verified' || isVerified
-  const isDocRejected = docData?.status === 'rejected'
+  const isReuploadRequested = Boolean(
+    docData?.reuploadRequested === true ||
+    docData?.status === 'reupload_requested' ||
+    docData?.status === 'rejected'
+  )
+  const isLocked = hasFile && !isReuploadRequested
+  const docVersion = docData?.version || 1
+  const historyList = Array.isArray(docData?.history) ? docData.history : []
 
   return (
     <div
@@ -2679,8 +2907,8 @@ function VerificationFormCard({
         justifyContent: 'space-between',
         gap: '16px',
         borderRadius: '10px',
-        border: isDocRejected ? '1px solid #fca5a5' : isDocVerified ? '1px solid #86efac' : '1px solid var(--border-color)',
-        background: isDocRejected ? '#fffbfb' : isDocVerified ? '#fbfdfb' : '#ffffff',
+        border: isReuploadRequested ? '1px solid #fca5a5' : isDocVerified ? '1px solid #86efac' : '1px solid var(--border-color)',
+        background: isReuploadRequested ? '#fffbfb' : isDocVerified ? '#fbfdfb' : '#ffffff',
         boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
       }}
     >
@@ -2717,7 +2945,7 @@ function VerificationFormCard({
             >
               <Lock size={11} /> VERIFIED & LOCKED
             </span>
-          ) : isDocRejected ? (
+          ) : isReuploadRequested ? (
             <span
               style={{
                 fontSize: '10px',
@@ -2726,9 +2954,12 @@ function VerificationFormCard({
                 borderRadius: '6px',
                 background: '#fee2e2',
                 color: '#b91c1c',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
               }}
             >
-              REVISION REQUIRED
+              <AlertCircle size={11} /> RE-UPLOAD REQUESTED
             </span>
           ) : isUploaded ? (
             <span
@@ -2739,9 +2970,12 @@ function VerificationFormCard({
                 borderRadius: '6px',
                 background: '#e0f2fe',
                 color: '#0369a1',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
               }}
             >
-              READY FOR HR REVIEW
+              <Lock size={11} /> SUBMITTED · LOCKED
             </span>
           ) : (
             <span
@@ -2763,15 +2997,20 @@ function VerificationFormCard({
         <h4 style={{ margin: '0 0 6px', fontSize: '14px', fontWeight: 700, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '6px' }}>
           <FileCheck2 size={16} style={{ color: isDocVerified ? '#16a34a' : 'var(--teal)' }} />
           {template.title}
+          {isUploaded && (
+            <span style={{ fontSize: '10px', padding: '1px 5px', borderRadius: '4px', background: '#f1f5f9', color: '#64748b', fontWeight: 600 }}>
+              v{docVersion}
+            </span>
+          )}
         </h4>
         <p style={{ margin: '0 0 14px', fontSize: '12px', color: '#64748b', lineHeight: '1.5' }}>
           {template.description}
         </p>
 
-        {/* Rejection Reason if any */}
-        {isDocRejected && docData?.rejectionReason && (
+        {/* Rejection / Reupload Remarks Note */}
+        {isReuploadRequested && (docData?.reuploadRemarks || docData?.rejectionReason) && (
           <div style={{ padding: '8px 10px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '6px', fontSize: '11px', color: '#991b1b', marginBottom: '10px' }}>
-            <strong>HR Revision Note:</strong> {docData.rejectionReason}
+            <strong>HR Correction Request:</strong> {docData.reuploadRemarks || docData.rejectionReason}
           </div>
         )}
 
@@ -2827,88 +3066,132 @@ function VerificationFormCard({
             </button>
           )}
 
+          {/* Employee Upload / Lock Controls */}
           {!isHRorAdmin && canEdit && onQuickUpload && (
-            <label
-              style={{
-                flex: 1,
-                minWidth: '130px',
-                fontSize: '11px',
-                padding: '6px 10px',
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '5px',
-                borderRadius: '6px',
-                border: '1px solid var(--border-color)',
-                background: isUploaded ? '#f1f5f9' : 'rgba(0, 110, 111, 0.08)',
-                color: isUploaded ? 'var(--text-primary)' : 'var(--teal)',
-                fontWeight: 600,
-                cursor: 'pointer',
-                textAlign: 'center',
-              }}
-              title={isDocVerified ? "Re-upload or update your signed copy for revision" : "Upload your filled and signed copy"}
-            >
-              <Upload size={12} /> {isDocVerified ? 'Re-upload / Revise' : (isUploaded ? 'Re-upload Signed' : 'Upload Signed Copy')}
-              <input
-                type="file"
-                accept=".pdf,.doc,.docx,.png,.jpg,.jpeg"
-                style={{ display: 'none' }}
-                onChange={(e) => {
-                  if (e.target.files?.[0]) {
-                    onQuickUpload(template.key, template.title, e.target.files[0])
-                    e.target.value = ''
-                  }
-                }}
-              />
-            </label>
+            <>
+              {isLocked ? (
+                <div
+                  style={{
+                    flex: 1,
+                    minWidth: '130px',
+                    fontSize: '11px',
+                    padding: '6px 10px',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '5px',
+                    borderRadius: '6px',
+                    border: '1px solid #cbd5e1',
+                    background: '#f1f5f9',
+                    color: '#64748b',
+                    fontWeight: 600,
+                    userSelect: 'none',
+                  }}
+                  title={isDocVerified ? "This form is verified and locked by HR." : "Form submitted and locked awaiting HR review."}
+                >
+                  <Lock size={12} /> {isDocVerified ? 'Verified & Locked' : 'Submitted · Locked'}
+                </div>
+              ) : isReuploadRequested ? (
+                <label
+                  style={{
+                    flex: 1,
+                    minWidth: '140px',
+                    fontSize: '11px',
+                    padding: '6px 10px',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '5px',
+                    borderRadius: '6px',
+                    border: '1px solid #fca5a5',
+                    background: '#fef2f2',
+                    color: '#b91c1c',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    textAlign: 'center',
+                  }}
+                  title="Upload corrected signed copy requested by HR"
+                >
+                  <Upload size={12} /> Re-upload Corrected Form
+                  <input
+                    type="file"
+                    accept=".pdf,.doc,.docx,.png,.jpg,.jpeg"
+                    style={{ display: 'none' }}
+                    onChange={(e) => {
+                      if (e.target.files?.[0]) {
+                        onQuickUpload(template.key, template.title, e.target.files[0])
+                        e.target.value = ''
+                      }
+                    }}
+                  />
+                </label>
+              ) : (
+                <label
+                  style={{
+                    flex: 1,
+                    minWidth: '130px',
+                    fontSize: '11px',
+                    padding: '6px 10px',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '5px',
+                    borderRadius: '6px',
+                    border: '1px solid var(--border-color)',
+                    background: 'rgba(0, 110, 111, 0.08)',
+                    color: 'var(--teal)',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    textAlign: 'center',
+                  }}
+                  title="Upload your filled and signed copy"
+                >
+                  <Upload size={12} /> Upload Signed Copy
+                  <input
+                    type="file"
+                    accept=".pdf,.doc,.docx,.png,.jpg,.jpeg"
+                    style={{ display: 'none' }}
+                    onChange={(e) => {
+                      if (e.target.files?.[0]) {
+                        onQuickUpload(template.key, template.title, e.target.files[0])
+                        e.target.value = ''
+                      }
+                    }}
+                  />
+                </label>
+              )}
+            </>
           )}
 
-          {isDocVerified && (!canEdit || !onQuickUpload) && (
-            <div
-              style={{
-                flex: 1,
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '6px',
-                padding: '6px 10px',
-                background: '#f0fdf4',
-                border: '1px solid #bbf7d0',
-                borderRadius: '6px',
-                fontSize: '11px',
-                color: '#15803d',
-                fontWeight: 600,
-              }}
-            >
-              <Lock size={12} /> Secured in Locker
-            </div>
-          )}
-
-          {isHRorAdmin && !isDocVerified && onRejectSingle && (
-            <button
-              type="button"
-              onClick={() => onRejectSingle(template.key, template.title)}
-              className="ui-button secondary"
-              style={{ fontSize: '11px', padding: '6px 8px', justifyContent: 'center', borderColor: '#fca5a5', color: '#b91c1c' }}
-              title="Reject form with reason"
-            >
-              <AlertCircle size={12} /> Reject
-            </button>
-          )}
-          {isHRorAdmin && !isDocVerified && onVerifySingle && (
-            <button
-              type="button"
-              onClick={() => onVerifySingle(template.key, template.title)}
-              className="ui-button primary"
-              style={{ fontSize: '11px', padding: '6px 10px', justifyContent: 'center', background: '#059669', borderColor: '#059669', color: '#fff' }}
-              title="Verify this form"
-            >
-              <CheckCircle2 size={12} /> Verify
-            </button>
+          {/* HR / Admin Controls */}
+          {isHRorAdmin && (
+            <>
+              {isUploaded && !isReuploadRequested && onRejectSingle && (
+                <button
+                  type="button"
+                  onClick={() => onRejectSingle(template.key, template.title)}
+                  className="ui-button secondary"
+                  style={{ fontSize: '11px', padding: '6px 8px', justifyContent: 'center', borderColor: '#fca5a5', color: '#b91c1c' }}
+                  title="Request re-upload / reject form with mandatory remarks"
+                >
+                  <AlertCircle size={12} /> Request Re-upload
+                </button>
+              )}
+              {isUploaded && !isDocVerified && onVerifySingle && (
+                <button
+                  type="button"
+                  onClick={() => onVerifySingle(template.key, template.title)}
+                  className="ui-button primary"
+                  style={{ fontSize: '11px', padding: '6px 10px', justifyContent: 'center', background: '#059669', borderColor: '#059669', color: '#fff' }}
+                  title="Approve and verify this form"
+                >
+                  <CheckCircle2 size={12} /> Approve Form
+                </button>
+              )}
+            </>
           )}
         </div>
       </div>
     </div>
   )
 }
-

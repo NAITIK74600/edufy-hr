@@ -67,6 +67,7 @@ const HR_DEFAULT_PERMISSIONS = [
   PERMISSIONS.LEAVE_SELF_READ,
   PERMISSIONS.LEAVE_SELF_WRITE,
   PERMISSIONS.LEAVE_TEAM_READ,
+  PERMISSIONS.LEAVE_TEAM_APPROVE,
   PERMISSIONS.LEAVE_HR_READ,
   PERMISSIONS.LEAVE_HR_REVIEW,
   PERMISSIONS.LEAVE_POLICY_ADMIN,
@@ -94,8 +95,12 @@ const LEADERSHIP_PERMISSIONS = [
   PERMISSIONS.LEAVE_SELF_READ,
   PERMISSIONS.LEAVE_SELF_WRITE,
   PERMISSIONS.ATTENDANCE_SELF_READ,
+  PERMISSIONS.ATTENDANCE_SELF_WRITE,
   PERMISSIONS.LEAVE_TEAM_READ,
   PERMISSIONS.LEAVE_TEAM_APPROVE,
+  PERMISSIONS.LEAVE_HR_READ,
+  PERMISSIONS.LEAVE_HR_REVIEW,
+  PERMISSIONS.LEAVE_POLICY_ADMIN,
   PERMISSIONS.ATTENDANCE_TEAM_READ,
   PERMISSIONS.ATTENDANCE_READ,
   PERMISSIONS.ATTENDANCE_WRITE,
@@ -103,7 +108,10 @@ const LEADERSHIP_PERMISSIONS = [
   PERMISSIONS.PAYROLL_WRITE,
   PERMISSIONS.PAYROLL_SELF_READ,
   PERMISSIONS.REPORTS_READ,
+  PERMISSIONS.RECRUITMENT_READ,
   PERMISSIONS.PERFORMANCE_READ,
+  PERMISSIONS.HR_SETTINGS_READ,
+  PERMISSIONS.ADMIN_ACCESS,
   ...SELF_WORKSPACE_READ,
 ]
 
@@ -147,7 +155,7 @@ const ESS_PERMISSIONS = [
 
 export const ROLE_DEFAULT_PERMISSIONS = Object.freeze({
   admin: ['*'],
-  managing_director: LEADERSHIP_PERMISSIONS,
+  managing_director: ['*'],
   director: LEADERSHIP_PERMISSIONS,
   co_founder: LEADERSHIP_PERMISSIONS,
   vertical_head: LEADERSHIP_PERMISSIONS,
@@ -182,7 +190,7 @@ export const ROLE_DEFAULT_PERMISSIONS = Object.freeze({
 })
 
 export function getUserPermissions(user) {
-  if (user?.role === 'admin') return ['*']
+  if (user?.role === 'admin' || user?.role === 'managing_director') return ['*']
   let perms = []
   if (Array.isArray(user?.permissions) && user.permissions.length > 0) {
     perms = user.permissions
@@ -194,7 +202,7 @@ export function getUserPermissions(user) {
       perms = rolePerms
     } else {
       const r = rawRole.toLowerCase()
-      if (r.includes('admin')) return ['*']
+      if (r.includes('admin') || r.includes('managing_director')) return ['*']
       if (r.includes('hr')) return HR_DEFAULT_PERMISSIONS
       if (r.includes('director') || r.includes('head') || r.includes('founder')) return LEADERSHIP_PERMISSIONS
       if (r.includes('manager') || r.includes('lead')) return MANAGER_PERMISSIONS
@@ -211,7 +219,14 @@ export function getUserPermissions(user) {
 }
 
 export function hasPermission(user, permission) {
-  return getUserPermissions(user).includes('*') || getUserPermissions(user).includes(permission)
+  if (getUserPermissions(user).includes('*') || getUserPermissions(user).includes(permission)) return true
+  // Default approval access: Anyone assigned as manager or with manager/lead roles has team leave permissions
+  if (permission === PERMISSIONS.LEAVE_TEAM_READ || permission === PERMISSIONS.LEAVE_TEAM_APPROVE) {
+    if (user?.isManager || user?.hasDirectReports || user?.managerOf || ['manager', 'team_lead', 'team_leader', 'vertical_head', 'director', 'managing_director', 'co_founder'].includes(user?.role)) {
+      return true
+    }
+  }
+  return false
 }
 
 export function hasAnyPermission(user, permissions) {

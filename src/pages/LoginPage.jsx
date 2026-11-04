@@ -456,7 +456,7 @@ function LoginStyles() {
  * - NO switch console option!
  */
 export function EmployeeLoginPage() {
-  const { login, changePassword, completeSession } = useAuth()
+  const { user, login, changePassword, completeSession } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -526,15 +526,19 @@ export function EmployeeLoginPage() {
     setLoading(true)
     try {
       const loggedUser = await login(email.trim(), password, 'employee')
-      if (loggedUser?.role === 'admin' || loggedUser?.role === 'hr') {
-        throw new Error('Access denied: Management accounts must log in via the HR / Admin Console.')
-      }
       if (loggedUser?.mustChangePassword) {
         setMustSetNewPassword(true)
         setNotice('First-time login detected: An auto-generated temporary password was used. Please set a new password below.')
         return
       }
-      window.location.hash = '#/employee'
+      const isExec = ['director', 'managing_director', 'co_founder', 'vertical_head'].includes(loggedUser?.role) || loggedUser?.email === 'jagadishbabu@edufyitech.in'
+      if (loggedUser?.role === 'admin') {
+        window.location.hash = '#/admin'
+      } else if (loggedUser?.role === 'hr' || loggedUser?.role === 'hr_executive' || isExec) {
+        window.location.hash = '#/hr'
+      } else {
+        window.location.hash = '#/employee'
+      }
     } catch (err) {
       setError(err.message || 'Invalid email or password.')
     } finally {
@@ -560,7 +564,10 @@ export function EmployeeLoginPage() {
     setLoading(true)
     try {
       await changePassword({ currentPassword: password, newPassword: newPassword.trim() })
-      window.location.hash = '#/employee'
+      const isExec = ['director', 'managing_director', 'co_founder', 'vertical_head'].includes(user?.role) || user?.email === 'jagadishbabu@edufyitech.in'
+      if (user?.role === 'admin') window.location.hash = '#/admin'
+      else if (user?.role === 'hr' || user?.role === 'hr_executive' || isExec) window.location.hash = '#/hr'
+      else window.location.hash = '#/employee'
     } catch (err) {
       setError(err?.message || 'Failed to set new password. Please try again.')
     } finally {
@@ -791,7 +798,7 @@ export function ManagementLoginPage({ defaultRole = 'hr' }) {
     return defaultRole
   })
 
-  const [email, setEmail] = useState(() => (role === 'admin' ? 'admin@edufyitech.in' : 'hr@edufyi.in'))
+  const [email, setEmail] = useState(() => (role === 'admin' ? 'admin@edufyitech.in' : 'hr@edufyitech.in'))
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [remember, setRemember] = useState(true)
@@ -902,9 +909,10 @@ export function ManagementLoginPage({ defaultRole = 'hr' }) {
         return
       }
 
+      const isExec = ['director', 'managing_director', 'co_founder', 'vertical_head'].includes(loggedUser?.role) || loggedUser?.email === 'jagadishbabu@edufyitech.in'
       if (loggedUser?.role === 'admin') {
         window.location.hash = '#/admin'
-      } else if (loggedUser?.role === 'hr') {
+      } else if (['hr', 'hr_executive', 'director', 'managing_director', 'co_founder', 'vertical_head'].includes(loggedUser?.role) || isExec) {
         window.location.hash = '#/hr'
       } else {
         throw new Error('Access denied: Employee accounts cannot sign into the HR or Admin Management Console.')

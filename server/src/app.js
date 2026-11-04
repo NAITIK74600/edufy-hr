@@ -33,6 +33,7 @@ import { seedLeavePolicies } from './modules/leave/leave.seed.js'
 import { createHierarchyRouter } from './modules/hierarchy/hierarchy.routes.js'
 import { createMailRouter } from './modules/mail/mail.routes.js'
 import { createNotificationRouter } from './modules/notifications/notification.routes.js'
+import { createCalendarRouter } from './modules/calendar/calendar.routes.js'
 import { createMongoAttendanceRepository } from './modules/attendance/attendance.repository.js'
 import { createMemoryAttendanceRepository } from './modules/attendance/memoryAttendanceRepository.js'
 import { createAttendanceService } from './modules/attendance/attendance.service.js'
@@ -40,6 +41,7 @@ import { createAttendanceRouter } from './modules/attendance/attendance.routes.j
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js'
 import { seedAllEmployees } from './modules/employees/seedAllEmployees.js'
 import { sanitizeMiddleware } from './middleware/sanitize.js'
+import { createRateLimiter } from './middleware/rateLimit.js'
 import { PERMISSIONS } from './auth/permissions.js'
 
 export function createApp(options = {}) {
@@ -55,6 +57,34 @@ export function createApp(options = {}) {
     if (databaseStore) {
       await seedLeavePolicies()
       await seedAllEmployees()
+      try {
+        const { Notification } = await import('./models/Notification.js')
+        const { workspaceModels } = await import('./models/Workspace.js')
+        try {
+          const indexes = await Notification.collection.indexes()
+          const badIdx = indexes.find((i) => i.name === 'idempotencyKey_1' && !i.sparse)
+          if (badIdx) {
+            console.log('[server] Dropping non-sparse idempotencyKey_1 index on Notification...')
+            await Notification.collection.dropIndex('idempotencyKey_1')
+          }
+        } catch {}
+        await Notification.collection.createIndex({ idempotencyKey: 1 }, { unique: true, sparse: true }).catch(() => {})
+        await Notification.updateMany({ idempotencyKey: null }, { $unset: { idempotencyKey: '' } })
+        if (workspaceModels?.notifications) {
+          try {
+            const wIndexes = await workspaceModels.notifications.collection.indexes()
+            const badWIdx = wIndexes.find((i) => i.name === 'dedupeKey_1' && !i.sparse)
+            if (badWIdx) {
+              console.log('[server] Dropping non-sparse dedupeKey_1 index on WorkspaceNotification...')
+              await workspaceModels.notifications.collection.dropIndex('dedupeKey_1')
+            }
+          } catch {}
+          await workspaceModels.notifications.collection.createIndex({ dedupeKey: 1 }, { unique: true, sparse: true }).catch(() => {})
+          await workspaceModels.notifications.updateMany({ dedupeKey: null }, { $unset: { dedupeKey: '' } })
+        }
+      } catch (notifCleanErr) {
+        console.warn('[server] Clean null idempotency keys notice:', notifCleanErr.message)
+      }
       try {
         const { AttendanceRecord } = await import('./models/AttendanceRecord.js')
         const { AttendanceSettings } = await import('./models/AttendanceSettings.js')
@@ -116,6 +146,32 @@ export function createApp(options = {}) {
       } catch (err) {
         console.warn('Attendance Wi-Fi cleanup notice:', err.message)
       }
+      try {
+        const { AttendanceRecord } = await import('./models/AttendanceRecord.js')
+        const today = new Date().toISOString().slice(0, 10)
+        const restored = await AttendanceRecord.updateMany(
+          {
+            date: today,
+            autoPunchOut: true,
+            punchOutReason: { $regex: /disconnect|inactive office presence/i },
+          },
+          {
+            $set: {
+              checkOut: null,
+              checkOutAt: null,
+              autoPunchOut: false,
+              punchOutReason: '',
+              totalHours: 'Active (Live)',
+              status: 'present',
+            },
+          }
+        )
+        if (restored.modifiedCount > 0) {
+          console.log(`[AttendanceRestore] Successfully restored ${restored.modifiedCount} employees who were prematurely auto-punched out today.`)
+        }
+      } catch (err) {
+        console.warn('Attendance restore notice:', err.message)
+      }
     }
   }
   const userStore = options.userStore ?? {
@@ -158,18 +214,27 @@ export function createApp(options = {}) {
   const leaveService = options.leaveService ?? createLeaveService({ repository: leaveRepository, employeeRepository, notificationService: options.notificationService })
   const attendanceRepository = options.attendanceRepository ?? (useDatabase ? createMongoAttendanceRepository() : createMemoryAttendanceRepository())
   const attendanceService = options.attendanceService ?? createAttendanceService({ repository: attendanceRepository, companySettings: options.companySettings })
-
-  // Automated punch-out background daemon: checks active records every 60s for 2-hour disconnection
-  if (typeof setInterval !== 'undefined') {
-    const autoPunchInterval = setInterval(() => {
-      attendanceService.autoPunchOutDisconnectedRecords?.().catch(() => {})
-    }, 60000)
-    if (autoPunchInterval?.unref) autoPunchInterval.unref()
-  }
+  app.locals.attendanceService = attendanceService
   const jwtSecret = options.jwtSecret ?? process.env.JWT_SECRET ?? (process.env.NODE_ENV === 'production' ? null : crypto.randomBytes(32).toString('hex'))
   if (!jwtSecret) throw new Error('JWT_SECRET is required in production')
   const auth = createAuthMiddleware({ userStore, jwtSecret, revokedTokens: options.revokedTokens ?? new Set() })
   const authService = createAuthService({ userStore, jwtSecret, accessTokenTtl: process.env.ACCESS_TOKEN_TTL || '30d', revokedTokens: auth.revokedTokens })
+  const authRateLimiter = createRateLimiter({
+    windowMs: 60 * 1000,
+    max: 15,
+    message: 'Too many authentication attempts. Please try again after 1 minute.',
+  })
+  const passwordResetLimiter = createRateLimiter({
+    windowMs: 15 * 60 * 1000,
+    max: 5,
+    message: 'Too many password reset requests. Please try again after 15 minutes.',
+  })
+  const mailRateLimiter = createRateLimiter({
+    windowMs: 60 * 1000,
+    max: 20,
+    message: 'Too many email requests dispatched. Please wait a moment.',
+  })
+
   app.disable('x-powered-by')
   if (compressionMiddleware) {
     const compHandler = compressionMiddleware({
@@ -193,6 +258,10 @@ export function createApp(options = {}) {
     response.setHeader('X-Frame-Options', 'SAMEORIGIN')
     response.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin')
     response.setHeader('X-XSS-Protection', '1; mode=block')
+    response.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(self)')
+    if (process.env.NODE_ENV === 'production' || request.secure || request.headers['x-forwarded-proto'] === 'https') {
+      response.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload')
+    }
     response.setHeader('Connection', 'keep-alive')
     response.setHeader('Keep-Alive', 'timeout=65, max=1000')
     const origin = request.headers.origin
@@ -224,11 +293,22 @@ export function createApp(options = {}) {
     }
     next()
   })
-  app.use(express.json({ limit: '25mb' }))
+  const largeUploadRoutes = [
+    '/api/v1/employees/me/onboarding',
+    '/api/v1/employees/me/avatar',
+    '/api/v1/employees/:id',
+  ]
+  app.use(largeUploadRoutes, express.json({ limit: '25mb' }))
+  app.use(express.json({ limit: '2mb' }))
+  app.use(express.urlencoded({ extended: true, limit: '2mb' }))
   app.use(sanitizeMiddleware)
   const events = createDataEvents(auth)
   app.use('/api/v1', events.changed, events.router)
   app.use('/api/v1', healthRouter)
+  app.use('/api/v1/auth/login', authRateLimiter)
+  app.use('/api/v1/auth/request-password-reset', passwordResetLimiter)
+  app.use('/api/v1/auth/reset-password', passwordResetLimiter)
+  app.use('/api/v1/mail', mailRateLimiter)
   app.use('/api/v1/auth', createAuthRouter({ authService, auth, userStore }))
   app.use('/api/v1/employees', createEmployeeRouter({ auth, service: employeeService, userStore, employeeRepository }))
   app.use('/api/v1/leave', createLeaveRouter({ auth, service: leaveService }))
@@ -248,6 +328,7 @@ export function createApp(options = {}) {
   app.use('/api/v1/hierarchy', createHierarchyRouter({ auth, repository: employeeRepository }))
   app.use('/api/v1/mail', createMailRouter({ auth }))
   app.use('/api/v1/notifications', createNotificationRouter({ auth }))
+  app.use('/api/v1/calendar', createCalendarRouter({ auth, useDatabase }))
   app.use('/api/v1', createAccessRouter(auth))
   const isCacheableStatic = (filePath) => {
     return /\.(woff2|woff|ttf|eot|png|jpe?g|gif|webp|svg|ico)$/i.test(filePath)

@@ -37,9 +37,14 @@ const employeeSchema = new mongoose.Schema({
   avatarUrl: { type: String, trim: true, default: null },
   permissions: { type: [String], default: [] },
   managerId: { type: mongoose.Schema.Types.ObjectId, ref: 'Employee', default: null },
+  managerName: { type: String, trim: true, maxlength: 100 },
   department: { type: String, trim: true, maxlength: 100 },
   team: { type: String, trim: true, maxlength: 100 },
   teamId: { type: String, trim: true, maxlength: 100 },
+  squad: { type: String, trim: true, maxlength: 100 },
+  squadId: { type: String, trim: true, maxlength: 100 },
+  teamLeadId: { type: String, trim: true, maxlength: 100 },
+  teamLeadName: { type: String, trim: true, maxlength: 100 },
   designation: { type: String, trim: true, maxlength: 120 },
   passkeys: {
     type: [{
@@ -116,6 +121,7 @@ const employeeSchema = new mongoose.Schema({
     },
   },
   joiningDate: { type: Date, required: true },
+  dob: { type: Date },
   employmentEndDate: Date,
   status: { type: String, enum: ['invited', 'active', 'inactive', 'onboarding', 'notice'], default: 'invited', index: true },
   documents: { type: [documentSchema], default: [] },

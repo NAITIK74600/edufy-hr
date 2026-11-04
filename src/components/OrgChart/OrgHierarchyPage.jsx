@@ -24,6 +24,10 @@ import {
   ShieldAlert,
   X,
   Edit2,
+  Edit3,
+  GitFork,
+  UserPlus,
+  Building,
   Layers,
   Check,
   ExternalLink,
@@ -42,16 +46,31 @@ import { Button, StatusBadge, Field } from '../ui'
 
 // Role badge styling and metadata matching organizational chart
 const ROLE_BADGES = {
-  director: { label: 'Director', bg: '#fef3c7', text: '#b45309', border: '#f59e0b', ring: '#fbbf24' },
+  managing_director: { label: 'Managing Director', bg: '#fef3c7', text: '#b45309', border: '#f59e0b', ring: '#fbbf24' },
+  director: { label: 'Managing Director', bg: '#fef3c7', text: '#b45309', border: '#f59e0b', ring: '#fbbf24' },
+  co_founder: { label: 'Co-Founder', bg: '#fef3c7', text: '#b45309', border: '#f59e0b', ring: '#fbbf24' },
+  vertical_head: { label: 'Vertical Head', bg: '#f3e8ff', text: '#7e22ce', border: '#a855f7', ring: '#c084fc' },
+  revenue_growth_manager: { label: 'Revenue Growth Manager', bg: '#dbeafe', text: '#1d4ed8', border: '#3b82f6', ring: '#60a5fa' },
   manager: { label: 'Manager', bg: '#dbeafe', text: '#1d4ed8', border: '#3b82f6', ring: '#60a5fa' },
   team_lead: { label: 'Team Lead', bg: '#ccfbf1', text: '#0f766e', border: '#14b8a6', ring: '#2dd4bf' },
-  employee: { label: 'Employee', bg: '#f1f5f9', text: '#475569', border: '#cbd5e1', ring: '#94a3b8' },
+  team_leader: { label: 'Team Leader', bg: '#ccfbf1', text: '#0f766e', border: '#14b8a6', ring: '#2dd4bf' },
+  employee: { label: 'Associate', bg: '#f1f5f9', text: '#475569', border: '#cbd5e1', ring: '#94a3b8' },
   admin: { label: 'Admin', bg: '#fee2e2', text: '#b91c1c', border: '#ef4444', ring: '#f87171' },
   hr: { label: 'HR', bg: '#d1fae5', text: '#047857', border: '#10b981', ring: '#34d399' },
+  hr_executive: { label: 'HR Executive', bg: '#d1fae5', text: '#047857', border: '#10b981', ring: '#34d399' },
 }
 
 function getRoleBadge(role) {
-  return ROLE_BADGES[role] || ROLE_BADGES.employee
+  if (role && ROLE_BADGES[role]) return ROLE_BADGES[role]
+  const clean = String(role || '').toLowerCase().replace(/[^a-z0-9]/g, '_')
+  if (ROLE_BADGES[clean]) return ROLE_BADGES[clean]
+  if (clean.includes('director') || clean.includes('founder')) return ROLE_BADGES.managing_director
+  if (clean.includes('head')) return ROLE_BADGES.vertical_head
+  if (clean.includes('manager')) return ROLE_BADGES.manager
+  if (clean.includes('lead')) return ROLE_BADGES.team_lead
+  if (clean.includes('hr')) return ROLE_BADGES.hr
+  if (clean.includes('admin')) return ROLE_BADGES.admin
+  return { label: role ? role.replace(/_/g, ' ') : 'Unassigned', bg: '#f1f5f9', text: '#475569', border: '#cbd5e1', ring: '#94a3b8' }
 }
 
 // Department theme colors for visual grouping
@@ -241,7 +260,7 @@ function OrgNodeCard({
               marginTop: '1px',
             }}
           >
-            {node.designation || 'Team Member'}
+            {node.designation || 'Pending Designation'}
           </div>
           <div style={{ fontSize: '10px', color: 'var(--muted)', marginTop: '2px', fontWeight: 500 }}>
             {node.employeeId}
@@ -428,26 +447,67 @@ function OrgTreeBranch({
 // -------------------------------------------------------------
 function ChangeManagerModal({ employee, allEmployees, isOpen, onClose, onSave }) {
   const [selectedMgrId, setSelectedMgrId] = useState(employee?.managerId || '')
+  const [searchFilter, setSearchFilter] = useState('')
+  const [showAllEmployees, setShowAllEmployees] = useState(false)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     setSelectedMgrId(employee?.managerId || '')
+    setSearchFilter('')
     setError('')
   }, [employee, isOpen])
 
   if (!isOpen || !employee) return null
 
-  // Check circular reporting for potential managers (Director, Managers, Team Leads, Admin, HR)
-  const rolePriority = { director: 1, manager: 2, team_lead: 3, admin: 4, hr: 5 }
+  const currentManager = allEmployees.find(
+    (m) => String(m.id || m._id) === String(employee.managerId)
+  )
+
+  const rolePriority = {
+    managing_director: 1,
+    director: 1,
+    co_founder: 1,
+    vertical_head: 2,
+    revenue_growth_manager: 3,
+    manager: 3,
+    team_lead: 4,
+    team_leader: 4,
+    admin: 5,
+    hr: 6,
+  }
+
   const availableManagers = allEmployees
     .filter((m) => {
       if (m.id === employee.id || m._id === employee.id) return false
-      return m.status === 'active' && ['director', 'manager', 'team_lead', 'admin', 'hr'].includes(m.role)
+      if (m.status !== 'active') return false
+      if (showAllEmployees) return true
+      const r = (m.role || '').toLowerCase().trim()
+      const d = (m.designation || '').toLowerCase().trim()
+      const isMgr =
+        ['managing_director', 'director', 'co_founder', 'vertical_head', 'revenue_growth_manager', 'manager', 'team_lead', 'team_leader', 'admin', 'hr'].includes(r) ||
+        d.includes('lead') ||
+        d.includes('manager') ||
+        d.includes('head') ||
+        d.includes('director') ||
+        d.includes('founder') ||
+        d.includes('vp') ||
+        d.includes('chief')
+      return isMgr
+    })
+    .filter((m) => {
+      if (!searchFilter.trim()) return true
+      const q = searchFilter.toLowerCase()
+      return (
+        (m.name || '').toLowerCase().includes(q) ||
+        (m.employeeId || '').toLowerCase().includes(q) ||
+        (m.designation || '').toLowerCase().includes(q) ||
+        (m.department || '').toLowerCase().includes(q)
+      )
     })
     .sort((a, b) => {
-      const pa = rolePriority[a.role] || 99
-      const pb = rolePriority[b.role] || 99
+      const pa = rolePriority[(a.role || '').toLowerCase()] || 99
+      const pb = rolePriority[(b.role || '').toLowerCase()] || 99
       if (pa !== pb) return pa - pb
       return (a.name || '').localeCompare(b.name || '')
     })
@@ -458,16 +518,20 @@ function ChangeManagerModal({ employee, allEmployees, isOpen, onClose, onSave })
     setError('')
     setSaving(true)
     try {
-      const val = hrStore.validateManagerAssignment(employee.id, selectedMgrId || null)
-      if (!val.valid) {
-        setError(val.message)
-        return
+      if (selectedMgrId) {
+        const val = hrStore.validateManagerAssignment(employee.id, selectedMgrId)
+        if (!val.valid) {
+          setError(val.message)
+          return
+        }
       }
       await onSave(employee.id, selectedMgrId || null)
       onClose()
     } catch (err) {
       setError(err.message)
-    } finally { setSaving(false) }
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -488,7 +552,7 @@ function ChangeManagerModal({ employee, allEmployees, isOpen, onClose, onSave })
       <div
         style={{
           width: '100%',
-          maxWidth: '520px',
+          maxWidth: '540px',
           backgroundColor: '#ffffff',
           borderRadius: '16px',
           border: '1px solid #e2e8f0',
@@ -505,7 +569,7 @@ function ChangeManagerModal({ employee, allEmployees, isOpen, onClose, onSave })
           <div>
             <h3 style={{ fontSize: '18px', fontWeight: 700, margin: 0, color: '#0f172a' }}>Change Reporting Manager</h3>
             <p style={{ fontSize: '13px', color: '#64748b', margin: '4px 0 0 0' }}>
-              Reassign reporting line for <strong style={{ color: '#0f172a' }}>{employee.name}</strong> ({employee.designation})
+              Reassign reporting line for <strong style={{ color: '#0f172a' }}>{employee.name}</strong> ({employee.designation || 'Staff'})
             </p>
           </div>
           <button
@@ -515,6 +579,28 @@ function ChangeManagerModal({ employee, allEmployees, isOpen, onClose, onSave })
           >
             <X size={20} />
           </button>
+        </div>
+
+        {/* Current Manager Banner */}
+        <div
+          style={{
+            backgroundColor: '#f1f5f9',
+            borderRadius: '10px',
+            padding: '10px 14px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            fontSize: '12px',
+          }}
+        >
+          <span style={{ color: '#64748b', fontWeight: 600 }}>Current Manager:</span>
+          {currentManager ? (
+            <span style={{ fontWeight: 700, color: '#0f172a' }}>
+              {currentManager.name} ({currentManager.designation || currentManager.department})
+            </span>
+          ) : (
+            <span style={{ fontWeight: 600, color: '#0284c7' }}>Top-Level (Company Root / No Manager)</span>
+          )}
         </div>
 
         {error && (
@@ -537,37 +623,78 @@ function ChangeManagerModal({ employee, allEmployees, isOpen, onClose, onSave })
 
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <div>
-            <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, marginBottom: '6px', color: '#334155' }}>
-              Select New Reporting Manager
-            </label>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+              <label style={{ fontSize: '13px', fontWeight: 600, color: '#334155' }}>
+                Select New Reporting Manager
+              </label>
+              <label style={{ fontSize: '11px', color: '#64748b', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={showAllEmployees}
+                  onChange={(e) => setShowAllEmployees(e.target.checked)}
+                />
+                Show all staff
+              </label>
+            </div>
+
+            {/* Quick Search inside modal */}
+            <input
+              type="text"
+              placeholder="Search manager by name, title, or department..."
+              value={searchFilter}
+              onChange={(e) => setSearchFilter(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '8px 12px',
+                borderRadius: '8px',
+                border: '1px solid #cbd5e1',
+                fontSize: '12px',
+                marginBottom: '8px',
+                boxSizing: 'border-box',
+              }}
+            />
+
             <select
               value={selectedMgrId}
               onChange={(e) => {
                 setSelectedMgrId(e.target.value)
                 setError('')
               }}
+              size={6}
               style={{
                 width: '100%',
-                padding: '10px 12px',
+                padding: '6px',
                 borderRadius: '8px',
                 border: '1px solid #cbd5e1',
                 backgroundColor: '#ffffff',
                 fontSize: '13px',
                 color: '#0f172a',
+                boxSizing: 'border-box',
               }}
             >
-              <option value="">None (Top-Level / Company Root)</option>
+              <option value="" style={{ padding: '6px 8px', fontWeight: 600, color: '#0284c7' }}>
+                ⭐ None (Promote to Top-Level Company Root)
+              </option>
               {availableManagers.map((mgr) => {
                 const val = hrStore.validateManagerAssignment(employee.id, mgr.id)
                 return (
-                  <option key={mgr.id} value={mgr.id} disabled={!val.valid}>
-                    {mgr.name} — {mgr.designation} ({mgr.department}) {!val.valid ? '(Circular Chain Loop)' : ''}
+                  <option
+                    key={mgr.id}
+                    value={mgr.id}
+                    disabled={!val.valid}
+                    style={{
+                      padding: '6px 8px',
+                      color: !val.valid ? '#94a3b8' : '#0f172a',
+                      backgroundColor: !val.valid ? '#f8fafc' : '#ffffff',
+                    }}
+                  >
+                    {mgr.name} — {mgr.designation || 'Staff'} ({mgr.department}) {!val.valid ? '⛔ (Circular Loop)' : ''}
                   </option>
                 )
               })}
             </select>
-            <span style={{ display: 'block', fontSize: '11px', color: '#64748b', marginTop: '4px' }}>
-              Note: Subordinates in {employee.name}'s reporting line are automatically disabled to prevent circular loops.
+            <span style={{ display: 'block', fontSize: '11px', color: '#64748b', marginTop: '6px' }}>
+              Subordinates in {employee.name}'s reporting line are automatically blocked to prevent circular loops.
             </span>
           </div>
 
@@ -594,7 +721,7 @@ function ChangeManagerModal({ employee, allEmployees, isOpen, onClose, onSave })
               className="ui-button primary"
               style={{ padding: '8px 20px', fontSize: '13px', fontWeight: 600 }}
             >
-              Update Manager
+              {saving ? 'Updating...' : 'Confirm Manager Change'}
             </button>
           </div>
         </form>
@@ -604,10 +731,12 @@ function ChangeManagerModal({ employee, allEmployees, isOpen, onClose, onSave })
 }
 
 // -------------------------------------------------------------
-// TRANSFER DEPARTMENT MODAL
+// TRANSFER DEPARTMENT & SQUAD MODAL
 // -------------------------------------------------------------
 function TransferDepartmentModal({ employee, allEmployees, isOpen, onClose, onSave }) {
   const [department, setDepartment] = useState(employee?.department || 'Technology')
+  const [squad, setSquad] = useState(employee?.squad || employee?.team || '')
+  const [designation, setDesignation] = useState(employee?.designation || '')
   const [managerId, setManagerId] = useState(employee?.managerId || '')
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
@@ -615,14 +744,33 @@ function TransferDepartmentModal({ employee, allEmployees, isOpen, onClose, onSa
   useEffect(() => {
     if (employee) {
       setDepartment(employee.department || 'Technology')
+      setSquad(employee.squad || employee.team || '')
+      setDesignation(employee.designation || '')
       setManagerId(employee.managerId || '')
       setError('')
     }
   }, [employee, isOpen])
 
-  if (!isOpen || !employee) return null
+  const departments = useMemo(() => {
+    const raw = hrStore.getDepartments ? hrStore.getDepartments() : []
+    const names = raw.map((d) => (typeof d === 'string' ? d : d.name)).filter(Boolean)
+    allEmployees.forEach((e) => {
+      if (e.department && !names.includes(e.department)) names.push(e.department)
+    })
+    return Array.from(new Set(names)).sort()
+  }, [allEmployees])
 
-  const departments = ['Executive Leadership', 'Revenue Growth', 'Operations', 'Technology', 'Human Resources']
+  const squads = useMemo(() => {
+    const raw = hrStore.getTeams ? hrStore.getTeams() : []
+    const names = raw.map((t) => (typeof t === 'string' ? t : t.name)).filter(Boolean)
+    allEmployees.forEach((e) => {
+      if (e.squad && !names.includes(e.squad)) names.push(e.squad)
+      if (e.team && !names.includes(e.team)) names.push(e.team)
+    })
+    return Array.from(new Set(names)).sort()
+  }, [allEmployees])
+
+  if (!isOpen || !employee) return null
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -637,11 +785,13 @@ function TransferDepartmentModal({ employee, allEmployees, isOpen, onClose, onSa
           return
         }
       }
-      await onSave(employee.id, department, managerId || null)
+      await onSave(employee.id, department, managerId || null, { squad, designation })
       onClose()
     } catch (err) {
       setError(err.message)
-    } finally { setSaving(false) }
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -677,9 +827,9 @@ function TransferDepartmentModal({ employee, allEmployees, isOpen, onClose, onSa
       >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
-            <h3 style={{ fontSize: '18px', fontWeight: 700, margin: 0, color: '#0f172a' }}>Transfer Department</h3>
+            <h3 style={{ fontSize: '18px', fontWeight: 700, margin: 0, color: '#0f172a' }}>Transfer Department & Squad</h3>
             <p style={{ fontSize: '13px', color: '#64748b', margin: '4px 0 0 0' }}>
-              Transfer <strong style={{ color: '#0f172a' }}>{employee.name}</strong> to a different department
+              Transfer <strong style={{ color: '#0f172a' }}>{employee.name}</strong> to a different department or team
             </p>
           </div>
           <button
@@ -709,22 +859,23 @@ function TransferDepartmentModal({ employee, allEmployees, isOpen, onClose, onSa
           </div>
         )}
 
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
           <div>
-            <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, marginBottom: '6px', color: '#334155' }}>
-              Target Department
+            <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px', color: '#334155' }}>
+              Target Department *
             </label>
             <select
               value={department}
               onChange={(e) => setDepartment(e.target.value)}
               style={{
                 width: '100%',
-                padding: '10px 12px',
+                padding: '9px 12px',
                 borderRadius: '8px',
                 border: '1px solid #cbd5e1',
                 backgroundColor: '#ffffff',
                 fontSize: '13px',
                 color: '#0f172a',
+                boxSizing: 'border-box',
               }}
             >
               {departments.map((d) => (
@@ -735,36 +886,80 @@ function TransferDepartmentModal({ employee, allEmployees, isOpen, onClose, onSa
             </select>
           </div>
 
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px', color: '#334155' }}>
+                Squad / Team
+              </label>
+              <input
+                type="text"
+                list="transfer-squad-list"
+                value={squad}
+                onChange={(e) => setSquad(e.target.value)}
+                placeholder="e.g. Core Dev, Growth"
+                style={{
+                  width: '100%',
+                  padding: '9px 12px',
+                  borderRadius: '8px',
+                  border: '1px solid #cbd5e1',
+                  fontSize: '13px',
+                  color: '#0f172a',
+                  boxSizing: 'border-box',
+                }}
+              />
+              <datalist id="transfer-squad-list">
+                {squads.map((s) => (
+                  <option key={s} value={s} />
+                ))}
+              </datalist>
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px', color: '#334155' }}>
+                Designation / Title
+              </label>
+              <input
+                type="text"
+                value={designation}
+                onChange={(e) => setDesignation(e.target.value)}
+                placeholder="e.g. SDE, Lead"
+                style={{
+                  width: '100%',
+                  padding: '9px 12px',
+                  borderRadius: '8px',
+                  border: '1px solid #cbd5e1',
+                  fontSize: '13px',
+                  color: '#0f172a',
+                  boxSizing: 'border-box',
+                }}
+              />
+            </div>
+          </div>
+
           <div>
-            <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, marginBottom: '6px', color: '#334155' }}>
-              New Reporting Manager (Optional)
+            <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px', color: '#334155' }}>
+              Reporting Manager in New Department (Optional)
             </label>
             <select
               value={managerId}
               onChange={(e) => setManagerId(e.target.value)}
               style={{
                 width: '100%',
-                padding: '10px 12px',
+                padding: '9px 12px',
                 borderRadius: '8px',
                 border: '1px solid #cbd5e1',
                 backgroundColor: '#ffffff',
                 fontSize: '13px',
                 color: '#0f172a',
+                boxSizing: 'border-box',
               }}
             >
-              <option value="">Keep current / None</option>
+              <option value="">Keep current manager / None</option>
               {allEmployees
-                .filter((m) => m.id !== employee.id && m._id !== employee.id && m.status === 'active' && ['director', 'manager', 'team_lead', 'admin', 'hr'].includes(m.role))
-                .sort((a, b) => {
-                  const rolePriority = { director: 1, manager: 2, team_lead: 3, admin: 4, hr: 5 }
-                  const pa = rolePriority[a.role] || 99
-                  const pb = rolePriority[b.role] || 99
-                  if (pa !== pb) return pa - pb
-                  return (a.name || '').localeCompare(b.name || '')
-                })
+                .filter((m) => m.id !== employee.id && m._id !== employee.id && m.status === 'active')
                 .map((mgr) => (
                   <option key={mgr.id} value={mgr.id}>
-                    {mgr.name} — {mgr.designation} ({mgr.department})
+                    {mgr.name} — {mgr.designation || 'Staff'} ({mgr.department})
                   </option>
                 ))}
             </select>
@@ -794,6 +989,308 @@ function TransferDepartmentModal({ employee, allEmployees, isOpen, onClose, onSa
               style={{ padding: '8px 20px', fontSize: '13px', fontWeight: 600 }}
             >
               {saving ? 'Saving...' : 'Confirm Transfer'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+// -------------------------------------------------------------
+// EDIT POSITION & ROLE MODAL
+// -------------------------------------------------------------
+function EditPositionModal({ employee, allEmployees, isOpen, onClose, onSave }) {
+  const [designation, setDesignation] = useState('')
+  const [role, setRole] = useState('employee')
+  const [squad, setSquad] = useState('')
+  const [location, setLocation] = useState('Ignite Campus')
+  const [status, setStatus] = useState('active')
+  const [employmentType, setEmploymentType] = useState('full_time')
+  const [error, setError] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    if (employee) {
+      setDesignation(employee.designation || '')
+      setRole(employee.role || 'employee')
+      setSquad(employee.squad || employee.team || '')
+      setLocation(employee.location || employee.campus || 'Ignite Campus')
+      setStatus(employee.status || 'active')
+      setEmploymentType(employee.employmentType || 'full_time')
+      setError('')
+    }
+  }, [employee, isOpen])
+
+  if (!isOpen || !employee) return null
+
+  const roles = [
+    { value: 'employee', label: 'Employee (Individual Contributor)' },
+    { value: 'team_leader', label: 'Team Leader / Lead' },
+    { value: 'manager', label: 'Manager' },
+    { value: 'revenue_growth_manager', label: 'Revenue Growth Manager' },
+    { value: 'vertical_head', label: 'Vertical Head / Director' },
+    { value: 'hr', label: 'HR / People Operations' },
+    { value: 'admin', label: 'System Administrator' },
+  ]
+
+  const squads = useMemo(() => {
+    const raw = hrStore.getTeams ? hrStore.getTeams() : []
+    const names = raw.map((t) => (typeof t === 'string' ? t : t.name)).filter(Boolean)
+    allEmployees.forEach((e) => {
+      if (e.squad && !names.includes(e.squad)) names.push(e.squad)
+      if (e.team && !names.includes(e.team)) names.push(e.team)
+    })
+    return Array.from(new Set(names)).sort()
+  }, [allEmployees])
+
+  async function handleSubmit(e) {
+    e.preventDefault()
+    if (saving) return
+    if (!designation.trim()) {
+      setError('Designation is required.')
+      return
+    }
+    setError('')
+    setSaving(true)
+    try {
+      await onSave(employee.id, {
+        designation: designation.trim(),
+        role,
+        squad: squad.trim(),
+        team: squad.trim(),
+        location: location.trim(),
+        campus: location.trim(),
+        status,
+        employmentType,
+      })
+      onClose()
+    } catch (err) {
+      setError(err.message || 'Failed to update position details.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        backgroundColor: 'rgba(15, 23, 42, 0.75)',
+        backdropFilter: 'blur(6px)',
+        zIndex: 99999,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '16px',
+      }}
+      onClick={onClose}
+    >
+      <div
+        style={{
+          width: '100%',
+          maxWidth: '520px',
+          backgroundColor: '#ffffff',
+          borderRadius: '16px',
+          border: '1px solid #e2e8f0',
+          boxShadow: '0 25px 50px -12px rgba(0,0,0,0.35)',
+          padding: '24px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '16px',
+          color: '#0f172a',
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div>
+            <h3 style={{ fontSize: '18px', fontWeight: 700, margin: 0, color: '#0f172a' }}>Edit Position & Details</h3>
+            <p style={{ fontSize: '13px', color: '#64748b', margin: '4px 0 0 0' }}>
+              Update title, role, squad & campus for <strong style={{ color: '#0f172a' }}>{employee.name}</strong>
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }}
+          >
+            <X size={20} />
+          </button>
+        </div>
+
+        {error && (
+          <div
+            style={{
+              padding: '12px 14px',
+              backgroundColor: '#fee2e2',
+              color: '#b91c1c',
+              borderRadius: '8px',
+              fontSize: '13px',
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: '8px',
+            }}
+          >
+            <AlertCircle size={16} style={{ marginTop: '2px', flexShrink: 0 }} />
+            <span>{error}</span>
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          <div>
+            <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px', color: '#334155' }}>
+              Job Title / Designation *
+            </label>
+            <input
+              type="text"
+              required
+              value={designation}
+              onChange={(e) => setDesignation(e.target.value)}
+              placeholder="e.g. SDE, Senior Engineer, Product Designer"
+              style={{
+                width: '100%',
+                padding: '9px 12px',
+                borderRadius: '8px',
+                border: '1px solid #cbd5e1',
+                fontSize: '13px',
+                color: '#0f172a',
+                boxSizing: 'border-box',
+              }}
+            />
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px', color: '#334155' }}>
+                System Access Role
+              </label>
+              <select
+                value={role}
+                onChange={(e) => setRole(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '9px 12px',
+                  borderRadius: '8px',
+                  border: '1px solid #cbd5e1',
+                  backgroundColor: '#ffffff',
+                  fontSize: '13px',
+                  color: '#0f172a',
+                  boxSizing: 'border-box',
+                }}
+              >
+                {roles.map((r) => (
+                  <option key={r.value} value={r.value}>
+                    {r.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px', color: '#334155' }}>
+                Squad / Team
+              </label>
+              <input
+                type="text"
+                list="pos-squad-list"
+                value={squad}
+                onChange={(e) => setSquad(e.target.value)}
+                placeholder="e.g. Core Dev, Growth, Ops"
+                style={{
+                  width: '100%',
+                  padding: '9px 12px',
+                  borderRadius: '8px',
+                  border: '1px solid #cbd5e1',
+                  fontSize: '13px',
+                  color: '#0f172a',
+                  boxSizing: 'border-box',
+                }}
+              />
+              <datalist id="pos-squad-list">
+                {squads.map((s) => (
+                  <option key={s} value={s} />
+                ))}
+              </datalist>
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px', color: '#334155' }}>
+                Campus / Location
+              </label>
+              <select
+                value={location}
+                onChange={(e) => setLocation(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '9px 12px',
+                  borderRadius: '8px',
+                  border: '1px solid #cbd5e1',
+                  backgroundColor: '#ffffff',
+                  fontSize: '13px',
+                  color: '#0f172a',
+                  boxSizing: 'border-box',
+                }}
+              >
+                <option value="Ignite Campus">Ignite Campus</option>
+                <option value="Velocity Hub">Velocity Hub</option>
+                <option value="Headquarters">Headquarters</option>
+                <option value="Remote">Remote</option>
+              </select>
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px', color: '#334155' }}>
+                Employment Status
+              </label>
+              <select
+                value={status}
+                onChange={(e) => setStatus(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '9px 12px',
+                  borderRadius: '8px',
+                  border: '1px solid #cbd5e1',
+                  backgroundColor: '#ffffff',
+                  fontSize: '13px',
+                  color: '#0f172a',
+                  boxSizing: 'border-box',
+                }}
+              >
+                <option value="active">Active</option>
+                <option value="on_leave">On Leave</option>
+                <option value="probation">Probation</option>
+                <option value="inactive">Inactive</option>
+              </select>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
+            <button
+              type="button"
+              onClick={onClose}
+              style={{
+                padding: '8px 16px',
+                borderRadius: '8px',
+                border: '1px solid #cbd5e1',
+                background: '#f8fafc',
+                color: '#334155',
+                fontSize: '13px',
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="ui-button primary"
+              style={{ padding: '8px 20px', fontSize: '13px', fontWeight: 600 }}
+            >
+              {saving ? 'Saving...' : 'Save Changes'}
             </button>
           </div>
         </form>
@@ -849,6 +1346,15 @@ function QuickAddEmployeeModal({ allEmployees, defaultManagerId, isOpen, onClose
     emergencyPhone: '',
   })
   const [error, setError] = useState('')
+
+  const departments = useMemo(() => {
+    const raw = hrStore.getDepartments ? hrStore.getDepartments() : []
+    const names = raw.map((d) => (typeof d === 'string' ? d : d.name)).filter(Boolean)
+    allEmployees.forEach((e) => {
+      if (e.department && !names.includes(e.department)) names.push(e.department)
+    })
+    return Array.from(new Set(names)).sort()
+  }, [allEmployees])
 
   useEffect(() => {
     if (defaultManagerId) {
@@ -1045,7 +1551,7 @@ function QuickAddEmployeeModal({ allEmployees, defaultManagerId, isOpen, onClose
                       onChange={(e) => setFormData({ ...formData, department: e.target.value })}
                       style={{ width: '100%', padding: '8px 10px', fontSize: '12px', borderRadius: '6px', border: '1px solid #cbd5e1' }}
                     >
-                      {['Executive Leadership', 'Revenue Growth', 'Operations', 'Technology', 'Human Resources'].map((d) => (
+                      {departments.map((d) => (
                         <option key={d} value={d}>{d}</option>
                       ))}
                     </select>
@@ -1482,7 +1988,9 @@ export function OrgHierarchyPage() {
   // Modals state
   const [changeMgrModalOpen, setChangeMgrModalOpen] = useState(false)
   const [transferDeptModalOpen, setTransferDeptModalOpen] = useState(false)
+  const [editDetailsModalOpen, setEditDetailsModalOpen] = useState(false)
   const [addEmpModalOpen, setAddEmpModalOpen] = useState(false)
+  const [addEmpDefaultManagerId, setAddEmpDefaultManagerId] = useState('')
 
   const canvasRef = useRef(null)
 
@@ -1660,20 +2168,39 @@ export function OrgHierarchyPage() {
   }
 
   async function handleSaveManager(employeeId, newManagerId) {
+    try {
       const updated = await hrStore.updateEmployeeManager(employeeId, newManagerId, user?.displayName || user?.name || 'Admin')
-      showNotification(`Successfully updated reporting manager for ${updated.name}.`)
-      setSelectedNode(updated)
+      showNotification(`Successfully updated reporting manager for ${updated?.name || 'employee'}.`)
+      if (updated) setSelectedNode(updated)
+    } catch (err) {
+      showNotification(`Failed to update manager: ${err.message}`)
+    }
   }
 
-  async function handleSaveDepartmentTransfer(employeeId, newDepartment, newManagerId) {
+  async function handleSaveDepartmentTransfer(employeeId, newDepartment, newManagerId, extra = {}) {
+    try {
       const updated = await hrStore.transferEmployeeDepartment(
         employeeId,
         newDepartment,
         newManagerId,
-        user?.displayName || user?.name || 'Admin'
+        user?.displayName || user?.name || 'Admin',
+        extra
       )
-      showNotification(`Transferred ${updated.name} to department ${newDepartment}.`)
-      setSelectedNode(updated)
+      showNotification(`Transferred ${updated?.name || 'employee'} to department ${newDepartment}.`)
+      if (updated) setSelectedNode(updated)
+    } catch (err) {
+      showNotification(`Failed to transfer department: ${err.message}`)
+    }
+  }
+
+  async function handleSavePositionDetails(employeeId, updates) {
+    try {
+      const updated = await hrStore.updateEmployee(employeeId, updates)
+      showNotification(`Updated position details for ${updated?.name || 'employee'}.`)
+      if (updated) setSelectedNode(updated)
+    } catch (err) {
+      showNotification(`Failed to update position details: ${err.message}`)
+    }
   }
 
   function handleEmployeeCreated(newEmp) {
@@ -1748,6 +2275,33 @@ export function OrgHierarchyPage() {
 
         {/* Quick Metrics & Actions */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          {isHRorAdmin && (
+            <button
+              type="button"
+              onClick={() => {
+                setAddEmpDefaultManagerId('')
+                setAddEmpModalOpen(true)
+              }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                backgroundColor: 'var(--primary)',
+                color: '#ffffff',
+                border: 'none',
+                borderRadius: '10px',
+                padding: '9px 16px',
+                fontSize: '13px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                boxShadow: '0 2px 6px rgba(0, 102, 204, 0.25)',
+              }}
+            >
+              <UserPlus size={15} />
+              <span>Add Staff to Org</span>
+            </button>
+          )}
+
           <div
             style={{
               display: 'flex',
@@ -1921,9 +2475,9 @@ export function OrgHierarchyPage() {
                 }}
               >
                 <option value="">Scope: Full Org (Admin/HR View)</option>
-                <optgroup label="Simulate as Director">
-                  {allEmployees.filter((e) => e.role === 'director').map((e) => (
-                    <option key={e.id} value={e.id}>{e.displayName || e.name} (Overall Director)</option>
+                <optgroup label="Simulate as Managing Director / Executive">
+                  {allEmployees.filter((e) => ['managing_director', 'director', 'co_founder'].includes(e.role)).map((e) => (
+                    <option key={e.id} value={e.id}>{e.displayName || e.name} (Managing Director)</option>
                   ))}
                 </optgroup>
                 <optgroup label="Simulate as Department Managers">
@@ -1932,7 +2486,7 @@ export function OrgHierarchyPage() {
                   ))}
                 </optgroup>
                 <optgroup label="Simulate as Team Leads">
-                  {allEmployees.filter((e) => e.role === 'team_lead').map((e) => (
+                  {allEmployees.filter((e) => e.role === 'team_lead' || e.role === 'team_leader' || /lead|leader|tl/i.test(e.role)).map((e) => (
                     <option key={e.id} value={e.id}>{e.name} (TL - {e.department})</option>
                   ))}
                 </optgroup>
@@ -2143,7 +2697,7 @@ export function OrgHierarchyPage() {
                 Role-Scoped Hierarchy View Active
                 {targetEmployee && (
                   <span style={{ fontWeight: 600, color: '#0284c7', marginLeft: '6px' }}>
-                    — Viewing as: {targetEmployee.name} ({targetEmployee.designation || targetEmployee.role})
+                    — Viewing as: {targetEmployee.name} ({targetEmployee.designation || 'Pending Designation'})
                   </span>
                 )}
               </div>
@@ -2383,11 +2937,11 @@ export function OrgHierarchyPage() {
                 </div>
                 <div>
                   <span style={{ color: 'var(--muted)', fontSize: '11px', display: 'block' }}>Location</span>
-                  <span style={{ fontWeight: 600 }}>{selectedNode.location || 'Headquarters'}</span>
+                  <span style={{ fontWeight: 600 }}>{selectedNode.location || selectedNode.campus || 'Headquarters'}</span>
                 </div>
                 <div>
-                  <span style={{ color: 'var(--muted)', fontSize: '11px', display: 'block' }}>Joined</span>
-                  <span style={{ fontWeight: 600 }}>{selectedNode.joiningDate || '2023-01-01'}</span>
+                  <span style={{ color: 'var(--muted)', fontSize: '11px', display: 'block' }}>Squad / Team</span>
+                  <span style={{ fontWeight: 600 }}>{selectedNode.squad || selectedNode.team || 'General'}</span>
                 </div>
               </div>
 
@@ -2404,6 +2958,141 @@ export function OrgHierarchyPage() {
                   </div>
                 )}
               </div>
+
+              {/* HIERARCHY MANAGEMENT ACTIONS (ADMIN / HR) */}
+              {isHRorAdmin && (
+                <div style={{ borderTop: '1px solid var(--border)', paddingTop: '16px' }}>
+                  <div
+                    style={{
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      textTransform: 'uppercase',
+                      color: 'var(--muted)',
+                      marginBottom: '10px',
+                      letterSpacing: '0.04em',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                    }}
+                  >
+                    <span>Hierarchy Management</span>
+                    <span style={{ fontSize: '10px', color: 'var(--primary)', fontWeight: 600 }}>Admin Controls</span>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                    <button
+                      type="button"
+                      onClick={() => setChangeMgrModalOpen(true)}
+                      title="Change reporting line / Move in tree"
+                      style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'flex-start',
+                        gap: '4px',
+                        padding: '10px 12px',
+                        borderRadius: '8px',
+                        border: '1px solid var(--border)',
+                        backgroundColor: 'var(--surface)',
+                        cursor: 'pointer',
+                        textAlign: 'left',
+                        transition: 'all 0.15s ease',
+                      }}
+                      onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--primary)'; e.currentTarget.style.backgroundColor = 'var(--surface-sunken)' }}
+                      onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.backgroundColor = 'var(--surface)' }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--primary)', fontWeight: 700, fontSize: '12px' }}>
+                        <GitFork size={14} />
+                        <span>Move / Manager</span>
+                      </div>
+                      <span style={{ fontSize: '10px', color: 'var(--muted)' }}>Change reporting line</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setTransferDeptModalOpen(true)}
+                      title="Transfer employee to another department or squad"
+                      style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'flex-start',
+                        gap: '4px',
+                        padding: '10px 12px',
+                        borderRadius: '8px',
+                        border: '1px solid var(--border)',
+                        backgroundColor: 'var(--surface)',
+                        cursor: 'pointer',
+                        textAlign: 'left',
+                        transition: 'all 0.15s ease',
+                      }}
+                      onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--primary)'; e.currentTarget.style.backgroundColor = 'var(--surface-sunken)' }}
+                      onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.backgroundColor = 'var(--surface)' }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#8b5cf6', fontWeight: 700, fontSize: '12px' }}>
+                        <Building size={14} />
+                        <span>Transfer Dept</span>
+                      </div>
+                      <span style={{ fontSize: '10px', color: 'var(--muted)' }}>Dept & squad directory</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setEditDetailsModalOpen(true)}
+                      title="Quick edit designation, role, squad & campus"
+                      style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'flex-start',
+                        gap: '4px',
+                        padding: '10px 12px',
+                        borderRadius: '8px',
+                        border: '1px solid var(--border)',
+                        backgroundColor: 'var(--surface)',
+                        cursor: 'pointer',
+                        textAlign: 'left',
+                        transition: 'all 0.15s ease',
+                      }}
+                      onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--primary)'; e.currentTarget.style.backgroundColor = 'var(--surface-sunken)' }}
+                      onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.backgroundColor = 'var(--surface)' }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#f59e0b', fontWeight: 700, fontSize: '12px' }}>
+                        <Edit3 size={14} />
+                        <span>Edit Position</span>
+                      </div>
+                      <span style={{ fontSize: '10px', color: 'var(--muted)' }}>Role, title & campus</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAddEmpDefaultManagerId(selectedNode.id)
+                        setAddEmpModalOpen(true)
+                      }}
+                      title="Add a subordinate reporting directly to this employee"
+                      style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'flex-start',
+                        gap: '4px',
+                        padding: '10px 12px',
+                        borderRadius: '8px',
+                        border: '1px solid var(--border)',
+                        backgroundColor: 'var(--surface)',
+                        cursor: 'pointer',
+                        textAlign: 'left',
+                        transition: 'all 0.15s ease',
+                      }}
+                      onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--primary)'; e.currentTarget.style.backgroundColor = 'var(--surface-sunken)' }}
+                      onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.backgroundColor = 'var(--surface)' }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#10b981', fontWeight: 700, fontSize: '12px' }}>
+                        <UserPlus size={14} />
+                        <span>Add Report</span>
+                      </div>
+                      <span style={{ fontSize: '10px', color: 'var(--muted)' }}>Onboard direct report</span>
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* REPORTING CHAIN (Interactive Breadcrumb) */}
               <div style={{ borderTop: '1px solid var(--border)', paddingTop: '16px' }}>
@@ -2567,6 +3256,42 @@ export function OrgHierarchyPage() {
           </aside>
         )}
       </div>
+
+      {/* MODALS */}
+      <ChangeManagerModal
+        isOpen={changeMgrModalOpen}
+        onClose={() => setChangeMgrModalOpen(false)}
+        employee={selectedNode}
+        allEmployees={allEmployees}
+        onSave={handleSaveManager}
+      />
+
+      <TransferDepartmentModal
+        isOpen={transferDeptModalOpen}
+        onClose={() => setTransferDeptModalOpen(false)}
+        employee={selectedNode}
+        allEmployees={allEmployees}
+        onSave={handleSaveDepartmentTransfer}
+      />
+
+      <EditPositionModal
+        isOpen={editDetailsModalOpen}
+        onClose={() => setEditDetailsModalOpen(false)}
+        employee={selectedNode}
+        allEmployees={allEmployees}
+        onSave={handleSavePositionDetails}
+      />
+
+      <QuickAddEmployeeModal
+        isOpen={addEmpModalOpen}
+        onClose={() => {
+          setAddEmpModalOpen(false)
+          setAddEmpDefaultManagerId('')
+        }}
+        allEmployees={allEmployees}
+        defaultManagerId={addEmpDefaultManagerId}
+        onCreated={handleEmployeeCreated}
+      />
     </div>
   )
 }

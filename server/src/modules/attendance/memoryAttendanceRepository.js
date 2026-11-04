@@ -114,7 +114,7 @@ export function createMemoryAttendanceRepository(seedRecords = []) {
       }
     },
     async findActiveTodayRecords(date) {
-      return records.filter((r) => r.date === date && r.checkIn && !r.checkOut)
+      return records.filter((r) => (!date || r.date === date) && r.checkIn && !r.checkOut)
     },
     async findByEmployeeAndDate(employeeId, date) {
       return records.find((r) => r.employeeId?.toUpperCase() === employeeId?.toUpperCase() && r.date === date) ?? null

@@ -1,10 +1,10 @@
 /**
  * High-performance client-side image compression utility.
- * Downscales camera and high-resolution images to a maximum dimension (default 512x512)
- * and encodes to an optimized JPEG data URL (quality 0.82).
- * Prevents exceeding MongoDB 16MB BSON document limits and keeps avatar payloads ~40KB - 80KB.
+ * Downscales camera and high-resolution images to a maximum dimension (default 384x384)
+ * and encodes to an optimized JPEG data URL (quality 0.75).
+ * Prevents exceeding MongoDB 16MB BSON document limits and keeps avatar payloads ~25KB - 60KB.
  */
-export function compressImageFile(file, maxWidth = 512, maxHeight = 512, quality = 0.82) {
+export function compressImageFile(file, maxWidth = 384, maxHeight = 384, quality = 0.75) {
   return new Promise((resolve, reject) => {
     if (!file) {
       return reject(new Error('No image file selected.'))
@@ -24,7 +24,7 @@ export function compressImageFile(file, maxWidth = 512, maxHeight = 512, quality
         let height = img.naturalHeight || img.height
 
         if (!width || !height) {
-          return resolve(event.target.result)
+          return reject(new Error('Unable to determine image dimensions.'))
         }
 
         // Downscale while preserving aspect ratio
@@ -39,7 +39,7 @@ export function compressImageFile(file, maxWidth = 512, maxHeight = 512, quality
         canvas.height = height
         const ctx = canvas.getContext('2d')
         if (!ctx) {
-          return resolve(event.target.result)
+          return reject(new Error('Browser canvas is not available for image processing.'))
         }
 
         // Fill background white to support transparent PNG conversion to clean JPEG
@@ -49,9 +49,22 @@ export function compressImageFile(file, maxWidth = 512, maxHeight = 512, quality
 
         try {
           const compressedDataUrl = canvas.toDataURL('image/jpeg', quality)
-          resolve(compressedDataUrl)
+          // If compressed string is still > 350KB, perform secondary reduction
+          if (compressedDataUrl.length > 350 * 1024) {
+            const secondaryCanvas = document.createElement('canvas')
+            secondaryCanvas.width = Math.round(width * 0.7)
+            secondaryCanvas.height = Math.round(height * 0.7)
+            const sCtx = secondaryCanvas.getContext('2d')
+            sCtx.fillStyle = '#FFFFFF'
+            sCtx.fillRect(0, 0, secondaryCanvas.width, secondaryCanvas.height)
+            sCtx.drawImage(canvas, 0, 0, secondaryCanvas.width, secondaryCanvas.height)
+            const secondaryDataUrl = secondaryCanvas.toDataURL('image/jpeg', 0.65)
+            resolve(secondaryDataUrl)
+          } else {
+            resolve(compressedDataUrl)
+          }
         } catch (canvasErr) {
-          resolve(event.target.result)
+          reject(new Error('Failed compressing image: ' + canvasErr.message))
         }
       }
       img.src = event.target.result
@@ -59,4 +72,3 @@ export function compressImageFile(file, maxWidth = 512, maxHeight = 512, quality
     reader.readAsDataURL(file)
   })
 }
-

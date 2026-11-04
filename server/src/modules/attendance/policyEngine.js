@@ -93,8 +93,8 @@ export function normalizeShiftConfig(raw) {
       earlyEnd = parseTimeToMinutes(raw.earlyLogoutWindow.endTime)
     } else {
       // Default: window ending 20 mins before shift end, spanning 70 mins
-      earlyStart = Math.max(0, endMins - 90)
-      earlyEnd = Math.max(0, endMins - 20)
+      earlyStart = graceMins >= 1440 ? -1 : Math.max(0, endMins - 90)
+      earlyEnd = graceMins >= 1440 ? -1 : Math.max(0, endMins - 20)
     }
   }
 
@@ -153,8 +153,8 @@ export async function resolveEmployeeShift(employeeId, dateStr) {
           graceCutoffMinutes: startMins + graceMins,
           halfDayCutoffMinutes: startMins + 60,
           earlyLogoutWindow: {
-            startMinutes: Math.max(0, endMins - 90),
-            endMinutes: Math.max(0, endMins - 20),
+            startMinutes: graceMins >= 1440 ? -1 : Math.max(0, endMins - 90),
+            endMinutes: graceMins >= 1440 ? -1 : Math.max(0, endMins - 20),
             startTime: formatMinutesToTime(Math.max(0, endMins - 90)),
             endTime: formatMinutesToTime(Math.max(0, endMins - 20)),
           },
@@ -366,15 +366,18 @@ export function evaluateRepeatedOccurrences(records = []) {
     }
   }
 
-  const lateHalfLopDays = Math.floor(lateCount / 3) * 0.5
-  const earlyHalfLopDays = Math.floor(earlyLogoutCount / 3) * 0.5
-  const totalHalfLopDays = lateHalfLopDays + earlyHalfLopDays
+  // Combined rule: Late Login and Early Logout are combined together.
+  // Every 3 occurrences (e.g. 2 early logout + 1 late login = 3) = 0.5 LOP day.
+  const totalOccurrences = lateCount + earlyLogoutCount
+  const totalHalfLopDays = Math.floor(totalOccurrences / 3) * 0.5
 
   return {
     lateCount,
     earlyLogoutCount,
-    lateHalfLopDays,
-    earlyHalfLopDays,
+    totalOccurrences,
+    combinedCount: totalOccurrences,
+    lateHalfLopDays: totalHalfLopDays,
+    earlyHalfLopDays: 0,
     totalHalfLopDays,
     qualifiesForHalfLop: totalHalfLopDays > 0,
   }

@@ -240,27 +240,41 @@ function App() {
 
     // If authenticated and visiting a login URL:
     if (status === 'authenticated' && isAuthRoute) {
-      const userPortal = user?.role === 'admin' ? '/admin' : (user?.role === 'hr' ? '/hr' : '/employee')
-      const targetPortal =
-        route.path === '/admin/login' ? '/admin' :
-        route.path === '/hr/login' ? '/hr' :
-        route.path === '/employee/login' ? '/employee' : null
-
-      // Only auto-redirect if visiting their own portal's login or generic /login
-      if (!targetPortal || targetPortal === userPortal) {
-        window.location.hash = '#' + userPortal
-        return
+      const isExec = ['director', 'managing_director', 'co_founder', 'vertical_head'].includes(user?.role) || user?.email === 'jagadishbabu@edufyitech.in'
+      const isAdmin = user?.role === 'admin'
+      const isHR = user?.role === 'hr' || user?.role === 'hr_executive'
+      
+      let defaultPortal = '/employee'
+      if (isAdmin) defaultPortal = '/admin'
+      else if (isHR) defaultPortal = '/hr'
+      else if (isExec) {
+        // MD logging in via employee login -> lands in employee self-service console!
+        defaultPortal = route.path === '/hr/login' ? '/hr' : '/employee'
       }
-      // If visiting a different portal's login (e.g. employee visiting /admin/login),
-      // allow LoginPage to display so they can authenticate into the intended portal
+
+      window.location.hash = '#' + defaultPortal
+      return
     }
 
-    // STRICT ROLE-BASED ACCESS: Each role is locked to their own portal ONLY
+    // ROLE-BASED ACCESS CONTROL & NAVIGATION
     if (status === 'authenticated' && user && !isAuthRoute) {
-      const rolePath = user.role === 'admin' ? '/admin' : (user.role === 'hr' ? '/hr' : '/employee')
-      // If the user is trying to access ANY portal other than their own, redirect
-      if (!route.path.startsWith(rolePath)) {
-        window.location.hash = '#' + rolePath
+      const isExec = ['director', 'managing_director', 'co_founder', 'vertical_head'].includes(user?.role) || user?.email === 'jagadishbabu@edufyitech.in'
+      const isAdmin = user.role === 'admin' || (user.permissions || []).includes('admin.access')
+      const isHR = user.role === 'hr' || user.role === 'hr_executive' || (user.permissions || []).includes('leave.hr.review')
+
+      // 1. Executives and Admins have unrestricted access to all consoles (/admin, /hr, /employee)
+      if (isExec || isAdmin) {
+        // No forced redirection - seamless navigation across all tabs and panels
+      } else if (isHR) {
+        // 2. HR can access /hr and /employee; redirect /admin to /hr
+        if (route.path.startsWith('/admin')) {
+          window.location.hash = '#/hr'
+        }
+      } else {
+        // 3. Regular employees and managers are restricted to /employee
+        if (!route.path.startsWith('/employee')) {
+          window.location.hash = '#/employee'
+        }
       }
     }
   }, [route.path, status, user, isAuthRoute])

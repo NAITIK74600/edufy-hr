@@ -36,6 +36,7 @@ import { hasPermission } from '../auth/permissions'
 import { hrStore, storeAction, getRecommendedRoleConfig, INITIAL_ROLES } from '../services/hrStore'
 import { generateNextEmployeeCode, generateAutoPassword, formatCredentialsShareText, copyTextToClipboard } from '../utils/credentialsHelper'
 import { formatINR } from '../utils/currency'
+import { getRoleBadgeLabel } from '../utils/greeting'
 import {
   Button,
   ConfirmationDialog,
@@ -213,6 +214,8 @@ function EmployeeDirectory({ route } = {}) {
     department: 'Technology',
     team: '',
     teamId: '',
+    squad: '',
+    squadId: '',
     teamLeadId: '',
     teamLeadName: '',
     designation: '',
@@ -286,13 +289,20 @@ function EmployeeDirectory({ route } = {}) {
   const updateFilter = (field, value) => setFilters((current) => ({ ...current, [field]: value, page: 1 }))
 
   // Managers list for dropdowns
-  const availableManagers = allEmployees.filter(
-    (e) => e.status === 'active' && [
-      'director', 'manager', 'admin', 'hr', 'team_lead', 'team_leader',
-      'senior_manager', 'general_manager', 'assistant_general_manager',
-      'head_of_sales', 'head_of_marketing', 'vertical_head', 'managing_director',
-    ].includes(e.role)
-  )
+  const availableManagers = allEmployees.filter((e) => {
+    if (!e || e.status === 'inactive' || e.status === 'terminated') return false
+    const r = String(e.role || '').toLowerCase().trim().replace(/[-\s]/g, '_')
+    const des = String(e.designation || '').toLowerCase().trim()
+    return (
+      [
+        'director', 'manager', 'admin', 'hr', 'team_lead', 'team_leader',
+        'senior_manager', 'general_manager', 'assistant_general_manager',
+        'head_of_sales', 'head_of_marketing', 'vertical_head', 'managing_director', 'co_founder',
+      ].includes(r) ||
+      r.includes('lead') || r.includes('leader') || r.includes('manager') || r.includes('director') || r.includes('head') ||
+      des.includes('lead') || des.includes('leader') || des.includes('manager') || des.includes('tl') || des.includes('head')
+    )
+  })
 
   const filteredEmployees = allEmployees.filter((emp) => {
     if (filters.search) {
@@ -300,7 +310,8 @@ function EmployeeDirectory({ route } = {}) {
       if (
         !emp.name.toLowerCase().includes(q) &&
         !emp.email.toLowerCase().includes(q) &&
-        !emp.employeeId.toLowerCase().includes(q)
+        !emp.employeeId.toLowerCase().includes(q) &&
+        !(emp.team || emp.squad || '').toLowerCase().includes(q)
       ) {
         return false
       }
@@ -368,6 +379,10 @@ function EmployeeDirectory({ route } = {}) {
     const mgr = allEmployees.find((m) => m.id === newEmpForm.managerId || m.employeeId === newEmpForm.managerId)
     const empData = {
       ...newEmpForm,
+      team: newEmpForm.team || newEmpForm.squad || '',
+      teamId: newEmpForm.teamId || newEmpForm.squadId || '',
+      squad: newEmpForm.squad || newEmpForm.team || '',
+      squadId: newEmpForm.squadId || newEmpForm.teamId || '',
       designation,
       campus: newEmpForm.campus || 'Ignite Campus',
       location: newEmpForm.campus || newEmpForm.location || 'Ignite Campus',
@@ -412,7 +427,7 @@ function EmployeeDirectory({ route } = {}) {
 
   function startEditEmployee(emp) {
     setModalError('')
-    const isDir = emp.role === 'director' || emp.email === 'jagadishbabu@edufyitech.in' || emp.email === 'director@edufyitech.in'
+    const isDir = emp.role === 'director' || emp.role === 'managing_director' || emp.email === 'jagadishbabu@edufyitech.in' || emp.email === 'director@edufyitech.in'
     const cleanDept = isDir ? 'Executive' : (emp.department || 'Executive')
     const rec = getRecommendedRoleConfig(emp.role, cleanDept)
     const isInternEmp = String(emp.employmentType || '').toLowerCase().includes('intern') ||
@@ -420,10 +435,16 @@ function EmployeeDirectory({ route } = {}) {
       String(emp.designation || '').toLowerCase().includes('intern')
     setEditingEmployee({
       ...emp,
+      team: emp.team || emp.squad || '',
+      teamId: emp.teamId || emp.squadId || '',
+      squad: emp.squad || emp.team || '',
+      squadId: emp.squadId || emp.teamId || '',
+      teamLeadId: emp.teamLeadId || '',
+      teamLeadName: emp.teamLeadName || '',
       campus: emp.campus || 'Ignite Campus',
       employmentType: emp.employmentType || (isInternEmp ? 'intern' : 'full_time'),
       department: cleanDept,
-      designation: isDir ? (emp.designation && emp.designation.toLowerCase().includes('director') ? emp.designation : 'Managing Director') : (emp.designation || rec.designation),
+      designation: isDir ? (emp.designation && emp.designation.toLowerCase().includes('director') ? emp.designation : 'Managing Director') : (emp.designation || 'Pending Designation'),
       bankName: emp.bankDetails?.bankName || '',
       accountNumber: emp.bankDetails?.accountNumber || '',
       ifscCode: emp.bankDetails?.ifscCode || '',
@@ -438,14 +459,32 @@ function EmployeeDirectory({ route } = {}) {
     e.preventDefault()
     if (!editingEmployee || !editingEmployee.name || !editingEmployee.email) return
 
-    const mgr = allEmployees.find((m) => m.id === editingEmployee.managerId || m.employeeId === editingEmployee.managerId)
+    const mgr = allEmployees.find(
+      (m) =>
+        String(m.id || m._id) === String(editingEmployee.managerId) ||
+        String(m.employeeId).toUpperCase() === String(editingEmployee.managerId).toUpperCase()
+    )
     const targetId = editingEmployee.id || editingEmployee._id || editingEmployee.employeeId
+    const validManagerId = mgr ? (mgr.id || mgr._id || mgr.employeeId) : null
+
+    const normEt = String(editingEmployee.employmentType || '').toLowerCase().trim().replace(/[-\s]/g, '_')
+    const validEt = ['full_time', 'part_time', 'contractor', 'intern'].includes(normEt)
+      ? normEt
+      : (normEt === 'contract' ? 'contractor' : (editingEmployee.role?.includes('intern') ? 'intern' : 'full_time'))
+
     const updates = {
       ...editingEmployee,
+      managerId: validManagerId,
+      managerName: mgr ? (mgr.displayName || mgr.name) : '',
+      team: editingEmployee.team || editingEmployee.squad || '',
+      teamId: editingEmployee.teamId || editingEmployee.squadId || '',
+      squad: editingEmployee.squad || editingEmployee.team || '',
+      squadId: editingEmployee.squadId || editingEmployee.teamId || '',
+      teamLeadId: editingEmployee.teamLeadId || '',
+      teamLeadName: editingEmployee.teamLeadName || '',
       campus: editingEmployee.campus || 'Ignite Campus',
       location: editingEmployee.campus || editingEmployee.location || 'Ignite Campus',
-      employmentType: editingEmployee.employmentType || (editingEmployee.role?.includes('intern') ? 'intern' : 'full_time'),
-      managerName: mgr ? mgr.name : editingEmployee.managerName,
+      employmentType: validEt,
       salary: Number(editingEmployee.salary) || 0,
       salaryStructure: editingEmployee.salaryStructure || {},
       phone: editingEmployee.phone ? String(editingEmployee.phone).trim() : '',
@@ -831,9 +870,16 @@ function EmployeeDirectory({ route } = {}) {
                       <div><span style={{ color: 'var(--muted)' }}>ID: </span><strong>{emp.employeeId}</strong></div>
                       <div><span style={{ color: 'var(--muted)' }}>Campus: </span><strong style={{ color: 'var(--teal)' }}>{emp.campus || 'Ignite Campus'}</strong></div>
                       <div><span style={{ color: 'var(--muted)' }}>Dept: </span><strong>{emp.department}</strong></div>
-                      <div><span style={{ color: 'var(--muted)' }}>Role: </span><strong>{emp.designation}</strong></div>
+                      <div><span style={{ color: 'var(--muted)' }}>Designation: </span><strong>{emp.designation || 'Pending Designation'}</strong></div>
+                <div><span style={{ color: 'var(--muted)' }}>Role: </span><strong style={{ textTransform: 'capitalize' }}>{getRoleBadgeLabel(emp.role)}</strong></div>
                       <div><span style={{ color: 'var(--muted)' }}>Type: </span><strong style={{ color: (emp.employmentType === 'intern' || String(emp.role || '').includes('intern') || String(emp.designation || '').toLowerCase().includes('intern')) ? '#0284c7' : 'inherit' }}>{(emp.employmentType === 'intern' || String(emp.role || '').includes('intern') || String(emp.designation || '').toLowerCase().includes('intern')) ? '🎓 Intern' : 'Full-Time'}</strong></div>
                       <div><span style={{ color: 'var(--muted)' }}>CTC: </span><strong style={{ color: 'var(--teal)' }}>{formatINR(emp.salary ?? 0)}</strong></div>
+                      {(emp.team || emp.squad) && (
+                        <div style={{ gridColumn: 'span 2' }}>
+                          <span style={{ color: 'var(--muted)' }}>Squad: </span>
+                          <strong style={{ color: '#7e22ce' }}>{emp.team || emp.squad}</strong>
+                        </div>
+                      )}
                     </div>
 
                     <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', borderTop: '1px solid var(--line)', paddingTop: '8px' }}>
@@ -890,6 +936,32 @@ function EmployeeDirectory({ route } = {}) {
                   },
                   { key: 'employeeId', label: 'Employee ID' },
                   { key: 'department', label: 'Department' },
+                  {
+                    key: 'team',
+                    label: 'Squad / Team',
+                    render: (employee) => {
+                      const squadName = employee.team || employee.squad
+                      if (!squadName) return <span style={{ color: 'var(--muted)', fontSize: '11px' }}>—</span>
+                      return (
+                        <span
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            padding: '2px 8px',
+                            borderRadius: '10px',
+                            fontSize: '11px',
+                            fontWeight: 600,
+                            background: '#f3e8ff',
+                            color: '#7e22ce',
+                            border: '1px solid #e9d5ff',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {squadName}
+                        </span>
+                      )
+                    },
+                  },
                   {
                     key: 'designation',
                     label: 'Designation',
@@ -1081,7 +1153,7 @@ function EmployeeDirectory({ route } = {}) {
                                 type="button"
                                 className="emp-action-btn edit"
                                 onClick={() => {
-                                  setExitForm({ employeeId: emp.id, reason: '', lastWorkingDay: '' })
+                                  setExitForm({ ...defaultExitForm, employeeId: emp.id })
                                   setShowExitModal(true)
                                 }}
                                 title="Initiate Exit / Offboarding"
@@ -1196,7 +1268,7 @@ function EmployeeDirectory({ route } = {}) {
                             </span>
                           </div>
                           <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>
-                            {emp.designation || 'Specialist'} · {emp.department} · {emp.email}
+                            {emp.designation || 'Pending Designation'} · {emp.department} · {emp.email}
                           </div>
                         </div>
                       </div>
@@ -1517,7 +1589,10 @@ function EmployeeDirectory({ route } = {}) {
               <h2>Exit Management & Departures</h2>
             </div>
             {hasPermission(user, 'employees.write') && (
-              <Button onClick={() => setShowExitModal(true)}>
+              <Button onClick={() => {
+                setExitForm(defaultExitForm)
+                setShowExitModal(true)
+              }}>
                 <UserX size={15} /> Initiate Exit Process
               </Button>
             )}
@@ -1572,6 +1647,26 @@ function EmployeeDirectory({ route } = {}) {
                             type="button"
                             className="ui-button secondary"
                             style={{ padding: '4px 10px', fontSize: '11px' }}
+                            onClick={() => {
+                              setExitForm({
+                                ...defaultExitForm,
+                                employeeId: emp.id,
+                                reason: emp.exitDetails?.reason || defaultExitForm.reason,
+                                noticePeriodDays: String(emp.exitDetails?.noticePeriodDays !== undefined && emp.exitDetails?.noticePeriodDays !== null ? emp.exitDetails.noticePeriodDays : '0'),
+                                lastWorkingDay: emp.exitDetails?.lastWorkingDay || new Date().toISOString().split('T')[0],
+                                handoverAssignee: emp.exitDetails?.handoverAssignee || '',
+                                comments: emp.exitDetails?.comments || '',
+                              })
+                              setShowExitModal(true)
+                            }}
+                            title="Edit exit details, notice period or last working day"
+                          >
+                            Edit Details
+                          </button>
+                          <button
+                            type="button"
+                            className="ui-button secondary"
+                            style={{ padding: '4px 10px', fontSize: '11px' }}
                             onClick={() => handleCancelExit(emp)}
                             title="Cancel exit and reinstate as Active"
                           >
@@ -1616,7 +1711,9 @@ function EmployeeDirectory({ route } = {}) {
                     <div>
                       <span style={{ color: 'var(--muted)', fontSize: '9px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Notice Period</span>
                       <strong style={{ display: 'block', color: 'var(--ink)', marginTop: '2px' }}>
-                        {emp.exitDetails?.noticePeriodDays ? `${emp.exitDetails.noticePeriodDays} Days` : '30 Days'}
+                        {emp.exitDetails?.noticePeriodDays !== undefined && emp.exitDetails?.noticePeriodDays !== null
+                          ? (Number(emp.exitDetails.noticePeriodDays) === 0 ? 'Immediate / 0 Days' : `${emp.exitDetails.noticePeriodDays} Days`)
+                          : '30 Days'}
                       </strong>
                     </div>
                     <div>
@@ -1942,26 +2039,40 @@ function EmployeeDirectory({ route } = {}) {
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginTop: '12px' }}>
                       <Field label="Assigned Team / Squad">
                         <select
-                          value={newEmpForm.teamId || ''}
+                          value={newEmpForm.teamId || newEmpForm.squadId || ''}
                           onChange={(e) => {
                             const selectedTeamId = e.target.value
                             const teamObj = hrStore.getTeam(selectedTeamId)
                             if (teamObj) {
+                              const targetMgr = allEmployees.find(
+                                (m) =>
+                                  String(m.id || m._id) === String(teamObj.managerId) ||
+                                  String(m.employeeId).toUpperCase() === String(teamObj.managerId).toUpperCase()
+                              )
+                              const targetTL = allEmployees.find(
+                                (m) =>
+                                  String(m.id || m._id) === String(teamObj.teamLeadId) ||
+                                  String(m.employeeId).toUpperCase() === String(teamObj.teamLeadId).toUpperCase()
+                              )
                               setNewEmpForm({
                                 ...newEmpForm,
                                 teamId: teamObj.id,
                                 team: teamObj.name,
+                                squadId: teamObj.id,
+                                squad: teamObj.name,
                                 department: teamObj.department || newEmpForm.department,
-                                managerId: teamObj.managerId || newEmpForm.managerId,
-                                managerName: teamObj.managerName || newEmpForm.managerName,
-                                teamLeadId: teamObj.teamLeadId || newEmpForm.teamLeadId,
-                                teamLeadName: teamObj.teamLeadName || newEmpForm.teamLeadName,
+                                managerId: targetMgr ? (targetMgr.id || targetMgr._id || targetMgr.employeeId) : (newEmpForm.managerId || ''),
+                                managerName: targetMgr ? (targetMgr.displayName || targetMgr.name) : (newEmpForm.managerName || ''),
+                                teamLeadId: targetTL ? (targetTL.id || targetTL._id || targetTL.employeeId) : (newEmpForm.teamLeadId || ''),
+                                teamLeadName: targetTL ? (targetTL.displayName || targetTL.name) : (newEmpForm.teamLeadName || ''),
                               })
                             } else {
                               setNewEmpForm({
                                 ...newEmpForm,
                                 teamId: '',
                                 team: '',
+                                squadId: '',
+                                squad: '',
                               })
                             }
                           }}
@@ -1979,20 +2090,23 @@ function EmployeeDirectory({ route } = {}) {
                         <select
                           value={newEmpForm.teamLeadId || ''}
                           onChange={(e) => {
-                            const tl = hrStore.getTeamLeads().find((x) => x.id === e.target.value)
+                            const tl = hrStore.getTeamLeads().find((x) => String(x.id || x._id || x.employeeId) === String(e.target.value))
                             setNewEmpForm({
                               ...newEmpForm,
                               teamLeadId: e.target.value,
-                              teamLeadName: tl ? tl.name : '',
+                              teamLeadName: tl ? (tl.displayName || tl.name) : '',
                             })
                           }}
                         >
                           <option value="">-- No Team Leader Assigned --</option>
-                          {hrStore.getTeamLeads().map((tl) => (
-                            <option key={tl.id} value={tl.id}>
-                              {tl.displayName || tl.name} ({tl.team ? `Team ${tl.team}` : tl.designation})
-                            </option>
-                          ))}
+                          {hrStore.getTeamLeads().map((tl) => {
+                            const tlId = tl.id || tl._id || tl.employeeId
+                            return (
+                              <option key={tlId} value={tlId}>
+                                {tl.displayName || tl.name} ({tl.team ? `Team ${tl.team}` : (tl.designation || tl.role)})
+                              </option>
+                            )
+                          })}
                         </select>
                       </Field>
                     </div>
@@ -2275,7 +2389,7 @@ function EmployeeDirectory({ route } = {}) {
                             name: createdCredentials.name,
                             email: createdCredentials.email,
                             employeeId: createdCredentials.employeeId,
-                            designation: createdCredentials.role ? createdCredentials.role.toUpperCase() : 'Staff Member',
+                            designation: createdCredentials.designation || 'Pending Designation',
                             department: 'Workforce',
                           },
                           temporaryPassword: createdCredentials.password,
@@ -2525,58 +2639,86 @@ function EmployeeDirectory({ route } = {}) {
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginTop: '12px' }}>
                   <Field label="Assigned Team / Squad">
-                    <select
-                      value={editingEmployee.teamId || ''}
-                      onChange={(e) => {
-                        const selectedTeamId = e.target.value
-                        const teamObj = hrStore.getTeam(selectedTeamId)
-                        if (teamObj) {
-                          setEditingEmployee({
-                            ...editingEmployee,
-                            teamId: teamObj.id,
-                            team: teamObj.name,
-                            department: teamObj.department || editingEmployee.department,
-                            managerId: teamObj.managerId || editingEmployee.managerId,
-                            managerName: teamObj.managerName || editingEmployee.managerName,
-                            teamLeadId: teamObj.teamLeadId || editingEmployee.teamLeadId,
-                            teamLeadName: teamObj.teamLeadName || editingEmployee.teamLeadName,
-                          })
-                        } else {
-                          setEditingEmployee({
-                            ...editingEmployee,
-                            teamId: '',
-                            team: '',
-                          })
-                        }
-                      }}
-                    >
-                      <option value="">-- No Specific Team / General --</option>
-                      {hrStore.getTeams().map((t) => (
-                        <option key={t.id} value={t.id}>
-                          {t.name} ({t.department} • TL: {t.teamLeadName || 'Unassigned'})
-                        </option>
-                      ))}
-                    </select>
+                    {(() => {
+                      const allTeams = hrStore.getTeams()
+                      const currentVal = editingEmployee.teamId || editingEmployee.squadId || ''
+                      const matchingTeam = allTeams.find((t) =>
+                        (currentVal && (t.id === currentVal || t.slug === currentVal)) ||
+                        (editingEmployee.team && t.name.toLowerCase() === editingEmployee.team.toLowerCase()) ||
+                        (editingEmployee.squad && t.name.toLowerCase() === editingEmployee.squad.toLowerCase())
+                      )
+                      return (
+                        <select
+                          value={matchingTeam ? matchingTeam.id : currentVal}
+                          onChange={(e) => {
+                            const selectedTeamId = e.target.value
+                            const teamObj = hrStore.getTeam(selectedTeamId)
+                            if (teamObj) {
+                              const targetMgr = allEmployees.find(
+                                (m) =>
+                                  String(m.id || m._id) === String(teamObj.managerId) ||
+                                  String(m.employeeId).toUpperCase() === String(teamObj.managerId).toUpperCase()
+                              )
+                              const targetTL = allEmployees.find(
+                                (m) =>
+                                  String(m.id || m._id) === String(teamObj.teamLeadId) ||
+                                  String(m.employeeId).toUpperCase() === String(teamObj.teamLeadId).toUpperCase()
+                              )
+                              setEditingEmployee({
+                                ...editingEmployee,
+                                teamId: teamObj.id,
+                                team: teamObj.name,
+                                squadId: teamObj.id,
+                                squad: teamObj.name,
+                                department: teamObj.department || editingEmployee.department,
+                                managerId: targetMgr ? (targetMgr.id || targetMgr._id || targetMgr.employeeId) : (editingEmployee.managerId || null),
+                                managerName: targetMgr ? (targetMgr.displayName || targetMgr.name) : (editingEmployee.managerName || ''),
+                                teamLeadId: targetTL ? (targetTL.id || targetTL._id || targetTL.employeeId) : (editingEmployee.teamLeadId || ''),
+                                teamLeadName: targetTL ? (targetTL.displayName || targetTL.name) : (editingEmployee.teamLeadName || ''),
+                              })
+                            } else {
+                              setEditingEmployee({
+                                ...editingEmployee,
+                                teamId: '',
+                                team: '',
+                                squadId: '',
+                                squad: '',
+                              })
+                            }
+                          }}
+                        >
+                          <option value="">-- No Specific Team / General --</option>
+                          {allTeams.map((t) => (
+                            <option key={t.id} value={t.id}>
+                              {t.name} ({t.department} • TL: {t.teamLeadName || 'Unassigned'})
+                            </option>
+                          ))}
+                        </select>
+                      )
+                    })()}
                   </Field>
 
                   <Field label="Team Leader (TL)">
                     <select
                       value={editingEmployee.teamLeadId || ''}
                       onChange={(e) => {
-                        const tl = hrStore.getTeamLeads().find((x) => x.id === e.target.value)
+                        const tl = hrStore.getTeamLeads().find((x) => String(x.id || x._id || x.employeeId) === String(e.target.value))
                         setEditingEmployee({
                           ...editingEmployee,
                           teamLeadId: e.target.value,
-                          teamLeadName: tl ? tl.name : '',
+                          teamLeadName: tl ? (tl.displayName || tl.name) : '',
                         })
                       }}
                     >
                       <option value="">-- No Team Leader Assigned --</option>
-                      {hrStore.getTeamLeads().filter((tl) => tl.id !== editingEmployee.id).map((tl) => (
-                        <option key={tl.id} value={tl.id}>
-                          {tl.displayName || tl.name} ({tl.team ? `Team ${tl.team}` : tl.designation})
-                        </option>
-                      ))}
+                      {hrStore.getTeamLeads().filter((tl) => String(tl.id || tl._id || tl.employeeId) !== String(editingEmployee.id || editingEmployee._id || editingEmployee.employeeId)).map((tl) => {
+                        const tlId = tl.id || tl._id || tl.employeeId
+                        return (
+                          <option key={tlId} value={tlId}>
+                            {tl.displayName || tl.name} ({tl.team ? `Team ${tl.team}` : (tl.designation || tl.role)})
+                          </option>
+                        )
+                      })}
                     </select>
                   </Field>
                 </div>
@@ -2744,7 +2886,7 @@ function EmployeeDirectory({ route } = {}) {
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                   <Field label="Notice Period Duration">
                     <select
-                      value={exitForm.noticePeriodDays}
+                      value={exitForm.noticePeriodDays ?? '30'}
                       onChange={(e) => {
                         const days = Number(e.target.value) || 0
                         const d = new Date()
@@ -2865,7 +3007,7 @@ function EmployeeDetail({ id }) {
       <PageHeader
         eyebrow="Employee profile"
         title={employee.name}
-        description={`${employee.designation || 'Specialist'} · ${employee.department} · ${employee.employeeId}`}
+        description={`${employee.designation || 'Pending Designation'} · ${employee.department} · ${employee.employeeId}`}
       >
         <div className="profile-actions-bar">
           <Button as="a" href={workforcePath('/people')} variant="secondary">
@@ -3125,8 +3267,8 @@ function EmployeeDetail({ id }) {
                   <Field label="Reporting Manager">
                     <select value={editingEmployee.managerId || ''} onChange={(event) => setEditingEmployee({ ...editingEmployee, managerId: event.target.value })}>
                       <option value="">No reporting manager</option>
-                      {storeState.employees.filter((manager) => manager.id !== employee.id && manager.status === 'active' && ['director', 'admin', 'hr', 'manager', 'team_lead'].includes(manager.role)).map((manager) => (
-                        <option key={manager.id} value={manager.id}>{manager.name} ({manager.employeeId})</option>
+                      {storeState.employees.filter((manager) => manager.id !== employee.id && manager.status === 'active' && ['director', 'managing_director', 'admin', 'hr', 'vertical_head', 'revenue_growth_manager', 'manager', 'team_lead', 'team_leader'].includes(String(manager.role || '').toLowerCase().trim().replace(/[-\s]/g, '_'))).map((manager) => (
+                        <option key={manager.id || manager._id || manager.employeeId} value={manager.id || manager._id || manager.employeeId}>{manager.name} ({manager.employeeId})</option>
                       ))}
                     </select>
                   </Field>
@@ -3398,8 +3540,8 @@ function EmployeeForm({ id }) {
           <Field label="Reporting Manager">
             <select value={form.managerId || ''} onChange={(event) => setForm({ ...form, managerId: event.target.value })}>
               <option value="">No reporting manager</option>
-              {storeState.employees.filter((employee) => employee.id !== id && employee.status === 'active' && ['director', 'admin', 'hr', 'manager', 'team_lead'].includes(employee.role)).map((employee) => (
-                <option key={employee.id} value={employee.id}>{employee.name} ({employee.employeeId})</option>
+              {storeState.employees.filter((employee) => employee.id !== id && employee.status === 'active' && ['director', 'managing_director', 'admin', 'hr', 'vertical_head', 'revenue_growth_manager', 'manager', 'team_lead', 'team_leader'].includes(String(employee.role || '').toLowerCase().trim().replace(/[-\s]/g, '_'))).map((employee) => (
+                <option key={employee.id || employee._id || employee.employeeId} value={employee.id || employee._id || employee.employeeId}>{employee.name} ({employee.employeeId})</option>
               ))}
             </select>
           </Field>

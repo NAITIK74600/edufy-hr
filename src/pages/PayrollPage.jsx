@@ -766,7 +766,7 @@ export function PayrollPage() {
                 <option value="">-- Select Employee --</option>
                 {employees.map((emp) => (
                   <option key={emp._id || emp.id} value={emp._id || emp.id}>
-                    {emp.employeeId || emp.code || 'EMP'} - {emp.name} ({emp.designation || 'Staff'})
+                    {emp.employeeId || emp.code || 'EMP'} - {emp.name} ({emp.designation || 'Pending Designation'})
                   </option>
                 ))}
               </select>

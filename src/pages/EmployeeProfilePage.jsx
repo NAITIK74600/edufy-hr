@@ -31,8 +31,8 @@ export function EmployeeProfilePage() {
     if (!file) return
     setUploadingPhoto(true)
     try {
-      // Compress client-side to max 512x512 JPEG (~50KB) to prevent MongoDB 16MB document size limit
-      const dataUrl = await compressImageFile(file, 512, 512, 0.82)
+      // Compress client-side to max 384x384 JPEG (~30KB-50KB) to prevent MongoDB 16MB document size limit
+      const dataUrl = await compressImageFile(file, 384, 384, 0.75)
       if (dataUrl) {
         if (hrStore.updateMyAvatar) {
           await hrStore.updateMyAvatar(dataUrl)
@@ -140,7 +140,7 @@ export function EmployeeProfilePage() {
               </span>
             </div>
             <p style={{ margin: '4px 0 0', color: 'var(--text-secondary)', fontSize: '13px' }}>
-              {employee.designation || 'Staff Member'} · {employee.department || 'Operations'} · ID: <strong style={{ color: 'var(--teal)' }}>{employee.employeeId}</strong>
+              {employee.designation || 'Pending Designation'} · {employee.department || 'Operations'} · ID: <strong style={{ color: 'var(--teal)' }}>{employee.employeeId}</strong>
             </p>
           </div>
 

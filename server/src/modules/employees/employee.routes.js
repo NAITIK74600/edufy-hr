@@ -2,7 +2,7 @@ import express from 'express'
 import mongoose from 'mongoose'
 import { PERMISSIONS, hasPermission } from '../../auth/permissions.js'
 import { Employee } from '../../models/Employee.js'
-import { toPublicEmployee } from './employee.repository.js'
+import { toPublicEmployee, sanitizeEmployeeForViewer } from './employee.repository.js'
 
 function parseListQuery(query) {
   return {
@@ -89,15 +89,78 @@ export function createEmployeeRouter({ auth, service, userStore, employeeReposit
       payload.onboardingStatus = 'submitted'
       payload.onboardingSubmittedAt = new Date()
 
-      // Sanitize documents so an employee cannot self-verify documents
+      // Sanitize documents so an employee cannot self-verify documents and enforce locking
       if (payload.onboardingDocs && typeof payload.onboardingDocs === 'object') {
         const existingDocs = currentEmployee?.onboardingDocs || {}
         const sanitized = { ...existingDocs }
         for (const [k, doc] of Object.entries(payload.onboardingDocs)) {
-          if (doc && typeof doc === 'object') {
+          if (!doc || typeof doc !== 'object') continue
+          const prev = existingDocs[k]
+          const prevHasFile = Boolean(prev && (prev.url || prev.fileName || (Array.isArray(prev.files) && prev.files.length > 0)))
+          const isReuploadAllowed = Boolean(
+            prev && (
+              prev.reuploadRequested === true ||
+              prev.status === 'reupload_requested' ||
+              prev.status === 'rejected'
+            )
+          )
+          const isReplacingFile = Boolean(
+            prevHasFile &&
+            ((doc.url && doc.url !== prev.url) || (doc.fileName && doc.fileName !== prev.fileName))
+          )
+
+          if (isReplacingFile && !isReuploadAllowed) {
+            return response.status(403).json({
+              success: false,
+              error: {
+                code: 'FORBIDDEN_DOCUMENT_LOCKED',
+                message: `Document "${k}" is submitted and locked. You cannot replace it unless HR explicitly requests a re-upload.`
+              }
+            })
+          }
+
+          if (isReplacingFile && isReuploadAllowed) {
+            const currentVer = Number(prev?.version || 1)
+            const hist = Array.isArray(prev?.history) ? [...prev.history] : []
+            hist.push({
+              version: currentVer,
+              fileName: prev.fileName,
+              url: prev.url,
+              size: prev.size,
+              files: prev.files,
+              uploadedAt: prev.uploadedAt,
+              submittedAt: prev.submittedAt,
+              status: prev.status,
+              rejectionReason: prev.rejectionReason,
+              reuploadRemarks: prev.reuploadRemarks,
+              verifiedAt: prev.verifiedAt,
+              verifiedBy: prev.verifiedBy,
+              archivedAt: new Date().toISOString(),
+            })
             sanitized[k] = {
               ...doc,
-              status: doc.status === 'verified' ? 'submitted' : (doc.status || 'submitted'),
+              version: currentVer + 1,
+              status: 'submitted',
+              reuploadRequested: false,
+              reuploadRequestedAt: null,
+              reuploadRequestedBy: null,
+              reuploadRemarks: null,
+              rejectionReason: null,
+              submittedAt: new Date().toISOString(),
+              history: hist,
+              verifiedAt: null,
+              verifiedBy: null,
+            }
+          } else if (!prevHasFile && (doc.url || doc.fileName)) {
+            sanitized[k] = {
+              ...doc,
+              version: 1,
+              status: 'submitted',
+              reuploadRequested: false,
+              reuploadRemarks: null,
+              rejectionReason: null,
+              submittedAt: new Date().toISOString(),
+              history: [],
               verifiedAt: null,
               verifiedBy: null,
             }
@@ -118,12 +181,12 @@ export function createEmployeeRouter({ auth, service, userStore, employeeReposit
       if (typeof avatarUrl !== 'string' || !avatarUrl.trim()) {
         return response.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'Valid avatarUrl string is required.' } })
       }
-      if (avatarUrl.length > 2 * 1024 * 1024) {
+      if (avatarUrl.length > 500 * 1024) {
         return response.status(400).json({
           success: false,
           error: {
             code: 'PAYLOAD_TOO_LARGE',
-            message: 'Image size is too large (exceeds 2MB limit). Please select an image under 2MB.'
+            message: 'Image size is too large (exceeds 500KB limit). Please select an image under 500KB.'
           }
         })
       }
@@ -140,11 +203,16 @@ export function createEmployeeRouter({ auth, service, userStore, employeeReposit
 
       let updatedEmployee = null
       if (mongoose.connection.readyState === 1) {
-        updatedEmployee = await Employee.findOneAndUpdate(
+        // Use updateOne to write only avatarUrl without full document BSON materialization
+        // This prevents "Plan executor error during findAndModify :: caused by :: BSONObj size" errors.
+        const updateRes = await Employee.updateOne(
           filter,
-          { $set: { avatarUrl: cleanAvatar } },
-          { returnDocument: 'after', lean: true }
+          { $set: { avatarUrl: cleanAvatar } }
         )
+        if (updateRes.matchedCount === 0) {
+          return response.status(404).json({ success: false, error: { code: 'EMPLOYEE_NOT_FOUND', message: 'Employee record not found.' } })
+        }
+        updatedEmployee = await Employee.findOne(filter).select('-onboardingDocs -complianceDocs').lean()
       } else {
         const empId = user.id || user._id || user.employeeId
         updatedEmployee = await service.update(empId, { avatarUrl: cleanAvatar }, request.auth.user)
@@ -172,7 +240,13 @@ export function createEmployeeRouter({ auth, service, userStore, employeeReposit
   })
 
   router.get('/', auth.authenticate, auth.requirePermission(PERMISSIONS.EMPLOYEES_READ), async (request, response, next) => {
-    try { const result = await cachedList(parseListQuery(request.query)); return response.json({ success: true, data: result.records, meta: result.meta }) } catch (error) { return next(error) }
+    try {
+      const result = await cachedList(parseListQuery(request.query))
+      const sanitized = Array.isArray(result?.records)
+        ? result.records.map((emp) => sanitizeEmployeeForViewer(emp, request.auth.user))
+        : []
+      return response.json({ success: true, data: sanitized, meta: result.meta })
+    } catch (error) { return next(error) }
   })
   router.post('/', auth.authenticate, auth.requirePermission(PERMISSIONS.EMPLOYEES_WRITE), async (request, response, next) => {
     try { const employee = await service.create(request.body ?? {}, request.auth.user); return response.status(201).json({ success: true, data: employee }) } catch (error) { return next(error) }
@@ -207,9 +281,31 @@ export function createEmployeeRouter({ auth, service, userStore, employeeReposit
       if (!isSelf && !hasPermission(request.auth.user, PERMISSIONS.EMPLOYEES_READ)) {
         return response.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'You do not have permission to view this employee.' } })
       }
-      return response.json({ success: true, data: await service.get(request.params.id) })
+      const employee = await service.get(request.params.id)
+      return response.json({ success: true, data: sanitizeEmployeeForViewer(employee, request.auth.user) })
     } catch (error) { return next(error) }
   })
+  const VERIFIER_ROLES = ['admin', 'hr', 'director', 'managing_director', 'co_founder', 'hr_executive', 'vertical_head']
+  function assertCanVerifyDocuments(actor, targetId) {
+    const isSelf = String(targetId) === String(actor.id) ||
+      String(targetId) === String(actor._id) ||
+      (actor.employeeId && String(actor.employeeId).toUpperCase() === String(targetId).toUpperCase())
+    if (isSelf) {
+      const err = new Error('Self-verification is strictly prohibited. You cannot verify or approve your own profile or documentation.')
+      err.statusCode = 403
+      err.code = 'FORBIDDEN_SELF_VERIFICATION'
+      throw err
+    }
+    const roleNormalized = String(actor?.role || '').toLowerCase().trim().replace(/[\s-]+/g, '_')
+    const isSuper = Boolean(actor?.permissions?.includes('*'))
+    if (!VERIFIER_ROLES.includes(roleNormalized) && !isSuper) {
+      const err = new Error('Access Denied: Only Director, Admin, or HR level can approve or verify employee documentation.')
+      err.statusCode = 403
+      err.code = 'FORBIDDEN_ROLE'
+      throw err
+    }
+  }
+
   router.patch('/:id', auth.authenticate, async (request, response, next) => {
     try {
       const isSelf = await checkIsSelf(request.auth.user, request.params.id)
@@ -217,10 +313,13 @@ export function createEmployeeRouter({ auth, service, userStore, employeeReposit
         return response.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'You do not have permission to update this employee.' } })
       }
       let updateBody = request.body ?? {}
-      if (isSelf && !hasPermission(request.auth.user, PERMISSIONS.EMPLOYEES_WRITE)) {
-        const allowedSelfFields = ['identity', 'parentsContact', 'emergencyContact', 'bankDetails', 'onboardingDocs', 'phone', 'financeDetails', 'complianceDocs', 'policyConsents', 'avatarUrl']
-        updateBody = Object.fromEntries(Object.entries(updateBody).filter(([key]) => allowedSelfFields.includes(key)))
-        if (request.body?.onboardingStatus) {
+      if (isSelf) {
+        if (!hasPermission(request.auth.user, PERMISSIONS.EMPLOYEES_WRITE)) {
+          const allowedSelfFields = ['identity', 'parentsContact', 'emergencyContact', 'bankDetails', 'onboardingDocs', 'phone', 'financeDetails', 'complianceDocs', 'policyConsents', 'avatarUrl']
+          updateBody = Object.fromEntries(Object.entries(updateBody).filter(([key]) => allowedSelfFields.includes(key)))
+        }
+        // Self-updates can NEVER set onboardingStatus to verified or self-verify documents, regardless of role!
+        if (updateBody.onboardingStatus === 'verified') {
           updateBody.onboardingStatus = 'submitted'
           updateBody.onboardingSubmittedAt = new Date()
         }
@@ -230,7 +329,7 @@ export function createEmployeeRouter({ auth, service, userStore, employeeReposit
             if (doc && typeof doc === 'object') {
               sanitizedDocs[k] = {
                 ...doc,
-                status: 'submitted',
+                status: doc.status === 'verified' ? 'submitted' : (doc.status || 'submitted'),
                 verifiedAt: null,
                 verifiedBy: null,
               }
@@ -257,11 +356,13 @@ export function createEmployeeRouter({ auth, service, userStore, employeeReposit
   })
   router.post('/:id/documents/:docKey/approve', auth.authenticate, auth.requirePermission(PERMISSIONS.EMPLOYEES_WRITE), async (request, response, next) => {
     try {
+      assertCanVerifyDocuments(request.auth.user, request.params.id)
       return response.json({ success: true, data: await service.approveDocument(request.params.id, request.params.docKey, request.auth.user, request.body) })
     } catch (error) { return next(error) }
   })
   router.post('/:id/documents/:docKey/reject', auth.authenticate, auth.requirePermission(PERMISSIONS.EMPLOYEES_WRITE), async (request, response, next) => {
     try {
+      assertCanVerifyDocuments(request.auth.user, request.params.id)
       return response.json({ success: true, data: await service.rejectDocument(request.params.id, request.params.docKey, request.body?.reason, request.auth.user, request.body) })
     } catch (error) { return next(error) }
   })
@@ -272,16 +373,32 @@ export function createEmployeeRouter({ auth, service, userStore, employeeReposit
   })
   router.post('/:id/onboarding/approve', auth.authenticate, auth.requirePermission(PERMISSIONS.EMPLOYEES_WRITE), async (request, response, next) => {
     try {
+      assertCanVerifyDocuments(request.auth.user, request.params.id)
       return response.json({ success: true, data: await service.approveOnboarding(request.params.id, request.auth.user) })
     } catch (error) { return next(error) }
   })
   router.post('/:id/onboarding/reject', auth.authenticate, auth.requirePermission(PERMISSIONS.EMPLOYEES_WRITE), async (request, response, next) => {
     try {
+      assertCanVerifyDocuments(request.auth.user, request.params.id)
       return response.json({ success: true, data: await service.rejectOnboarding(request.params.id, request.body?.reason, request.auth.user) })
     } catch (error) { return next(error) }
   })
-  router.post('/:id/exit/initiate', auth.authenticate, auth.requirePermission(PERMISSIONS.EMPLOYEES_WRITE), async (request, response, next) => {
+  router.post('/:id/exit/initiate', auth.authenticate, async (request, response, next) => {
     try {
+      const isSelf = String(request.params.id) === String(request.auth.user.id) || String(request.params.id) === String(request.auth.user._id)
+      const hasWrite = hasPermission(request.auth.user, PERMISSIONS.EMPLOYEES_WRITE)
+      let isManager = false
+      if (!isSelf && !hasWrite && employeeRepository) {
+        try {
+          const emp = await employeeRepository.findById(request.params.id)
+          if (emp && (String(emp.managerId) === String(request.auth.user.id) || String(emp.managerId) === String(request.auth.user._id))) {
+            isManager = true
+          }
+        } catch {}
+      }
+      if (!isSelf && !hasWrite && !isManager) {
+        return response.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'You are not authorized to initiate offboarding for this employee.' } })
+      }
       return response.json({ success: true, data: await service.initiateExit(request.params.id, request.body ?? {}, request.auth.user) })
     } catch (error) { return next(error) }
   })
@@ -295,8 +412,21 @@ export function createEmployeeRouter({ auth, service, userStore, employeeReposit
       return response.json({ success: true, data: await service.finalizeExit(request.params.id, request.auth.user) })
     } catch (error) { return next(error) }
   })
-  router.post('/:id/offboarding/checklist/:key/toggle', auth.authenticate, auth.requirePermission(PERMISSIONS.EMPLOYEES_WRITE), async (request, response, next) => {
+  router.post('/:id/offboarding/checklist/:key/toggle', auth.authenticate, async (request, response, next) => {
     try {
+      const hasWrite = hasPermission(request.auth.user, PERMISSIONS.EMPLOYEES_WRITE)
+      let isManager = false
+      if (!hasWrite && employeeRepository) {
+        try {
+          const emp = await employeeRepository.findById(request.params.id)
+          if (emp && (String(emp.managerId) === String(request.auth.user.id) || String(emp.managerId) === String(request.auth.user._id))) {
+            isManager = true
+          }
+        } catch {}
+      }
+      if (!hasWrite && !isManager) {
+        return response.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'You are not authorized to update offboarding checklist items.' } })
+      }
       return response.json({ success: true, data: await service.toggleOffboardingItem(request.params.id, request.params.key, request.auth.user) })
     } catch (error) { return next(error) }
   })
