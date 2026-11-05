@@ -277,9 +277,10 @@ async function restoreCommittedRequestBalances(repository, request) {
 
   return {
     async submit(payload, actor, targetEmployeeId) {
-      if (targetEmployeeId ? (!hasPermission(actor, PERMISSIONS.LEAVE_HR_REVIEW) && !['admin', 'hr'].includes(actor.role)) : !hasPermission(actor, PERMISSIONS.LEAVE_SELF_WRITE)) throw error('You cannot submit leave requests.', 403, 'FORBIDDEN')
+      const canManageLeaves = hasPermission(actor, PERMISSIONS.LEAVE_HR_REVIEW) || ['admin', 'hr', 'director', 'managing_director', 'co_founder', 'super_admin'].includes(actor.role)
+      if (targetEmployeeId ? !canManageLeaves : !hasPermission(actor, PERMISSIONS.LEAVE_SELF_WRITE)) throw error('You cannot submit leave requests.', 403, 'FORBIDDEN')
       const employee = targetEmployeeId ? await employeeRepository.findById(targetEmployeeId) : await getEmployee(actor)
-      if (!employee || !['active', 'notice'].includes(employee.status)) throw error('Select an active employee.', 400, 'EMPLOYEE_RECORD_NOT_FOUND')
+      if (!employee || ['inactive', 'terminated'].includes(employee.status)) throw error('Select an active employee.', 400, 'EMPLOYEE_RECORD_NOT_FOUND')
       const leaveType = String(payload.leaveType ?? '').trim().toLowerCase()
       const policy = await getPolicy(leaveType)
       const isHalfDay = Boolean(payload.isHalfDay || payload.days === 0.5)
@@ -573,8 +574,10 @@ async function restoreCommittedRequestBalances(repository, request) {
       return publicRequest(request)
     },
     async grant(payload, actor) {
-      if (!hasPermission(actor, PERMISSIONS.LEAVE_HR_REVIEW) && !['admin', 'hr'].includes(actor.role)) throw error('HR leave review is required.', 403, 'FORBIDDEN')
-      const request = await this.submit(payload, actor, payload.employeeId)
+      const canManageLeaves = hasPermission(actor, PERMISSIONS.LEAVE_HR_REVIEW) || ['admin', 'hr', 'director', 'managing_director', 'co_founder', 'super_admin'].includes(actor.role)
+      if (!canManageLeaves) throw error('HR leave review is required.', 403, 'FORBIDDEN')
+      const grantPayload = { replaceOverlap: true, ...payload }
+      const request = await this.submit(grantPayload, actor, payload.employeeId)
       return payload.status === 'approved' ? this.decide(request.id, 'approve', { comment: payload.hrComment || 'Granted directly by HR Operations' }, actor, 'hr') : request
     },
 

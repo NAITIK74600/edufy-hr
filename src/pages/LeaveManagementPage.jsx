@@ -1,5 +1,5 @@
 import { parseLocationHash } from '../navigation/navigationResolver.js'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import {
   AlertCircle,
   ArrowLeft,
@@ -103,6 +103,7 @@ function RequestStatus({ status }) {
 function RequestCard({ request, onSelect, selected, onQuickApprove, onQuickReject }) {
   if (!request) return null
   const employee = request.employeeName || request.employeeId?.name || 'Employee'
+  const empCode = request.employeeCode || (typeof request.employeeId === 'object' ? request.employeeId?.employeeId : '') || ''
   const isHalfDay = Boolean(request.isHalfDay || request.days === 0.5 || request.units === 0.5)
   const isPending =
     request.status === 'pending_tl' ||
@@ -111,65 +112,138 @@ function RequestCard({ request, onSelect, selected, onQuickApprove, onQuickRejec
     request.status === 'pending_hr' ||
     request.status === 'pending_admin'
 
+  const initials = (employee || 'E')
+    .split(' ')
+    .filter(Boolean)
+    .map((n) => n[0])
+    .slice(0, 2)
+    .join('')
+    .toUpperCase()
+
+  const hue = (employee || 'A').split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) % 360
+
   return (
     <div
       className={`leave-request-card ${selected ? 'selected' : ''}`}
       onClick={() => onSelect(request)}
-      style={{ cursor: 'pointer', position: 'relative' }}
+      style={{
+        cursor: 'pointer',
+        position: 'relative',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '10px',
+        padding: '13px 15px',
+        borderRadius: '11px',
+        border: selected ? '1.5px solid var(--teal, #006e6f)' : '1px solid var(--line)',
+        background: selected ? 'rgba(0, 110, 111, 0.03)' : '#ffffff',
+        boxShadow: selected ? '0 4px 14px rgba(0, 110, 111, 0.08)' : '0 2px 6px rgba(35, 38, 35, 0.02)',
+        transition: 'all 0.18s ease',
+      }}
     >
-      <div className="leave-request-top">
-        <div style={{ minWidth: 0, flex: 1, overflow: 'hidden' }}>
-          <strong style={{ fontSize: '12px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>{employee}</strong>
-          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>
-            {leaveTypeLabels[request.leaveType] || request.leaveType} · {isHalfDay ? formatDate(request.startDate) : `${formatDate(request.startDate)} to ${formatDate(request.endDate)}`}
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '11px', width: '100%' }}>
+        <div
+          style={{
+            width: '36px',
+            height: '36px',
+            borderRadius: '9px',
+            background: `hsl(${hue}, 65%, 92%)`,
+            color: `hsl(${hue}, 80%, 28%)`,
+            display: 'grid',
+            placeItems: 'center',
+            fontSize: '12.5px',
+            fontWeight: 700,
+            flexShrink: 0,
+            border: `1px solid hsl(${hue}, 50%, 82%)`,
+          }}
+        >
+          {initials}
+        </div>
+
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
+              <strong style={{ fontSize: '12.5px', fontWeight: 600, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {employee}
+              </strong>
+              {empCode && (
+                <span style={{ fontSize: '9.5px', color: 'var(--muted)', background: '#f3f4f6', padding: '1px 5px', borderRadius: '4px', fontWeight: 500, flexShrink: 0 }}>
+                  {empCode}
+                </span>
+              )}
+            </div>
+            <RequestStatus status={request.status} />
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '5px', flexWrap: 'wrap', marginTop: '4px' }}>
+            <span style={{ fontSize: '11px', color: '#4b5563', fontWeight: 500 }}>
+              {isHalfDay ? formatDate(request.startDate) : `${formatDate(request.startDate)} → ${formatDate(request.endDate)}`}
+            </span>
+            <span style={{ fontSize: '9.5px', padding: '1px 5px', borderRadius: '4px', background: '#f1f5f9', color: '#334155', fontWeight: 600 }}>
+              {isHalfDay ? '0.5 Day' : `${request.days || request.units || 1}d`}
+            </span>
             {isHalfDay && (
-              <span className="half-day-badge" style={{ marginLeft: '6px' }}>
-                0.5 Day · {request.halfDayPeriod === 'second_half' ? '2nd Half' : '1st Half'}
+              <span className="half-day-badge" style={{ fontSize: '9.5px' }}>
+                {request.halfDayPeriod === 'second_half' ? '2nd Half' : '1st Half'}
               </span>
             )}
             {/* Accurate Leave Badges */}
             {Boolean(request.isDoubleLop || request.doubleLopDays > 0 || request.doubleLopUnits > 0 || request.leaveType === 'double_lop') ? (
-              <span style={{ marginLeft: '6px', background: '#fee2e2', color: '#b91c1c', border: '1px solid #fca5a5', fontSize: '9px', padding: '1px 5px', borderRadius: '4px', fontWeight: 700 }}>
+              <span style={{ background: '#fee2e2', color: '#b91c1c', border: '1px solid #fca5a5', fontSize: '9.5px', padding: '1px 6px', borderRadius: '4px', fontWeight: 700 }}>
                 Double LOP (25th+)
               </span>
             ) : Boolean(request.normalLopUnits > 0 || request.leaveType === 'lop' || (request.unpaidUnits > 0 && !request.isDoubleLop)) ? (
-              <span style={{ marginLeft: '6px', background: '#fef3c7', color: '#b45309', border: '1px solid #fcd34d', fontSize: '9px', padding: '1px 5px', borderRadius: '4px', fontWeight: 700 }}>
+              <span style={{ background: '#fef3c7', color: '#b45309', border: '1px solid #fcd34d', fontSize: '9.5px', padding: '1px 6px', borderRadius: '4px', fontWeight: 700 }}>
                 Normal LOP
               </span>
             ) : Boolean(request.casualLeaveUnits > 0 && request.sickLeaveUnits > 0) ? (
-              <span style={{ marginLeft: '6px', background: '#ecfdf5', color: '#047857', border: '1px solid #a7f3d0', fontSize: '9px', padding: '1px 5px', borderRadius: '4px', fontWeight: 700 }}>
+              <span style={{ background: '#ecfdf5', color: '#047857', border: '1px solid #a7f3d0', fontSize: '9.5px', padding: '1px 6px', borderRadius: '4px', fontWeight: 700 }}>
                 CL + SL (Paid)
               </span>
             ) : Boolean(request.casualLeaveUnits > 0 || request.leaveType === 'casual') ? (
-              <span style={{ marginLeft: '6px', background: '#ecfdf5', color: '#047857', border: '1px solid #a7f3d0', fontSize: '9px', padding: '1px 5px', borderRadius: '4px', fontWeight: 700 }}>
+              <span style={{ background: '#ecfdf5', color: '#047857', border: '1px solid #a7f3d0', fontSize: '9.5px', padding: '1px 6px', borderRadius: '4px', fontWeight: 700 }}>
                 Casual Leave (Paid)
               </span>
             ) : Boolean(request.sickLeaveUnits > 0 || request.leaveType === 'sick') ? (
-              <span style={{ marginLeft: '6px', background: '#f0fdfa', color: '#0f766e', border: '1px solid #99f6e4', fontSize: '9px', padding: '1px 5px', borderRadius: '4px', fontWeight: 700 }}>
+              <span style={{ background: '#f0fdfa', color: '#0f766e', border: '1px solid #99f6e4', fontSize: '9.5px', padding: '1px 6px', borderRadius: '4px', fontWeight: 700 }}>
                 Sick Leave (Paid)
               </span>
-            ) : null}
-          </span>
+            ) : (
+              <span style={{ background: '#f8fafc', color: '#475569', border: '1px solid #e2e8f0', fontSize: '9.5px', padding: '1px 6px', borderRadius: '4px', fontWeight: 600 }}>
+                {leaveTypeLabels[request.leaveType] || request.leaveType}
+              </span>
+            )}
+          </div>
         </div>
-        <RequestStatus status={request.status} />
       </div>
 
-      <div className="leave-request-bottom" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', minWidth: 0, width: '100%', gap: '8px' }}>
-        <span style={{ minWidth: 0, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={request.reason}>
-          <strong>{isHalfDay ? '0.5 day (Half Day)' : `${request.days || request.units || 1} day(s)`}</strong> — {request.reason}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', gap: '8px', paddingTop: '6px', borderTop: '1px solid #f3f4f6' }}>
+        <span
+          style={{
+            minWidth: 0,
+            flex: 1,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            fontSize: '11px',
+            color: '#64748b'
+          }}
+          title={request.reason}
+        >
+          <strong style={{ color: '#334155' }}>Note:</strong> {request.reason || 'No justification specified'}
         </span>
 
         {isPending && onQuickApprove && (
           <div
             className="emp-action-group"
             onClick={(e) => e.stopPropagation()}
-            style={{ marginLeft: 'auto', flexShrink: 0 }}
+            style={{ marginLeft: 'auto', flexShrink: 0, display: 'flex', gap: '6px' }}
           >
             <button
               type="button"
               className="emp-action-btn view"
               onClick={() => onQuickApprove(request)}
               title="Quick Approve"
+              style={{ padding: '3px 8px', fontSize: '10.5px' }}
             >
               <Check size={11} /> Approve
             </button>
@@ -178,6 +252,7 @@ function RequestCard({ request, onSelect, selected, onQuickApprove, onQuickRejec
               className="emp-action-btn delete"
               onClick={() => onQuickReject(request)}
               title="Quick Reject"
+              style={{ padding: '3px 8px', fontSize: '10.5px' }}
             >
               <X size={11} /> Reject
             </button>
@@ -1311,6 +1386,31 @@ function GrantLeaveHR({ employees, onGranted, preselectedEmpId }) {
   })
   const [busy, setBusy] = useState(false)
   const [success, setSuccess] = useState(false)
+  const [error, setError] = useState('')
+  const [overlapConflict, setOverlapConflict] = useState(false)
+
+  const allBalances = hrStore.getState().leaveBalances || []
+  const selectedEmp = employees.find((x) => x && (x.employeeId === form.employeeId || x.id === form.employeeId || x._id === form.employeeId))
+
+  const empBalances = useMemo(() => {
+    if (!selectedEmp) return null
+    const empId = String(selectedEmp.employeeId || selectedEmp.id || selectedEmp._id || '').trim()
+    const rawBal = allBalances.filter((b) => {
+      if (!b) return false
+      const bEmpObj = typeof b.employeeId === 'object' && b.employeeId !== null ? b.employeeId : null
+      const bEmpCode = String(bEmpObj?.employeeId || (typeof b.employeeId === 'string' ? b.employeeId : '')).trim()
+      const bEmpId = String(bEmpObj?._id || bEmpObj?.id || (typeof b.employeeId === 'string' ? b.employeeId : '')).trim()
+      return (empId && (bEmpCode === empId || bEmpId === empId))
+    })
+    const casual = rawBal.find((b) => b.leaveType === 'casual')
+    const sick = rawBal.find((b) => b.leaveType === 'sick')
+    const earned = rawBal.find((b) => b.leaveType === 'earned' || b.leaveType === 'paid')
+    return {
+      casual: Math.max(0, (casual?.allowance ?? 1) - (casual?.used ?? 0) - (casual?.reserved ?? 0)),
+      sick: Math.max(0, (sick?.allowance ?? 1) - (sick?.used ?? 0) - (sick?.reserved ?? 0)),
+      earned: Math.max(0, (earned?.allowance ?? 0) - (earned?.used ?? 0) - (earned?.reserved ?? 0)),
+    }
+  }, [selectedEmp, allBalances])
 
   useEffect(() => {
     if (preselectedEmpId) {
@@ -1319,6 +1419,8 @@ function GrantLeaveHR({ employees, onGranted, preselectedEmpId }) {
   }, [preselectedEmpId])
 
   function update(field, value) {
+    setError('')
+    setOverlapConflict(false)
     setForm((current) => {
       const updated = { ...current, [field]: value }
       if (field === 'startDate') {
@@ -1342,12 +1444,14 @@ function GrantLeaveHR({ employees, onGranted, preselectedEmpId }) {
     })
   }
 
-  const handleSubmit = storeAction(async (e) => {
-    e.preventDefault()
+  const handleSubmit = storeAction(async (e, forceOverride = false) => {
+    if (e && e.preventDefault) e.preventDefault()
     const emp = employees.find((x) => x && (x.employeeId === form.employeeId || x.id === form.employeeId || x._id === form.employeeId))
     if (!emp) return
 
     setBusy(true)
+    setError('')
+    setOverlapConflict(false)
     try {
       await hrStore.applyLeave({
         ...form,
@@ -1358,68 +1462,154 @@ function GrantLeaveHR({ employees, onGranted, preselectedEmpId }) {
         employeeId: emp.employeeId,
         employeeName: emp.name,
         department: emp.department,
+        replaceOverlap: forceOverride || Boolean(overlapConflict),
       })
       setSuccess(true)
       setTimeout(() => setSuccess(false), 3500)
+      setForm({
+        employeeId: '',
+        leaveType: 'casual',
+        isHalfDay: false,
+        halfDayPeriod: 'first_half',
+        startDate: todayKey(),
+        endDate: todayKey(),
+        days: 1,
+        status: 'approved',
+        reason: '',
+        hrComment: 'Granted directly by HR Operations with manager alignment.',
+      })
+      onGranted()
+    } catch (err) {
+      console.error('HR Grant Leave failed:', err)
+      const msg = err.message || 'The leave request could not be granted.'
+      setError(msg)
+      if (
+        msg.toLowerCase().includes('overlap') ||
+        msg.toLowerCase().includes('conflict') ||
+        msg.toLowerCase().includes('already has') ||
+        msg.toLowerCase().includes('existing')
+      ) {
+        setOverlapConflict(true)
+      }
     } finally {
       setBusy(false)
     }
-    setForm({
-      employeeId: '',
-      leaveType: 'casual',
-      isHalfDay: false,
-      halfDayPeriod: 'first_half',
-      startDate: todayKey(),
-      endDate: todayKey(),
-      days: 1,
-      status: 'approved',
-      reason: '',
-      hrComment: 'Granted directly by HR Operations with manager alignment.',
-    })
-    onGranted()
   })
 
   return (
-    <div className="panel">
-      <div className="panel-heading">
+    <div className="panel" style={{ maxWidth: '880px', margin: '0 auto 24px', borderRadius: '14px', border: '1px solid var(--line)', boxShadow: '0 4px 20px rgba(35, 38, 35, 0.04)' }}>
+      <div className="panel-heading" style={{ paddingBottom: '16px', borderBottom: '1px solid var(--line)' }}>
         <div>
-          <p className="section-kicker">HR Administrative Action</p>
-          <h2>Grant / Record Leave on Behalf of Employee</h2>
+          <p className="section-kicker" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <Sparkles size={13} color="var(--teal)" /> HR Administrative Authority
+          </p>
+          <h2 style={{ fontSize: '18px', fontWeight: 700, margin: '2px 0 0' }}>Grant / Record Leave on Behalf of Employee</h2>
         </div>
       </div>
-      <p className="foundation-copy" style={{ margin: '10px 0 20px' }}>
-        HR personnel can record approved or pending leaves for any staff member. Immediate approvals automatically sync with daily attendance records.
+
+      <p className="foundation-copy" style={{ margin: '14px 0 18px', fontSize: '11.5px', color: '#64748b' }}>
+        HR Operations and Admin leadership can authorize and log approved leaves directly. Instant grants automatically synchronize with daily attendance logs and payroll deductions.
       </p>
 
       {success && (
-        <div style={{ background: 'var(--soft-teal)', color: 'var(--teal)', padding: '12px 16px', borderRadius: '8px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '18px' }}>
-          <CheckCircle2 size={16} /> Leave recorded successfully and synchronized with attendance records!
+        <div style={{ background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', padding: '12px 16px', borderRadius: '10px', fontSize: '11.5px', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '18px', animation: 'fadeUp 0.3s ease' }}>
+          <CheckCircle2 size={16} color="#059669" />
+          <span><strong>Success!</strong> Leave record granted successfully and synchronized with attendance records.</span>
         </div>
       )}
 
-      <form onSubmit={handleSubmit} style={{ display: 'grid', gap: '16px', maxWidth: '780px' }}>
+      {error && (
+        <div style={{
+          background: '#fef2f2',
+          border: '1px solid #fecaca',
+          borderRadius: '10px',
+          padding: '13px 16px',
+          color: '#991b1b',
+          fontSize: '11.5px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '8px',
+          marginBottom: '18px',
+          animation: 'fadeUp 0.3s ease'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 600 }}>
+            <AlertCircle size={16} color="#dc2626" style={{ flexShrink: 0 }} />
+            <span>Unable to Record Leave: {error}</span>
+          </div>
+          {overlapConflict && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px', marginTop: '4px', paddingTop: '8px', borderTop: '1px solid #fee2e2' }}>
+              <span style={{ fontSize: '11px', color: '#b91c1c', flex: 1, minWidth: '220px' }}>
+                A pending or existing leave overlaps with this date range. You can perform an administrative force override to supersede conflicting records.
+              </span>
+              <Button
+                type="button"
+                variant="danger"
+                disabled={busy}
+                onClick={() => handleSubmit(null, true)}
+                style={{ padding: '5px 12px', fontSize: '11px', fontWeight: 700 }}
+              >
+                Force Override &amp; Grant
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
+
+      <form onSubmit={(e) => handleSubmit(e, false)} style={{ display: 'grid', gap: '16px' }}>
         <Field label="Select Employee" required>
           <select
             value={form.employeeId}
             onChange={(e) => update('employeeId', e.target.value)}
             required
-            style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--line)', borderRadius: '8px', background: '#fff', fontSize: '11px' }}
+            style={{ width: '100%', padding: '10px 14px', border: '1px solid var(--line)', borderRadius: '9px', background: '#fff', fontSize: '12px', color: 'var(--ink)' }}
           >
-            <option value="">-- Choose employee --</option>
+            <option value="">-- Choose employee to grant leave --</option>
             {employees.map((emp) => (
               <option key={emp.employeeId} value={emp.employeeId}>
-                {emp.name} ({emp.employeeId} · {emp.department})
+                {emp.name} ({emp.employeeId} · {emp.department || 'Operations'})
               </option>
             ))}
           </select>
         </Field>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px' }}>
+        {empBalances && (
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: '10px',
+            padding: '10px 14px',
+            background: 'rgba(0, 110, 111, 0.04)',
+            borderRadius: '9px',
+            border: '1px solid rgba(0, 110, 111, 0.12)',
+            fontSize: '11px'
+          }}>
+            <span style={{ fontWeight: 600, color: 'var(--ink)' }}>Employee Available Balances:</span>
+            <span style={{ padding: '2px 8px', borderRadius: '6px', background: '#ecfdf5', color: '#047857', border: '1px solid #a7f3d0', fontWeight: 700 }}>
+              CL: {empBalances.casual}d
+            </span>
+            <span style={{ padding: '2px 8px', borderRadius: '6px', background: '#f0fdfa', color: '#0f766e', border: '1px solid #99f6e4', fontWeight: 700 }}>
+              SL: {empBalances.sick}d
+            </span>
+            {empBalances.earned > 0 && (
+              <span style={{ padding: '2px 8px', borderRadius: '6px', background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe', fontWeight: 700 }}>
+                EL: {empBalances.earned}d
+              </span>
+            )}
+            {empBalances.casual === 0 && empBalances.sick === 0 && (
+              <span style={{ color: '#b45309', fontWeight: 600, marginLeft: 'auto' }}>
+                ⚠️ Paid balance exhausted (will be recorded as LOP)
+              </span>
+            )}
+          </div>
+        )}
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '14px' }}>
           <Field label="Leave Classification" required>
             <select
               value={form.leaveType}
               onChange={(e) => update('leaveType', e.target.value)}
-              style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--line)', borderRadius: '8px', background: '#fff', fontSize: '11px' }}
+              style={{ width: '100%', padding: '10px 14px', border: '1px solid var(--line)', borderRadius: '9px', background: '#fff', fontSize: '11.5px' }}
             >
               <option value="casual">Casual Leave (CL)</option>
               <option value="sick">Sick / Medical Leave (SL)</option>
@@ -1434,7 +1624,7 @@ function GrantLeaveHR({ employees, onGranted, preselectedEmpId }) {
             <select
               value={form.status}
               onChange={(e) => update('status', e.target.value)}
-              style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--line)', borderRadius: '8px', background: '#fff', fontSize: '11px' }}
+              style={{ width: '100%', padding: '10px 14px', border: '1px solid var(--line)', borderRadius: '9px', background: '#fff', fontSize: '11.5px' }}
             >
               <option value="approved">Direct HR Approval (Instant Grant)</option>
               <option value="pending_hr">Submit as Pending HR Review</option>
@@ -1515,7 +1705,7 @@ function GrantLeaveHR({ employees, onGranted, preselectedEmpId }) {
                   update('days', 0.5)
                 }}
                 required
-                style={{ width: '100%', padding: '10px', border: '1px solid var(--line)', borderRadius: '8px', background: '#fff', fontSize: '12px' }}
+                style={{ width: '100%', padding: '10px 14px', border: '1px solid var(--line)', borderRadius: '9px', background: '#fff', fontSize: '12px' }}
               />
             </Field>
 
@@ -1527,14 +1717,14 @@ function GrantLeaveHR({ employees, onGranted, preselectedEmpId }) {
             </div>
           </div>
         ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 110px', gap: '14px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '14px' }}>
             <Field label="Start Date" required>
               <input
                 type="date"
                 value={form.startDate}
                 onChange={(e) => update('startDate', e.target.value)}
                 required
-                style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--line)', borderRadius: '8px', background: '#fff', fontSize: '11px' }}
+                style={{ width: '100%', padding: '10px 14px', border: '1px solid var(--line)', borderRadius: '9px', background: '#fff', fontSize: '11.5px' }}
               />
             </Field>
 
@@ -1545,18 +1735,18 @@ function GrantLeaveHR({ employees, onGranted, preselectedEmpId }) {
                 min={form.startDate || todayKey()}
                 onChange={(e) => update('endDate', e.target.value)}
                 required
-                style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--line)', borderRadius: '8px', background: '#fff', fontSize: '11px' }}
+                style={{ width: '100%', padding: '10px 14px', border: '1px solid var(--line)', borderRadius: '9px', background: '#fff', fontSize: '11.5px' }}
               />
             </Field>
 
-            <Field label="Duration">
+            <Field label="Duration (Days)">
               <input
                 type="number"
                 min="1"
                 step="1"
                 value={form.days}
                 onChange={(e) => update('days', Math.max(1, parseInt(e.target.value, 10) || 1))}
-                style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--line)', borderRadius: '8px', background: '#fff', fontSize: '11px' }}
+                style={{ width: '100%', padding: '10px 14px', border: '1px solid var(--line)', borderRadius: '9px', background: '#fff', fontSize: '11.5px' }}
               />
             </Field>
           </div>
@@ -1574,12 +1764,11 @@ function GrantLeaveHR({ employees, onGranted, preselectedEmpId }) {
           <div style={{
             background: '#fff7ed',
             border: '1px solid #fdba74',
-            borderRadius: '8px',
-            padding: '10px 14px',
-            margin: '0 0 14px',
+            borderRadius: '9px',
+            padding: '11px 15px',
             display: 'flex',
             alignItems: 'flex-start',
-            gap: '8px',
+            gap: '10px',
             fontSize: '11.5px',
             color: '#9a3412',
           }}>
@@ -1597,7 +1786,7 @@ function GrantLeaveHR({ employees, onGranted, preselectedEmpId }) {
             placeholder="e.g. Urgent family emergency, scheduled health check-up, pre-approved earned leave..."
             rows={2}
             required
-            style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--line)', borderRadius: '8px', background: '#fff', fontSize: '11px' }}
+            style={{ width: '100%', padding: '10px 14px', border: '1px solid var(--line)', borderRadius: '9px', background: '#fff', fontSize: '11.5px' }}
           />
         </Field>
 
@@ -1607,13 +1796,13 @@ function GrantLeaveHR({ employees, onGranted, preselectedEmpId }) {
             value={form.hrComment}
             onChange={(e) => update('hrComment', e.target.value)}
             placeholder="Official resolution note..."
-            style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--line)', borderRadius: '8px', background: '#fff', fontSize: '11px' }}
+            style={{ width: '100%', padding: '10px 14px', border: '1px solid var(--line)', borderRadius: '9px', background: '#fff', fontSize: '11.5px' }}
           />
         </Field>
 
-        <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
-          <Button type="submit" disabled={busy || !form.employeeId}>
-            <CheckCircle2 size={15} /> Grant & Record Leave
+        <div style={{ display: 'flex', gap: '12px', marginTop: '6px' }}>
+          <Button type="submit" disabled={busy || !form.employeeId} style={{ padding: '10px 22px', fontSize: '12px', fontWeight: 600 }}>
+            <CheckCircle2 size={16} /> Grant &amp; Record Leave
           </Button>
         </div>
       </form>
@@ -1946,7 +2135,7 @@ export function LeaveManagementPage({ mode = 'self', route, query: propQuery }) 
     : 'Manage leave policies, employee entitlements, approvals, and holiday rules.'
 
   return (
-    <>
+    <div className="leave-management-shell">
       <PageHeader eyebrow={eyebrow} title={title} description={description}>
         {isManagement && (
           <Button variant="secondary" onClick={handleExportCSV}>
@@ -1992,34 +2181,67 @@ export function LeaveManagementPage({ mode = 'self', route, query: propQuery }) 
 
       {/* Management (Admin & HR) Executive KPIs */}
       {isManagement && (
-        <section className="module-kpi-grid">
-          <div className="panel module-kpi">
-            <span>{mode === 'admin' ? 'Pending Admin LOP Sign-Off' : 'Pending HR Approvals'}</span>
-            <strong style={{ color: (mode === 'admin' ? pendingAdminCount : pendingCount) ? 'var(--gold)' : 'var(--teal)' }}>
-              {mode === 'admin' ? `${pendingAdminCount} Request(s)` : `${pendingCount} Request(s)`}
-            </strong>
-            <small>{mode === 'admin' ? (pendingAdminCount ? 'Requires administrative authorization' : 'All LOP queues cleared') : (pendingCount ? 'Action required by HR' : 'All queues cleared')}</small>
+        <section className="leave-kpi-grid">
+          <div className="leave-kpi-card pending">
+            <div className="leave-kpi-header">
+              <span className="leave-kpi-title">{mode === 'admin' ? 'Pending Admin LOP Sign-Off' : 'Pending HR Approvals'}</span>
+              <div className="leave-kpi-icon-wrap pending">
+                <Clock3 size={16} />
+              </div>
+            </div>
+            <div className="leave-kpi-value">
+              {mode === 'admin' ? pendingAdminCount : pendingCount}
+              <span className="leave-kpi-unit">Requests</span>
+            </div>
+            <div className="leave-kpi-sub">
+              {mode === 'admin' ? (pendingAdminCount ? 'Requires administrative authorization' : 'All LOP queues cleared') : (pendingCount ? 'Action required by HR' : 'All queues cleared')}
+            </div>
           </div>
-          <div className="panel module-kpi">
-            <span>Approved Leaves (YTD)</span>
-            <strong>{approvedCount} Records</strong>
-            <small>Authorized absences</small>
+
+          <div className="leave-kpi-card approved">
+            <div className="leave-kpi-header">
+              <span className="leave-kpi-title">Approved Leaves (YTD)</span>
+              <div className="leave-kpi-icon-wrap approved">
+                <CheckCircle2 size={16} />
+              </div>
+            </div>
+            <div className="leave-kpi-value">
+              {approvedCount}
+              <span className="leave-kpi-unit">Records</span>
+            </div>
+            <div className="leave-kpi-sub">Authorized workforce absences</div>
           </div>
-          <div className="panel module-kpi">
-            <span>Staff On Leave Today</span>
-            <strong style={{ color: onLeaveToday.length ? 'var(--blue)' : 'inherit' }}>
-              {onLeaveToday.length} Staff
-            </strong>
-            <small>
+
+          <div className="leave-kpi-card on-leave">
+            <div className="leave-kpi-header">
+              <span className="leave-kpi-title">Staff On Leave Today</span>
+              <div className="leave-kpi-icon-wrap on-leave">
+                <CalendarDays size={16} />
+              </div>
+            </div>
+            <div className="leave-kpi-value" style={{ color: onLeaveToday.length ? 'var(--blue)' : 'inherit' }}>
+              {onLeaveToday.length}
+              <span className="leave-kpi-unit">Staff</span>
+            </div>
+            <div className="leave-kpi-sub" title={onLeaveToday.length ? onLeaveToday.map((x) => x.employeeName).join(', ') : 'Full on-site coverage'}>
               {onLeaveToday.length
                 ? onLeaveToday.map((x) => x.employeeName).join(', ')
                 : 'Full on-site coverage'}
-            </small>
+            </div>
           </div>
-          <div className="panel module-kpi">
-            <span>Total Leave Requests</span>
-            <strong>{totalRequests} Total</strong>
-            <small>All time company requests</small>
+
+          <div className="leave-kpi-card total">
+            <div className="leave-kpi-header">
+              <span className="leave-kpi-title">Total Requests</span>
+              <div className="leave-kpi-icon-wrap total">
+                <FileText size={16} />
+              </div>
+            </div>
+            <div className="leave-kpi-value">
+              {totalRequests}
+              <span className="leave-kpi-unit">Total</span>
+            </div>
+            <div className="leave-kpi-sub">All-time company requests</div>
           </div>
         </section>
       )}
@@ -2083,13 +2305,36 @@ export function LeaveManagementPage({ mode = 'self', route, query: propQuery }) 
       {/* SELF-SERVICE BALANCES */}
       {isSelf && (
         <div className="leave-balance-grid">
-          {balancesSelf.map((b) => (
-            <div className="panel leave-balance-card" key={b.leaveType}>
-              <span>{b.leaveType}</span>
-              <strong>{typeof b.available === 'number' ? (b.available % 1 === 0 ? b.available : b.available.toFixed(1)) : b.available} Days</strong>
-              <small>Used: {typeof b.used === 'number' ? (b.used % 1 === 0 ? b.used : b.used.toFixed(1)) : b.used} · Reserved: {typeof b.reserved === 'number' ? (b.reserved % 1 === 0 ? b.reserved : b.reserved.toFixed(1)) : b.reserved}</small>
-            </div>
-          ))}
+          {balancesSelf.map((b) => {
+            const isCasual = b.leaveType.toLowerCase().includes('casual')
+            const isSick = b.leaveType.toLowerCase().includes('sick')
+            const isEarned = b.leaveType.toLowerCase().includes('earned') || b.leaveType.toLowerCase().includes('privilege')
+            const borderTopColor = isCasual ? '#10b981' : isSick ? '#0d9488' : isEarned ? '#3b82f6' : '#6366f1'
+            const bgGradient = isCasual
+              ? 'linear-gradient(135deg, rgba(209, 250, 229, 0.4) 0%, #ffffff 100%)'
+              : isSick
+              ? 'linear-gradient(135deg, rgba(204, 251, 241, 0.4) 0%, #ffffff 100%)'
+              : isEarned
+              ? 'linear-gradient(135deg, rgba(219, 234, 254, 0.4) 0%, #ffffff 100%)'
+              : 'linear-gradient(135deg, rgba(243, 244, 246, 0.5) 0%, #ffffff 100%)'
+            return (
+              <div
+                className="leave-balance-card"
+                key={b.leaveType}
+                style={{
+                  background: bgGradient,
+                  borderTop: `3px solid ${borderTopColor}`,
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span>{b.leaveType}</span>
+                  {isCasual ? <Sun size={15} color="#059669" /> : isSick ? <Clock3 size={15} color="#0d9488" /> : <CalendarDays size={15} color="#3b82f6" />}
+                </div>
+                <strong>{typeof b.available === 'number' ? (b.available % 1 === 0 ? b.available : b.available.toFixed(1)) : b.available} <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--muted)' }}>Days</span></strong>
+                <small style={{ color: '#4b5563' }}>Used: {typeof b.used === 'number' ? (b.used % 1 === 0 ? b.used : b.used.toFixed(1)) : b.used}d · Reserved: {typeof b.reserved === 'number' ? (b.reserved % 1 === 0 ? b.reserved : b.reserved.toFixed(1)) : b.reserved}d</small>
+              </div>
+            )
+          })}
         </div>
       )}
 
@@ -2480,6 +2725,6 @@ export function LeaveManagementPage({ mode = 'self', route, query: propQuery }) 
           </div>
         </div>
       )}
-    </>
+    </div>
   )
 }

@@ -99,11 +99,23 @@ export function evaluateLeaveRequest({
     }
   }
 
+  // Fallback: If all requested days fall on weekends or holidays (e.g. weekend shift, on-duty, or HR operational grant),
+  // do NOT crash with 400. Treat the explicitly requested calendar days as valid leave units so employees and HR can record the leave.
   if (workingDays.length === 0) {
-    throw Object.assign(new Error('The selected range contains no payable or working leave units under company policy.'), {
-      statusCode: 400,
-      code: 'INVALID_LEAVE_RANGE',
-    })
+    for (const cur = new Date(s); cur <= e; cur.setUTCDate(cur.getUTCDate() + 1)) {
+      const curCopy = new Date(cur)
+      const dayOfWeek = curCopy.getUTCDay()
+      const curKey = dateKey(curCopy)
+      workingDays.push({
+        date: curKey,
+        dateObj: curCopy,
+        dayOfWeek,
+        dayOfMonth: curCopy.getUTCDate(),
+        isWorkingDay: true,
+        isWeekendOrHolidayOverride: true,
+        unit: isHalfDay ? 0.5 : 1.0,
+      })
+    }
   }
 
   // Determine available paid balances (authoritative)

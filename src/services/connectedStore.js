@@ -2016,7 +2016,7 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
 
         if (isHrOrAdmin && targetEmp && !isSelf) {
           const res = await apiClient.post('/leave/hr/grant', {
-            employeeId: targetEmp.id || targetEmp._id,
+            employeeId: targetEmp.id || targetEmp._id || targetEmp.employeeId,
             leaveType: data.leaveType || 'casual',
             startDate: data.startDate,
             endDate: data.endDate,
@@ -2026,8 +2026,27 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
             isHalfDay: Boolean(data.isHalfDay || data.days === 0.5),
             halfDayPeriod: data.halfDayPeriod || null,
             days: data.days || (data.isHalfDay ? 0.5 : 1),
+            replaceOverlap: Boolean(data.replaceOverlap),
           })
+          if (res?.data) {
+            const newRecord = normalizeLeave(res.data)
+            state().leaves = [newRecord, ...(state().leaves || []).filter((l) => l.id !== newRecord.id && l._id !== newRecord._id)]
+          }
           if (rawLocal.applyLeave) rawLocal.applyLeave(data, activeUser)
+          try {
+            const isExec = ['director', 'managing_director', 'co_founder', 'vertical_head'].includes(user?.role) || user?.email === 'jagadishbabu@edufyitech.in'
+            const isMgmt = ['admin', 'hr', 'hr_executive'].includes(user?.role) || isExec
+            const [freshBal, freshLeaves] = await Promise.all([
+              apiClient.get(isMgmt ? '/leave/hr/balances' : '/leave/balances').catch(() => null),
+              apiClient.get(isMgmt ? '/leave/hr/requests' : '/leave/self').catch(() => null)
+            ])
+            if (freshBal?.data) state().leaveBalances = freshBal.data
+            if (freshLeaves?.data) {
+              const freshList = Array.isArray(freshLeaves.data) ? freshLeaves.data : freshLeaves.data.records || []
+              state().leaves = freshList.map(normalizeLeave)
+            }
+          } catch {}
+          notify()
           return res.data
         } else {
           const res = await apiClient.post('/leave/requests', {
