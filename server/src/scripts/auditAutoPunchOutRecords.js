@@ -1,25 +1,66 @@
+import fs from 'node:fs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import mongoose from 'mongoose'
 import { AttendanceRecord } from '../models/AttendanceRecord.js'
+
+// Auto-load .env from multiple candidate paths
+try { process.loadEnvFile?.() } catch {}
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const envCandidatePaths = [
+  path.resolve(process.cwd(), '.env'),
+  path.resolve(process.cwd(), 'server', '.env'),
+  path.resolve(process.cwd(), '..', '.env'),
+  path.resolve(__dirname, '../../../../.env'),
+  path.resolve(__dirname, '../../../.env'),
+  path.resolve(__dirname, '../../.env'),
+  path.resolve(__dirname, '../.env'),
+]
+
+for (const envPath of envCandidatePaths) {
+  if (fs.existsSync(envPath)) {
+    try {
+      const lines = fs.readFileSync(envPath, 'utf8').split('\n')
+      for (const line of lines) {
+        const trimmed = line.trim()
+        if (trimmed && !trimmed.startsWith('#') && trimmed.includes('=')) {
+          const [k, ...v] = trimmed.split('=')
+          const key = k.trim()
+          if (key && !process.env[key]) {
+            process.env[key] = v.join('=').trim()
+          }
+        }
+      }
+      break
+    } catch {}
+  }
+}
 
 export async function runAutoPunchOutAudit(options = {}) {
   const isDirect = options.direct ?? false
   let ownConnection = false
 
   if (mongoose.connection.readyState !== 1) {
-    const mongoUri = process.env.MONGO_URI || process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/edufyi_hr'
-    try {
-      await mongoose.connect(mongoUri, { serverSelectionTimeoutMS: 3000 })
-      ownConnection = true
-    } catch (err) {
-      console.warn('[Audit] MongoDB connection not available for standalone script:', err.message)
+    const mongoUri = process.env.MONGODB_URI || process.env.MONGO_URI
+    if (!mongoUri) {
+      console.error('[Audit Error] MONGODB_URI not found in environment or .env file.')
+      console.log('Please ensure MONGODB_URI is set in your .env file.')
       return {
         timestamp: new Date().toISOString(),
         totalAudited: 0,
         falsePositivesCount: 0,
         validClosuresCount: 0,
         records: [],
-        summary: 'Database connection not available; dry-run audit skipped.',
+        summary: 'MONGODB_URI not found in .env',
       }
+    }
+
+    try {
+      await mongoose.connect(mongoUri, { serverSelectionTimeoutMS: 5000 })
+      ownConnection = true
+    } catch (err) {
+      console.error('[Audit Error] Failed to connect to MongoDB with configured URI:', err.message)
+      throw err
     }
   }
 
@@ -49,7 +90,7 @@ export async function runAutoPunchOutAudit(options = {}) {
       if (/disconnect|offline|inactive/i.test(reason) || reasonCode === 'OFFLINE_TIMEOUT' || policy === 'ENGINE_A_OFFLINE') {
         classification = 'FALSE_POSITIVE_OFFLINE'
         suspectedPolicy = 'ENGINE_A_OFFLINE'
-        recommendedCorrection = 'Device suspended background heartbeat. Recommend restore active session or set standard shift end (19:00).'
+        recommendedCorrection = 'Device suspended background heartbeat while employee worked. Recommend HR adjust check-out to shift end (19:00).'
         falsePositives++
       } else if (reasonCode === 'GEOFENCE_EXIT_TIMEOUT' || policy === 'ENGINE_A_GEOFENCE' || /geofence/i.test(reason)) {
         if (r.gpsVerified || r.wifiVerified || (r.distanceMeters !== null && r.distanceMeters <= 50)) {
@@ -105,19 +146,25 @@ export async function runAutoPunchOutAudit(options = {}) {
     }
 
     if (isDirect) {
-      console.log(`\n=== AUTO PUNCH-OUT AUDIT REPORT ===`)
+      console.log(`\n========================================================================`)
+      console.log(`               EDUFYI HR AUTO PUNCH-OUT AUDIT REPORT                   `)
+      console.log(`========================================================================`)
       console.log(`Total Records Audited: ${records.length}`)
-      console.log(`False Positives (Offline/Jitter): ${falsePositives}`)
-      console.log(`Valid Cut-offs: ${validClosures}`)
-      console.log(`===================================\n`)
-      console.table(report.slice(0, 15).map(r => ({
-        Employee: `${r.employeeName} (${r.employeeId})`,
-        Date: r.date,
-        In: r.checkIn,
-        Out: r.checkOut,
-        Class: r.classification,
-        Reason: r.punchOutReason.slice(0, 30),
-      })))
+      console.log(`False Positives (Offline / Jitter): ${falsePositives}`)
+      console.log(`Valid Daily Cut-offs (Forgot Checkout): ${validClosures}`)
+      console.log(`========================================================================\n`)
+      if (records.length === 0) {
+        console.log(`No automated punch-out records found in database. Attendance data is clean.`)
+      } else {
+        console.table(report.slice(0, 25).map(r => ({
+          Employee: `${r.employeeName || 'Unknown'} (${r.employeeId})`,
+          Date: r.date,
+          In: r.checkIn || '—',
+          Out: r.checkOut || '—',
+          Class: r.classification,
+          Reason: (r.punchOutReason || '').slice(0, 35),
+        })))
+      }
     }
 
     return auditSummary
@@ -128,12 +175,12 @@ export async function runAutoPunchOutAudit(options = {}) {
   }
 }
 
-// Allow direct CLI execution
-if (process.argv[1]?.endsWith('auditAutoPunchOutRecords.js')) {
+// Allow direct CLI execution: node server/src/scripts/auditAutoPunchOutRecords.js
+if (process.argv[1]?.replace(/\\/g, '/').endsWith('auditAutoPunchOutRecords.js')) {
   runAutoPunchOutAudit({ direct: true })
     .then(() => process.exit(0))
     .catch((err) => {
-      console.error('Audit execution error:', err)
+      console.error('Audit execution error:', err.message)
       process.exit(1)
     })
 }
