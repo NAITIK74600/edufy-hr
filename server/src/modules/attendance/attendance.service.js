@@ -784,6 +784,46 @@ export function createAttendanceService({ repository, companySettings = {} }) {
         currentLateCount = punchEval.isLate ? 1 : 0
       }
 
+      const punchInLocation = {
+        latitude: latitude !== undefined && latitude !== null ? Number(latitude) : null,
+        longitude: longitude !== undefined && longitude !== null ? Number(longitude) : null,
+        accuracy: accuracy !== undefined && accuracy !== null ? Math.round(Number(accuracy)) : null,
+        distanceMeters: verification.distanceMeters,
+        geofenceStatus: verification.isGpsVerified ? 'inside' : 'unknown',
+        networkType: verification.isWifiVerified ? 'wifi' : (clientIp ? 'cellular' : 'unknown'),
+        wifiSSID: /airtel|dji|3052/i.test(wifiSSID || '') ? 'Edufyi' : (wifiSSID || 'Edufyi'),
+        bssid: verification.bssid || '',
+        clientIp: clientIp || '',
+        wifiVerified: verification.isWifiVerified,
+        ipVerified: verification.isIpVerified,
+        gpsVerified: verification.isGpsVerified,
+        locationName: (/san francisco|austin|london/i.test(verification.nearestLocation || '') || !verification.nearestLocation) ? 'IGNITE CAMPUS' : verification.nearestLocation,
+        timestamp: now,
+      }
+
+      const liveLocation = {
+        latitude: punchInLocation.latitude,
+        longitude: punchInLocation.longitude,
+        accuracy: punchInLocation.accuracy,
+        distanceMeters: punchInLocation.distanceMeters,
+        geofenceStatus: punchInLocation.geofenceStatus,
+        locationFreshness: 'live',
+        locationPermission: 'granted',
+        connectivityStatus: 'online',
+        networkType: punchInLocation.networkType,
+        wifiSSID: punchInLocation.wifiSSID,
+        bssid: punchInLocation.bssid,
+        clientIp: punchInLocation.clientIp,
+        wifiVerified: punchInLocation.wifiVerified,
+        ipVerified: punchInLocation.ipVerified,
+        gpsVerified: punchInLocation.gpsVerified,
+        locationSource: 'gps',
+        locationName: punchInLocation.locationName,
+        deviceCapturedAt: now,
+        serverReceivedAt: now,
+        lastSyncAt: now,
+      }
+
       const record = {
         id: existing?.id,
         employeeId: employeeId.toUpperCase(),
@@ -820,6 +860,8 @@ export function createAttendanceService({ repository, companySettings = {} }) {
         lastConnectedAt: now,
         disconnectedSince: null,
         geofenceStatus: 'inside',
+        punchInLocation,
+        liveLocation,
         geofenceExitAt: null,
         geofenceGraceExpiresAt: null,
         geofenceWarningSentAt: null,
@@ -1247,6 +1289,33 @@ export function createAttendanceService({ repository, companySettings = {} }) {
         }
       }
 
+      const hasCoords = Number.isFinite(Number(latitude)) && Number.isFinite(Number(longitude))
+      const isUncertain = hasCoords && (numAcc > 150 || (numAcc > 50 && !verification.isGpsVerified && verification.distanceMeters !== null && verification.distanceMeters <= (verification.maxAllowedRadius || 50) + numAcc))
+      const liveGeofenceStatus = isPhysicallyPresent ? 'inside' : (isUncertain ? 'uncertain' : (currentGeofenceStatus === 'outside' ? 'outside' : 'unknown'))
+
+      const liveLoc = {
+        latitude: hasCoords ? Number(latitude) : (existing.liveLocation?.latitude ?? null),
+        longitude: hasCoords ? Number(longitude) : (existing.liveLocation?.longitude ?? null),
+        accuracy: Number.isFinite(numAcc) ? Math.round(numAcc) : (existing.liveLocation?.accuracy ?? null),
+        distanceMeters: verification.distanceMeters !== null ? verification.distanceMeters : (existing.liveLocation?.distanceMeters ?? null),
+        geofenceStatus: liveGeofenceStatus,
+        locationFreshness: 'live',
+        locationPermission: hasCoords ? 'granted' : (existing.liveLocation?.locationPermission || 'unknown'),
+        connectivityStatus: 'online',
+        networkType: verification.isWifiVerified ? 'wifi' : (clientIp ? 'cellular' : 'unknown'),
+        wifiSSID: /airtel|dji|3052/i.test(wifiSSID || '') ? 'Edufyi' : (wifiSSID || existing.liveLocation?.wifiSSID || ''),
+        bssid: verification.bssid || existing.liveLocation?.bssid || '',
+        clientIp: clientIp || existing.liveLocation?.clientIp || '',
+        wifiVerified: verification.isWifiVerified,
+        ipVerified: verification.isIpVerified,
+        gpsVerified: verification.isGpsVerified,
+        locationSource: hasCoords ? 'gps' : (verification.isWifiVerified ? 'wifi' : 'network'),
+        locationName: verification.nearestLocation || existing.liveLocation?.locationName || 'IGNITE CAMPUS',
+        deviceCapturedAt: now,
+        serverReceivedAt: now,
+        lastSyncAt: now,
+      }
+
       const presenceUpdates = {
         lastConnectedAt: now,
         disconnectedSince: null,
@@ -1254,6 +1323,8 @@ export function createAttendanceService({ repository, companySettings = {} }) {
         geofenceExitAt,
         geofenceGraceExpiresAt,
         geofenceWarningSentAt,
+        liveLocation: liveLoc,
+        ...(verification.distanceMeters !== null ? { distanceMeters: verification.distanceMeters } : {}),
       }
 
       if (isPhysicallyPresent) {

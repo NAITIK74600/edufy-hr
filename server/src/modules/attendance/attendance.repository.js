@@ -339,14 +339,79 @@ export function createMongoAttendanceRepository() {
         ]
       }
       const docs = await AttendanceRecord.find(query).populate('userId', 'name displayName employeeId department').sort({ createdAt: -1 }).lean()
-      return docs.map((record) => ({
-        ...record, id: String(record._id),
-        totalHours: calculateRecordWorkDuration(record),
-        userId: record.userId ? String(record.userId._id ?? record.userId) : null,
-        employeeName: record.userId?.displayName || record.userId?.name || record.employeeName,
-        department: record.userId?.department,
-        wifiSSID: /airtel|dji|3052/i.test(record.wifiSSID || '') ? 'Edufyi' : (record.wifiSSID || 'Edufyi'),
-      }))
+      const nowMs = Date.now()
+      return docs.map((record) => {
+        // Ensure punchInLocation fallback for legacy records
+        const punchInLocation = record.punchInLocation && record.punchInLocation.latitude !== null ? record.punchInLocation : {
+          latitude: record.latitude,
+          longitude: record.longitude,
+          accuracy: record.accuracy,
+          distanceMeters: record.distanceMeters,
+          geofenceStatus: record.geofenceStatus || (record.gpsVerified ? 'inside' : 'unknown'),
+          networkType: record.wifiVerified ? 'wifi' : (record.clientIp ? 'cellular' : 'unknown'),
+          wifiSSID: record.wifiSSID,
+          bssid: record.bssid,
+          clientIp: record.clientIp,
+          wifiVerified: record.wifiVerified,
+          ipVerified: record.ipVerified,
+          gpsVerified: record.gpsVerified,
+          locationName: record.locationName,
+          timestamp: record.checkInAt || record.createdAt,
+        }
+
+        // Calculate dynamic freshness for liveLocation
+        let liveLocation = record.liveLocation ? { ...record.liveLocation } : null
+        if (!liveLocation || liveLocation.latitude === null) {
+          liveLocation = {
+            latitude: record.lastVerifiedLatitude ?? record.latitude,
+            longitude: record.lastVerifiedLongitude ?? record.longitude,
+            accuracy: record.lastVerifiedAccuracy ?? record.accuracy,
+            distanceMeters: record.distanceMeters,
+            geofenceStatus: record.geofenceStatus,
+            locationFreshness: 'unavailable',
+            locationPermission: 'unknown',
+            connectivityStatus: record.checkOut ? 'offline' : 'online',
+            networkType: record.wifiVerified ? 'wifi' : (record.clientIp ? 'cellular' : 'unknown'),
+            wifiSSID: record.wifiSSID,
+            bssid: record.bssid,
+            clientIp: record.clientIp,
+            wifiVerified: record.wifiVerified,
+            ipVerified: record.ipVerified,
+            gpsVerified: record.gpsVerified,
+            locationSource: record.gpsVerified ? 'gps' : 'network',
+            locationName: record.lastVerifiedLocationName || record.locationName || 'IGNITE CAMPUS',
+            deviceCapturedAt: record.lastVerifiedLocationAt || record.lastConnectedAt,
+            serverReceivedAt: record.lastConnectedAt,
+            lastSyncAt: record.lastConnectedAt,
+          }
+        }
+
+        // Determine freshness state based on last sync time
+        const syncTime = liveLocation.deviceCapturedAt ? new Date(liveLocation.deviceCapturedAt).getTime() : (record.lastConnectedAt ? new Date(record.lastConnectedAt).getTime() : null)
+        let freshness = 'unavailable'
+        if (record.checkOut) {
+          freshness = 'offline'
+        } else if (syncTime) {
+          const ageSecs = (nowMs - syncTime) / 1000
+          if (ageSecs <= 90) freshness = 'live'
+          else if (ageSecs <= 180) freshness = 'recent'
+          else if (ageSecs <= 300) freshness = 'stale'
+          else freshness = 'offline'
+        }
+        liveLocation.locationFreshness = freshness
+
+        return {
+          ...record,
+          id: String(record._id),
+          totalHours: calculateRecordWorkDuration(record),
+          userId: record.userId ? String(record.userId._id ?? record.userId) : null,
+          employeeName: record.userId?.displayName || record.userId?.name || record.employeeName,
+          department: record.userId?.department,
+          wifiSSID: /airtel|dji|3052/i.test(record.wifiSSID || '') ? 'Edufyi' : (record.wifiSSID || 'Edufyi'),
+          punchInLocation,
+          liveLocation,
+        }
+      })
     },
     async save(record) {
       const { id, _id, department, createdAt, updatedAt, __v, ...data } = record

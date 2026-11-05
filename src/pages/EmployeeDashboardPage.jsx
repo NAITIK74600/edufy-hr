@@ -309,8 +309,12 @@ function GPSAttendanceStation({ user, todayRecord, onPunch, onStartBreak, onEndB
       }
 
       try {
+        const netType = typeof navigator !== 'undefined' && navigator.connection?.effectiveType ? navigator.connection.effectiveType : 'unknown'
         const res = await apiClient.post('/attendance/presence', {
           ...coords,
+          deviceCapturedAt: new Date().toISOString(),
+          locationPermission: permissionStatus,
+          networkType: netType,
         })
         const data = res.data?.data || res.data || {}
         setServerVerification(data)
@@ -318,13 +322,26 @@ function GPSAttendanceStation({ user, todayRecord, onPunch, onStartBreak, onEndB
       } catch { }
     }
 
-    const timer = setInterval(evaluatePresence, 60000)
-    const initTimer = setTimeout(evaluatePresence, 8000)
+    const timer = setInterval(evaluatePresence, 45000)
+    const initTimer = setTimeout(evaluatePresence, 5000)
+
+    function handleVisibility() {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        evaluatePresence()
+      }
+    }
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', handleVisibility)
+    }
+
     return () => {
       clearInterval(timer)
       clearTimeout(initTimer)
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', handleVisibility)
+      }
     }
-  }, [isCheckedIn, isCompleted, customCoords])
+  }, [isCheckedIn, isCompleted, customCoords, permissionStatus])
 
   const matchedOfficeNet = { label: serverVerification?.matchedNetworkLabel }
   const isRealOfficeIp = Boolean(serverVerification?.isIpVerified)
@@ -1170,14 +1187,12 @@ function ESSOverview({ user }) {
         localStorage.removeItem(`att_disc_since_${todayStr}_${empId}`)
         localStorage.removeItem(`att_disc_since_${empId}`)
       }
-      setDisconnectedMinutes(0)
-      setIsAutoPunchedOut(false)
     } else if (isCheckedIn) {
       const isAuto = Boolean(opts.autoPunchOut)
       if (isAuto) {
-        let checkInMs = todayRecord?.checkInAt ? new Date(todayRecord.checkInAt).getTime() : null
-        if (!checkInMs && todayRecord?.checkIn) {
-          const timeMatch = /(\d+):(\d+)(?::(\d+))?\s*(AM|PM)?/i.exec(todayRecord.checkIn)
+        let checkInMs = todayAttendance?.checkInAt ? new Date(todayAttendance.checkInAt).getTime() : null
+        if (!checkInMs && todayAttendance?.checkIn) {
+          const timeMatch = /(\d+):(\d+)(?::(\d+))?\s*(AM|PM)?/i.exec(todayAttendance.checkIn)
           if (timeMatch) {
             let h = parseInt(timeMatch[1], 10)
             const m = parseInt(timeMatch[2], 10)

@@ -63,6 +63,7 @@ import { HolidayCalendarShowcase } from '../components/HolidayCalendarShowcase'
 import { todayKey } from '../services/connectedStore'
 import { useAuth } from '../auth/AuthContext'
 import { formatINR, formatINRRaw, amountInWordsINR } from '../utils/currency'
+import { resolveAttendancePresence } from '../utils/attendancePresence'
 const workspaceHandler = (handler) => workspaceAction(hrStore, handler)
 
 function formatShiftDisplay(shiftStr, shiftCode, attendanceRules) {
@@ -90,9 +91,6 @@ function formatShiftDisplay(shiftStr, shiftCode, attendanceRules) {
   return shiftStr
 }
 
-// ==========================================
-// 1. ATTENDANCE MANAGEMENT MODULE
-// ==========================================
 // ==========================================
 // 1. ATTENDANCE MANAGEMENT MODULE
 // ==========================================
@@ -126,6 +124,14 @@ function AttendanceModule() {
   const [syncSuccess, setSyncSuccess] = useState(false)
   const [feedbackNotice, setFeedbackNotice] = useState('')
 
+
+  useEffect(() => {
+    if (selectedDate !== todayKey()) return
+    const pollInterval = setInterval(() => {
+      hrStore.refresh().catch(() => {})
+    }, 25000)
+    return () => clearInterval(pollInterval)
+  }, [selectedDate])
   useEffect(() => {
     return hrStore.subscribe((state) => {
       setStoreState(state)
@@ -888,12 +894,18 @@ function AttendanceModule() {
                     </div>
 
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center', fontSize: '10px' }}>
-                      <span className={`wifi-badge ${r.wifiVerified ? 'verified' : 'remote'}`}>
-                        <Wifi size={10} /> {r.wifiVerified ? 'Office Wi-Fi' : 'Remote'} ({/airtel|dji|3052/i.test(r.wifiSSID || '') ? 'Edufyi' : (/^edufyi$/i.test(r.wifiSSID || '') ? 'Edufyi' : (r.wifiSSID || (r.wifiVerified ? 'Edufyi' : 'External Network')))})
+                      <span className={`wifi-badge ${presence.networkTone}`}>
+                        <Wifi size={10} /> {presence.networkLabel} {presence.displaySsid ? `(${presence.displaySsid})` : ''}
                       </span>
-                      <span className={`gps-verified-badge ${isInside ? 'in-range' : 'out-range'}`}>
-                        <MapPin size={10} /> {isInside ? `GPS ≤${maxGeofenceRadius}m (${distText})` : `GPS Out (${distText})`}
+                      <span className={`gps-verified-badge ${presence.isInside ? 'in-range' : presence.isUncertain ? 'uncertain' : 'out-range'}`}>
+                        <MapPin size={10} /> {presence.isInside ? `GPS ≤${maxGeofenceRadius}m (${presence.distText})` : presence.isUncertain ? `GPS Uncertain (${presence.distText})` : `GPS Out (${presence.distText})`}
                       </span>
+                      {presence.freshness && (
+                        <span className={`freshness-badge ${presence.freshness}`} title={`Heartbeat: ${presence.freshness}`}>
+                          {presence.freshness === 'live' && <span className="pulse-dot" />}
+                          {presence.freshness}
+                        </span>
+                      )}
                     </div>
 
                     <div style={{ display: 'flex', gap: '6px', borderTop: '1px solid var(--line)', paddingTop: '8px' }}>
@@ -1047,15 +1059,15 @@ function AttendanceModule() {
                   key: 'wifi',
                   label: 'Network Verification',
                   render: (r) => {
-                    const displaySsid = /airtel|dji|3052/i.test(r.wifiSSID || '') ? 'Edufyi' : (/^edufyi$/i.test(r.wifiSSID || '') ? 'Edufyi' : (r.wifiSSID || (r.wifiVerified ? 'Edufyi' : '')))
+                    const presence = resolveAttendancePresence(r, maxGeofenceRadius)
                     return (
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <Wifi size={13} style={{ color: r.wifiVerified ? 'var(--teal)' : 'var(--muted)' }} />
-                        <span className={`wifi-badge ${r.wifiVerified ? 'verified' : 'remote'}`}>
-                          {r.wifiVerified ? 'Office Wi-Fi' : 'Remote / Hotspot'}
+                        <Wifi size={13} style={{ color: presence.networkTone === 'verified' ? 'var(--teal)' : presence.networkTone === 'on-site' ? '#0284c7' : 'var(--muted)' }} />
+                        <span className={`wifi-badge ${presence.networkTone}`}>
+                          {presence.networkLabel}
                         </span>
-                        {displaySsid && (
-                          <small style={{ color: 'var(--muted)', fontSize: '9px' }}>({displaySsid})</small>
+                        {presence.displaySsid && (
+                          <small style={{ color: 'var(--muted)', fontSize: '9px' }}>({presence.displaySsid})</small>
                         )}
                       </div>
                     )
@@ -1065,18 +1077,25 @@ function AttendanceModule() {
                   key: 'geofence',
                   label: `GPS Geofence (≤ ${maxGeofenceRadius}m)`,
                   render: (r) => {
-                    const isInside = r.distanceMeters !== undefined && r.distanceMeters !== null
-                      ? r.distanceMeters <= maxGeofenceRadius
-                      : r.gpsVerified
-                    const distText = r.distanceMeters !== undefined && r.distanceMeters !== null
-                      ? `${r.distanceMeters}m`
-                      : (r.wifiVerified ? `<${maxGeofenceRadius}m` : '—')
+                    const presence = resolveAttendancePresence(r, maxGeofenceRadius)
+                    const tone = presence.isInside ? 'in-range' : presence.isUncertain ? 'uncertain' : 'out-range'
+                    const label = presence.isInside
+                      ? `≤${maxGeofenceRadius}m (${presence.distText}${presence.accText ? `, ${presence.accText}` : ''})`
+                      : presence.isUncertain
+                      ? `Uncertain (${presence.distText}, ${presence.accText})`
+                      : `Outside (${presence.distText})`
                     return (
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap' }}>
-                        <MapPin size={13} style={{ color: isInside ? 'var(--teal)' : '#c25e00', flexShrink: 0 }} />
-                        <span className={`gps-verified-badge ${isInside ? 'in-range' : 'out-range'}`}>
-                          {isInside ? `≤${maxGeofenceRadius}m (${distText})` : `Outside (${distText})`}
+                        <MapPin size={13} style={{ color: presence.isInside ? 'var(--teal)' : presence.isUncertain ? '#a16207' : '#c25e00', flexShrink: 0 }} />
+                        <span className={`gps-verified-badge ${tone}`}>
+                          {label}
                         </span>
+                        {presence.freshness && (
+                          <span className={`freshness-badge ${presence.freshness}`} title={`Location Freshness: ${presence.freshness}`}>
+                            {presence.freshness === 'live' && <span className="pulse-dot" />}
+                            {presence.freshness}
+                          </span>
+                        )}
                         {r.locationName && (
                           <small style={{ color: 'var(--muted)', fontSize: '9px' }}>{r.locationName}</small>
                         )}

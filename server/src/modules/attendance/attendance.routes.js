@@ -318,12 +318,12 @@ export function createAttendanceRouter({ auth, service, useDatabase = false, per
     }
   })
 
-  // 3d. Periodic Presence Verification & Auto Punch-Out Heartbeat
-  router.post('/presence', auth.authenticate, async (request, response, next) => {
+  // 3d. Periodic Presence Verification & Auto Punch-Out Heartbeat (with location-update and location-heartbeat aliases)
+  router.post(['/presence', '/location-update', '/location-heartbeat'], auth.authenticate, async (request, response, next) => {
     try {
       const user = request.auth.user
       const employeeId = user.employeeId || user.id
-      const { latitude, longitude, wifiSSID, bssid, accuracy, gpsData } = request.body || {}
+      const { latitude, longitude, wifiSSID, bssid, accuracy, gpsData, locationPermission, networkType, deviceCapturedAt } = request.body || {}
       const lat = latitude !== undefined ? latitude : gpsData?.latitude
       const lng = longitude !== undefined ? longitude : gpsData?.longitude
       const acc = accuracy !== undefined ? accuracy : gpsData?.accuracy
@@ -337,6 +337,9 @@ export function createAttendanceRouter({ auth, service, useDatabase = false, per
         clientIp,
         bssid,
         accuracy: acc,
+        locationPermission,
+        networkType,
+        deviceCapturedAt,
       })
       return response.json({ success: true, data: { ...result, clientIp } })
     } catch (error) {
@@ -652,6 +655,77 @@ export function createAttendanceRouter({ auth, service, useDatabase = false, per
     try {
       const record = await service.getRecordById ? await service.getRecordById(request.params.id) : null
       return response.json({ success: true, data: record?.auditEvents || [] })
+    } catch (error) { next(error) }
+  })
+
+  // 19. Get Live Locations for Active Attendance Sessions Today
+  router.get('/live-locations', auth.authenticate, auth.requirePermission(PERMISSIONS.ATTENDANCE_READ), async (request, response, next) => {
+    try {
+      const todayStr = new Date().toISOString().slice(0, 10)
+      const records = await service.listAttendance({ date: todayStr })
+      const activeSessions = (records || [])
+        .filter((r) => r.checkIn && !r.checkOut)
+        .map((r) => ({
+          recordId: r.id || r._id,
+          employeeId: r.employeeId,
+          employeeName: r.employeeName,
+          checkIn: r.checkIn,
+          status: r.status,
+          punchInLocation: r.punchInLocation || null,
+          liveLocation: r.liveLocation || null,
+          geofenceStatus: r.liveLocation?.geofenceStatus || r.geofenceStatus || 'unknown',
+          locationFreshness: r.liveLocation?.locationFreshness || 'unavailable',
+          networkType: r.liveLocation?.networkType || (r.wifiVerified ? 'wifi' : 'unknown'),
+          distanceMeters: r.liveLocation?.distanceMeters ?? r.distanceMeters ?? null,
+          locationName: r.liveLocation?.locationName || r.locationName || 'Ignite Campus',
+          lastConnectedAt: r.lastConnectedAt,
+        }))
+      return response.json({ success: true, data: activeSessions })
+    } catch (error) { next(error) }
+  })
+
+  // 20. Get Separated Punch-In vs Live Location History for a Record
+  router.get('/records/:id/location-history', auth.authenticate, auth.requirePermission(PERMISSIONS.ATTENDANCE_READ), async (request, response, next) => {
+    try {
+      const record = await service.getRecordById ? await service.getRecordById(request.params.id) : null
+      if (!record) {
+        throw Object.assign(new Error('Attendance record not found.'), { statusCode: 404 })
+      }
+      return response.json({
+        success: true,
+        data: {
+          recordId: record.id || record._id,
+          employeeId: record.employeeId,
+          employeeName: record.employeeName,
+          date: record.date,
+          checkIn: record.checkIn,
+          checkOut: record.checkOut,
+          punchInLocation: record.punchInLocation || {
+            latitude: record.latitude,
+            longitude: record.longitude,
+            accuracy: record.accuracy,
+            distanceMeters: record.distanceMeters,
+            wifiVerified: record.wifiVerified,
+            ipVerified: record.ipVerified,
+            gpsVerified: record.gpsVerified,
+            locationName: record.locationName,
+            timestamp: record.checkInAt || record.createdAt,
+          },
+          liveLocation: record.liveLocation || {
+            latitude: record.lastVerifiedLatitude ?? record.latitude,
+            longitude: record.lastVerifiedLongitude ?? record.longitude,
+            accuracy: record.lastVerifiedAccuracy ?? record.accuracy,
+            distanceMeters: record.distanceMeters,
+            geofenceStatus: record.geofenceStatus,
+            locationFreshness: record.checkOut ? 'offline' : 'live',
+            locationName: record.lastVerifiedLocationName || record.locationName,
+            lastSyncAt: record.lastConnectedAt,
+          },
+          auditEvents: (record.auditEvents || []).filter((e) =>
+            ['CHECK_IN', 'GEOFENCE_EXIT_DETECTED', 'GEOFENCE_RETURN_VERIFIED', 'AUTO_PUNCH_OUT_GEOFENCE', 'AUTO_PUNCH_OUT_OFFLINE'].includes(e.eventType)
+          ),
+        },
+      })
     } catch (error) { next(error) }
   })
 

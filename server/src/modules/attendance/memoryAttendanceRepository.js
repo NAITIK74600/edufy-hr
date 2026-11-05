@@ -225,19 +225,84 @@ export function createMemoryAttendanceRepository(seedRecords = []) {
       return records.find((r) => r.id === id || String(r._id) === String(id)) ?? null
     },
     async list(filters = {}) {
-      return records.filter((r) => {
-        if (filters.date && r.date !== filters.date) return false
-        if (filters.month && (!r.date || !r.date.startsWith(filters.month))) return false
-        if (filters.employeeId && r.employeeId?.toUpperCase() !== filters.employeeId?.toUpperCase()) return false
-        if (filters.status && filters.status !== 'all' && r.status !== filters.status) return false
-        if (filters.search) {
-          const q = filters.search.toLowerCase()
-          const nameMatch = r.employeeName?.toLowerCase().includes(q)
-          const idMatch = r.employeeId?.toLowerCase().includes(q)
-          if (!nameMatch && !idMatch) return false
-        }
-        return true
-      })
+      const nowMs = Date.now()
+      return records
+        .filter((r) => {
+          if (filters.date && r.date !== filters.date) return false
+          if (filters.month && (!r.date || !r.date.startsWith(filters.month))) return false
+          if (filters.employeeId && r.employeeId?.toUpperCase() !== filters.employeeId?.toUpperCase()) return false
+          if (filters.status && filters.status !== 'all' && r.status !== filters.status) return false
+          if (filters.search) {
+            const q = filters.search.toLowerCase()
+            const nameMatch = r.employeeName?.toLowerCase().includes(q)
+            const idMatch = r.employeeId?.toLowerCase().includes(q)
+            if (!nameMatch && !idMatch) return false
+          }
+          return true
+        })
+        .map((record) => {
+          const punchInLocation = record.punchInLocation && record.punchInLocation.latitude !== null ? record.punchInLocation : {
+            latitude: record.latitude,
+            longitude: record.longitude,
+            accuracy: record.accuracy,
+            distanceMeters: record.distanceMeters,
+            geofenceStatus: record.geofenceStatus || (record.gpsVerified ? 'inside' : 'unknown'),
+            networkType: record.wifiVerified ? 'wifi' : (record.clientIp ? 'cellular' : 'unknown'),
+            wifiSSID: record.wifiSSID,
+            bssid: record.bssid,
+            clientIp: record.clientIp,
+            wifiVerified: record.wifiVerified,
+            ipVerified: record.ipVerified,
+            gpsVerified: record.gpsVerified,
+            locationName: record.locationName,
+            timestamp: record.checkInAt || record.createdAt,
+          }
+
+          let liveLocation = record.liveLocation ? { ...record.liveLocation } : null
+          if (!liveLocation || liveLocation.latitude === null) {
+            liveLocation = {
+              latitude: record.lastVerifiedLatitude ?? record.latitude,
+              longitude: record.lastVerifiedLongitude ?? record.longitude,
+              accuracy: record.lastVerifiedAccuracy ?? record.accuracy,
+              distanceMeters: record.distanceMeters,
+              geofenceStatus: record.geofenceStatus,
+              locationFreshness: 'unavailable',
+              locationPermission: 'unknown',
+              connectivityStatus: record.checkOut ? 'offline' : 'online',
+              networkType: record.wifiVerified ? 'wifi' : (record.clientIp ? 'cellular' : 'unknown'),
+              wifiSSID: record.wifiSSID,
+              bssid: record.bssid,
+              clientIp: record.clientIp,
+              wifiVerified: record.wifiVerified,
+              ipVerified: record.ipVerified,
+              gpsVerified: record.gpsVerified,
+              locationSource: record.gpsVerified ? 'gps' : 'network',
+              locationName: record.lastVerifiedLocationName || record.locationName || 'IGNITE CAMPUS',
+              deviceCapturedAt: record.lastVerifiedLocationAt || record.lastConnectedAt,
+              serverReceivedAt: record.lastConnectedAt,
+              lastSyncAt: record.lastConnectedAt,
+            }
+          }
+
+          const syncTime = liveLocation.deviceCapturedAt ? new Date(liveLocation.deviceCapturedAt).getTime() : (record.lastConnectedAt ? new Date(record.lastConnectedAt).getTime() : null)
+          let freshness = 'unavailable'
+          if (record.checkOut) {
+            freshness = 'offline'
+          } else if (syncTime) {
+            const ageSecs = (nowMs - syncTime) / 1000
+            if (ageSecs <= 90) freshness = 'live'
+            else if (ageSecs <= 180) freshness = 'recent'
+            else if (ageSecs <= 300) freshness = 'stale'
+            else freshness = 'offline'
+          }
+          liveLocation.locationFreshness = freshness
+
+          return {
+            ...record,
+            punchInLocation,
+            liveLocation,
+          }
+        })
     },
     async updateFields(id, fields = {}) {
       const cleanId = String(id || '').trim()

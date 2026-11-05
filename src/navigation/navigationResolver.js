@@ -313,3 +313,4 @@ export function resolveNotificationRoute(notification, user) {
   const portal = getCanonicalPortal(user)
   return `#/${portal}/notifications`
 }
+
