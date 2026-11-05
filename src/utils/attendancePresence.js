@@ -67,3 +67,4 @@ export function resolveAttendancePresence(r, maxGeofenceRadius = 50) {
     punchInDist: punch.distanceMeters ?? r?.distanceMeters ?? null,
   }
 }
+

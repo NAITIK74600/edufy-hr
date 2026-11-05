@@ -192,6 +192,73 @@ export function validatePayroll(body) {
   }
 }
 
+export function calculateAttendanceLopContext({ attendance = [], leave = [], period = {} }) {
+  const countedDates = new Set()
+  let totalLopDays = 0
+
+  // 1. Process attendance records (Only genuine unpaid LOP / Double LOP records generate deductions)
+  for (const record of attendance) {
+    const dateStr = record.date
+    const dayOfMonth = Number(String(dateStr || '').split('-')[2]) || 1
+    const isLopRecord = record.status === 'lop' || record.isLop
+    const isExplicitDoubleLop = Boolean(record.isDoubleLop || record.doubleLopStatus === 'approved')
+    const isMonthEndDoubleLop = isExplicitDoubleLop || (dayOfMonth >= 25 && isLopRecord)
+
+    if (isLopRecord) {
+      totalLopDays += isMonthEndDoubleLop ? 2 : 1
+      countedDates.add(dateStr)
+    } else if (record.status === 'on-leave' && isExplicitDoubleLop) {
+      totalLopDays += 2
+      countedDates.add(dateStr)
+    }
+  }
+
+  // 2. Process approved leave requests:
+  // Only approved unpaid LOP / Double LOP days generate deductions. Paid leaves (CL/SL) have ZERO deduction!
+  for (const req of leave) {
+    if (req.status !== 'approved') continue
+
+    if (Array.isArray(req.dayBreakdown) && req.dayBreakdown.length > 0) {
+      for (const day of req.dayBreakdown) {
+        if (!day.isWorkingDay || day.isPaid) continue // Paid CL/SL has 0 deduction!
+        const curDateStr = day.date
+        if (period.from && period.to && (curDateStr < period.from || curDateStr > period.to)) continue
+        if (countedDates.has(curDateStr)) continue
+
+        const multiplier = day.isDoubleLop || day.leaveCategory === 'double_lop' ? 2 : 1
+        totalLopDays += (day.units || 1) * multiplier
+        countedDates.add(curDateStr)
+      }
+    } else {
+      const isLopType = String(req.leaveType).toLowerCase() === 'lop' || String(req.leaveType).toLowerCase() === 'double_lop'
+      // If it was a paid leave (casual or sick) and NOT flagged as Double LOP, ZERO deduction!
+      if (!isLopType && !req.isDoubleLop && (!req.doubleLopDays || req.doubleLopDays === 0)) {
+        continue
+      }
+
+      const pStart = period.start ? period.start.getTime() : new Date(req.startDate).getTime()
+      const pEnd = period.end ? period.end.getTime() : new Date(req.endDate).getTime()
+      const start = new Date(Math.max(new Date(req.startDate).getTime(), pStart))
+      const end = new Date(Math.min(new Date(req.endDate).getTime(), pEnd))
+      for (const cur = new Date(start); cur <= end; cur.setUTCDate(cur.getUTCDate() + 1)) {
+        const curDateStr = cur.toISOString().slice(0, 10)
+        if (countedDates.has(curDateStr)) continue
+
+        const dayOfMonth = cur.getUTCDate()
+        if (dayOfMonth >= 25 || req.isDoubleLop) {
+          totalLopDays += 2
+          countedDates.add(curDateStr)
+        } else if (isLopType) {
+          totalLopDays += 1
+          countedDates.add(curDateStr)
+        }
+      }
+    }
+  }
+
+  return { totalLopDays, countedDates }
+}
+
 async function context(employee, month) {
   try {
     const period = payrollPeriod(month)
@@ -202,41 +269,8 @@ async function context(employee, month) {
       empObjectId ? LeaveRequest.find({ employeeId: empObjectId, status: 'approved', startDate: { $lte: period.end }, endDate: { $gte: period.start } }).lean() : [],
     ])
 
-    const countedDates = new Set()
-    let totalLopDays = 0
-
-    // 1. Process attendance records
-    for (const record of attendance) {
-      const dateStr = record.date
-      const dayOfMonth = Number(String(dateStr || '').split('-')[2]) || 1
-      const isLopRecord = record.status === 'lop' || record.isLop
-      const isLeaveRecord = record.status === 'on-leave'
-      const isMonthEndDoubleLop = dayOfMonth >= 25 || record.isDoubleLop
-
-      if (isLopRecord) {
-        totalLopDays += isMonthEndDoubleLop ? 2 : 1
-        countedDates.add(dateStr)
-      } else if (isLeaveRecord && isMonthEndDoubleLop) {
-        totalLopDays += 2
-        countedDates.add(dateStr)
-      }
-    }
-
-    // 2. Process approved leave requests (month-end from 25th is considered Double LOP)
-    for (const req of leave) {
-      const start = new Date(Math.max(new Date(req.startDate).getTime(), period.start.getTime()))
-      const end = new Date(Math.min(new Date(req.endDate).getTime(), period.end.getTime()))
-      for (const cur = new Date(start); cur <= end; cur.setUTCDate(cur.getUTCDate() + 1)) {
-        const curDateStr = cur.toISOString().slice(0, 10)
-        if (countedDates.has(curDateStr)) continue
-
-        const dayOfMonth = cur.getUTCDate()
-        if (dayOfMonth >= 25 || req.isDoubleLop) {
-          totalLopDays += 2
-          countedDates.add(curDateStr)
-        }
-      }
-    }
+    const { totalLopDays: leaveAndAttendanceLop, countedDates } = calculateAttendanceLopContext({ attendance, leave, period })
+    let totalLopDays = leaveAndAttendanceLop
 
     // 3. Process combined late logins & early logouts LOP:
     // Rule: Every 3 infractions (late login or early logout, combined) = 0.5 LOP day

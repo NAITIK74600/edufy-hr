@@ -127,11 +127,28 @@ function RequestCard({ request, onSelect, selected, onQuickApprove, onQuickRejec
                 0.5 Day · {request.halfDayPeriod === 'second_half' ? '2nd Half' : '1st Half'}
               </span>
             )}
-            {(request.isDoubleLop || request.doubleLopDays > 0 || (new Date(request.startDate).getDate() >= 25) || (new Date(request.endDate).getDate() >= 25)) && (
+            {/* Accurate Leave Badges */}
+            {Boolean(request.isDoubleLop || request.doubleLopDays > 0 || request.doubleLopUnits > 0 || request.leaveType === 'double_lop') ? (
               <span style={{ marginLeft: '6px', background: '#fee2e2', color: '#b91c1c', border: '1px solid #fca5a5', fontSize: '9px', padding: '1px 5px', borderRadius: '4px', fontWeight: 700 }}>
                 Double LOP (25th+)
               </span>
-            )}
+            ) : Boolean(request.normalLopUnits > 0 || request.leaveType === 'lop' || (request.unpaidUnits > 0 && !request.isDoubleLop)) ? (
+              <span style={{ marginLeft: '6px', background: '#fef3c7', color: '#b45309', border: '1px solid #fcd34d', fontSize: '9px', padding: '1px 5px', borderRadius: '4px', fontWeight: 700 }}>
+                Normal LOP
+              </span>
+            ) : Boolean(request.casualLeaveUnits > 0 && request.sickLeaveUnits > 0) ? (
+              <span style={{ marginLeft: '6px', background: '#ecfdf5', color: '#047857', border: '1px solid #a7f3d0', fontSize: '9px', padding: '1px 5px', borderRadius: '4px', fontWeight: 700 }}>
+                CL + SL (Paid)
+              </span>
+            ) : Boolean(request.casualLeaveUnits > 0 || request.leaveType === 'casual') ? (
+              <span style={{ marginLeft: '6px', background: '#ecfdf5', color: '#047857', border: '1px solid #a7f3d0', fontSize: '9px', padding: '1px 5px', borderRadius: '4px', fontWeight: 700 }}>
+                Casual Leave (Paid)
+              </span>
+            ) : Boolean(request.sickLeaveUnits > 0 || request.leaveType === 'sick') ? (
+              <span style={{ marginLeft: '6px', background: '#f0fdfa', color: '#0f766e', border: '1px solid #99f6e4', fontSize: '9px', padding: '1px 5px', borderRadius: '4px', fontWeight: 700 }}>
+                Sick Leave (Paid)
+              </span>
+            ) : null}
           </span>
         </div>
         <RequestStatus status={request.status} />
@@ -351,6 +368,58 @@ function RequestDetail({ request, mode, onRefresh, onDeleteRequest }) {
             {request.applicantRole && `(${request.applicantRole.replace('_', ' ')})`}
           </small>
         </div>
+      </div>
+
+      {/* Centralized Leave Policy Breakdown */}
+      <div className="leave-detail-section" style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '14px', marginBottom: '14px' }}>
+        <div className="detail-section-title" style={{ marginBottom: '8px', color: '#0f172a', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <ShieldAlert size={15} color="#475569" />
+          <strong>Leave Policy & Balance Breakdown</strong>
+        </div>
+        
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: '8px', marginBottom: '10px' }}>
+          <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '8px 10px' }}>
+            <span style={{ fontSize: '10px', color: '#64748b', display: 'block' }}>Working Days</span>
+            <strong style={{ fontSize: '14px', color: '#0f172a' }}>{request.units || request.days || 1} day(s)</strong>
+          </div>
+          <div style={{ background: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: '8px', padding: '8px 10px' }}>
+            <span style={{ fontSize: '10px', color: '#065f46', display: 'block' }}>CL Used</span>
+            <strong style={{ fontSize: '14px', color: '#047857' }}>{request.casualLeaveUnits ?? (request.leaveType === 'casual' ? (request.paidUnits || request.units || 0) : 0)} day(s)</strong>
+          </div>
+          <div style={{ background: '#f0fdfa', border: '1px solid #99f6e4', borderRadius: '8px', padding: '8px 10px' }}>
+            <span style={{ fontSize: '10px', color: '#115e59', display: 'block' }}>SL Used</span>
+            <strong style={{ fontSize: '14px', color: '#0f766e' }}>{request.sickLeaveUnits ?? (request.leaveType === 'sick' ? (request.paidUnits || request.units || 0) : 0)} day(s)</strong>
+          </div>
+          <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '8px', padding: '8px 10px' }}>
+            <span style={{ fontSize: '10px', color: '#92400e', display: 'block' }}>Normal LOP</span>
+            <strong style={{ fontSize: '14px', color: '#b45309' }}>{request.normalLopUnits ?? (request.leaveType === 'lop' && !request.isDoubleLop ? (request.units || 0) : 0)} day(s)</strong>
+          </div>
+          <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', padding: '8px 10px' }}>
+            <span style={{ fontSize: '10px', color: '#991b1b', display: 'block' }}>Double LOP (25th+)</span>
+            <strong style={{ fontSize: '14px', color: '#b91c1c' }}>{request.doubleLopUnits ?? request.doubleLopDays ?? (request.isDoubleLop ? (request.units || 0) : 0)} day(s)</strong>
+          </div>
+        </div>
+
+        {Array.isArray(request.dayBreakdown) && request.dayBreakdown.length > 0 && (
+          <div style={{ marginTop: '8px' }}>
+            <span style={{ fontSize: '11px', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '6px' }}>Date-by-Date Evaluation:</span>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+              {request.dayBreakdown.map((d, idx) => {
+                const isDbl = d.isDoubleLop || d.leaveCategory === 'double_lop'
+                const isNorm = d.leaveCategory === 'normal_lop'
+                const bg = isDbl ? '#fee2e2' : isNorm ? '#fef3c7' : '#dcfce7'
+                const col = isDbl ? '#b91c1c' : isNorm ? '#92400e' : '#15803d'
+                const border = isDbl ? '#fca5a5' : isNorm ? '#fde047' : '#86efac'
+                const label = isDbl ? 'Double LOP (2x)' : isNorm ? 'Normal LOP (1x)' : (d.leaveCategory ? d.leaveCategory.toUpperCase() : 'Paid')
+                return (
+                  <span key={idx} style={{ background: bg, color: col, border: `1px solid ${border}`, fontSize: '10px', padding: '3px 8px', borderRadius: '6px', fontWeight: 600 }}>
+                    {d.date}: {label}
+                  </span>
+                )
+              })}
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="leave-reason">

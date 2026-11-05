@@ -2,6 +2,7 @@ import { hasPermission, PERMISSIONS } from '../../auth/permissions.js'
 import mongoose from 'mongoose'
 import { mailService, sendLeaveSubmissionEmail, sendLeaveStatusEmail } from '../../services/mail.service.js'
 import { createUnifiedNotification } from '../../services/unifiedNotification.service.js'
+import { evaluateLeaveRequest, isInternEmployee, getMonthlyDefaultAllowance } from './leavePolicyEngine.js'
 
 const ACTIVE_STATUSES = ['pending_tl', 'pending_manager', 'pending_director', 'pending_hr', 'pending_admin', 'approved']
 const TRANSITIONS = Object.freeze({
@@ -16,17 +17,9 @@ const TRANSITIONS = Object.freeze({
 })
 
 export function is25thMonthLop(startDate, endDate, leaveType, isDoubleLop, doubleLopDays) {
-  if (isDoubleLop || (Number(doubleLopDays) > 0)) return true
-  const s = new Date(startDate)
-  const e = new Date(endDate || startDate)
-  if (!Number.isNaN(s.getTime()) && !Number.isNaN(e.getTime())) {
-    for (const cur = new Date(s); cur <= e; cur.setUTCDate(cur.getUTCDate() + 1)) {
-      if (cur.getUTCDate() >= 25) return true
-    }
-  }
-  if (String(leaveType).toLowerCase() === 'lop') {
-    if (s.getUTCDate() >= 25 || e.getUTCDate() >= 25) return true
-  }
+  if (Boolean(isDoubleLop) || (Number(doubleLopDays) > 0)) return true
+  const type = String(leaveType || '').toLowerCase()
+  if (type === 'double_lop' || type === 'mixed_double_lop') return true
   return false
 }
 
@@ -58,60 +51,25 @@ function calculateUnits(startDate, endDate, policy) {
   return calculateUnitsBreakdown(startDate, endDate, policy).totalUnits
 }
 
-function calculateUnitsBreakdown(startDate, endDate, policy) {
-  if (!policy?.configured) throw error(`The ${policy?.label ?? 'leave'} policy is not configured. HR must confirm its rules before leave can be calculated.`, 409, 'LEAVE_POLICY_NOT_CONFIGURED')
-  const holidayKeys = new Set((policy.holidayDates ?? []).map((date) => dateKey(new Date(date))))
-  const isLopType = String(policy?.leaveType || '').toLowerCase() === 'lop'
-  let totalUnits = 0
-  let paidUnits = 0
-  let doubleLopDays = 0
-
-  for (const cursor = new Date(startDate); cursor <= endDate; cursor.setUTCDate(cursor.getUTCDate() + 1)) {
-    const day = cursor.getUTCDay()
-    const weekend = day === 0 || day === 6
-    const holiday = holidayKeys.has(dateKey(cursor))
-    if ((!weekend || policy.countWeekends) && (!holiday || policy.countHolidays)) {
-      totalUnits += 1
-      const dayOfMonth = cursor.getUTCDate()
-      if (isLopType) {
-        // Loss of Pay is completely unpaid
-        doubleLopDays += 1
-      } else if (dayOfMonth >= 25) {
-        // Month end: 25th onwards is considered Double LOP
-        doubleLopDays += 1
-      } else {
-        paidUnits += 1
-      }
-    }
+function calculateUnitsBreakdown(startDate, endDate, policy, options = {}) {
+  if (!policy?.configured) {
+    throw error(`The ${policy?.label ?? 'leave'} policy is not configured. HR must confirm its rules before leave can be calculated.`, 409, 'LEAVE_POLICY_NOT_CONFIGURED')
   }
-
-  if (totalUnits <= 0) throw error('The selected range contains no payable leave units under the configured policy.', 400, 'INVALID_LEAVE_RANGE')
-
-  return {
-    totalUnits,
-    paidUnits,
-    doubleLopDays,
-    isDoubleLop: doubleLopDays > 0,
-  }
+  return evaluateLeaveRequest({
+    startDate,
+    endDate,
+    requestedLeaveType: policy.leaveType || options.requestedLeaveType || 'casual',
+    isHalfDay: Boolean(options.isHalfDay),
+    halfDayPeriod: options.halfDayPeriod || null,
+    policy,
+    availableBalances: options.availableBalances || {},
+    holidayDates: policy.holidayDates ?? options.holidayDates ?? [],
+    companySettings: options.companySettings || {},
+    employee: options.employee || {},
+  })
 }
 
-function isInternEmployee(employee) {
-  const type = String(employee?.employmentType || '').toLowerCase().replace(/[-\s]/g, '_')
-  const desig = String(employee?.designation || '').toLowerCase()
-  const role = String(employee?.role || '').toLowerCase()
-  return type === 'intern' || desig.includes('intern') || role.includes('intern')
-}
 
-function getMonthlyDefaultAllowance(employee, leaveType) {
-  const intern = isInternEmployee(employee)
-  const type = String(leaveType).toLowerCase()
-  if (intern) {
-    // Intern: 1 paid leave in month and 1 sick leave (i.e. only 1 sick leave, 0 casual)
-    return type === 'sick' ? 1 : 0
-  }
-  // Full-timer: 2 paid leaves in month (1 sick leave, 1 casual leave)
-  return (type === 'casual' || type === 'sick') ? 1 : 0
-}
 
 function assertTransition(from, to) {
   if (!TRANSITIONS[from]?.includes(to)) throw error(`Cannot move a ${from} request to ${to}.`, 409, 'INVALID_STATUS_TRANSITION')
@@ -178,12 +136,95 @@ export function createLeaveService({ repository, employeeRepository, notificatio
     return request
   }
 
-  async function releaseReservation(request) {
-    const unitsToRelease = request.paidUnits !== undefined ? request.paidUnits : request.units
-    if (unitsToRelease > 0 && ACTIVE_STATUSES.includes(request.status)) {
-      await repository.releaseReservation(request.employeeId, request.leaveType, unitsToRelease)
+  async function reserveRequestBalances(repository, employeeId, evalResult, leaveType) {
+  const empId = idOf(employeeId)
+  const reservedList = []
+  try {
+    if (evalResult.casualUnits > 0) {
+      const res = await repository.reserveBalance(empId, 'casual', evalResult.casualUnits)
+      if (!res) throw new Error('CL_INSUFFICIENT')
+      reservedList.push({ leaveType: 'casual', units: evalResult.casualUnits })
     }
+    if (evalResult.sickUnits > 0) {
+      const res = await repository.reserveBalance(empId, 'sick', evalResult.sickUnits)
+      if (!res) throw new Error('SL_INSUFFICIENT')
+      reservedList.push({ leaveType: 'sick', units: evalResult.sickUnits })
+    }
+    const reqType = String(leaveType || '').toLowerCase()
+    if (!['casual', 'sick', 'lop', 'double_lop'].includes(reqType) && evalResult.paidUnits > 0) {
+      const remainingGenericPaid = Math.max(0, evalResult.paidUnits - evalResult.casualUnits - evalResult.sickUnits)
+      if (remainingGenericPaid > 0) {
+        const res = await repository.reserveBalance(empId, reqType, remainingGenericPaid)
+        if (!res) throw new Error(`${reqType.toUpperCase()}_INSUFFICIENT`)
+        reservedList.push({ leaveType: reqType, units: remainingGenericPaid })
+      }
+    }
+    return true
+  } catch (err) {
+    for (const item of reservedList) {
+      await repository.releaseReservation(empId, item.leaveType, item.units).catch(() => {})
+    }
+    return false
   }
+}
+
+async function releaseRequestBalances(repository, request) {
+  const empId = idOf(request.employeeId)
+  if (request.casualLeaveUnits > 0) {
+    await repository.releaseReservation(empId, 'casual', request.casualLeaveUnits).catch(() => {})
+  }
+  if (request.sickLeaveUnits > 0) {
+    await repository.releaseReservation(empId, 'sick', request.sickLeaveUnits).catch(() => {})
+  }
+  const reqType = String(request.leaveType || '').toLowerCase()
+  if (!['casual', 'sick', 'lop', 'double_lop'].includes(reqType)) {
+    const genericPaid = Math.max(0, (request.paidUnits || 0) - (request.casualLeaveUnits || 0) - (request.sickLeaveUnits || 0))
+    if (genericPaid > 0) {
+      await repository.releaseReservation(empId, reqType, genericPaid).catch(() => {})
+    }
+  } else if (!request.casualLeaveUnits && !request.sickLeaveUnits && request.paidUnits > 0) {
+    await repository.releaseReservation(empId, request.leaveType, request.paidUnits).catch(() => {})
+  }
+}
+
+async function commitRequestBalances(repository, request) {
+  const empId = idOf(request.employeeId)
+  if (request.casualLeaveUnits > 0) {
+    await repository.commitReservation(empId, 'casual', request.casualLeaveUnits).catch(() => {})
+  }
+  if (request.sickLeaveUnits > 0) {
+    await repository.commitReservation(empId, 'sick', request.sickLeaveUnits).catch(() => {})
+  }
+  const reqType = String(request.leaveType || '').toLowerCase()
+  if (!['casual', 'sick', 'lop', 'double_lop'].includes(reqType)) {
+    const genericPaid = Math.max(0, (request.paidUnits || 0) - (request.casualLeaveUnits || 0) - (request.sickLeaveUnits || 0))
+    if (genericPaid > 0) {
+      await repository.commitReservation(empId, reqType, genericPaid).catch(() => {})
+    }
+  } else if (!request.casualLeaveUnits && !request.sickLeaveUnits && request.paidUnits > 0) {
+    await repository.commitReservation(empId, request.leaveType, request.paidUnits).catch(() => {})
+  }
+}
+
+async function restoreCommittedRequestBalances(repository, request) {
+  const empId = idOf(request.employeeId)
+  if (request.casualLeaveUnits > 0) {
+    await repository.restoreCommittedBalance(empId, 'casual', request.casualLeaveUnits).catch(() => {})
+  }
+  if (request.sickLeaveUnits > 0) {
+    await repository.restoreCommittedBalance(empId, 'sick', request.sickLeaveUnits).catch(() => {})
+  }
+  const reqType = String(request.leaveType || '').toLowerCase()
+  if (!['casual', 'sick', 'lop', 'double_lop'].includes(reqType)) {
+    const genericPaid = Math.max(0, (request.paidUnits || 0) - (request.casualLeaveUnits || 0) - (request.sickLeaveUnits || 0))
+    if (genericPaid > 0) {
+      await repository.restoreCommittedBalance(empId, reqType, genericPaid).catch(() => {})
+    }
+  } else if (!request.casualLeaveUnits && !request.sickLeaveUnits && request.paidUnits > 0) {
+    await repository.restoreCommittedBalance(empId, request.leaveType, request.paidUnits).catch(() => {})
+  }
+}
+
 
   async function notifyRecipient(recipientId, event, request, message, title = 'Leave Notice', targetUrl = '#/employee/leave', priority = 'normal') {
     if (!recipientId) return
@@ -247,14 +288,56 @@ export function createLeaveService({ repository, employeeRepository, notificatio
       const endDate = isHalfDay ? startDate : parseDate(payload.endDate, 'endDate')
       if (endDate < startDate) throw error('End date must be on or after start date.', 400, 'INVALID_LEAVE_RANGE', { endDate: 'Must be on or after start date.' })
       if (policy.requiresReason && !String(payload.reason ?? '').trim()) throw error('A reason is required for this leave type.', 400, 'VALIDATION_ERROR', { reason: 'Required.' })
-      let { totalUnits, paidUnits, doubleLopDays, isDoubleLop } = calculateUnitsBreakdown(startDate, endDate, policy)
-      if (isHalfDay) {
-        totalUnits = 0.5
-        paidUnits = paidUnits > 0 ? 0.5 : 0
-        doubleLopDays = doubleLopDays > 0 ? 0.5 : 0
-        isDoubleLop = doubleLopDays > 0
+      // Authoritative balances from repository
+      const balances = await repository.listBalances({ employeeId: idOf(employee) })
+      const casualRec = balances.find((b) => b.leaveType === 'casual')
+      const sickRec = balances.find((b) => b.leaveType === 'sick')
+      const requestedRec = balances.find((b) => b.leaveType === leaveType)
+
+      // Auto ensure balances if repository supports it
+      if (repository.ensureBalance) {
+        if (!casualRec) await repository.ensureBalance(idOf(employee), 'casual', getMonthlyDefaultAllowance(employee, 'casual'))
+        if (!sickRec) await repository.ensureBalance(idOf(employee), 'sick', getMonthlyDefaultAllowance(employee, 'sick'))
+        if (leaveType !== 'casual' && leaveType !== 'sick' && !requestedRec && policy.annualAllowance != null) {
+          await repository.ensureBalance(idOf(employee), leaveType, policy.annualAllowance)
+        }
       }
+
+      const availCasual = casualRec ? Math.max(0, (casualRec.allowance ?? casualRec.allocated ?? 0) - (casualRec.used ?? 0) - (casualRec.reserved ?? 0)) : 0
+      const availSick = sickRec ? Math.max(0, (sickRec.allowance ?? sickRec.allocated ?? 0) - (sickRec.used ?? 0) - (sickRec.reserved ?? 0)) : 0
+      const availRequested = requestedRec ? Math.max(0, (requestedRec.allowance ?? requestedRec.allocated ?? 0) - (requestedRec.used ?? 0) - (requestedRec.reserved ?? 0)) : 0
+
+      let companySettings = {}
+      if (mongoose?.connection?.readyState === 1) {
+        try {
+          const { AttendanceSettings } = await import('../../models/AttendanceSettings.js')
+          companySettings = await AttendanceSettings.findOne().lean() || {}
+        } catch {}
+      }
+
+      const evalResult = evaluateLeaveRequest({
+        startDate,
+        endDate,
+        requestedLeaveType: leaveType,
+        isHalfDay,
+        halfDayPeriod,
+        policy,
+        availableBalances: {
+          casual: availCasual,
+          sick: availSick,
+          [leaveType]: availRequested,
+        },
+        holidayDates: policy?.holidayDates || [],
+        companySettings,
+        employee,
+      })
+
+      const totalUnits = evalResult.totalUnits
+      const paidUnits = evalResult.paidUnits
+      const doubleLopDays = evalResult.doubleLopUnits
+      const isDoubleLop = evalResult.isDoubleLop
       const units = totalUnits
+
       const overlap = await repository.findOverlap({ employeeId: idOf(employee), startDate, endDate, isHalfDay, halfDayPeriod })
       if (overlap) {
         const canCancel = ['pending_tl', 'pending_manager', 'pending_director', 'pending_hr', 'pending_admin', 'approved'].includes(overlap.status)
@@ -283,6 +366,7 @@ export function createLeaveService({ repository, employeeRepository, notificatio
           )
         }
       }
+
       // Resolve the direct reporting manager for this employee from database
       let directManager = null
       const rawMgrId = employee.managerId?._id || employee.managerId?.id || employee.managerId
@@ -327,20 +411,10 @@ export function createLeaveService({ repository, employeeRepository, notificatio
       const directManagerId = directManager ? idOf(directManager) : (rawMgrId ? String(rawMgrId) : null)
       let managerId = directManagerId
 
-      const defaultAllowance = getMonthlyDefaultAllowance(employee, leaveType)
-      const targetAllowance = policy.annualAllowance != null ? policy.annualAllowance : defaultAllowance
-      if (repository.ensureBalance) await repository.ensureBalance(idOf(employee), leaveType, targetAllowance)
-
-      let reserved = true
-      if (paidUnits > 0) {
-        reserved = await repository.reserveBalance(idOf(employee), leaveType, paidUnits)
-        if (!reserved) {
-          await repository.ensureBalance?.(idOf(employee), leaveType, targetAllowance)
-          reserved = await repository.reserveBalance(idOf(employee), leaveType, paidUnits)
-          if (!reserved) {
-            throw error(`Insufficient leave balance. You have less than ${paidUnits} paid leave unit(s) remaining for this month. Note that leave on or after the 25th is considered Double LOP.`, 409, 'INSUFFICIENT_LEAVE_BALANCE')
-          }
-        }
+      // Multi-balance reservation: reserve casual and/or sick balances atomically
+      const reserved = await reserveRequestBalances(repository, employee, evalResult, leaveType)
+      if (!reserved) {
+        throw error('Insufficient leave balance. You do not have enough paid leave balance remaining.', 409, 'INSUFFICIENT_LEAVE_BALANCE')
       }
 
       // Determine initial approval status based on configured leave policy and reporting hierarchy
@@ -348,12 +422,12 @@ export function createLeaveService({ repository, employeeRepository, notificatio
       const isDirectorApplicant = ['director', 'managing_director', 'co_founder'].includes(employee.role)
       const isManagerApplicant = ['manager', 'revenue_growth_manager', 'senior_manager', 'vertical_head'].includes(employee.role)
       const isDirectManagerDirector = directManager && ['director', 'managing_director', 'co_founder'].includes(directManager.role)
-      const isLopMonthLeave = is25thMonthLop(startDate, endDate, leaveType, isDoubleLop, doubleLopDays)
+      const isLopMonthLeave = isDoubleLop
 
       let status = 'pending_manager'
 
       if (isLopMonthLeave) {
-        // Month-end (>=25th) LOP leave mandates HR verification first
+        // Month-end (>=25th) Double LOP leave mandates HR verification before Admin approval
         status = 'pending_hr'
       } else if (configuredStage === 'hr') {
         // Policy explicitly mandates direct HR Operations review
@@ -372,7 +446,6 @@ export function createLeaveService({ repository, employeeRepository, notificatio
         status = 'pending_director'
       } else if (directManager) {
         // Standard Employee with an assigned reporting manager:
-        // Always routes to their assigned reporting manager for review!
         if (directManager.role === 'team_lead' || directManager.role === 'team_leader') {
           status = 'pending_tl'
         } else {
@@ -394,18 +467,24 @@ export function createLeaveService({ repository, employeeRepository, notificatio
           leaveType,
           startDate,
           endDate,
-          units,
-          paidUnits,
+          units: evalResult.totalUnits,
+          paidUnits: evalResult.paidUnits,
+          casualLeaveUnits: evalResult.casualUnits,
+          sickLeaveUnits: evalResult.sickUnits,
+          normalLopUnits: evalResult.normalLopUnits,
+          doubleLopUnits: evalResult.doubleLopUnits,
+          isDoubleLop: evalResult.isDoubleLop,
+          doubleLopDays: evalResult.doubleLopUnits,
+          dayBreakdown: evalResult.dayBreakdown,
+          policySnapshot: evalResult.policySnapshot,
           isHalfDay,
           halfDayPeriod,
-          isDoubleLop,
-          doubleLopDays,
           reason: String(payload.reason).trim(),
           status,
           approvalHistory: [{ action: 'submitted', toStatus: status, actorId: actor.id, actorRole: actor.role }],
         })
       } catch (saveError) {
-        if (paidUnits > 0) await repository.releaseReservation(idOf(employee), leaveType, paidUnits)
+        await releaseRequestBalances(repository, { employeeId: idOf(employee), casualLeaveUnits: evalResult.casualUnits, sickLeaveUnits: evalResult.sickUnits, paidUnits: evalResult.paidUnits, leaveType })
         throw saveError
       }
       const empName = employee.name || 'Employee'
@@ -597,7 +676,7 @@ export function createLeaveService({ repository, employeeRepository, notificatio
       if (!isAdminApprover && !isHr && !isDirector && !isManager && !isTl && !isLeadership) throw error('You are not authorized to decide this request at its current stage.', 403, 'FORBIDDEN')
       if (decision === 'reject' && !String(payload.reason ?? payload.comment ?? '').trim()) throw error('A rejection reason is required.', 400, 'REJECTION_REASON_REQUIRED', { reason: 'Required.' })
       const policy = await getPolicy(request.leaveType)
-      const isLopMonth = is25thMonthLop(request.startDate, request.endDate, request.leaveType, request.isDoubleLop, request.doubleLopDays)
+      const isLopMonth = is25thMonthLop(request.startDate, request.endDate, request.leaveType, request.isDoubleLop, request.doubleLopDays) || (request.doubleLopUnits > 0)
       
       let nextStatus
       if (decision === 'reject') {
@@ -637,9 +716,8 @@ export function createLeaveService({ repository, employeeRepository, notificatio
         }
       })
       if (!updated) throw error('This leave request has already been decided by another action.', 409, 'DUPLICATE_DECISION')
-      const paidUnits = request.paidUnits !== undefined ? request.paidUnits : request.units
-      if (nextStatus === 'rejected') await releaseReservation(request)
-      if (nextStatus === 'approved' && paidUnits > 0) await repository.commitReservation(request.employeeId, request.leaveType, paidUnits)
+      if (nextStatus === 'rejected') await releaseRequestBalances(repository, request)
+      if (nextStatus === 'approved') await commitRequestBalances(repository, request)
       const empIdToFind = idOf(request.employeeId) || (typeof request.employeeId === 'object' ? String(request.employeeId._id || request.employeeId.id) : String(request.employeeId))
       const empRecord = targetEmp || await employeeRepository.findById(empIdToFind)
 
@@ -714,9 +792,8 @@ export function createLeaveService({ repository, employeeRepository, notificatio
       if (!isPending && !canCancelApproved) throw error('This request cannot be cancelled under the configured policy.', 409, 'CANCELLATION_NOT_ALLOWED')
       const updated = await repository.transitionRequest(id, [request.status], { set: { status: 'cancelled' }, push: { action: 'cancelled', fromStatus: request.status, toStatus: 'cancelled', actorId: actor.id, actorRole: actor.role, createdAt: new Date() } })
       if (!updated) throw error('This request has already changed.', 409, 'DUPLICATE_DECISION')
-      const paidUnits = request.paidUnits !== undefined ? request.paidUnits : request.units
-      if (request.status === 'approved' && paidUnits > 0) await repository.restoreCommittedBalance(request.employeeId, request.leaveType, paidUnits)
-      else if (paidUnits > 0) await releaseReservation(request)
+      if (request.status === 'approved') await restoreCommittedRequestBalances(repository, request)
+      else await releaseRequestBalances(repository, request)
       try {
         const emp = await employeeRepository.findById(request.employeeId)
         if (emp && emp.email) {
@@ -741,11 +818,10 @@ export function createLeaveService({ repository, employeeRepository, notificatio
       }
       const request = await repository.findRequest(id)
       if (!request) throw error('Leave request not found.', 404, 'NOT_FOUND')
-      const paidUnits = request.paidUnits !== undefined ? request.paidUnits : request.units
       if (['pending_tl', 'pending_manager', 'pending_director', 'pending_hr', 'pending_admin'].includes(request.status)) {
-        if (paidUnits > 0) await releaseReservation(request).catch(() => null)
+        await releaseRequestBalances(repository, request).catch(() => null)
       } else if (request.status === 'approved') {
-        if (paidUnits > 0) await repository.restoreCommittedBalance(request.employeeId, request.leaveType, paidUnits).catch(() => null)
+        await restoreCommittedRequestBalances(repository, request).catch(() => null)
       }
       await repository.deleteRequest(id)
       return { success: true, id: String(id) }
@@ -757,34 +833,122 @@ export function createLeaveService({ repository, employeeRepository, notificatio
       const startDate = parseDate(payload.startDate, 'startDate')
       const endDate = parseDate(payload.endDate, 'endDate')
       if (endDate < startDate) throw error('End date must be on or after start date.', 400, 'INVALID_LEAVE_RANGE')
-      const { totalUnits: newUnits, paidUnits: newPaidUnits, doubleLopDays: newDoubleLopDays, isDoubleLop: newIsDoubleLop } = calculateUnitsBreakdown(startDate, endDate, policy)
-      const overlap = await repository.findOverlap({ employeeId: request.employeeId, startDate, endDate, excludeId: id })
+      const isHalfDay = Boolean(payload.isHalfDay || payload.days === 0.5 || request.isHalfDay)
+      const halfDayPeriod = isHalfDay ? (payload.halfDayPeriod || request.halfDayPeriod || 'first_half') : null
+
+      const overlap = await repository.findOverlap({ employeeId: request.employeeId, startDate, endDate, excludeId: id, isHalfDay, halfDayPeriod })
       if (overlap) throw error('This leave range overlaps an existing active request.', 409, 'LEAVE_OVERLAP')
-      const oldPaidUnits = request.paidUnits !== undefined ? request.paidUnits : request.units
-      if (newPaidUnits !== oldPaidUnits) {
-        if (oldPaidUnits > 0) await repository.releaseReservation(request.employeeId, request.leaveType, oldPaidUnits)
-        if (newPaidUnits > 0) {
-          const reserved = await repository.reserveBalance(request.employeeId, request.leaveType, newPaidUnits)
-          if (!reserved) {
-            if (oldPaidUnits > 0) await repository.reserveBalance(request.employeeId, request.leaveType, oldPaidUnits)
-            throw error('The amended range exceeds the available balance.', 409, 'INSUFFICIENT_LEAVE_BALANCE')
-          }
-        }
+
+      // Resolve employee & balances
+      const employee = await employeeRepository.findById(request.employeeId)
+      const balances = await repository.listBalances({ employeeId: idOf(request.employeeId) })
+      const casualRec = balances.find((b) => b.leaveType === 'casual')
+      const sickRec = balances.find((b) => b.leaveType === 'sick')
+      const requestedRec = balances.find((b) => b.leaveType === request.leaveType)
+
+      // Add back currently reserved units from this request to available calculation
+      const availCasual = Math.max(0, (casualRec?.allowance ?? casualRec?.allocated ?? 0) - (casualRec?.used ?? 0) - ((casualRec?.reserved ?? 0) - (request.casualLeaveUnits || 0)))
+      const availSick = Math.max(0, (sickRec?.allowance ?? sickRec?.allocated ?? 0) - (sickRec?.used ?? 0) - ((sickRec?.reserved ?? 0) - (request.sickLeaveUnits || 0)))
+      const availReq = requestedRec ? Math.max(0, (requestedRec.allowance ?? requestedRec.allocated ?? 0) - (requestedRec.used ?? 0) - ((requestedRec.reserved ?? 0) - (request.paidUnits || 0))) : 0
+
+      let companySettings = {}
+      if (mongoose?.connection?.readyState === 1) {
+        try {
+          const { AttendanceSettings } = await import('../../models/AttendanceSettings.js')
+          companySettings = await AttendanceSettings.findOne().lean() || {}
+        } catch {}
       }
+
+      const evalResult = evaluateLeaveRequest({
+        startDate,
+        endDate,
+        requestedLeaveType: request.leaveType,
+        isHalfDay,
+        halfDayPeriod,
+        policy,
+        availableBalances: {
+          casual: availCasual,
+          sick: availSick,
+          [request.leaveType]: availReq,
+        },
+        holidayDates: policy.holidayDates ?? [],
+        companySettings,
+        employee,
+      })
+
+      // Release old reservations and reserve new
+      await releaseRequestBalances(repository, request)
+      const reserved = await reserveRequestBalances(repository, employee, evalResult, request.leaveType)
+      if (!reserved) {
+        // Rollback and re-reserve old balances
+        await reserveRequestBalances(repository, employee, { casualUnits: request.casualLeaveUnits || 0, sickUnits: request.sickLeaveUnits || 0, paidUnits: request.paidUnits || 0 }, request.leaveType)
+        throw error('The amended range exceeds the available balance.', 409, 'INSUFFICIENT_LEAVE_BALANCE')
+      }
+
       const updated = await repository.transitionRequest(id, [request.status], {
         set: {
           startDate,
           endDate,
-          units: newUnits,
-          paidUnits: newPaidUnits,
-          doubleLopDays: newDoubleLopDays,
-          isDoubleLop: newIsDoubleLop,
+          units: evalResult.totalUnits,
+          paidUnits: evalResult.paidUnits,
+          casualLeaveUnits: evalResult.casualUnits,
+          sickLeaveUnits: evalResult.sickUnits,
+          normalLopUnits: evalResult.normalLopUnits,
+          doubleLopUnits: evalResult.doubleLopUnits,
+          isDoubleLop: evalResult.isDoubleLop,
+          doubleLopDays: evalResult.doubleLopUnits,
+          dayBreakdown: evalResult.dayBreakdown,
+          policySnapshot: evalResult.policySnapshot,
           reason: payload.reason ? String(payload.reason).trim() : request.reason,
         },
         push: { action: 'amended', fromStatus: request.status, toStatus: request.status, actorId: actor.id, actorRole: actor.role, createdAt: new Date() },
       })
       if (!updated) throw error('This request has already changed.', 409, 'DUPLICATE_DECISION')
       return publicRequest(updated)
+    },
+    async evaluate(payload, actor, targetEmployeeId) {
+      const employee = targetEmployeeId ? await employeeRepository.findById(targetEmployeeId) : await getEmployee(actor)
+      if (!employee) throw error('Select an active employee.', 400, 'EMPLOYEE_RECORD_NOT_FOUND')
+      const leaveType = String(payload.leaveType ?? 'casual').trim().toLowerCase()
+      const policy = await getPolicy(leaveType).catch(() => ({ configured: true, leaveType }))
+      const isHalfDay = Boolean(payload.isHalfDay || payload.days === 0.5)
+      const halfDayPeriod = isHalfDay ? (payload.halfDayPeriod || 'first_half') : null
+      const startDate = parseDate(payload.startDate, 'startDate')
+      const endDate = isHalfDay ? startDate : parseDate(payload.endDate, 'endDate')
+
+      const balances = await repository.listBalances({ employeeId: idOf(employee) })
+      const casualRec = balances.find((b) => b.leaveType === 'casual')
+      const sickRec = balances.find((b) => b.leaveType === 'sick')
+      const requestedRec = balances.find((b) => b.leaveType === leaveType)
+
+      const availCasual = casualRec ? Math.max(0, (casualRec.allowance ?? casualRec.allocated ?? 0) - (casualRec.used ?? 0) - (casualRec.reserved ?? 0)) : 0
+      const availSick = sickRec ? Math.max(0, (sickRec.allowance ?? sickRec.allocated ?? 0) - (sickRec.used ?? 0) - (sickRec.reserved ?? 0)) : 0
+      const availRequested = requestedRec ? Math.max(0, (requestedRec.allowance ?? requestedRec.allocated ?? 0) - (requestedRec.used ?? 0) - (requestedRec.reserved ?? 0)) : 0
+
+      let companySettings = {}
+      if (mongoose?.connection?.readyState === 1) {
+        try {
+          const { AttendanceSettings } = await import('../../models/AttendanceSettings.js')
+          companySettings = await AttendanceSettings.findOne().lean() || {}
+        } catch {}
+      }
+
+      return evaluateLeaveRequest({
+        startDate,
+        endDate,
+        requestedLeaveType: leaveType,
+        isHalfDay,
+        halfDayPeriod,
+        policy,
+        availableBalances: {
+          casual: availCasual,
+          sick: availSick,
+          [leaveType]: availRequested,
+        },
+        holidayDates: policy?.holidayDates || [],
+        companySettings,
+        employee,
+      })
     },
     async policies(actor) { if (!hasPermission(actor, PERMISSIONS.LEAVE_POLICY_ADMIN)) throw error('Leave policy administration is not permitted.', 403, 'FORBIDDEN'); return repository.listPolicies() },
     async savePolicy(leaveType, payload, actor) {

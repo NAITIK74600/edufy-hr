@@ -132,6 +132,21 @@ export function createMemoryLeaveRepository() {
       policies = policies.filter((entry) => entry.leaveType !== leaveType).concat(policy)
       return policy
     },
+    async ensureBalance(employeeId, leaveType, allowance) {
+      let balance = balances.find((b) => b.employeeId === employeeId && b.leaveType === leaveType)
+      const target = allowance != null ? Number(allowance) : 1
+      if (balance) {
+        if (allowance != null) {
+          balance.allowance = target
+          balance.allocated = target
+          balance.remaining = Math.max(0, target - (balance.used ?? 0) - (balance.reserved ?? 0))
+        }
+        return balance
+      }
+      balance = { employeeId, leaveType, allowance: target, allocated: target, used: 0, reserved: 0, remaining: target, year: 2026 }
+      balances.push(balance)
+      return balance
+    },
     async getBalance(employeeId, leaveType) {
       return balances.find((b) => b.employeeId === employeeId && b.leaveType === leaveType) ?? null
     },
@@ -145,23 +160,25 @@ export function createMemoryLeaveRepository() {
       const units = maybeDays !== undefined ? maybeDays : yearOrUnits
       let balance = balances.find((b) => b.employeeId === employeeId && b.leaveType === leaveType)
       if (!balance) {
-        balance = { employeeId, leaveType, allocated: 12, used: 0, reserved: 0, remaining: 12, year: 2026 }
+        balance = { employeeId, leaveType, allowance: 12, allocated: 12, used: 0, reserved: 0, remaining: 12, year: 2026 }
         balances.push(balance)
       }
-      const available = (balance.allocated ?? 12) - (balance.used ?? 0) - (balance.reserved ?? 0)
-      if (available < units) return false
+      const quota = balance.allowance ?? balance.allocated ?? 12
+      const available = quota - (balance.used ?? 0) - (balance.reserved ?? 0)
+      if (available < units) return null
       balance.reserved = (balance.reserved ?? 0) + units
-      balance.remaining = Math.max(0, (balance.allocated ?? 12) - (balance.used ?? 0) - balance.reserved)
-      return true
+      balance.remaining = Math.max(0, quota - (balance.used ?? 0) - balance.reserved)
+      return balance
     },
     async releaseReservation(employeeId, leaveType, yearOrUnits, maybeDays) {
       const units = maybeDays !== undefined ? maybeDays : yearOrUnits
       const balance = balances.find((b) => b.employeeId === employeeId && b.leaveType === leaveType)
       if (balance) {
         balance.reserved = Math.max(0, (balance.reserved ?? 0) - units)
-        balance.remaining = Math.max(0, (balance.allocated ?? 12) - (balance.used ?? 0) - balance.reserved)
+        const quota = balance.allowance ?? balance.allocated ?? 12
+        balance.remaining = Math.max(0, quota - (balance.used ?? 0) - balance.reserved)
       }
-      return true
+      return balance || null
     },
     async commitReservation(employeeId, leaveType, yearOrUnits, maybeDays) {
       const units = maybeDays !== undefined ? maybeDays : yearOrUnits
@@ -169,18 +186,20 @@ export function createMemoryLeaveRepository() {
       if (balance) {
         balance.reserved = Math.max(0, (balance.reserved ?? 0) - units)
         balance.used = (balance.used ?? 0) + units
-        balance.remaining = Math.max(0, (balance.allocated ?? 12) - balance.used - balance.reserved)
+        const quota = balance.allowance ?? balance.allocated ?? 12
+        balance.remaining = Math.max(0, quota - balance.used - balance.reserved)
       }
-      return true
+      return balance || null
     },
     async restoreCommittedBalance(employeeId, leaveType, yearOrUnits, maybeDays) {
       const units = maybeDays !== undefined ? maybeDays : yearOrUnits
       const balance = balances.find((b) => b.employeeId === employeeId && b.leaveType === leaveType)
       if (balance) {
         balance.used = Math.max(0, (balance.used ?? 0) - units)
-        balance.remaining = Math.max(0, (balance.allocated ?? 12) - balance.used - balance.reserved)
+        const quota = balance.allowance ?? balance.allocated ?? 12
+        balance.remaining = Math.max(0, quota - balance.used - (balance.reserved ?? 0))
       }
-      return true
+      return balance || null
     },
     async deleteRequest(id) {
       const index = requests.findIndex((r) => r.id === String(id) || r._id === String(id))
