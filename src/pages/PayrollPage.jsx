@@ -59,6 +59,52 @@ function normalizeBranch(b) {
   return trimmed
 }
 
+function calculateEmpAttendanceContext(emp, monthStr, attendanceList = [], leavesList = []) {
+  if (!emp) return { lopDays: 0, attendanceDays: 0, lateCount: 0 }
+  const empId = String(emp.employeeId || emp.code || '').toUpperCase()
+  const empObjId = String(emp._id || emp.id || '')
+
+  const records = (attendanceList || []).filter((a) => {
+    const aEmp = String(a.employeeId || a.employeeRef || '').toUpperCase()
+    return (empId && aEmp === empId) || (empObjId && aEmp === empObjId.toUpperCase())
+  })
+
+  const counted = new Set()
+  let lop = 0
+  for (const r of records) {
+    const dateStr = String(r.date || '')
+    const day = Number(dateStr.split('-')[2]) || 1
+    const isLop = r.status === 'lop' || r.isLop || r.status === 'absent'
+    const isHalf = r.status === 'half-day' || r.isHalfDay
+    const isDouble = day >= 25 || r.isDoubleLop || r.doubleLopStatus === 'approved'
+
+    if (isLop) {
+      lop += isDouble ? 2 : 1
+      counted.add(dateStr)
+    } else if (isHalf) {
+      lop += 0.5
+      counted.add(dateStr)
+    }
+  }
+
+  for (const l of (leavesList || [])) {
+    const lEmp = String(l.employeeId?._id || l.employeeId?.employeeId || l.employeeId || '').toUpperCase()
+    if ((empId && lEmp === empId) || (empObjId && lEmp === empObjId.toUpperCase())) {
+      if (l.status === 'approved') {
+        if (l.doubleLopDays && l.doubleLopDays > 0) lop += l.doubleLopDays * 2
+        else if (l.isDoubleLop) lop += (l.units || 1) * 2
+        else if (String(l.leaveType).toLowerCase() === 'lop') lop += (l.units || 1)
+      }
+    }
+  }
+
+  const late = records.filter((r) => r.isLate || r.status === 'late').length
+  const early = records.filter((r) => r.isEarlyLogout || r.status === 'early-logout').length
+  lop += Math.floor((late + early) / 3) * 0.5
+
+  return { lopDays: lop, attendanceDays: records.length, lateCount: late }
+}
+
 export function PayrollPage() {
   const { user } = useAuth()
   const [storeState, setStoreState] = useState(() => hrStore.getState())
@@ -284,32 +330,46 @@ export function PayrollPage() {
       { name: 'ESI', amount: 0 },
       { name: 'TDS / Income Tax', amount: 0 },
     ]
+    // 1. Immediately calculate local attendance context
+    const localCtx = calculateEmpAttendanceContext(emp, formMonth, storeState.attendance, storeState.leaves)
+    const stdDays = Number(formStandardDays) || 30
+    const localLopDays = Number(localCtx.lopDays) || 0
+    setFormLopDays(localLopDays)
+    setFormPayableDays(Math.max(0, stdDays - localLopDays))
+    if (localLopDays > 0) {
+      const lopDeduction = Math.round((baseSalary / stdDays) * localLopDays)
+      initialDeductions.push({ name: 'Loss of Pay (LOP)', amount: lopDeduction })
+    }
     setFormDeductions(initialDeductions)
 
-    // Automatically sync live attendance & leave LOP context from backend
-    const empCode = emp.employeeId || emp.code
-    if (empCode) {
-      apiClient.get('/payroll/context', { params: { employeeId: empCode, month: formMonth } })
-        .then((res) => {
-          const ctx = res.data?.data
-          if (ctx) {
-            const liveLopDays = Number(ctx.lopDays) || 0
-            setFormLopDays(liveLopDays)
-            const stdDays = Number(formStandardDays) || 30
-            setFormPayableDays(Math.max(0, stdDays - liveLopDays))
-            if (liveLopDays > 0) {
-              const lopDeduction = Math.round((baseSalary / stdDays) * liveLopDays)
-              setFormDeductions((prev) => {
-                const baseList = prev.filter(
-                  (d) => !d.name.toLowerCase().includes('loss of pay') && !d.name.toLowerCase().includes('lop')
-                )
-                return [...baseList, { name: 'Loss of Pay (LOP)', amount: lopDeduction }]
-              })
-            }
+    // 2. Automatically sync authoritative live attendance & leave LOP context from backend
+    const empCode = emp.employeeId || emp.code || ''
+    const empObjId = emp._id || emp.id || ''
+    apiClient.get('/payroll/context', { params: { employeeId: empCode, id: empObjId, month: formMonth } })
+      .then((res) => {
+        const ctx = res.data?.data
+        if (ctx) {
+          const liveLopDays = Number(ctx.lopDays ?? localLopDays)
+          setFormLopDays(liveLopDays)
+          setFormPayableDays(Math.max(0, stdDays - liveLopDays))
+          if (liveLopDays > 0) {
+            const lopDeduction = Math.round((baseSalary / stdDays) * liveLopDays)
+            setFormDeductions((prev) => {
+              const baseList = prev.filter(
+                (d) => !d.name.toLowerCase().includes('loss of pay') && !d.name.toLowerCase().includes('lop')
+              )
+              return [...baseList, { name: 'Loss of Pay (LOP)', amount: lopDeduction }]
+            })
+          } else {
+            setFormDeductions((prev) =>
+              prev.filter(
+                (d) => !d.name.toLowerCase().includes('loss of pay') && !d.name.toLowerCase().includes('lop')
+              )
+            )
           }
-        })
-        .catch(() => {})
-    }
+        }
+      })
+      .catch(() => {})
   }
 
   // Edit existing record in form
@@ -810,16 +870,31 @@ export function PayrollPage() {
 
                   if (selectedEmpId) {
                     const emp = employees.find((e) => String(e._id || e.id) === String(selectedEmpId) || String(e.employeeId) === String(selectedEmpId))
-                    const empCode = emp?.employeeId || emp?.code
-                    if (empCode) {
-                      apiClient.get('/payroll/context', { params: { employeeId: empCode, month: newMonth } })
+                    if (emp) {
+                      // 1. Local fallback
+                      const localCtx = calculateEmpAttendanceContext(emp, newMonth, storeState.attendance, storeState.leaves)
+                      const localLop = Number(localCtx.lopDays) || 0
+                      setFormLopDays(localLop)
+                      setFormPayableDays(Math.max(0, d - localLop))
+                      const baseSal = Number(emp.baseSalary || emp.salary || 30000)
+                      const localLopDed = localLop > 0 ? Math.round((baseSal / d) * localLop) : 0
+                      setFormDeductions((prev) => {
+                        const baseList = prev.filter(
+                          (item) => !item.name.toLowerCase().includes('loss of pay') && !item.name.toLowerCase().includes('lop')
+                        )
+                        return localLopDed > 0 ? [...baseList, { name: 'Loss of Pay (LOP)', amount: localLopDed }] : baseList
+                      })
+
+                      // 2. Authoritative backend sync
+                      const empCode = emp.employeeId || emp.code || ''
+                      const empObjId = emp._id || emp.id || ''
+                      apiClient.get('/payroll/context', { params: { employeeId: empCode, id: empObjId, month: newMonth } })
                         .then((res) => {
                           const ctx = res.data?.data
                           if (ctx) {
-                            const liveLopDays = Number(ctx.lopDays) || 0
+                            const liveLopDays = Number(ctx.lopDays ?? localLop)
                             setFormLopDays(liveLopDays)
                             setFormPayableDays(Math.max(0, d - liveLopDays))
-                            const baseSal = Number(emp.baseSalary || emp.salary || 30000)
                             const lopDed = liveLopDays > 0 ? Math.round((baseSal / d) * liveLopDays) : 0
                             setFormDeductions((prev) => {
                               const baseList = prev.filter(

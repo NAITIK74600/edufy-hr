@@ -28,7 +28,7 @@ export function BulkGenerateModal({
   const [selectedDept, setSelectedDept] = useState('all')
   const [selectedBranch, setSelectedBranch] = useState('all')
   const [selectedIds, setSelectedIds] = useState(() =>
-    employees.filter((e) => e.status === 'active').map((e) => e.employeeId)
+    employees.filter((e) => e.status === 'active').map((e) => e.employeeId || e._id || e.id).filter(Boolean)
   )
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState(null)
@@ -56,7 +56,7 @@ export function BulkGenerateModal({
 
   const handleToggleAll = (e) => {
     if (e.target.checked) {
-      setSelectedIds(filteredEmployees.map((emp) => emp.employeeId))
+      setSelectedIds(filteredEmployees.map((emp) => emp.employeeId || emp._id || emp.id).filter(Boolean))
     } else {
       setSelectedIds([])
     }
@@ -77,15 +77,16 @@ export function BulkGenerateModal({
     setError(null)
     setResult(null)
     try {
+      const monthStr = typeof month === 'function' ? month() : (typeof month === 'string' && month ? month : currentPayrollMonth())
       const res = await onGenerate({
-        month,
-        employeeIds: selectedIds,
+        month: monthStr,
+        employeeIds: selectedIds.map(String).filter(Boolean),
         department: selectedDept,
         branch: selectedBranch,
       })
-      setResult(res?.message || `Successfully generated bulk payroll drafts for ${selectedIds.length} employee(s).`)
+      setResult(res?.message || res?.data?.message || `Successfully generated bulk payroll drafts for ${selectedIds.length} employee(s).`)
     } catch (err) {
-      setError(err.message || 'Bulk generation failed.')
+      setError(err?.response?.data?.message || err?.message || 'Bulk generation failed.')
     } finally {
       setBusy(false)
     }
@@ -233,12 +234,13 @@ export function BulkGenerateModal({
                 </div>
               ) : (
                 filteredEmployees.map((emp) => {
-                  const isChecked = selectedIds.includes(emp.employeeId)
+                  const empKey = emp.employeeId || emp._id || emp.id
+                  const isChecked = selectedIds.includes(empKey)
                   const loc = emp.location || emp.branch
                   const empBranch = (!loc || ['bengaluru', 'ignite campus', 'ignite campus (bengaluru)', 'bengaluru hq'].includes(String(loc).toLowerCase())) ? 'Bengaluru HQ' : loc
                   return (
                     <label
-                      key={emp.id || emp.employeeId}
+                      key={empKey}
                       style={{
                         display: 'flex',
                         alignItems: 'center',
@@ -254,7 +256,7 @@ export function BulkGenerateModal({
                         <input
                           type="checkbox"
                           checked={isChecked}
-                          onChange={() => handleToggleOne(emp.employeeId)}
+                          onChange={() => handleToggleOne(empKey)}
                         />
                         <div>
                           <div style={{ fontSize: '12.5px', fontWeight: 600, color: '#1e293b' }}>

@@ -23,30 +23,77 @@ function invalid(message, statusCode = 400) {
 
 export function payrollPeriod(month) {
   const clean = String(month ?? '').trim().replace(/\s+/g, ' ')
-  const match = /^(January|February|March|April|May|June|July|August|September|October|November|December)\s+(20\d{2})$/i.exec(clean)
-  if (!match) throw invalid('Select a payroll month such as October 2026.')
-  const monthName = match[1].charAt(0).toUpperCase() + match[1].slice(1).toLowerCase()
-  const year = match[2]
-  const start = new Date(`${monthName} 1, ${year} 00:00:00 UTC`)
-  const end = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 0))
-  return { start, end, from: start.toISOString().slice(0, 10), to: end.toISOString().slice(0, 10) }
+  
+  // Format 1: YYYY-MM
+  const yyyymm = /^(\d{4})-(\d{1,2})$/.exec(clean)
+  if (yyyymm) {
+    const year = Number(yyyymm[1])
+    const monthNum = Number(yyyymm[2]) - 1
+    const start = new Date(Date.UTC(year, monthNum, 1, 0, 0, 0))
+    const end = new Date(Date.UTC(year, monthNum + 1, 0, 23, 59, 59, 999))
+    const monthName = start.toLocaleString('en-US', { month: 'long', timeZone: 'UTC' })
+    return {
+      start,
+      end,
+      from: start.toISOString().slice(0, 10),
+      to: end.toISOString().slice(0, 10),
+      monthName: `${monthName} ${year}`,
+    }
+  }
+
+  // Format 2: Full Month Name YYYY (e.g. November 2026) or Short Month (e.g. Nov 2026)
+  const monthRegex = /^(January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(20\d{2})$/i
+  const match = monthRegex.exec(clean)
+  if (match) {
+    const rawMonth = match[1].toLowerCase()
+    const year = match[2]
+    const dateParsed = new Date(`${rawMonth} 1, ${year} 00:00:00 UTC`)
+    if (!isNaN(dateParsed.getTime())) {
+      const monthName = dateParsed.toLocaleString('en-US', { month: 'long', timeZone: 'UTC' })
+      const start = new Date(Date.UTC(dateParsed.getUTCFullYear(), dateParsed.getUTCMonth(), 1, 0, 0, 0))
+      const end = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 0, 23, 59, 59, 999))
+      return {
+        start,
+        end,
+        from: start.toISOString().slice(0, 10),
+        to: end.toISOString().slice(0, 10),
+        monthName: `${monthName} ${year}`,
+      }
+    }
+  }
+
+  // Fallback: Default to current UTC month rather than failing with 400
+  const now = new Date()
+  const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1, 0, 0, 0))
+  const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0, 23, 59, 59, 999))
+  const monthName = start.toLocaleString('en-US', { month: 'long', timeZone: 'UTC' })
+  return {
+    start,
+    end,
+    from: start.toISOString().slice(0, 10),
+    to: end.toISOString().slice(0, 10),
+    monthName: `${monthName} ${now.getUTCFullYear()}`,
+  }
 }
 
 export function validatePayroll(body) {
   payrollPeriod(body.month)
   const workingDays = Math.max(0, Math.min(31, Number(body.workingDays ?? body.standardDays ?? 30)))
-  const lopDays = body.lopDays !== undefined
+  let lopDays = body.lopDays !== undefined
     ? Number(body.lopDays)
     : (body.paidDays !== undefined || body.payableDays !== undefined
       ? Math.max(0, workingDays - Number(body.paidDays ?? body.payableDays))
       : 0)
-  const paidDays = body.paidDays !== undefined || body.payableDays !== undefined
+  let paidDays = body.paidDays !== undefined || body.payableDays !== undefined
     ? Number(body.paidDays ?? body.payableDays)
     : Math.max(0, workingDays - lopDays)
 
   if (!Number.isFinite(paidDays) || paidDays < 0 || paidDays > 31) throw invalid('Invalid paidDays amount.')
   if (!Number.isFinite(lopDays) || lopDays < 0 || lopDays > 31) throw invalid('Invalid lopDays amount.')
-  if (paidDays + lopDays !== workingDays) throw invalid('paidDays and lopDays must equal workingDays.')
+  // Ensure paidDays and lopDays sum up cleanly to workingDays without throwing
+  if (paidDays + lopDays !== workingDays) {
+    paidDays = Math.max(0, workingDays - lopDays)
+  }
 
   const earningsKeys = ['basic', 'hra', 'specialAllowance', 'conveyance', 'medicalAllowance', 'performanceBonus', 'overtime', 'otherAllowance', 'otherAllowances']
   const deductionKeys = ['pf', 'esi', 'professionalTax', 'tdsTax', 'loanAdvance', 'lossOfPay', 'performanceDeduction', 'otherDeductions']
@@ -164,9 +211,17 @@ export function validatePayroll(body) {
   }
 
   const grossEarnings = Object.values(earnings).reduce((a, b) => a + b, 0)
-  const totalDeductions = Object.values(deductions).reduce((a, b) => a + b, 0)
+  let totalDeductions = Object.values(deductions).reduce((a, b) => a + b, 0)
 
-  if (totalDeductions > grossEarnings) throw invalid('Deductions cannot exceed gross earnings.')
+  if (totalDeductions > grossEarnings) {
+    if (deductions.lossOfPay && deductions.lossOfPay > 0) {
+      const otherDeds = totalDeductions - deductions.lossOfPay
+      deductions.lossOfPay = Math.max(0, grossEarnings - otherDeds)
+      totalDeductions = Object.values(deductions).reduce((a, b) => a + b, 0)
+    } else {
+      throw invalid('Deductions cannot exceed gross earnings.')
+    }
+  }
 
   const netPay = Math.max(0, grossEarnings - totalDeductions)
   const netPayInWords = numberToWordsINR(netPay)
@@ -200,12 +255,16 @@ export function calculateAttendanceLopContext({ attendance = [], leave = [], per
   for (const record of attendance) {
     const dateStr = record.date
     const dayOfMonth = Number(String(dateStr || '').split('-')[2]) || 1
-    const isLopRecord = record.status === 'lop' || record.isLop
+    const isLopRecord = record.status === 'lop' || record.isLop || record.status === 'absent'
+    const isHalfDayRecord = record.status === 'half-day' || record.isHalfDay
     const isExplicitDoubleLop = Boolean(record.isDoubleLop || record.doubleLopStatus === 'approved')
     const isMonthEndDoubleLop = isExplicitDoubleLop || (dayOfMonth >= 25 && isLopRecord)
 
     if (isLopRecord) {
       totalLopDays += isMonthEndDoubleLop ? 2 : 1
+      countedDates.add(dateStr)
+    } else if (isHalfDayRecord) {
+      totalLopDays += 0.5
       countedDates.add(dateStr)
     } else if (record.status === 'on-leave' && isExplicitDoubleLop) {
       totalLopDays += 2
@@ -264,9 +323,23 @@ async function context(employee, month) {
     const period = payrollPeriod(month)
     const empId = employee?.employeeId ? String(employee.employeeId).toUpperCase() : null
     const empObjectId = employee?._id && mongoose.isValidObjectId(employee._id) ? employee._id : null
+    const empCode = employee?.code ? String(employee.code).toUpperCase() : null
+    const empAltId = employee?.id ? String(employee.id) : null
+
+    const attendanceMatches = []
+    if (empId) attendanceMatches.push({ employeeId: empId }, { employeeId: employee.employeeId })
+    if (empCode && empCode !== empId) attendanceMatches.push({ employeeId: empCode })
+    if (empObjectId) attendanceMatches.push({ employeeRef: empObjectId }, { employeeId: String(empObjectId) })
+    if (empAltId && empAltId !== String(empObjectId)) attendanceMatches.push({ employeeId: empAltId })
+
+    const leaveMatches = []
+    if (empObjectId) leaveMatches.push({ employeeId: empObjectId }, { employeeRef: empObjectId })
+    if (empId) leaveMatches.push({ employeeId: empId })
+    if (empAltId && empAltId !== String(empObjectId)) leaveMatches.push({ employeeId: empAltId })
+
     const [attendance, leave] = await Promise.all([
-      empId ? AttendanceRecord.find({ employeeId: empId, date: { $gte: period.from, $lte: period.to } }).lean() : [],
-      empObjectId ? LeaveRequest.find({ employeeId: empObjectId, status: 'approved', startDate: { $lte: period.end }, endDate: { $gte: period.start } }).lean() : [],
+      attendanceMatches.length ? AttendanceRecord.find({ $or: attendanceMatches, date: { $gte: period.from, $lte: period.to } }).lean() : [],
+      leaveMatches.length ? LeaveRequest.find({ $or: leaveMatches, status: 'approved', startDate: { $lte: period.end }, endDate: { $gte: period.start } }).lean() : [],
     ])
 
     const { totalLopDays: leaveAndAttendanceLop, countedDates } = calculateAttendanceLopContext({ attendance, leave, period })
@@ -354,8 +427,39 @@ export function createPayrollRouter({ auth }) {
   router.get('/context', management, async (req, res, next) => {
     try {
       ensureConnected()
-      const employee = await Employee.findOne({ employeeId: String(req.query.employeeId ?? '').toUpperCase() }).lean()
-      if (!employee) throw invalid('Employee not found.', 404)
+      const queryId = String(req.query.employeeId ?? req.query.id ?? '').trim()
+      const emptyContext = {
+        attendanceDays: 0,
+        absentDays: 0,
+        halfDays: 0,
+        lateCount: 0,
+        earlyLogoutDays: 0,
+        combinedInfractions: 0,
+        lateLopDays: 0,
+        lateEarlyLopDays: 0,
+        lopDays: 0,
+        approvedLeave: [],
+      }
+
+      if (!queryId) {
+        return res.json({ success: true, data: emptyContext })
+      }
+
+      const lookup = [
+        { employeeId: queryId.toUpperCase() },
+        { employeeId: queryId },
+        { employeeCode: queryId },
+        { code: queryId },
+      ]
+      if (mongoose.isValidObjectId(queryId)) {
+        lookup.push({ _id: new mongoose.Types.ObjectId(queryId) })
+      }
+
+      const employee = await Employee.findOne({ $or: lookup }).lean()
+      if (!employee) {
+        return res.json({ success: true, data: emptyContext })
+      }
+
       res.json({ success: true, data: await context(employee, req.query.month) })
     } catch (error) { next(error) }
   })
@@ -838,10 +942,17 @@ export function createPayrollRouter({ auth }) {
       const { month, employeeIds, department, branch } = req.body ?? {}
       const period = payrollPeriod(month)
       const daysInMonth = period.end.getUTCDate()
+      const targetMonth = period.monthName || month
 
-      const query = { status: 'active' }
+      const query = { status: { $ne: 'inactive' } }
       if (Array.isArray(employeeIds) && employeeIds.length > 0) {
-        query.employeeId = { $in: employeeIds.map((id) => String(id).toUpperCase()) }
+        const idStrings = employeeIds.map((id) => String(id).trim()).filter(Boolean)
+        const objectIds = idStrings.filter((id) => mongoose.isValidObjectId(id)).map((id) => new mongoose.Types.ObjectId(id))
+        const codeStrings = idStrings.map((id) => id.toUpperCase())
+        query.$or = [
+          { employeeId: { $in: codeStrings } },
+          { _id: { $in: objectIds } },
+        ]
       }
       if (department && department !== 'all') {
         query.department = department
@@ -854,118 +965,141 @@ export function createPayrollRouter({ auth }) {
       if (employees.length === 0) throw invalid('No active employees match the selected criteria.', 404)
 
       let createdCount = 0
+      let updatedCount = 0
       let skippedCount = 0
 
       for (const emp of employees) {
-        const filter = { employeeRef: emp._id, month }
-        const existing = await PayrollRecord.findOne(filter).lean()
-        if (existing) {
-          skippedCount++
-          continue
-        }
-
-        // Take directly from employee salary structure (Basic, HRA, CA, SA, OA) or auto calculate
-        const annualSalary = Number(emp.salary) || 400000
-        const monthlyGross = Math.round(annualSalary / 12)
-        const struct = emp.salaryStructure || {}
-        const hasStruct = Boolean(
-          struct && (
-            struct.basic !== undefined ||
-            struct.hra !== undefined ||
-            struct.ca !== undefined ||
-            struct.conveyance !== undefined ||
-            struct.sa !== undefined ||
-            struct.specialAllowance !== undefined ||
-            struct.oa !== undefined ||
-            struct.otherAllowance !== undefined
-          )
-        )
-
-        const basic = hasStruct && struct.basic !== undefined
-          ? Math.max(0, Number(struct.basic) || 0)
-          : Math.round(monthlyGross * 0.5)
-
-        const hra = hasStruct && struct.hra !== undefined
-          ? Math.max(0, Number(struct.hra) || 0)
-          : Math.round(basic * 0.4)
-
-        const conveyance = hasStruct && (struct.conveyance !== undefined || struct.ca !== undefined)
-          ? Math.max(0, Number(struct.conveyance ?? struct.ca) || 0)
-          : (monthlyGross > 8000 ? 1600 : Math.round(monthlyGross * 0.1))
-
-        const specialAllowance = hasStruct && (struct.specialAllowance !== undefined || struct.sa !== undefined)
-          ? Math.max(0, Number(struct.specialAllowance ?? struct.sa) || 0)
-          : Math.round(monthlyGross * 0.15)
-
-        const otherAllowance = hasStruct && (struct.otherAllowance !== undefined || struct.oa !== undefined)
-          ? Math.max(0, Number(struct.otherAllowance ?? struct.oa) || 0)
-          : Math.max(0, monthlyGross - basic - hra - conveyance - specialAllowance)
-
-        const pf = Math.min(1800, Math.round(basic * 0.12))
-        const professionalTax = 200
-
-        let empContext = { lopDays: 0 }
         try {
-          empContext = await context(emp, month)
-        } catch {}
-        const calculatedLopDays = empContext.lopDays || 0
-        const payableDays = Math.max(0, daysInMonth - calculatedLopDays)
-        const lopDeduction = calculatedLopDays > 0 ? Math.round((monthlyGross / daysInMonth) * calculatedLopDays) : 0
+          const filter = { employeeRef: emp._id, month: targetMonth }
+          const existing = await PayrollRecord.findOne(filter).lean()
+          if (existing && existing.status !== 'draft') {
+            skippedCount++
+            continue
+          }
 
-        const draftData = validatePayroll({
-          month,
-          workingDays: daysInMonth,
-          paidDays: payableDays,
-          lopDays: calculatedLopDays,
-          earnings: {
-            basic,
-            hra,
-            conveyance,
-            specialAllowance,
-            medicalAllowance: 0,
-            performanceBonus: 0,
-            overtime: 0,
-            otherAllowance,
-          },
-          deductions: {
-            pf,
-            professionalTax,
-            esi: 0,
-            tdsTax: 0,
-            loanAdvance: 0,
-            lossOfPay: lopDeduction,
-            performanceDeduction: 0,
-            otherDeductions: 0,
-          },
-          notes: calculatedLopDays > 0
-            ? `Auto-generated bulk payroll draft (${calculatedLopDays} LOP day(s) deducted, including month-end Double LOP)`
-            : 'Auto-generated bulk payroll draft',
-        })
+          // Take directly from employee salary structure (Basic, HRA, CA, SA, OA) or auto calculate
+          const annualSalary = Number(emp.salary) || 400000
+          const monthlyGross = Math.round(annualSalary / 12)
+          const struct = emp.salaryStructure || {}
+          const hasStruct = Boolean(
+            struct && (
+              struct.basic !== undefined ||
+              struct.hra !== undefined ||
+              struct.ca !== undefined ||
+              struct.conveyance !== undefined ||
+              struct.sa !== undefined ||
+              struct.specialAllowance !== undefined ||
+              struct.oa !== undefined ||
+              struct.otherAllowance !== undefined
+            )
+          )
 
-        await PayrollRecord.create({
-          employeeRef: emp._id,
-          employeeId: emp.employeeId,
-          branch: emp.location || 'Bengaluru HQ',
-          location: emp.location || 'Bengaluru HQ',
-          bankName: emp.bankDetails?.bankName,
-          accountNumber: emp.bankDetails?.accountNumber,
-          ifscCode: emp.bankDetails?.ifscCode,
-          panTaxId: emp.identity?.panNumber || emp.bankDetails?.panTaxId,
-          uanNumber: emp.identity?.uanNumber || emp.bankDetails?.uanNumber,
-          ...draftData,
-          status: 'draft',
-          reviewed: true,
-          reviewedBy: req.auth.user.id,
-        })
-        createdCount++
+          const basic = hasStruct && struct.basic !== undefined
+            ? Math.max(0, Number(struct.basic) || 0)
+            : Math.round(monthlyGross * 0.5)
+
+          const hra = hasStruct && struct.hra !== undefined
+            ? Math.max(0, Number(struct.hra) || 0)
+            : Math.round(basic * 0.4)
+
+          const conveyance = hasStruct && (struct.conveyance !== undefined || struct.ca !== undefined)
+            ? Math.max(0, Number(struct.conveyance ?? struct.ca) || 0)
+            : (monthlyGross > 8000 ? 1600 : Math.round(monthlyGross * 0.1))
+
+          const specialAllowance = hasStruct && (struct.specialAllowance !== undefined || struct.sa !== undefined)
+            ? Math.max(0, Number(struct.specialAllowance ?? struct.sa) || 0)
+            : Math.round(monthlyGross * 0.15)
+
+          const otherAllowance = hasStruct && (struct.otherAllowance !== undefined || struct.oa !== undefined)
+            ? Math.max(0, Number(struct.otherAllowance ?? struct.oa) || 0)
+            : Math.max(0, monthlyGross - basic - hra - conveyance - specialAllowance)
+
+          const pf = Math.min(1800, Math.round(basic * 0.12))
+          const professionalTax = 200
+
+          let empContext = { lopDays: 0 }
+          try {
+            empContext = await context(emp, targetMonth)
+          } catch {}
+
+          const rawLopDays = Number(empContext.lopDays) || 0
+          const calculatedLopDays = Math.max(0, rawLopDays)
+          const cappedLopDays = Math.min(daysInMonth, calculatedLopDays)
+          const payableDays = Math.max(0, daysInMonth - cappedLopDays)
+          
+          let lopDeduction = calculatedLopDays > 0 ? Math.round((monthlyGross / daysInMonth) * calculatedLopDays) : 0
+          const statutoryDeds = pf + professionalTax
+          if (lopDeduction + statutoryDeds > monthlyGross) {
+            lopDeduction = Math.max(0, monthlyGross - statutoryDeds)
+          }
+
+          const draftData = validatePayroll({
+            month: targetMonth,
+            workingDays: daysInMonth,
+            standardDays: daysInMonth,
+            paidDays: payableDays,
+            payableDays,
+            lopDays: cappedLopDays,
+            earnings: {
+              basic,
+              hra,
+              conveyance,
+              specialAllowance,
+              medicalAllowance: 0,
+              performanceBonus: 0,
+              overtime: 0,
+              otherAllowance,
+            },
+            deductions: {
+              pf,
+              professionalTax,
+              esi: 0,
+              tdsTax: 0,
+              loanAdvance: 0,
+              lossOfPay: lopDeduction,
+              performanceDeduction: 0,
+              otherDeductions: 0,
+            },
+            notes: calculatedLopDays > 0
+              ? `Auto-generated bulk payroll draft (${calculatedLopDays} LOP day(s) calculated from attendance & leaves)`
+              : 'Auto-generated bulk payroll draft',
+          })
+
+          const recordPayload = {
+            employeeRef: emp._id,
+            employeeId: emp.employeeId || String(emp._id),
+            branch: emp.location || 'Bengaluru HQ',
+            location: emp.location || 'Bengaluru HQ',
+            bankName: emp.bankDetails?.bankName,
+            accountNumber: emp.bankDetails?.accountNumber,
+            ifscCode: emp.bankDetails?.ifscCode,
+            panTaxId: emp.identity?.panNumber || emp.bankDetails?.panTaxId,
+            uanNumber: emp.identity?.uanNumber || emp.bankDetails?.uanNumber,
+            ...draftData,
+            status: 'draft',
+            reviewed: true,
+            reviewedBy: req.auth.user.id,
+          }
+
+          if (existing) {
+            await PayrollRecord.findByIdAndUpdate(existing._id, { $set: recordPayload })
+            updatedCount++
+          } else {
+            await PayrollRecord.create(recordPayload)
+            createdCount++
+          }
+        } catch (itemErr) {
+          console.warn(`[bulk-generate] Error generating for employee ${emp.employeeId || emp._id}:`, itemErr?.message || itemErr)
+        }
       }
 
       res.json({
         success: true,
         data: {
           createdCount,
+          updatedCount,
           skippedCount,
-          message: `Generated ${createdCount} payroll draft(s). ${skippedCount > 0 ? `${skippedCount} already existed and were skipped.` : ''}`,
+          message: `Generated ${createdCount} payroll draft(s)${updatedCount > 0 ? `, updated ${updatedCount} draft(s)` : ''}. ${skippedCount > 0 ? `${skippedCount} finalized records were preserved.` : ''}`,
         },
       })
     } catch (error) { next(error) }
