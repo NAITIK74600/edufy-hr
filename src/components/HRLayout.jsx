@@ -223,8 +223,8 @@ export function HRLayout({ route, children }) {
   useEffect(() => {
     function handleClickOutside(event) {
       const path = event.composedPath ? event.composedPath() : []
-      const clickedProfile = profileRef.current && (profileRef.current.contains(event.target) || path.includes(profileRef.current))
-      const clickedNotif = notifRef.current && (notifRef.current.contains(event.target) || path.includes(notifRef.current))
+      const clickedProfile = profileRef.current && (profileRef.current.contains(event.target) || path.includes(profileRef.current) || Boolean(event.target?.closest?.('.topbar-profile-dropdown')))
+      const clickedNotif = notifRef.current && (notifRef.current.contains(event.target) || path.includes(notifRef.current) || Boolean(event.target?.closest?.('.notif-popover')))
 
       if (!clickedProfile) setProfileOpen(false)
       if (!clickedNotif) setNotifOpen(false)
@@ -262,7 +262,19 @@ export function HRLayout({ route, children }) {
           _id: String(n._id || n.id || ''),
         })).filter((n) => Boolean(n.id))
 
-        setNotifications(normalized)
+        setNotifications((prev) => {
+          const locallyReadIds = new Set(
+            prev.filter((n) => n.read || n.readAt).map((n) => String(n.id || n._id))
+          )
+          return normalized.map((n) => {
+            const isRead = Boolean(n.read || n.readAt || locallyReadIds.has(String(n.id)))
+            return {
+              ...n,
+              read: isRead,
+              readAt: n.readAt || (isRead ? (n.readAt || new Date().toISOString()) : null),
+            }
+          })
+        })
         const unread = normalized.filter((n) => !n.read && !n.readAt)
         const newArrivals = unread.filter((n) => !prevNotifIdsRef.current.has(n.id))
         if (newArrivals.length > 0 && !isFirstLoadRef.current && !silent) {
@@ -306,7 +318,16 @@ export function HRLayout({ route, children }) {
             const id = String(item.id || item._id || '')
             if (id) {
               const prevItem = map.get(id)
-              map.set(id, { ...prevItem, ...item, id, _id: id })
+              const isRead = Boolean(prevItem?.read || prevItem?.readAt || item.read || item.readAt)
+              const readAt = prevItem?.readAt || item.readAt || (isRead ? (prevItem?.readAt || item.readAt || new Date().toISOString()) : null)
+              map.set(id, {
+                ...item,
+                ...prevItem,
+                id,
+                _id: id,
+                read: isRead,
+                readAt,
+              })
             }
           })
           return Array.from(map.values()).sort((a, b) => new Date(b.createdAt || b.time || 0) - new Date(a.createdAt || a.time || 0))
@@ -468,7 +489,7 @@ export function HRLayout({ route, children }) {
     }
   }
 
-  const unreadCount = notifications.filter((n) => !n.read).length
+  const unreadCount = notifications.filter((n) => !n.read && !n.readAt).length
 
   // STRICT ROLE-BASED: Admin, HR, Executive Leadership, and Employee portals
   const isAdmin = user?.role === 'admin'
@@ -728,7 +749,7 @@ export function HRLayout({ route, children }) {
                 title={`${unreadCount} unread notification${unreadCount === 1 ? '' : 's'}`}
               >
                 <Bell size={18} className={unreadCount > 0 ? 'bell-icon-pulse' : ''} />
-                {unreadCount > 0 && <span className="badge-count">{unreadCount}</span>}
+                {unreadCount > 0 && <span className="badge-count">{unreadCount > 99 ? '99+' : unreadCount}</span>}
               </button>
 
               {/* Notifications Popover */}

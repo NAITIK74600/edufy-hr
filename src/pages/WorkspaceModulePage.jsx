@@ -3849,6 +3849,7 @@ function HelpDeskModule() {
   }
 
   // New ticket form state
+  const [isSubmittingTicket, setIsSubmittingTicket] = useState(false)
   const [newTicket, setNewTicket] = useState({
     subject: '',
     category: 'IT Support',
@@ -3944,20 +3945,30 @@ function HelpDeskModule() {
 
   const handleCreateTicketSubmit = workspaceHandler(async (e) => {
     e.preventDefault()
+    if (isSubmittingTicket) return
     if (!newTicket.subject.trim() || !newTicket.description.trim()) return
-    const emp = (storeState.employees || []).find((e) => e.id === newTicket.employeeId || e.employeeId === newTicket.employeeId)
-    await hrStore.createTicket({
-      subject: newTicket.subject.trim(),
-      category: newTicket.category,
-      priority: newTicket.priority,
-      description: newTicket.description.trim(),
-      employeeId: emp?.employeeId || emp?.id || user?.employeeId || 'STAFF',
-      employeeName: emp?.name || newTicket.employeeName || user?.displayName || 'Internal Staff',
-    })
-    setShowCreateModal(false)
-    setNewTicket({ subject: '', category: 'IT Support', priority: 'Medium', description: '', employeeId: '', employeeName: '' })
-    setFeedback('New support ticket raised and dispatched to service queue.')
-    setTimeout(() => setFeedback(''), 3500)
+
+    setIsSubmittingTicket(true)
+    try {
+      const emp = (storeState.employees || []).find((e) => e.id === newTicket.employeeId || e.employeeId === newTicket.employeeId)
+      await hrStore.createTicket({
+        subject: newTicket.subject.trim(),
+        category: newTicket.category,
+        priority: newTicket.priority,
+        description: newTicket.description.trim(),
+        employeeId: emp?.employeeId || emp?.id || user?.employeeId || 'STAFF',
+        employeeName: emp?.name || newTicket.employeeName || user?.displayName || 'Internal Staff',
+      })
+      setShowCreateModal(false)
+      setNewTicket({ subject: '', category: 'IT Support', priority: 'Medium', description: '', employeeId: '', employeeName: '' })
+      setFeedback('New support ticket raised and dispatched to service queue.')
+      setTimeout(() => setFeedback(''), 3500)
+    } catch (err) {
+      setFeedback('Failed to log ticket: ' + (err.message || 'Please try again.'))
+      setTimeout(() => setFeedback(''), 3500)
+    } finally {
+      setIsSubmittingTicket(false)
+    }
   })
 
   return (
@@ -4719,11 +4730,16 @@ function HelpDeskModule() {
               </div>
 
               <div className="modal-footer-premium">
-                <Button type="button" variant="secondary" onClick={() => setShowCreateModal(false)}>
+                <Button type="button" variant="secondary" onClick={() => !isSubmittingTicket && setShowCreateModal(false)} disabled={isSubmittingTicket}>
                   Cancel
                 </Button>
-                <Button type="submit" disabled={!newTicket.subject.trim() || !newTicket.description.trim()}>
-                  <Send size={13} /> Submit Ticket
+                <Button
+                  type="submit"
+                  disabled={isSubmittingTicket || !newTicket.subject.trim() || !newTicket.description.trim()}
+                  style={{ opacity: isSubmittingTicket ? 0.75 : 1, pointerEvents: isSubmittingTicket ? 'none' : 'auto' }}
+                >
+                  {isSubmittingTicket ? <Clock3 size={13} className="spin" /> : <Send size={13} />}
+                  {isSubmittingTicket ? 'Submitting Ticket...' : 'Submit Ticket'}
                 </Button>
               </div>
             </form>

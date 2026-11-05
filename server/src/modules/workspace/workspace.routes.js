@@ -759,6 +759,19 @@ export function createWorkspaceRouter({ auth, useDatabase }) {
           { upsert: true, returnDocument: 'after' }
         )
       } else {
+        if (resource === 'tickets') {
+          // Idempotency: prevent multiple tickets caused by rapid double-clicking
+          const fifteenSecondsAgo = new Date(Date.now() - 15000)
+          const recentDuplicate = await models.tickets.findOne({
+            employeeId: values.employeeId,
+            subject: values.subject,
+            description: values.description,
+            createdAt: { $gte: fifteenSecondsAgo },
+          }).lean()
+          if (recentDuplicate) {
+            return res.status(200).json(format(recentDuplicate, actor))
+          }
+        }
         record = await models[resource].create(values)
       }
 

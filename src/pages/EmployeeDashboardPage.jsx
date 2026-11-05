@@ -4220,6 +4220,7 @@ function ESSHelpDeskView({ user }) {
   const [resolvingTicket, setResolvingTicket] = useState(null)
   const [resolutionNotes, setResolutionNotes] = useState('')
   const [isResolving, setIsResolving] = useState(false)
+  const [isSubmittingTicket, setIsSubmittingTicket] = useState(false)
 
   useEffect(() => {
     return hrStore.subscribe((state) => {
@@ -4311,25 +4312,34 @@ function ESSHelpDeskView({ user }) {
 
   const handleCreateTicket = workspaceAction(hrStore, async (e) => {
     e.preventDefault()
+    if (isSubmittingTicket) return
     if (!ticketSubject.trim() || !ticketDesc.trim()) return
 
-    await hrStore.createTicket({
-      employeeId: user?.employeeId || user?.id || 'STAFF',
-      employeeName: user?.displayName || user?.name || user?.email?.split('@')[0] || 'Employee',
-      subject: ticketSubject.trim(),
-      category: ticketCat,
-      priority: ticketPriority,
-      description: ticketDesc.trim(),
-      status: 'open',
-      createdAt: new Date().toISOString().split('T')[0],
-    })
+    setIsSubmittingTicket(true)
+    try {
+      await hrStore.createTicket({
+        employeeId: user?.employeeId || user?.id || 'STAFF',
+        employeeName: user?.displayName || user?.name || user?.email?.split('@')[0] || 'Employee',
+        subject: ticketSubject.trim(),
+        category: ticketCat,
+        priority: ticketPriority,
+        description: ticketDesc.trim(),
+        status: 'open',
+        createdAt: new Date().toISOString().split('T')[0],
+      })
 
-    setModalOpen(false)
-    setTicketSubject('')
-    setTicketDesc('')
-    setTicketPriority('Medium')
-    setNotice('Help desk ticket submitted successfully! The support team has been assigned.')
-    setTimeout(() => setNotice(''), 4500)
+      setModalOpen(false)
+      setTicketSubject('')
+      setTicketDesc('')
+      setTicketPriority('Medium')
+      setNotice('Help desk ticket submitted successfully! The support team has been assigned.')
+      setTimeout(() => setNotice(''), 4500)
+    } catch (err) {
+      setNotice(err?.message || 'Failed to submit ticket. Please try again.')
+      setTimeout(() => setNotice(''), 4500)
+    } finally {
+      setIsSubmittingTicket(false)
+    }
   })
 
   const handleSendEmployeeReply = workspaceAction(hrStore, async () => {
@@ -5041,11 +5051,16 @@ function ESSHelpDeskView({ user }) {
               </div>
 
               <div className="modal-footer-premium">
-                <Button type="button" variant="secondary" onClick={() => setModalOpen(false)}>
+                <Button type="button" variant="secondary" onClick={() => !isSubmittingTicket && setModalOpen(false)} disabled={isSubmittingTicket}>
                   Cancel
                 </Button>
-                <Button type="submit" disabled={!ticketSubject.trim() || !ticketDesc.trim()}>
-                  <Send size={13} /> Submit Ticket
+                <Button
+                  type="submit"
+                  disabled={isSubmittingTicket || !ticketSubject.trim() || !ticketDesc.trim()}
+                  style={{ opacity: isSubmittingTicket ? 0.75 : 1, pointerEvents: isSubmittingTicket ? 'none' : 'auto' }}
+                >
+                  {isSubmittingTicket ? <Clock3 size={13} className="spin" /> : <Send size={13} />}
+                  {isSubmittingTicket ? 'Submitting Ticket...' : 'Submit Ticket'}
                 </Button>
               </div>
             </form>

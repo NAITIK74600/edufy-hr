@@ -7041,7 +7041,7 @@ const localStore = {
     notifyListeners()
   },
 
-  // Help Desk
+  // Help Desk & Support In-Flight Mutex & Deduplication
   getTickets() {
     return storeState.tickets
   },
@@ -7049,55 +7049,95 @@ const localStore = {
     return this.createTicket(ticketData)
   },
   async createTicket(ticketData) {
-    const tempId = `TICK-${Math.floor(1000 + Math.random() * 9000)}`
-    const newTicket = {
-      id: tempId,
-      _id: tempId,
-      employeeId: ticketData.employeeId,
-      employeeName: ticketData.employeeName,
-      subject: ticketData.subject,
-      category: ticketData.category || 'IT Support',
-      priority: ticketData.priority || 'Medium',
-      status: 'open',
-      createdAt: new Date().toISOString(),
-      assignedTo: ticketData.category === 'IT Support' ? 'IT Desk' : 'HR Ops Desk',
-      assignedToId: ticketData.assignedToId || null,
-      assignedToName: ticketData.assignedToName || null,
-      assignedToEmail: ticketData.assignedToEmail || null,
-      responses: [{ sender: ticketData.employeeName, text: ticketData.description, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }],
-    }
-    storeState.tickets = [newTicket, ...(storeState.tickets || [])]
-    this.addNotification({
-      title: 'Support Ticket Created',
-      message: `Ticket #${newTicket.id} (${newTicket.category}) is open and assigned.`,
-      type: 'ticket',
-      recipientId: ticketData.employeeId,
-    })
-    this.addAuditLog(ticketData.employeeName, 'TICKET_CREATE', `Created ticket #${newTicket.id}: ${newTicket.subject}`)
-    notifyListeners()
+    const empId = ticketData.employeeId || 'STAFF'
+    const subj = (ticketData.subject || '').trim()
+    const desc = (ticketData.description || '').trim()
+    const dedupeKey = `${empId}::${subj}::${desc}`
 
-    try {
-      const res = await apiClient.post('/workspace/tickets', {
+    // 1. Guard against simultaneous rapid-click submissions
+    if (globalThis.__hrStoreInFlightTickets?.has(dedupeKey)) {
+      console.warn('[hrStore] Duplicate in-flight ticket creation intercepted:', dedupeKey)
+      return globalThis.__hrStoreInFlightTickets.get(dedupeKey)
+    }
+    if (!globalThis.__hrStoreInFlightTickets) {
+      globalThis.__hrStoreInFlightTickets = new Map()
+    }
+
+    // 2. Guard against recent identical ticket submissions within 15 seconds
+    const recentDuplicate = (storeState.tickets || []).find((t) => {
+      const matchEmp = (t.employeeId || '').toLowerCase() === empId.toLowerCase()
+      const matchSubj = (t.subject || '').trim() === subj
+      const matchDesc = (t.description || '').trim() === desc
+      const createdTime = t.createdAt ? new Date(t.createdAt).getTime() : 0
+      const isRecent = (Date.now() - createdTime) < 15000
+      return matchEmp && matchSubj && (matchDesc || !desc) && isRecent
+    })
+    if (recentDuplicate) {
+      console.warn('[hrStore] Returning existing recently submitted ticket:', recentDuplicate.id)
+      return recentDuplicate
+    }
+
+    const submissionPromise = (async () => {
+      const tempId = `TICK-${Math.floor(1000 + Math.random() * 9000)}`
+      const newTicket = {
+        id: tempId,
+        _id: tempId,
+        employeeId: ticketData.employeeId,
+        employeeName: ticketData.employeeName,
         subject: ticketData.subject,
         description: ticketData.description,
         category: ticketData.category || 'IT Support',
         priority: ticketData.priority || 'Medium',
-        assignedToId: ticketData.assignedToId || undefined,
-        assignedToName: ticketData.assignedToName || undefined,
-        assignedToEmail: ticketData.assignedToEmail || undefined,
-      })
-      if (res?.data) {
-        const saved = res.data
-        const realId = saved.id || String(saved._id)
-        storeState.tickets = (storeState.tickets || []).map((t) => (t.id === tempId || t._id === tempId) ? { ...saved, id: realId, _id: realId } : t)
-        notifyListeners()
-        await this.refresh?.()
-        return saved
+        status: 'open',
+        createdAt: new Date().toISOString(),
+        assignedTo: ticketData.category === 'IT Support' ? 'IT Desk' : 'HR Ops Desk',
+        assignedToId: ticketData.assignedToId || null,
+        assignedToName: ticketData.assignedToName || null,
+        assignedToEmail: ticketData.assignedToEmail || null,
+        responses: [{ sender: ticketData.employeeName, text: ticketData.description, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }],
       }
-    } catch (err) {
-      console.warn('Backend ticket creation sync:', err.message)
+      storeState.tickets = [newTicket, ...(storeState.tickets || [])]
+      this.addNotification({
+        title: 'Support Ticket Created',
+        message: `Ticket #${newTicket.id} (${newTicket.category}) is open and assigned.`,
+        type: 'ticket',
+        recipientId: ticketData.employeeId,
+      })
+      this.addAuditLog(ticketData.employeeName, 'TICKET_CREATE', `Created ticket #${newTicket.id}: ${newTicket.subject}`)
+      notifyListeners()
+
+      try {
+        const res = await apiClient.post('/workspace/tickets', {
+          subject: ticketData.subject,
+          description: ticketData.description,
+          category: ticketData.category || 'IT Support',
+          priority: ticketData.priority || 'Medium',
+          assignedToId: ticketData.assignedToId || undefined,
+          assignedToName: ticketData.assignedToName || undefined,
+          assignedToEmail: ticketData.assignedToEmail || undefined,
+        })
+        if (res?.data) {
+          const saved = res.data
+          const realId = saved.id || String(saved._id)
+          storeState.tickets = (storeState.tickets || []).map((t) => (t.id === tempId || t._id === tempId) ? { ...saved, id: realId, _id: realId } : t)
+          notifyListeners()
+          await this.refresh?.()
+          return saved
+        }
+      } catch (err) {
+        console.warn('Backend ticket creation sync:', err.message)
+      }
+      return newTicket
+    })()
+
+    globalThis.__hrStoreInFlightTickets.set(dedupeKey, submissionPromise)
+    try {
+      return await submissionPromise
+    } finally {
+      setTimeout(() => {
+        globalThis.__hrStoreInFlightTickets?.delete(dedupeKey)
+      }, 8000)
     }
-    return newTicket
   },
   async updateTicketStatus(ticketId, status, resolutionNotes = '') {
     const noteText = typeof resolutionNotes === 'string' ? resolutionNotes.trim() : ''
