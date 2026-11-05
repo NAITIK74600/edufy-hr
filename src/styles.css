@@ -927,27 +927,28 @@ label.form-label {
 
 .leave-kpi-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 16px;
-  margin-bottom: 22px;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
 }
 
 .leave-kpi-card {
   position: relative;
-  border-radius: 14px;
+  border-radius: 12px;
   border: 1px solid var(--line);
-  padding: 18px 20px;
+  padding: 12px 16px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  box-shadow: 0 4px 16px rgba(35, 38, 35, 0.03);
-  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+  gap: 4px;
+  box-shadow: 0 2px 10px rgba(35, 38, 35, 0.03);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
   overflow: hidden;
+  cursor: pointer;
 }
 
 .leave-kpi-card:hover {
   transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(35, 38, 35, 0.07);
+  box-shadow: 0 6px 18px rgba(35, 38, 35, 0.07);
 }
 
 .leave-kpi-card.pending {
@@ -974,21 +975,21 @@ label.form-label {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: 8px;
 }
 
 .leave-kpi-title {
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.05em;
   color: var(--muted);
 }
 
 .leave-kpi-icon-wrap {
-  width: 32px;
-  height: 32px;
-  border-radius: 9px;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
   display: grid;
   place-items: center;
 }
@@ -1014,25 +1015,25 @@ label.form-label {
 }
 
 .leave-kpi-value {
-  font: 700 28px 'Space Grotesk', -apple-system, sans-serif;
+  font: 700 22px 'Space Grotesk', -apple-system, sans-serif;
   color: var(--ink);
-  letter-spacing: -0.6px;
+  letter-spacing: -0.5px;
   display: flex;
   align-items: baseline;
-  gap: 8px;
+  gap: 6px;
 }
 
 .leave-kpi-unit {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 500;
   color: var(--muted);
   letter-spacing: 0;
 }
 
 .leave-kpi-sub {
-  font-size: 11px;
+  font-size: 10.5px;
   color: #6b7280;
-  line-height: 1.4;
+  line-height: 1.35;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1182,8 +1183,8 @@ label.form-label {
 }
 .leave-workspace-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.25fr) minmax(340px, 0.95fr);
-  gap: 20px;
+  grid-template-columns: minmax(0, 1.25fr) minmax(360px, 1fr);
+  gap: 18px;
   align-items: start;
   width: 100%;
   max-width: 100%;
@@ -1196,7 +1197,7 @@ label.form-label {
   max-width: 100%;
   width: 100%;
   box-sizing: border-box;
-  overflow: hidden;
+  border-radius: 14px;
 }
 
 .leave-detail-panel {
@@ -1206,24 +1207,72 @@ label.form-label {
   box-sizing: border-box;
   align-self: start;
   position: sticky;
-  top: 98px;
-  background: rgba(255, 254, 250, 0.98);
-  box-shadow: 0 4px 20px rgba(35, 38, 35, 0.04);
+  top: 80px;
+  max-height: calc(100vh - 100px);
+  overflow-y: auto;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 4px 20px rgba(35, 38, 35, 0.05);
   border: 1px solid var(--line);
-  border-radius: 12px;
-  overflow: hidden;
+  border-radius: 14px;
   z-index: 2;
+  padding-bottom: 20px;
 }
 
 .leave-request-list {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  margin-top: 18px;
+  margin-top: 14px;
   min-width: 0;
   max-width: 100%;
   width: 100%;
   box-sizing: border-box;
+  max-height: calc(100vh - 250px);
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.leave-top-decision-bar {
+  background: linear-gradient(135deg, rgba(209, 250, 229, 0.4) 0%, rgba(240, 253, 250, 0.95) 100%);
+  border: 1.5px solid #10b981;
+  border-radius: 11px;
+  padding: 12px 14px;
+  margin-bottom: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.08);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  backdrop-filter: blur(8px);
+}
+
+.leave-pill-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 12px;
+  border-radius: 20px;
+  border: 1px solid var(--line);
+  background: #ffffff;
+  color: #4b5563;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.leave-pill-btn:hover {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+}
+
+.leave-pill-btn.active {
+  background: var(--teal, #006e6f);
+  color: #ffffff;
+  border-color: var(--teal, #006e6f);
+  box-shadow: 0 2px 6px rgba(0, 110, 111, 0.2);
 }
 
 .leave-request-card {
@@ -2084,7 +2133,7 @@ label.form-label {
 .subnav-tabs { display: flex; gap: 6px; margin-bottom: 18px; border-bottom: 1px solid var(--line); padding-bottom: 8px; overflow-x: auto; }
 .subnav-tab { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border: 1px solid transparent; border-radius: 8px; background: transparent; color: var(--muted); font-size: 11px; font-weight: 600; cursor: pointer; transition: all 0.2s ease; }
 .subnav-tab:hover { color: var(--ink); background: #f0efe9; }
-.subnav-tab.active { background: var(--ink); color: #fffefa; }
+.subnav-tab.active { background: var(--teal, #006e6f); color: #ffffff; box-shadow: 0 2px 8px rgba(0, 110, 111, 0.22); }
 .badge-pill { font-size: 9px; padding: 2px 6px; border-radius: 999px; background: rgba(255, 255, 255, 0.2); }
 .subnav-tab:not(.active) .badge-pill { background: #e5e4de; color: var(--ink); }
 

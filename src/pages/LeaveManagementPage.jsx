@@ -263,7 +263,7 @@ function RequestCard({ request, onSelect, selected, onQuickApprove, onQuickRejec
   )
 }
 
-function RequestDetail({ request, mode, onRefresh, onDeleteRequest }) {
+function RequestDetail({ request, mode, onRefresh, onDeleteRequest, onPromptReject }) {
   const { user } = useAuth()
   const [decisionReason, setDecisionReason] = useState('')
   const [busy, setBusy] = useState(false)
@@ -346,7 +346,7 @@ function RequestDetail({ request, mode, onRefresh, onDeleteRequest }) {
       } else if (currentStatus === 'pending_admin') {
         role = 'admin'
       }
-      await hrStore.approveLeave(request.id, role, decisionReason, user)
+      await hrStore.approveLeave(request.id, role, decisionReason || 'Approved after review', user)
       setLocalStatus('approved')
       setDecisionReason('')
       onRefresh()
@@ -359,6 +359,10 @@ function RequestDetail({ request, mode, onRefresh, onDeleteRequest }) {
 
   async function handleReject() {
     if (!decisionReason.trim()) {
+      if (onPromptReject) {
+        onPromptReject(request)
+        return
+      }
       setError('A decision comment or reason is required to reject a leave request.')
       return
     }
@@ -400,13 +404,113 @@ function RequestDetail({ request, mode, onRefresh, onDeleteRequest }) {
 
   return (
     <div className="panel leave-detail-panel">
-      <div className="panel-heading">
+      <div className="panel-heading" style={{ paddingBottom: '12px' }}>
         <div>
           <p className="section-kicker">Leave Dossier</p>
           <h2>{leaveTypeLabels[request.leaveType] || request.leaveType?.toUpperCase()}</h2>
         </div>
         <RequestStatus status={currentStatus} />
       </div>
+
+      {/* TOP PROMINENT DECISION BAR — NEVER NEED TO SCROLL TO FIND APPROVE/REJECT */}
+      {canDecide && (
+        <div className="leave-top-decision-bar">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{ fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#047857', background: '#d1fae5', padding: '2px 7px', borderRadius: '4px' }}>
+                ⚡ Action Required
+              </span>
+              <strong style={{ fontSize: '12px', color: '#064e3b' }}>
+                {currentStatus === 'pending_admin'
+                  ? 'Month-End (25th+) LOP Sign-Off'
+                  : currentStatus === 'pending_director'
+                  ? 'Director Executive Sign-Off'
+                  : currentStatus === 'pending_hr'
+                  ? 'HR Operations Authorization'
+                  : 'Management Authorization'}
+              </strong>
+            </div>
+
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <Button
+                disabled={busy}
+                onClick={handleApprove}
+                style={{
+                  background: '#059669',
+                  color: '#ffffff',
+                  border: '1px solid #047857',
+                  padding: '6px 14px',
+                  fontSize: '11.5px',
+                  fontWeight: 700,
+                  boxShadow: '0 2px 6px rgba(5, 150, 105, 0.25)'
+                }}
+              >
+                <Check size={14} />
+                {currentStatus === 'pending_admin'
+                  ? 'Approve LOP'
+                  : (currentStatus === 'pending_hr' && (request.isDoubleLop || request.doubleLopDays > 0 || (new Date(request.startDate).getDate() >= 25) || (new Date(request.endDate).getDate() >= 25)))
+                  ? 'Advance to Admin'
+                  : 'Approve'}
+              </Button>
+              <Button
+                variant="danger"
+                disabled={busy}
+                onClick={handleReject}
+                style={{ padding: '6px 14px', fontSize: '11.5px', fontWeight: 700 }}
+              >
+                <X size={14} /> Reject
+              </Button>
+              {onDeleteRequest && (
+                <button
+                  type="button"
+                  className="emp-action-btn delete"
+                  style={{ padding: '6px 10px', fontSize: '11px' }}
+                  onClick={() => onDeleteRequest(request)}
+                  title="Remove Request"
+                >
+                  <Trash2 size={12} />
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <input
+              type="text"
+              value={decisionReason}
+              onChange={(e) => setDecisionReason(e.target.value)}
+              placeholder="Enter decision remarks or note (optional for approval, required for rejection)..."
+              style={{
+                width: '100%',
+                padding: '7px 11px',
+                border: '1px solid #a7f3d0',
+                borderRadius: '7px',
+                fontSize: '11px',
+                background: '#ffffff',
+                color: '#0f172a'
+              }}
+            />
+          </div>
+        </div>
+      )}
+
+      {error && (
+        <div style={{
+          background: '#fef2f2',
+          border: '1px solid #fecaca',
+          borderRadius: '8px',
+          padding: '8px 12px',
+          color: '#dc2626',
+          fontSize: '11px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px',
+          marginBottom: '12px'
+        }}>
+          <AlertCircle size={14} />
+          <span>{error}</span>
+        </div>
+      )}
 
       <div className="leave-detail-summary">
         <div>
@@ -1962,7 +2066,15 @@ export function LeaveManagementPage({ mode = 'self', route, query: propQuery }) 
 
   // Filter by status, type, and search
   filteredRequests = filteredRequests.filter((r) => {
-    if (filter && r.status !== filter) return false
+    if (filter === 'pending_all') {
+      const isP =
+        r.status === 'pending_tl' ||
+        r.status === 'pending_manager' ||
+        r.status === 'pending_director' ||
+        r.status === 'pending_hr' ||
+        r.status === 'pending_admin'
+      if (!isP) return false
+    } else if (filter && r.status !== filter) return false
     if (typeFilter !== 'all' && r.leaveType !== typeFilter) return false
     if (search) {
       const q = search.toLowerCase()
@@ -1972,6 +2084,16 @@ export function LeaveManagementPage({ mode = 'self', route, query: propQuery }) 
       if (!name.includes(q) && !id.includes(q) && !reason.includes(q)) return false
     }
     return true
+  })
+
+  // Prioritize pending/actionable requests at the very top so users never have to scroll to find actionable items
+  filteredRequests.sort((a, b) => {
+    const isPendingA = ['pending_tl', 'pending_manager', 'pending_director', 'pending_hr', 'pending_admin'].includes(a.status) ? 1 : 0
+    const isPendingB = ['pending_tl', 'pending_manager', 'pending_director', 'pending_hr', 'pending_admin'].includes(b.status) ? 1 : 0
+    if (isPendingA !== isPendingB) return isPendingB - isPendingA
+    const dateA = new Date(a.createdAt || a.startDate || 0)
+    const dateB = new Date(b.createdAt || b.startDate || 0)
+    return dateB - dateA
   })
 
   // Synchronize selection with targetEntityId support
@@ -2182,11 +2304,15 @@ export function LeaveManagementPage({ mode = 'self', route, query: propQuery }) 
       {/* Management (Admin & HR) Executive KPIs */}
       {isManagement && (
         <section className="leave-kpi-grid">
-          <div className="leave-kpi-card pending">
+          <div
+            className="leave-kpi-card pending"
+            onClick={() => { setActiveTab('approvals'); setFilter(mode === 'admin' ? 'pending_admin' : 'pending_all'); }}
+            title="Click to filter pending requests"
+          >
             <div className="leave-kpi-header">
-              <span className="leave-kpi-title">{mode === 'admin' ? 'Pending Admin LOP Sign-Off' : 'Pending HR Approvals'}</span>
+              <span className="leave-kpi-title">{mode === 'admin' ? 'Pending Admin LOP' : 'Pending HR Approvals'}</span>
               <div className="leave-kpi-icon-wrap pending">
-                <Clock3 size={16} />
+                <Clock3 size={15} />
               </div>
             </div>
             <div className="leave-kpi-value">
@@ -2194,15 +2320,19 @@ export function LeaveManagementPage({ mode = 'self', route, query: propQuery }) 
               <span className="leave-kpi-unit">Requests</span>
             </div>
             <div className="leave-kpi-sub">
-              {mode === 'admin' ? (pendingAdminCount ? 'Requires administrative authorization' : 'All LOP queues cleared') : (pendingCount ? 'Action required by HR' : 'All queues cleared')}
+              {mode === 'admin' ? (pendingAdminCount ? 'Click to review pending authorization' : 'All LOP queues cleared') : (pendingCount ? 'Click to review pending action' : 'All queues cleared')}
             </div>
           </div>
 
-          <div className="leave-kpi-card approved">
+          <div
+            className="leave-kpi-card approved"
+            onClick={() => { setActiveTab('approvals'); setFilter('approved'); }}
+            title="Click to filter approved leaves"
+          >
             <div className="leave-kpi-header">
               <span className="leave-kpi-title">Approved Leaves (YTD)</span>
               <div className="leave-kpi-icon-wrap approved">
-                <CheckCircle2 size={16} />
+                <CheckCircle2 size={15} />
               </div>
             </div>
             <div className="leave-kpi-value">
@@ -2212,11 +2342,15 @@ export function LeaveManagementPage({ mode = 'self', route, query: propQuery }) 
             <div className="leave-kpi-sub">Authorized workforce absences</div>
           </div>
 
-          <div className="leave-kpi-card on-leave">
+          <div
+            className="leave-kpi-card on-leave"
+            onClick={() => { setActiveTab('approvals'); setFilter('approved'); }}
+            title="Click to filter approved records"
+          >
             <div className="leave-kpi-header">
               <span className="leave-kpi-title">Staff On Leave Today</span>
               <div className="leave-kpi-icon-wrap on-leave">
-                <CalendarDays size={16} />
+                <CalendarDays size={15} />
               </div>
             </div>
             <div className="leave-kpi-value" style={{ color: onLeaveToday.length ? 'var(--blue)' : 'inherit' }}>
@@ -2230,11 +2364,15 @@ export function LeaveManagementPage({ mode = 'self', route, query: propQuery }) 
             </div>
           </div>
 
-          <div className="leave-kpi-card total">
+          <div
+            className="leave-kpi-card total"
+            onClick={() => { setActiveTab('approvals'); setFilter(''); }}
+            title="Click to view all requests"
+          >
             <div className="leave-kpi-header">
               <span className="leave-kpi-title">Total Requests</span>
               <div className="leave-kpi-icon-wrap total">
-                <FileText size={16} />
+                <FileText size={15} />
               </div>
             </div>
             <div className="leave-kpi-value">
@@ -2380,68 +2518,123 @@ export function LeaveManagementPage({ mode = 'self', route, query: propQuery }) 
           <div
             style={{
               display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              flexWrap: 'wrap',
-              gap: '12px',
+              flexDirection: 'column',
+              gap: '10px',
               marginBottom: '16px',
             }}
           >
-            <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-              <div className="module-search" style={{ minWidth: '220px' }}>
-                <Search size={15} />
-                <input
-                  placeholder="Search employee name, ID, or reason..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                />
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: '12px',
+              }}
+            >
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+                <div className="module-search" style={{ minWidth: '220px' }}>
+                  <Search size={15} />
+                  <input
+                    placeholder="Search employee name, ID, or reason..."
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                  />
+                </div>
+
+                <select
+                  className="leave-filter"
+                  value={filter}
+                  onChange={(event) => setFilter(event.target.value)}
+                >
+                  <option value="">All statuses</option>
+                  <option value="pending_all">⚡ All Pending Action ({pendingCount})</option>
+                  {Object.entries(labels).map(([val, lbl]) => (
+                    <option value={val} key={val}>
+                      {lbl}
+                    </option>
+                  ))}
+                </select>
+
+                <select
+                  className="leave-filter"
+                  value={typeFilter}
+                  onChange={(event) => setTypeFilter(event.target.value)}
+                >
+                  <option value="all">All leave types</option>
+                  <option value="casual">Casual Leave (CL)</option>
+                  <option value="sick">Sick Leave (SL)</option>
+                  <option value="earned">Earned Leave (EL)</option>
+                  <option value="comp_off">Compensatory Off</option>
+                  <option value="maternity">Maternity/Paternity</option>
+                  <option value="lop">Loss of Pay (LOP)</option>
+                </select>
               </div>
 
-              <select
-                className="leave-filter"
-                value={filter}
-                onChange={(event) => setFilter(event.target.value)}
-              >
-                <option value="">All statuses</option>
-                {Object.entries(labels).map(([val, lbl]) => (
-                  <option value={val} key={val}>
-                    {lbl}
-                  </option>
-                ))}
-              </select>
-
-              <select
-                className="leave-filter"
-                value={typeFilter}
-                onChange={(event) => setTypeFilter(event.target.value)}
-              >
-                <option value="all">All leave types</option>
-                <option value="casual">Casual Leave (CL)</option>
-                <option value="sick">Sick Leave (SL)</option>
-                <option value="earned">Earned Leave (EL)</option>
-                <option value="comp_off">Compensatory Off</option>
-                <option value="maternity">Maternity/Paternity</option>
-                <option value="lop">Loss of Pay (LOP)</option>
-              </select>
+              {/* View Mode Toggle */}
+              <div className="view-mode-toggle">
+                <button
+                  type="button"
+                  className={`view-mode-btn ${viewMode === 'split' ? 'active' : ''}`}
+                  onClick={() => setViewMode('split')}
+                  title="Split Review View"
+                >
+                  <Layers size={13} /> Split View
+                </button>
+                <button
+                  type="button"
+                  className={`view-mode-btn ${viewMode === 'table' ? 'active' : ''}`}
+                  onClick={() => setViewMode('table')}
+                  title="Data Table View"
+                >
+                  <TableIcon size={13} /> Table View
+                </button>
+              </div>
             </div>
 
-            {/* View Mode Toggle */}
-            <div className="view-mode-toggle">
+            {/* Quick Status Filter Pills (No Scrolling Needed) */}
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
               <button
                 type="button"
-                className={`view-mode-btn ${viewMode === 'split' ? 'active' : ''}`}
-                onClick={() => setViewMode('split')}
-                title="Split Review View"
+                className={`leave-pill-btn ${!filter ? 'active' : ''}`}
+                onClick={() => setFilter('')}
               >
-                <Layers size={13} /> Split View
+                All Requests ({allLeaves.length})
               </button>
               <button
                 type="button"
-                className={`view-mode-btn ${viewMode === 'table' ? 'active' : ''}`}
-                onClick={() => setViewMode('table')}
-                title="Data Table View"
+                className={`leave-pill-btn ${filter === 'pending_all' ? 'active' : ''}`}
+                onClick={() => setFilter(filter === 'pending_all' ? '' : 'pending_all')}
+                style={pendingCount > 0 ? {
+                  borderColor: '#f59e0b',
+                  color: filter === 'pending_all' ? '#ffffff' : '#b45309',
+                  background: filter === 'pending_all' ? '#f59e0b' : '#fef3c7',
+                  fontWeight: 700
+                } : {}}
               >
-                <TableIcon size={13} /> Table View
+                ⚡ Pending Review ({pendingCount})
+              </button>
+              {pendingAdminCount > 0 && (
+                <button
+                  type="button"
+                  className={`leave-pill-btn ${filter === 'pending_admin' ? 'active' : ''}`}
+                  onClick={() => setFilter(filter === 'pending_admin' ? '' : 'pending_admin')}
+                  style={{
+                    borderColor: '#ef4444',
+                    color: filter === 'pending_admin' ? '#ffffff' : '#b91c1c',
+                    background: filter === 'pending_admin' ? '#ef4444' : '#fee2e2',
+                    fontWeight: 700
+                  }}
+                >
+                  🛡️ 25th+ Month-End LOP ({pendingAdminCount})
+                </button>
+              )}
+              <button
+                type="button"
+                className={`leave-pill-btn ${filter === 'approved' ? 'active' : ''}`}
+                onClick={() => setFilter(filter === 'approved' ? '' : 'approved')}
+              >
+                Approved ({approvedCount})
               </button>
             </div>
           </div>
@@ -2506,6 +2699,7 @@ export function LeaveManagementPage({ mode = 'self', route, query: propQuery }) 
                 mode={mode}
                 onRefresh={() => setRefreshKey((k) => k + 1)}
                 onDeleteRequest={setLeaveToDelete}
+                onPromptReject={isManagement ? handleQuickRejectPrompt : null}
               />
             </section>
           )}
