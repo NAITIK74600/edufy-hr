@@ -1200,12 +1200,17 @@ export function createAttendanceService({ repository, companySettings = {} }) {
       return repository.punchOut(updated)
     },
 
-    async updatePresence({ employeeId, latitude, longitude, wifiSSID, clientIp, bssid, accuracy, locationPermission = 'unknown', networkType = 'unknown', deviceCapturedAt = null }) {
+    async updatePresence({ employeeId, latitude, longitude, wifiSSID, clientIp, bssid, accuracy, locationPermission = 'unknown', networkType = 'unknown', deviceCapturedAt = null, isStale = false }) {
       const now = new Date()
       const workDate = getTodayString()
       const verification = verifyLocation(latitude, longitude, wifiSSID, clientIp, bssid, accuracy)
       const settings = this.getSettings ? this.getSettings() : this.getConfig()
       const rules = settings?.attendanceRules || DEFAULT_ATTENDANCE_RULES
+
+      const clientTime = deviceCapturedAt ? new Date(deviceCapturedAt).getTime() : null
+      const isDeviceDateValid = clientTime && !isNaN(clientTime)
+      const dataAgeMs = isDeviceDateValid ? (now.getTime() - clientTime) : 0
+      const isOutdated = Boolean(isStale) || (isDeviceDateValid && dataAgeMs > 5 * 60 * 1000)
 
       const existing = await repository.findByEmployeeAndDate(employeeId, workDate)
       if (!existing || !existing.checkIn || existing.checkOut) {
@@ -1216,6 +1221,7 @@ export function createAttendanceService({ repository, companySettings = {} }) {
           geofenceGraceExpiresAt: null,
           remainingGraceMinutes: 0,
           autoPunchedOut: Boolean(existing?.autoPunchOut),
+          locationFreshness: isOutdated ? 'stale' : 'unavailable',
         }
       }
 
@@ -1241,7 +1247,10 @@ export function createAttendanceService({ repository, companySettings = {} }) {
       // Separate 6 Distinct States:
       // INSIDE, OUTSIDE, LOCATION_UNCERTAIN, LOCATION_UNAVAILABLE, STALE_LOCATION, DEVICE_OFFLINE
       let resolvedPresenceState = 'INSIDE'
-      if (isPhysicallyPresent) {
+      if (isOutdated) {
+        // Reject outdated buffered coordinates (>5 mins) as current live location!
+        resolvedPresenceState = 'STALE_LOCATION'
+      } else if (isPhysicallyPresent) {
         resolvedPresenceState = 'INSIDE'
       } else if (!hasCoords || locationPermission === 'denied') {
         resolvedPresenceState = 'LOCATION_UNAVAILABLE'
@@ -1303,6 +1312,10 @@ export function createAttendanceService({ repository, companySettings = {} }) {
             }
           }
         }
+      } else if (resolvedPresenceState === 'STALE_LOCATION') {
+        // Outdated coordinates from device reconnect/buffer (>5m old)
+        // CRITICAL: NEVER convert STALE_LOCATION into a confirmed geofence exit!
+        // Maintain current geofence status and DO NOT start a grace timer.
       } else {
         // LOCATION_UNCERTAIN or LOCATION_UNAVAILABLE:
         // Indoor weak signal, GPS jitter, or permission unavailable.
@@ -1310,7 +1323,24 @@ export function createAttendanceService({ repository, companySettings = {} }) {
         // DO NOT change currentGeofenceStatus to 'outside' and DO NOT start a grace timer!
       }
 
-      const liveGeofenceStatus = isPhysicallyPresent ? 'inside' : (resolvedPresenceState === 'OUTSIDE' ? 'outside' : (resolvedPresenceState === 'LOCATION_UNAVAILABLE' ? 'location_unavailable' : 'uncertain'))
+      const liveGeofenceStatus = isOutdated
+        ? (currentGeofenceStatus || 'inside')
+        : (isPhysicallyPresent
+          ? 'inside'
+          : (resolvedPresenceState === 'OUTSIDE'
+            ? 'outside'
+            : (resolvedPresenceState === 'LOCATION_UNAVAILABLE'
+              ? 'location_unavailable'
+              : 'uncertain')))
+
+      let calculatedFreshness = 'live'
+      if (isOutdated || resolvedPresenceState === 'STALE_LOCATION') {
+        calculatedFreshness = 'stale'
+      } else if (resolvedPresenceState === 'LOCATION_UNCERTAIN') {
+        calculatedFreshness = 'uncertain'
+      } else if (resolvedPresenceState === 'LOCATION_UNAVAILABLE') {
+        calculatedFreshness = 'unavailable'
+      }
 
       const liveLoc = {
         latitude: hasCoords ? Number(latitude) : (existing.liveLocation?.latitude ?? null),
@@ -1318,7 +1348,7 @@ export function createAttendanceService({ repository, companySettings = {} }) {
         accuracy: Number.isFinite(numAcc) ? Math.round(numAcc) : (existing.liveLocation?.accuracy ?? null),
         distanceMeters: verification.distanceMeters !== null ? verification.distanceMeters : (existing.liveLocation?.distanceMeters ?? null),
         geofenceStatus: liveGeofenceStatus,
-        locationFreshness: 'live',
+        locationFreshness: calculatedFreshness,
         locationPermission: hasCoords ? 'granted' : (existing.liveLocation?.locationPermission || 'unknown'),
         connectivityStatus: 'online',
         networkType: verification.isWifiVerified ? 'wifi' : (clientIp ? 'cellular' : 'unknown'),
@@ -1330,7 +1360,7 @@ export function createAttendanceService({ repository, companySettings = {} }) {
         gpsVerified: verification.isGpsVerified,
         locationSource: hasCoords ? 'gps' : (verification.isWifiVerified ? 'wifi' : 'network'),
         locationName: verification.nearestLocation || existing.liveLocation?.locationName || 'IGNITE CAMPUS',
-        deviceCapturedAt: now,
+        deviceCapturedAt: isDeviceDateValid ? new Date(clientTime) : now,
         serverReceivedAt: now,
         lastSyncAt: now,
       }
@@ -1388,6 +1418,9 @@ export function createAttendanceService({ repository, companySettings = {} }) {
         geofenceStatus: currentGeofenceStatus,
         geofenceGraceExpiresAt,
         remainingGraceMinutes,
+        locationFreshness: liveLoc.locationFreshness,
+        isOutdated,
+        resolvedPresenceState,
         autoPunchedOut: false,
       }
     },

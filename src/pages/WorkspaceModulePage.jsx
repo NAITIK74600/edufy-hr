@@ -901,10 +901,10 @@ function AttendanceModule() {
                       <span className={`gps-verified-badge ${presence?.isInside ? 'in-range' : presence?.isUncertain ? 'uncertain' : 'out-range'}`}>
                         <MapPin size={10} /> {presence?.isInside ? `GPS ≤${maxGeofenceRadius}m (${presence?.distText || '—'})` : presence?.isUncertain ? `GPS Uncertain (${presence?.distText || '—'})` : `GPS Out (${presence?.distText || '—'})`}
                       </span>
-                      {presence?.freshness && (
-                        <span className={`freshness-badge ${presence.freshness}`} title={`Heartbeat: ${presence.freshness}`}>
-                          {presence.freshness === 'live' && <span className="pulse-dot" />}
-                          {presence.freshness}
+                      {presence?.statusBadge && (
+                        <span className={`freshness-badge ${presence.statusBadge.tone}`} title={`Location Status: ${presence.statusBadge.label}`}>
+                          {presence.statusBadge.tone === 'live' && <span className="pulse-dot" />}
+                          {presence.statusBadge.label}
                         </span>
                       )}
                     </div>
@@ -1091,10 +1091,10 @@ function AttendanceModule() {
                         <span className={`gps-verified-badge ${tone}`}>
                           {label}
                         </span>
-                        {presence.freshness && (
-                          <span className={`freshness-badge ${presence.freshness}`} title={`Location Freshness: ${presence.freshness}`}>
-                            {presence.freshness === 'live' && <span className="pulse-dot" />}
-                            {presence.freshness}
+                        {presence.statusBadge && (
+                          <span className={`freshness-badge ${presence.statusBadge.tone}`} title={`Location Status: ${presence.statusBadge.label}`}>
+                            {presence.statusBadge.tone === 'live' && <span className="pulse-dot" />}
+                            {presence.statusBadge.label}
                           </span>
                         )}
                         {r.locationName && (

@@ -85,6 +85,7 @@ import { CompanyPoliciesView } from '../components/CompanyPoliciesView'
 import { formatAttendanceNotes, getDailyAttendanceStatus, getLateCountInfo } from '../utils/attendanceUtils'
 import { HolidayCalendarShowcase } from '../components/HolidayCalendarShowcase'
 import { CompanyDocumentsView } from '../components/CompanyDocumentsView'
+import { liveGpsTracker } from '../services/liveGpsTracker'
 
 // ==============================================================
 // GPS ATTENDANCE STATION COMPONENT (DEDICATED DUAL VERIFIER + SHIFTS & BREAKS)
@@ -169,6 +170,7 @@ function GPSAttendanceStation({ user, todayRecord, onPunch, onStartBreak, onEndB
   const [disconnectedMinutes, setDisconnectedMinutes] = useState(0)
   const [isAutoPunchedOut, setIsAutoPunchedOut] = useState(false)
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false)
+  const [trackingStatus, setTrackingStatus] = useState(() => liveGpsTracker.getState().status)
 
   const isCheckedIn = !!todayRecord?.checkIn && !todayRecord?.checkOut
   const isCompleted = !!todayRecord?.checkIn && !!todayRecord?.checkOut
@@ -223,41 +225,39 @@ function GPSAttendanceStation({ user, todayRecord, onPunch, onStartBreak, onEndB
     return () => { active = false }
   }, [])
 
-  // Continuous background geolocation tracking while checked in:
-  // Automatically acquires real-time GPS fixes so entering campus immediately clears pauses
-  // without forcing the user to manually click "GPS Detect".
+  // 1. Authoritative Singleton GPS & Presence Tracker Integration
+  // Ensures exactly ONE watchPosition across the entire app, starts on check-in, stops on check-out
   useEffect(() => {
-    if (!isCheckedIn || isCompleted) return
-    if (typeof navigator === 'undefined' || !navigator.geolocation) return
+    if (isCheckedIn && !isCompleted) {
+      liveGpsTracker.start({
+        employeeId: user?.employeeId || user?.id,
+        employeeName: user?.displayName || 'Employee',
+      })
+    } else {
+      liveGpsTracker.stop()
+    }
 
-    let lastVerifyEpoch = 0
-    const watchId = navigator.geolocation.watchPosition(
-      (pos) => {
-        const coords = {
-          latitude: pos.coords.latitude,
-          longitude: pos.coords.longitude,
-          accuracy: Math.ceil(pos.coords.accuracy),
-        }
-        updateCustomCoords(coords)
-        setGpsLive(true)
+    const unsubscribe = liveGpsTracker.subscribe((state) => {
+      setTrackingStatus(state.status)
+      if (state.lastCoords) {
+        updateCustomCoords(state.lastCoords)
+        setGpsLive(state.status === 'LIVE' || state.status === 'UNCERTAIN')
         setPermissionStatus('granted')
-
-        const now = Date.now()
-        if (now - lastVerifyEpoch >= 15000) {
-          lastVerifyEpoch = now
-          handleRefreshNetwork(coords)
+      } else if (state.status === 'LOCATION_UNAVAILABLE') {
+        setPermissionStatus('denied')
+      }
+      if (state.lastServerVerification) {
+        setServerVerification(state.lastServerVerification)
+        if (state.lastServerVerification.clientIp) {
+          setPublicIp(state.lastServerVerification.clientIp)
         }
-      },
-      () => {},
-      { enableHighAccuracy: true, maximumAge: 10000, timeout: 15000 }
-    )
+      }
+    })
 
     return () => {
-      if (typeof navigator !== 'undefined' && navigator.geolocation) {
-        navigator.geolocation.clearWatch(watchId)
-      }
+      unsubscribe()
     }
-  }, [isCheckedIn, isCompleted])
+  }, [isCheckedIn, isCompleted, user?.employeeId, user?.id, user?.displayName])
 
   const assignedCampus = user?.campus || user?.location || 'IGNITE CAMPUS'
   const primaryWifiSSID = (settings?.allowedWifiSSIDs || []).find((w) => !/airtel|dji|3052/i.test(w) && /edufyi/i.test(w)) || 'Edufyi'
@@ -293,55 +293,6 @@ function GPSAttendanceStation({ user, todayRecord, onPunch, onStartBreak, onEndB
       .finally(() => { if (active) setIpLoading(false) })
     return () => { active = false }
   }, [customCoords, settings])
-
-  // Presence Heartbeat: reports location/verification periodically without auto-punching out on disconnection
-  useEffect(() => {
-    if (!isCheckedIn || isCompleted) return
-
-    async function evaluatePresence() {
-      let coords = customCoords
-      if (typeof navigator !== 'undefined' && navigator.geolocation) {
-        try {
-          coords = await getFreshCoordinates()
-          setCustomCoords(coords)
-          setGpsLive(true)
-        } catch { }
-      }
-
-      try {
-        const netType = typeof navigator !== 'undefined' && navigator.connection?.effectiveType ? navigator.connection.effectiveType : 'unknown'
-        const res = await apiClient.post('/attendance/presence', {
-          ...coords,
-          deviceCapturedAt: new Date().toISOString(),
-          locationPermission: permissionStatus,
-          networkType: netType,
-        })
-        const data = res.data?.data || res.data || {}
-        setServerVerification(data)
-        if (data.clientIp) setPublicIp(data.clientIp)
-      } catch { }
-    }
-
-    const timer = setInterval(evaluatePresence, 45000)
-    const initTimer = setTimeout(evaluatePresence, 5000)
-
-    function handleVisibility() {
-      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
-        evaluatePresence()
-      }
-    }
-    if (typeof document !== 'undefined') {
-      document.addEventListener('visibilitychange', handleVisibility)
-    }
-
-    return () => {
-      clearInterval(timer)
-      clearTimeout(initTimer)
-      if (typeof document !== 'undefined') {
-        document.removeEventListener('visibilitychange', handleVisibility)
-      }
-    }
-  }, [isCheckedIn, isCompleted, customCoords, permissionStatus])
 
   const matchedOfficeNet = { label: serverVerification?.matchedNetworkLabel }
   const isRealOfficeIp = Boolean(serverVerification?.isIpVerified)
@@ -642,6 +593,7 @@ function GPSAttendanceStation({ user, todayRecord, onPunch, onStartBreak, onEndB
 
     if (isCheckedIn) {
       try {
+        liveGpsTracker.stop()
         await onPunch({
           offCampusDurationMinutes: 0,
         })
@@ -1069,6 +1021,24 @@ function GPSAttendanceStation({ user, todayRecord, onPunch, onStartBreak, onEndB
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: '5px' }}>
                   <Radio size={13} color={isGpsInside ? 'var(--teal)' : '#c25e00'} /> GPS Geofence (Max {maxGeofenceRadius}m)
+                  {isCheckedIn && !isCompleted && (
+                    <span className={`freshness-badge ${
+                      trackingStatus === 'LIVE' ? 'live' :
+                      trackingStatus === 'BACKGROUND_PAUSED' ? 'background-paused' :
+                      trackingStatus === 'STALE' ? 'stale' :
+                      trackingStatus === 'OFFLINE' ? 'offline' :
+                      trackingStatus === 'UNCERTAIN' ? 'uncertain' :
+                      'unavailable'
+                    }`} style={{ marginLeft: '4px' }} title={`Presence Status: ${trackingStatus}`}>
+                      {trackingStatus === 'LIVE' && <span className="pulse-dot" />}
+                      {trackingStatus === 'LIVE' ? 'LIVE' :
+                       trackingStatus === 'BACKGROUND_PAUSED' ? 'BACKGROUND PAUSED' :
+                       trackingStatus === 'STALE' ? 'STALE' :
+                       trackingStatus === 'OFFLINE' ? 'OFFLINE' :
+                       trackingStatus === 'UNCERTAIN' ? 'UNCERTAIN' :
+                       'LOCATION UNAVAILABLE'}
+                    </span>
+                  )}
                 </span>
                 <button
                   type="button"
@@ -1218,6 +1188,7 @@ function ESSOverview({ user }) {
         }
       }
 
+      liveGpsTracker.stop()
       await hrStore.checkOut({
         employeeId: empId,
         employeeName: user?.displayName || 'Employee',
@@ -1763,6 +1734,7 @@ function ESSAttendanceView({ user }) {
       setPunchNotice(`Successfully punched in at ${rec?.checkIn || 'now'}! (${rec?.ipVerified ? 'Office network verified' : rec?.gpsVerified ? 'GPS Geofence verified' : 'Recorded'}${rec?.shift ? `, Shift: ${rec.shift}` : ''})`)
     } else if (isCheckedIn) {
       const offCampusMinutes = Number(opts.offCampusDurationMinutes) || 0
+      liveGpsTracker.stop()
       await hrStore.checkOut({
         employeeId: empId,
         employeeName: user?.displayName || 'Employee',

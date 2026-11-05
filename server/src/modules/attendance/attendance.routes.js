@@ -323,7 +323,7 @@ export function createAttendanceRouter({ auth, service, useDatabase = false, per
     try {
       const user = request.auth.user
       const employeeId = user.employeeId || user.id
-      const { latitude, longitude, wifiSSID, bssid, accuracy, gpsData, locationPermission, networkType, deviceCapturedAt } = request.body || {}
+      const { latitude, longitude, wifiSSID, bssid, accuracy, gpsData, locationPermission, networkType, deviceCapturedAt, isStale } = request.body || {}
       const lat = latitude !== undefined ? latitude : gpsData?.latitude
       const lng = longitude !== undefined ? longitude : gpsData?.longitude
       const acc = accuracy !== undefined ? accuracy : gpsData?.accuracy
@@ -340,6 +340,7 @@ export function createAttendanceRouter({ auth, service, useDatabase = false, per
         locationPermission,
         networkType,
         deviceCapturedAt,
+        isStale,
       })
       return response.json({ success: true, data: { ...result, clientIp } })
     } catch (error) {

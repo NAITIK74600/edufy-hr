@@ -1,7 +1,12 @@
 /**
  * Centralized Attendance Presence & Geofence Resolver
  * Resolves accuracy-aware physical presence, separates network type from physical location,
- * and tracks live location freshness.
+ * and tracks authoritative live location freshness badges:
+ * - LIVE (fresh GPS fix)
+ * - STALE (last fix > threshold)
+ * - OFFLINE (device disconnected)
+ * - LOCATION UNAVAILABLE (GPS disabled / permission denied)
+ * - UNCERTAIN (low GPS accuracy > 100m)
  */
 
 export function resolveAttendancePresence(r, maxGeofenceRadius = 50) {
@@ -45,8 +50,23 @@ export function resolveAttendancePresence(r, maxGeofenceRadius = 50) {
     networkTone = 'remote'
   }
 
-  // 3. Location Freshness
-  const freshness = live.locationFreshness || (r?.checkOut ? 'offline' : 'live')
+  // 3. Authoritative Location Freshness & Status Badges
+  // States: LIVE | STALE | OFFLINE | LOCATION UNAVAILABLE | UNCERTAIN
+  const rawFreshness = live.locationFreshness || (r?.checkOut ? 'offline' : 'live')
+
+  let statusBadge = { key: 'live', label: 'LIVE', tone: 'live' }
+
+  if (r?.checkOut || live.connectivityStatus === 'offline' || r?.isOnline === false || rawFreshness === 'offline') {
+    statusBadge = { key: 'offline', label: 'OFFLINE', tone: 'offline' }
+  } else if (live.locationPermission === 'denied' || effectiveGeofenceStatus === 'location_unavailable' || rawFreshness === 'unavailable' || (!live.latitude && !gpsVerified && !wifiVerified)) {
+    statusBadge = { key: 'unavailable', label: 'LOCATION UNAVAILABLE', tone: 'unavailable' }
+  } else if (isUncertain || rawFreshness === 'uncertain' || (acc !== null && acc > 100)) {
+    statusBadge = { key: 'uncertain', label: 'UNCERTAIN', tone: 'uncertain' }
+  } else if (rawFreshness === 'stale') {
+    statusBadge = { key: 'stale', label: 'STALE', tone: 'stale' }
+  } else {
+    statusBadge = { key: 'live', label: 'LIVE', tone: 'live' }
+  }
 
   const distText = dist !== null ? `${Math.round(dist)}m` : (wifiVerified ? `≤${maxGeofenceRadius}m` : '—')
   const accText = acc ? `±${Math.round(acc)}m` : ''
@@ -62,9 +82,9 @@ export function resolveAttendancePresence(r, maxGeofenceRadius = 50) {
     networkLabel,
     networkTone,
     displaySsid,
-    freshness,
+    freshness: statusBadge.tone,
+    statusBadge,
     locationName: live.locationName || r?.locationName || 'Ignite Campus',
     punchInDist: punch.distanceMeters ?? r?.distanceMeters ?? null,
   }
 }
-

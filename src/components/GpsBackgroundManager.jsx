@@ -60,7 +60,7 @@ export function GpsBackgroundManager({ user }) {
               setGpsStatus(perm.state)
               if (perm.state === 'granted') {
                 setShowGpsModal(false)
-                startWarmWatcher()
+                refreshGpsCache()
               }
             }
           })
@@ -71,8 +71,8 @@ export function GpsBackgroundManager({ user }) {
         if (!isGpsDismissed) setShowGpsModal(true)
       }
 
-      // Start background watcher if already granted
-      startWarmWatcher()
+      // Check current GPS fix once without holding a duplicate background watcher
+      refreshGpsCache()
     }
 
     // 2. Background Heartbeat & Keep-Alive Daemon (pings when minimized)
@@ -149,22 +149,19 @@ export function GpsBackgroundManager({ user }) {
       window.removeEventListener('beforeinstallprompt', handleBeforeInstall)
       window.removeEventListener('edufyi-prompt-available', handlePromptAvailable)
       window.removeEventListener('edufyi-trigger-install', handleCustomTrigger)
-      if (window.__edufyi_watch_id !== undefined) {
-        navigator.geolocation.clearWatch(window.__edufyi_watch_id)
-      }
     }
   }, [])
 
-  function startWarmWatcher() {
+  function refreshGpsCache() {
     if (!navigator.geolocation) return
     try {
-      window.__edufyi_watch_id = navigator.geolocation.watchPosition(
+      navigator.geolocation.getCurrentPosition(
         (pos) => {
           const coords = {
             latitude: pos.coords.latitude,
             longitude: pos.coords.longitude,
             accuracy: Math.round(pos.coords.accuracy),
-            timestamp: pos.timestamp,
+            timestamp: pos.timestamp || Date.now(),
           }
           window.__edufyi_last_gps = coords
           setAccuracy(coords.accuracy)
@@ -176,7 +173,7 @@ export function GpsBackgroundManager({ user }) {
             setGpsStatus('denied')
           }
         },
-        { enableHighAccuracy: true, timeout: 20000, maximumAge: 30000 }
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 }
       )
     } catch {}
   }
@@ -194,13 +191,12 @@ export function GpsBackgroundManager({ user }) {
           latitude: pos.coords.latitude,
           longitude: pos.coords.longitude,
           accuracy: Math.round(pos.coords.accuracy),
-          timestamp: pos.timestamp,
+          timestamp: pos.timestamp || Date.now(),
         }
         window.__edufyi_last_gps = coords
         setAccuracy(coords.accuracy)
         setGpsStatus('granted')
         setShowGpsModal(false)
-        startWarmWatcher()
       },
       (err) => {
         if (err.code === 1) {

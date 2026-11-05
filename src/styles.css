@@ -2371,6 +2371,22 @@ label.form-label {
   color: #64748b;
   border: 1px solid #cbd5e1;
 }
+.freshness-badge.unavailable,
+.freshness-badge.location-unavailable {
+  background: #fee2e2;
+  color: #b91c1c;
+  border: 1px solid #fca5a5;
+}
+.freshness-badge.uncertain {
+  background: #fef9c3;
+  color: #854d0e;
+  border: 1px solid #fef08a;
+}
+.freshness-badge.background-paused {
+  background: #e0f2fe;
+  color: #0284c7;
+  border: 1px solid #bae6fd;
+}
 .pulse-dot {
   width: 6px;
   height: 6px;
