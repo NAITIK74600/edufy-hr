@@ -796,8 +796,9 @@ function AttendanceModule() {
               <EmptyState title="No attendance entries" message={`No records for ${selectedDate}. Record actual attendance or wait for employee punches.`} />
             ) : (
               dailyAttendance.map((r) => {
-                const isInside = r.distanceMeters !== undefined && r.distanceMeters !== null ? r.distanceMeters <= maxGeofenceRadius : r.gpsVerified
-                const distText = r.distanceMeters !== undefined && r.distanceMeters !== null ? `${r.distanceMeters}m` : (r.wifiVerified ? `<${maxGeofenceRadius}m` : '—')
+                const presence = resolveAttendancePresence(r, maxGeofenceRadius) || {}
+                const isInside = presence.isInside !== undefined ? presence.isInside : (r.distanceMeters !== undefined && r.distanceMeters !== null ? r.distanceMeters <= maxGeofenceRadius : r.gpsVerified)
+                const distText = presence.distText || (r.distanceMeters !== undefined && r.distanceMeters !== null ? `${r.distanceMeters}m` : (r.wifiVerified ? `<${maxGeofenceRadius}m` : '—'))
                 const statusInfo = getDailyAttendanceStatus(r, storeState.companySettings?.attendanceRules)
                 const lateInfo = getLateCountInfo(r, storeState.attendance, selectedDate, storeState.companySettings?.attendanceRules)
                 return (
@@ -894,13 +895,13 @@ function AttendanceModule() {
                     </div>
 
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center', fontSize: '10px' }}>
-                      <span className={`wifi-badge ${presence.networkTone}`}>
-                        <Wifi size={10} /> {presence.networkLabel} {presence.displaySsid ? `(${presence.displaySsid})` : ''}
+                      <span className={`wifi-badge ${presence?.networkTone || 'remote'}`}>
+                        <Wifi size={10} /> {presence?.networkLabel || 'External / Remote'} {presence?.displaySsid ? `(${presence.displaySsid})` : ''}
                       </span>
-                      <span className={`gps-verified-badge ${presence.isInside ? 'in-range' : presence.isUncertain ? 'uncertain' : 'out-range'}`}>
-                        <MapPin size={10} /> {presence.isInside ? `GPS ≤${maxGeofenceRadius}m (${presence.distText})` : presence.isUncertain ? `GPS Uncertain (${presence.distText})` : `GPS Out (${presence.distText})`}
+                      <span className={`gps-verified-badge ${presence?.isInside ? 'in-range' : presence?.isUncertain ? 'uncertain' : 'out-range'}`}>
+                        <MapPin size={10} /> {presence?.isInside ? `GPS ≤${maxGeofenceRadius}m (${presence?.distText || '—'})` : presence?.isUncertain ? `GPS Uncertain (${presence?.distText || '—'})` : `GPS Out (${presence?.distText || '—'})`}
                       </span>
-                      {presence.freshness && (
+                      {presence?.freshness && (
                         <span className={`freshness-badge ${presence.freshness}`} title={`Heartbeat: ${presence.freshness}`}>
                           {presence.freshness === 'live' && <span className="pulse-dot" />}
                           {presence.freshness}

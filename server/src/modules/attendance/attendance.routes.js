@@ -617,6 +617,15 @@ export function createAttendanceRouter({ auth, service, useDatabase = false, per
     } catch (error) { next(error) }
   })
 
+  // 15b. Historical Auto Punch-Out Dry-Run Audit Report
+  router.get('/auto-punchout-audit', auth.authenticate, auth.requirePermission(PERMISSIONS.ATTENDANCE_READ), async (request, response, next) => {
+    try {
+      const { runAutoPunchOutAudit } = await import('../../scripts/auditAutoPunchOutRecords.js')
+      const audit = await runAutoPunchOutAudit({ direct: false })
+      return response.json({ success: true, data: audit })
+    } catch (error) { next(error) }
+  })
+
   // 16. List Auto Punch-Out Records for HR/Admin Review
   router.get('/auto-punch-outs', auth.authenticate, auth.requirePermission(PERMISSIONS.ATTENDANCE_READ), async (request, response, next) => {
     try {

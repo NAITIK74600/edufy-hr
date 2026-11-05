@@ -109,7 +109,7 @@ const DEFAULT_WIFI_NETWORKS = [
 // Policy-free baseline: Default attendance rules retain security parameters (geofence & network)
 // Obsolete work start/end times and grace periods are removed pending new policy.
 const DEFAULT_ATTENDANCE_RULES = {
-  maxGeofenceRadiusMeters: 30,
+  maxGeofenceRadiusMeters: 50,
   strictGeofenceRequired: false,
   requireOfficeNetworkAndGps: true,
   lunchBreakAutoPause: true,
@@ -117,13 +117,13 @@ const DEFAULT_ATTENDANCE_RULES = {
   lunchBreakEnd: '14:30',
   autoPunchOutEnabled: true,
   autoPunchOutTime: '21:30',
-  geofenceAutoPunchOutEnabled: true,
+  geofenceAutoPunchOutEnabled: false,
   geofenceGracePeriodMinutes: 120,
   geofenceGpsAccuracyThresholdMeters: 50,
   geofenceExitWarningEnabled: true,
-  offlineAutoPunchOutEnabled: true,
+  offlineAutoPunchOutEnabled: false,
   offlineGracePeriodMinutes: 120,
-  offlineWarningEnabled: true,
+  offlineWarningEnabled: false,
   dailyCutoffAutoPunchOutEnabled: true,
   dailyCutoffTime: '21:30',
   dailyCutoffWarningEnabled: true,
@@ -435,6 +435,7 @@ function isIpMatching(clientIp, allowedIPs = []) {
 }
 
 export function createAttendanceService({ repository, companySettings = {} }) {
+  let isProcessingAutoPunchOuts = false
   let locations = companySettings.locations || []
   let allowedWifiSSIDs = companySettings.allowedWifiSSIDs || []
   let wifiNetworks = companySettings.wifiNetworks || []
@@ -688,6 +689,10 @@ export function createAttendanceService({ repository, companySettings = {} }) {
 
     async getSummary(date = getTodayString()) {
       return repository.getSummary(date)
+    },
+
+    async punchIn(args) {
+      return this.checkIn(args)
     },
 
     async checkIn({ employeeId, employeeName, latitude, longitude, accuracy, wifiSSID, bssid, date, clientIp, shift, shiftCode }) {
@@ -1195,7 +1200,7 @@ export function createAttendanceService({ repository, companySettings = {} }) {
       return repository.punchOut(updated)
     },
 
-    async updatePresence({ employeeId, latitude, longitude, wifiSSID, clientIp, bssid, accuracy }) {
+    async updatePresence({ employeeId, latitude, longitude, wifiSSID, clientIp, bssid, accuracy, locationPermission = 'unknown', networkType = 'unknown', deviceCapturedAt = null }) {
       const now = new Date()
       const workDate = getTodayString()
       const verification = verifyLocation(latitude, longitude, wifiSSID, clientIp, bssid, accuracy)
@@ -1229,10 +1234,29 @@ export function createAttendanceService({ repository, companySettings = {} }) {
       let auditEventToLog = null
       let notificationToSend = null
 
+      const hasCoords = Number.isFinite(Number(latitude)) && Number.isFinite(Number(longitude))
+      const maxAllowedRadius = Number(verification.maxAllowedRadius) || Number(rules.maxGeofenceRadiusMeters) || 50
+      const confidenceTolerance = Math.min(Math.max(0, (numAcc || 0) * 0.35), 35)
+
+      // Separate 6 Distinct States:
+      // INSIDE, OUTSIDE, LOCATION_UNCERTAIN, LOCATION_UNAVAILABLE, STALE_LOCATION, DEVICE_OFFLINE
+      let resolvedPresenceState = 'INSIDE'
       if (isPhysicallyPresent) {
+        resolvedPresenceState = 'INSIDE'
+      } else if (!hasCoords || locationPermission === 'denied') {
+        resolvedPresenceState = 'LOCATION_UNAVAILABLE'
+      } else if (!isAccurateGps || numAcc > 100 || (verification.distanceMeters !== null && (verification.distanceMeters - numAcc) <= maxAllowedRadius)) {
+        resolvedPresenceState = 'LOCATION_UNCERTAIN'
+      } else if (hasCoords && isAccurateGps && verification.distanceMeters !== null && (verification.distanceMeters - confidenceTolerance) > maxAllowedRadius && (verification.distanceMeters - numAcc) > maxAllowedRadius) {
+        resolvedPresenceState = 'OUTSIDE'
+      } else {
+        resolvedPresenceState = 'LOCATION_UNCERTAIN'
+      }
+
+      if (resolvedPresenceState === 'INSIDE') {
         // Employee is inside office or on office Wi-Fi
         if (currentGeofenceStatus === 'outside' || geofenceGraceExpiresAt) {
-          // Employee has RETURNED inside the grace period!
+          // Employee has RETURNED inside the grace period! Immediately cancel 2-hour timer!
           currentGeofenceStatus = 'inside'
           geofenceGraceExpiresAt = null
           geofenceExitAt = null
@@ -1254,44 +1278,39 @@ export function createAttendanceService({ repository, companySettings = {} }) {
         } else {
           currentGeofenceStatus = 'inside'
         }
-      } else {
-        // Device is NOT verified on office network or inside geofence
-        // Check if GPS is accurate enough to confirm a genuine exit
-        const hasCoords = Number.isFinite(Number(latitude)) && Number.isFinite(Number(longitude))
-        if (hasCoords && isAccurateGps && verification.distanceMeters !== null && verification.distanceMeters > (verification.maxAllowedRadius || 50)) {
-          // Genuine confirmed exit!
-          if (currentGeofenceStatus !== 'outside') {
-            currentGeofenceStatus = 'outside'
-            geofenceExitAt = now
-            const graceMins = Number(rules.geofenceGracePeriodMinutes) || 120
-            geofenceGraceExpiresAt = new Date(now.getTime() + graceMins * 60 * 1000)
+      } else if (resolvedPresenceState === 'OUTSIDE') {
+        // Genuine, confirmed exit with reliable GPS evidence
+        if (currentGeofenceStatus !== 'outside') {
+          currentGeofenceStatus = 'outside'
+          geofenceExitAt = now
+          const graceMins = Number(rules.geofenceGracePeriodMinutes) || 120
+          geofenceGraceExpiresAt = new Date(now.getTime() + graceMins * 60 * 1000)
 
-            auditEventToLog = {
-              eventType: 'GEOFENCE_EXIT_DETECTED',
-              eventTimestamp: now,
-              description: `Device detected outside authorized geofence (${Math.round(verification.distanceMeters)}m away). 2-hour grace period initiated.`,
-              source: 'device',
-              metadata: { latitude, longitude, accuracy, distanceMeters: verification.distanceMeters, graceExpiresAt: geofenceGraceExpiresAt },
-            }
+          auditEventToLog = {
+            eventType: 'GEOFENCE_EXIT_DETECTED',
+            eventTimestamp: now,
+            description: `Device confirmed outside authorized geofence (${Math.round(verification.distanceMeters)}m away). 2-hour grace period initiated.`,
+            source: 'device',
+            metadata: { latitude, longitude, accuracy, distanceMeters: verification.distanceMeters, graceExpiresAt: geofenceGraceExpiresAt },
+          }
 
-            if (rules.geofenceExitWarningEnabled !== false && !geofenceWarningSentAt) {
-              geofenceWarningSentAt = now
-              notificationToSend = {
-                type: 'EXIT_WARNING',
-                title: 'Outside Office Geofence Warning',
-                message: 'Your device appears to be outside the authorized office location. Your attendance session is still active. Please return to the office location within 2 hours. Otherwise, your attendance will be automatically punched out.',
-              }
+          if (rules.geofenceExitWarningEnabled !== false && !geofenceWarningSentAt) {
+            geofenceWarningSentAt = now
+            notificationToSend = {
+              type: 'EXIT_WARNING',
+              title: 'Outside Office Geofence Warning',
+              message: 'Your device appears to be outside the authorized office location. Your attendance session is still active. Please return to the office location within 2 hours. Otherwise, your attendance will be automatically punched out.',
             }
           }
-        } else {
-          // GPS is either unavailable, indoor weak signal, or accuracy is poor (>50m).
-          // DO NOT falsely claim geofence exit!
         }
+      } else {
+        // LOCATION_UNCERTAIN or LOCATION_UNAVAILABLE:
+        // Indoor weak signal, GPS jitter, or permission unavailable.
+        // CRITICAL RULE: NEVER convert UNCERTAIN or UNAVAILABLE into a confirmed geofence exit!
+        // DO NOT change currentGeofenceStatus to 'outside' and DO NOT start a grace timer!
       }
 
-      const hasCoords = Number.isFinite(Number(latitude)) && Number.isFinite(Number(longitude))
-      const isUncertain = hasCoords && (numAcc > 150 || (numAcc > 50 && !verification.isGpsVerified && verification.distanceMeters !== null && verification.distanceMeters <= (verification.maxAllowedRadius || 50) + numAcc))
-      const liveGeofenceStatus = isPhysicallyPresent ? 'inside' : (isUncertain ? 'uncertain' : (currentGeofenceStatus === 'outside' ? 'outside' : 'unknown'))
+      const liveGeofenceStatus = isPhysicallyPresent ? 'inside' : (resolvedPresenceState === 'OUTSIDE' ? 'outside' : (resolvedPresenceState === 'LOCATION_UNAVAILABLE' ? 'location_unavailable' : 'uncertain'))
 
       const liveLoc = {
         latitude: hasCoords ? Number(latitude) : (existing.liveLocation?.latitude ?? null),
@@ -1373,7 +1392,7 @@ export function createAttendanceService({ repository, companySettings = {} }) {
       }
     },
 
-    async finalizeAttendanceRecord({
+    async finalizeAttendanceSession({
       recordId,
       employeeId,
       employeeName,
@@ -1386,9 +1405,20 @@ export function createAttendanceService({ repository, companySettings = {} }) {
       isAutoPunchOut = false,
       source = 'system',
     }) {
-      const record = await repository.findByEmployeeAndDate(employeeId, workDate)
+      let record = null
+      if (employeeId && workDate) {
+        record = await repository.findByEmployeeAndDate(employeeId, workDate)
+      }
+      if (!record && recordId) {
+        record = repository.findById ? await repository.findById(recordId) : (repository.getRecordById ? await repository.getRecordById(recordId) : null)
+      }
       if (!record || !record.checkIn || record.checkOut) {
         return null // Session already finalized or no check-in
+      }
+
+      // Safeguard: Do not finalize with geofence timeout if employee returned inside!
+      if (policy === 'ENGINE_A_GEOFENCE' && record.geofenceStatus === 'inside') {
+        return null
       }
 
       const now = punchOutAt instanceof Date ? punchOutAt : new Date(punchOutAt)
@@ -1558,7 +1588,16 @@ export function createAttendanceService({ repository, companySettings = {} }) {
       return finalized
     },
 
+    // Backward-compatible alias
+    async finalizeAttendanceRecord(params) {
+      return this.finalizeAttendanceSession(params)
+    },
+
     async processAutoPunchOuts() {
+      if (isProcessingAutoPunchOuts) {
+        return { geofenceTimeouts: [], offlineTimeouts: [], dailyCutoffs: [], advanceWarningsSent: 0 }
+      }
+      isProcessingAutoPunchOuts = true
       const results = {
         geofenceTimeouts: [],
         offlineTimeouts: [],
@@ -1574,13 +1613,18 @@ export function createAttendanceService({ repository, companySettings = {} }) {
 
         // =========================================================================
         // ENGINE A: Geofence Grace Period Expiry (2 Hours Outside Office)
+        // Only active if geofenceAutoPunchOutEnabled is explicitly true
         // =========================================================================
-        if (rules.geofenceAutoPunchOutEnabled !== false) {
+        if (Boolean(rules.geofenceAutoPunchOutEnabled)) {
           const expiredGeofence = await repository.findExpiredGeofenceRecords(now)
           for (const rec of expiredGeofence || []) {
             try {
+              // Revalidate: must still be marked 'outside' and not returned
+              if (rec.geofenceStatus !== 'outside') {
+                continue
+              }
               const punchOutTargetDate = rec.geofenceGraceExpiresAt ? new Date(rec.geofenceGraceExpiresAt) : now
-              const finalized = await this.finalizeAttendanceRecord({
+              const finalized = await this.finalizeAttendanceSession({
                 recordId: rec.id || rec._id,
                 employeeId: rec.employeeId,
                 employeeName: rec.employeeName,
@@ -1602,8 +1646,9 @@ export function createAttendanceService({ repository, companySettings = {} }) {
 
         // =========================================================================
         // ENGINE A FALLBACK: Device Offline Timeout (2 Hours Inactive/Disconnected)
+        // Disabled by default. Internet disconnects or phone sleep must NEVER auto punch out!
         // =========================================================================
-        if (rules.offlineAutoPunchOutEnabled !== false) {
+        if (Boolean(rules.offlineAutoPunchOutEnabled)) {
           const offlineMins = Number(rules.offlineGracePeriodMinutes) || 120
           const offlineCutoffDate = new Date(now.getTime() - offlineMins * 60 * 1000)
           const expiredOffline = await repository.findExpiredOfflineRecords(offlineCutoffDate)
@@ -1613,7 +1658,7 @@ export function createAttendanceService({ repository, companySettings = {} }) {
               if (checkInTime && (now.getTime() - checkInTime) < (offlineMins * 60 * 1000)) {
                 continue
               }
-              const finalized = await this.finalizeAttendanceRecord({
+              const finalized = await this.finalizeAttendanceSession({
                 recordId: rec.id || rec._id,
                 employeeId: rec.employeeId,
                 employeeName: rec.employeeName,
@@ -1641,8 +1686,22 @@ export function createAttendanceService({ repository, companySettings = {} }) {
           const cutOffTimeStr = rules.dailyCutoffTime || rules.autoPunchOutTime || '21:30'
           const cutOffMinutes = parseTimeToMinutes(cutOffTimeStr) ?? (21 * 60 + 30)
 
-          const nowTz = new Date(new Date().toLocaleString('en-US', { timeZone: tz }))
-          const currentMins = nowTz.getHours() * 60 + nowTz.getMinutes()
+          // Robust timezone extraction using Intl.DateTimeFormat
+          let currentMins = 0
+          try {
+            const tzFormatter = new Intl.DateTimeFormat('en-US', {
+              timeZone: tz,
+              hour: 'numeric',
+              minute: 'numeric',
+              hourCycle: 'h23',
+            })
+            const parts = tzFormatter.formatToParts(now)
+            const hVal = parseInt(parts.find((p) => p.type === 'hour')?.value || '0', 10)
+            const mVal = parseInt(parts.find((p) => p.type === 'minute')?.value || '0', 10)
+            currentMins = hVal * 60 + mVal
+          } catch {
+            currentMins = now.getHours() * 60 + now.getMinutes()
+          }
 
           // Advance Warning (e.g. 15 mins before cut-off)
           const warningMinsBefore = Number(rules.dailyCutoffWarningMinutesBefore) || 15
@@ -1650,10 +1709,23 @@ export function createAttendanceService({ repository, companySettings = {} }) {
             const pendingWarningRecords = await repository.findRecordsPendingAdvanceWarning(workDate)
             for (const rec of pendingWarningRecords || []) {
               try {
+                // Re-verify shift before sending advance warning:
+                let shiftDef = null
+                if (rec.shift) {
+                  const extracted = extractShiftTimes(rec.shift)
+                  shiftDef = normalizeShiftConfig({ shiftId: rec.shiftCode, name: rec.shift, ...extracted })
+                } else {
+                  const res = await resolveEmployeeShift(rec.employeeId, rec.date || workDate)
+                  shiftDef = res.shift
+                }
+                if (shiftDef.isOvernight || (shiftDef.endMinutes && shiftDef.endMinutes > cutOffMinutes)) {
+                  continue // Exempt from day cut-off warning
+                }
+
                 await createUnifiedNotification({
                   employeeId: rec.employeeId,
-                  title: 'Daily Cut-Off Advance Reminder',
-                  message: `Reminder: Daily automatic punch-out is scheduled at ${formatTime12(cutOffTimeStr)}. If you finish earlier, please punch out manually.`,
+                  title: 'Daily Attendance Cut-Off Notice',
+                  message: `Your shift is scheduled to automatically close at ${formatTime12(cutOffTimeStr) || '9:30 PM'}. Please remember to punch out manually before this time.`,
                   category: 'attendance',
                   eventType: 'ATTENDANCE_WARNING_15',
                   targetUrl: '#/employee/attendance',
@@ -1673,16 +1745,44 @@ export function createAttendanceService({ repository, companySettings = {} }) {
             const activeToday = await repository.findActiveSessionsForCutoff(workDate)
             for (const rec of activeToday || []) {
               try {
-                // Shift-aware check:
-                if (rec.shiftCode && /overnight|night/i.test(rec.shiftCode)) {
-                  continue
+                // Revalidate session:
+                const latest = await repository.findByEmployeeAndDate(rec.employeeId, rec.date || workDate)
+                if (!latest || !latest.checkIn || latest.checkOut) {
+                  continue // Already punched out
                 }
 
-                const finalized = await this.finalizeAttendanceRecord({
-                  recordId: rec.id || rec._id,
-                  employeeId: rec.employeeId,
-                  employeeName: rec.employeeName,
-                  workDate: rec.date || workDate,
+                // Check assigned shift:
+                let shiftDef = null
+                if (latest.shift) {
+                  const extracted = extractShiftTimes(latest.shift)
+                  shiftDef = normalizeShiftConfig({ shiftId: latest.shiftCode, name: latest.shift, ...extracted })
+                } else {
+                  const res = await resolveEmployeeShift(latest.employeeId, latest.date || workDate)
+                  shiftDef = res.shift
+                }
+
+                // Shift-awareness:
+                // 1. Overnight shifts:
+                if (shiftDef.isOvernight) {
+                  continue // Overnight shifts cross midnight, exempt from 21:30 daily day cutoff!
+                }
+                // 2. Evening shifts ending after cut-off time:
+                if (shiftDef.endMinutes && cutOffMinutes >= (shiftDef.startMinutes || 0) && shiftDef.endMinutes > cutOffMinutes) {
+                  continue // Shift ends after cut-off time, ongoing session!
+                }
+                // 3. Minimum duration safeguard (checked in less than 60 mins ago):
+                if (latest.checkInAt) {
+                  const elapsedSinceIn = (now.getTime() - new Date(latest.checkInAt).getTime()) / 60000
+                  if (elapsedSinceIn < 60) {
+                    continue
+                  }
+                }
+
+                const finalized = await this.finalizeAttendanceSession({
+                  recordId: latest.id || latest._id,
+                  employeeId: latest.employeeId,
+                  employeeName: latest.employeeName,
+                  workDate: latest.date || workDate,
                   punchOutTime: formatTime12(cutOffTimeStr) || formatCurrentTime(now),
                   punchOutAt: now,
                   reasonCode: 'SYSTEM_DAILY_CUTOFF',
@@ -1700,6 +1800,8 @@ export function createAttendanceService({ repository, companySettings = {} }) {
         }
       } catch (globalErr) {
         console.error('[processAutoPunchOuts Global Notice]:', globalErr.message)
+      } finally {
+        isProcessingAutoPunchOuts = false
       }
 
       return results
