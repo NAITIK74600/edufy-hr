@@ -97,6 +97,19 @@ export function createApp(options = {}) {
         const settings = await AttendanceSettings.findOne({ key: 'office' }) || await AttendanceSettings.findOne().sort({ updatedAt: -1 })
         if (settings) {
           let dirty = false
+          if (settings.attendanceRules?.offlineAutoPunchOutEnabled || settings.attendanceRules?.geofenceAutoPunchOutEnabled) {
+            settings.attendanceRules.offlineAutoPunchOutEnabled = false
+            settings.attendanceRules.geofenceAutoPunchOutEnabled = false
+            dirty = true
+          }
+          if (settings.offlineAutoPunchOutEnabled || settings.geofenceAutoPunchOutEnabled) {
+            settings.offlineAutoPunchOutEnabled = false
+            settings.geofenceAutoPunchOutEnabled = false
+            dirty = true
+          }
+          if (app.locals.attendanceService?.updateConfig) {
+            app.locals.attendanceService.updateConfig(settings.toObject ? settings.toObject() : settings)
+          }
           if (Array.isArray(settings.allowedWifiSSIDs)) {
             const cleaned = [...new Set(settings.allowedWifiSSIDs.map((s) => /airtel|dji|3052/i.test(s) ? 'Edufyi' : s).filter(Boolean))]
             if (!cleaned.includes('edufyi')) cleaned.unshift('edufyi')
@@ -148,26 +161,61 @@ export function createApp(options = {}) {
       }
       try {
         const { AttendanceRecord } = await import('./models/AttendanceRecord.js')
-        const today = new Date().toISOString().slice(0, 10)
-        const restored = await AttendanceRecord.updateMany(
-          {
-            date: today,
-            autoPunchOut: true,
-            punchOutReason: { $regex: /disconnect|inactive office presence/i },
-          },
-          {
-            $set: {
-              checkOut: null,
-              checkOutAt: null,
-              autoPunchOut: false,
-              punchOutReason: '',
-              totalHours: 'Active (Live)',
-              status: 'present',
-            },
-          }
-        )
-        if (restored.modifiedCount > 0) {
-          console.log(`[AttendanceRestore] Successfully restored ${restored.modifiedCount} employees who were prematurely auto-punched out today.`)
+        const todayUTC = new Date().toISOString().slice(0, 10)
+        const todayIST = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
+        const targetDates = Array.from(new Set([todayUTC, todayIST, '2026-11-05']))
+
+        const recordsToRestore = await AttendanceRecord.find({
+          date: { $in: targetDates },
+          checkIn: { $nin: [null, ''] },
+          $or: [
+            { autoPunchOut: true },
+            { punchOutType: 'auto' },
+            { punchOutReason: { $regex: /auto|disconnect|offline|inactive|geofence|timeout/i } },
+            { totalHours: { $regex: /auto punch out/i } },
+          ],
+        }).lean()
+
+        let restoredCount = 0
+        for (const rec of recordsToRestore) {
+          const cleanStatus = (rec.isLate || rec.status === 'late') ? 'late' : 'present'
+          await AttendanceRecord.updateOne(
+            { _id: rec._id },
+            {
+              $set: {
+                checkOut: null,
+                checkOutAt: null,
+                autoPunchOut: false,
+                punchOutReason: '',
+                punchOutType: 'manual',
+                isEarlyLogout: false,
+                earlyLogoutCount: 0,
+                isHalfDay: false,
+                totalHours: 'Active (Live)',
+                status: cleanStatus,
+                disconnectedSince: null,
+                autoPunchOutPolicy: null,
+                autoPunchOutReasonCode: null,
+                reviewStatus: 'corrected',
+                reviewedBy: 'Emergency Restoration Daemon',
+                reviewedAt: new Date(),
+                reviewRemarks: 'Restored from premature offline timeout false closure',
+              },
+              $push: {
+                auditEvents: {
+                  eventType: 'EMERGENCY_RESTORE_FALSE_AUTOPUNCH',
+                  eventTimestamp: new Date(),
+                  description: 'Employee restored to active working status following premature offline false closure',
+                  source: 'system_repair',
+                },
+              },
+            }
+          )
+          restoredCount++
+        }
+
+        if (restoredCount > 0) {
+          console.log(`[AttendanceRestore] Successfully restored ${restoredCount} employees who were prematurely auto-punched out today.`)
         }
       } catch (err) {
         console.warn('Attendance restore notice:', err.message)

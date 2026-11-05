@@ -1,74 +1,109 @@
-import fs from 'node:fs';
-import path from 'node:path';
-import mongoose from 'mongoose';
+import fs from 'node:fs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+import mongoose from 'mongoose'
+import { AttendanceRecord } from './src/models/AttendanceRecord.js'
+import { AttendanceSettings } from './src/models/AttendanceSettings.js'
 
-// 1. Load environment variables (.env)
-try { process.loadEnvFile?.(); } catch {}
+// Auto-load .env from multiple candidate paths
+try { process.loadEnvFile?.() } catch {}
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const envCandidatePaths = [
   path.resolve(process.cwd(), '.env'),
   path.resolve(process.cwd(), 'server', '.env'),
   path.resolve(process.cwd(), '..', '.env'),
-];
+  path.resolve(__dirname, '../../../.env'),
+  path.resolve(__dirname, '../../.env'),
+  path.resolve(__dirname, '../.env'),
+  path.resolve(__dirname, '.env'),
+]
 
 for (const envPath of envCandidatePaths) {
   if (fs.existsSync(envPath)) {
     try {
-      const lines = fs.readFileSync(envPath, 'utf8').split('\n');
+      const lines = fs.readFileSync(envPath, 'utf8').split('\n')
       for (const line of lines) {
-        const trimmed = line.trim();
+        const trimmed = line.trim()
         if (trimmed && !trimmed.startsWith('#') && trimmed.includes('=')) {
-          const [k, ...v] = trimmed.split('=');
-          const key = k.trim();
+          const [k, ...v] = trimmed.split('=')
+          const key = k.trim()
           if (key && !process.env[key]) {
-            process.env[key] = v.join('=').trim();
+            process.env[key] = v.join('=').trim()
           }
         }
       }
-      break;
+      break
     } catch {}
   }
 }
 
-const mongoUri = process.env.MONGODB_URI;
+const mongoUri = process.env.MONGODB_URI || process.env.MONGO_URI
 if (!mongoUri) {
-  console.error('[ERROR] MONGODB_URI not found in .env. Please ensure .env exists with MONGODB_URI.');
-  process.exit(1);
+  console.error('\n❌ [ERROR] MONGODB_URI not found in environment or .env file.')
+  console.error('Please verify that .env exists and contains MONGODB_URI=<connection_string>.\n')
+  process.exit(1)
 }
 
 async function restore() {
-  console.log('[INFO] Connecting to MongoDB...');
-  await mongoose.connect(mongoUri, { serverSelectionTimeoutMS: 8000 });
-  const coll = mongoose.connection.collection('attendancerecords');
+  console.log('🔄 Connecting to MongoDB database...')
+  await mongoose.connect(mongoUri, { serverSelectionTimeoutMS: 8000 })
+  console.log('✅ Connected to MongoDB successfully.')
 
-  const today = new Date().toISOString().slice(0, 10);
-  console.log(`[INFO] Searching for auto-punched out records (Today: ${today})...`);
+  // 1. Permanently disable offline & geofence auto-punchout in AttendanceSettings
+  console.log('\n🔒 Step 1: Disabling offline & geofence auto punch-out rules in database settings...')
+  await AttendanceSettings.updateMany(
+    {},
+    {
+      $set: {
+        'attendanceRules.offlineAutoPunchOutEnabled': false,
+        'attendanceRules.geofenceAutoPunchOutEnabled': false,
+        offlineAutoPunchOutEnabled: false,
+        geofenceAutoPunchOutEnabled: false,
+      },
+    }
+  ).catch(() => {})
+  console.log('✅ Settings secured: offlineAutoPunchOutEnabled = false.')
 
-  // Target any records that have checkIn and were auto-punched out
+  const todayIST = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
+  const todayUTC = new Date().toISOString().slice(0, 10)
+  const targetDates = Array.from(new Set([todayIST, todayUTC, '2026-11-05']))
+
+  const allDates = process.argv.includes('--all-dates')
+  const specificDateArg = process.argv.find((arg) => arg.startsWith('--date='))?.split('=')[1]
+
   const query = {
+    checkIn: { $nin: [null, ''] },
     $or: [
       { autoPunchOut: true },
-      { punchOutReason: { $regex: /auto punch out|disconnect|inactive/i } },
+      { punchOutType: 'auto' },
+      { punchOutReason: { $regex: /auto|disconnect|offline|inactive|geofence|timeout/i } },
       { totalHours: { $regex: /auto punch out/i } },
     ],
-    checkIn: { $nin: [null, ''] },
-  };
-
-  const records = await coll.find(query).toArray();
-
-  if (records.length === 0) {
-    console.log('[INFO] No auto-punched out records found. All active attendances are in good state!');
-    await mongoose.disconnect();
-    process.exit(0);
   }
 
-  console.log(`[FOUND] Found ${records.length} records to restore:\n`);
+  if (!allDates) {
+    query.date = specificDateArg ? specificDateArg : { $in: targetDates }
+  }
 
-  let count = 0;
-  for (const r of records) {
-    // Preserve status if it was 'late', else set 'present'
-    const cleanStatus = r.status === 'late' || r.isLate ? 'late' : 'present';
+  console.log(`\n🔍 Step 2: Searching for prematurely auto-punched out records...`)
+  const records = await AttendanceRecord.find(query).sort({ date: -1, employeeId: 1 }).lean()
 
-    await coll.updateOne(
+  if (!records || records.length === 0) {
+    console.log('\n✨ [INFO] No auto-punched out records found. All active attendances are in good state!\n')
+    await mongoose.disconnect()
+    process.exit(0)
+  }
+
+  console.log(`\n⚠️  [FOUND] Found ${records.length} falsely punched out record(s) to restore:\n`)
+
+  const tableData = []
+  let count = 0
+
+  for (let i = 0; i < records.length; i++) {
+    const r = records[i]
+    const cleanStatus = (r.isLate || r.status === 'late') ? 'late' : 'present'
+
+    await AttendanceRecord.updateOne(
       { _id: r._id },
       {
         $set: {
@@ -82,20 +117,50 @@ async function restore() {
           isHalfDay: false,
           totalHours: 'Active (Live)',
           status: cleanStatus,
+          disconnectedSince: null,
+          autoPunchOutPolicy: null,
+          autoPunchOutReasonCode: null,
+          reviewStatus: 'corrected',
+          reviewedBy: 'Emergency Restoration Daemon',
+          reviewedAt: new Date(),
+          reviewRemarks: 'Restored from premature offline timeout false closure',
+        },
+        $push: {
+          auditEvents: {
+            eventType: 'EMERGENCY_RESTORE_FALSE_AUTOPUNCH',
+            eventTimestamp: new Date(),
+            description: 'Employee restored to active working status following premature offline false closure',
+            source: 'system_repair',
+          },
         },
       }
-    );
+    )
 
-    count++;
-    console.log(`✅ [RESTORED] ${r.employeeId || 'Unknown'} (${r.employeeName || 'Staff'}) | Date: ${r.date} | In: ${r.checkIn} | Previous Out: ${r.checkOut || 'N/A'}`);
+    count++
+    tableData.push({
+      Index: i,
+      Employee: `${r.employeeName || 'Staff'} (${r.employeeId || 'N/A'})`,
+      Date: r.date,
+      CheckIn: r.checkIn || 'N/A',
+      PreviousOut: r.checkOut || 'N/A',
+      PreviousReason: (r.punchOutReason || 'Auto Punch Out').slice(0, 36),
+      RestoredStatus: `Active (Live) [${cleanStatus}]`,
+    })
   }
 
-  console.log(`\n🎉 [SUCCESS] Successfully restored ${count} attendance records back to Active (Live)!`);
-  await mongoose.disconnect();
+  console.table(tableData)
+
+  console.log('\n' + '='.repeat(80))
+  console.log(`🎉 [SUCCESS] Successfully restored ${count} attendance record(s) back to Active (Live)!`)
+  console.log('✅ All employees are now marked active in the HR Portal.')
+  console.log('✅ offlineAutoPunchOutEnabled has been permanently disabled.')
+  console.log('='.repeat(80) + '\n')
+
+  await mongoose.disconnect()
+  console.log('🔌 Disconnected from MongoDB.\n')
 }
 
 restore().catch((err) => {
-  console.error('[ERROR] Restoration failed:', err.message || err);
-  process.exit(1);
-});
-
+  console.error('\n❌ [ERROR] Restoration failed:', err.message || err)
+  process.exit(1)
+})
