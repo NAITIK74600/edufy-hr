@@ -75,9 +75,51 @@ const attendanceRecordSchema = new mongoose.Schema({
   punchOutType: { type: String, trim: true, default: 'manual' }, // 'manual' | 'auto'
   lastConnectedAt: { type: Date, default: null },
   disconnectedSince: { type: Date, default: null },
+  geofenceStatus: { type: String, enum: ['inside', 'outside', 'unknown'], default: 'unknown' },
+  geofenceExitAt: { type: Date, default: null },
+  geofenceGraceExpiresAt: { type: Date, default: null, index: true },
+  geofenceWarningSentAt: { type: Date, default: null },
+  offlineDetectedAt: { type: Date, default: null },
+  offlineGraceExpiresAt: { type: Date, default: null, index: true },
+  offlineWarningSentAt: { type: Date, default: null },
+  lastVerifiedLocationAt: { type: Date, default: null },
+  lastVerifiedLatitude: { type: Number, default: null },
+  lastVerifiedLongitude: { type: Number, default: null },
+  lastVerifiedAccuracy: { type: Number, default: null },
+  lastVerifiedLocationName: { type: String, trim: true, default: '' },
+  autoPunchOutReasonCode: { type: String, trim: true, default: null },
+  autoPunchOutPolicy: { type: String, trim: true, default: null },
+  autoPunchOutExecutedAt: { type: Date, default: null },
+  advanceWarningSentAt: { type: Date, default: null },
+  reviewStatus: { type: String, enum: ['none', 'pending', 'confirmed', 'corrected'], default: 'none', index: true },
+  reviewedBy: { type: String, default: null },
+  reviewedAt: { type: Date, default: null },
+  reviewRemarks: { type: String, default: null },
+  correctionHistory: [
+    {
+      correctedBy: { type: String },
+      correctedAt: { type: Date, default: Date.now },
+      previousCheckOut: { type: String },
+      newCheckOut: { type: String },
+      reason: { type: String },
+    },
+  ],
+  auditEvents: [
+    {
+      eventType: { type: String, required: true },
+      eventTimestamp: { type: Date, default: Date.now },
+      description: { type: String, default: '' },
+      source: { type: String, default: 'system' }, // 'system' | 'device' | 'hr' | 'scheduler'
+      metadata: { type: mongoose.Schema.Types.Mixed, default: {} },
+    },
+  ],
 }, { timestamps: true, strict: true })
 
 attendanceRecordSchema.index({ employeeId: 1, date: 1 }, { unique: true })
 attendanceRecordSchema.index({ date: 1, status: 1 })
+attendanceRecordSchema.index({ checkIn: 1, checkOut: 1, geofenceGraceExpiresAt: 1 })
+attendanceRecordSchema.index({ checkIn: 1, checkOut: 1, offlineGraceExpiresAt: 1 })
+attendanceRecordSchema.index({ checkIn: 1, checkOut: 1, date: 1 })
+attendanceRecordSchema.index({ reviewStatus: 1, date: 1 })
 
 export const AttendanceRecord = mongoose.models.AttendanceRecord ?? mongoose.model('AttendanceRecord', attendanceRecordSchema)

@@ -614,5 +614,46 @@ export function createAttendanceRouter({ auth, service, useDatabase = false, per
     } catch (error) { next(error) }
   })
 
+  // 16. List Auto Punch-Out Records for HR/Admin Review
+  router.get('/auto-punch-outs', auth.authenticate, auth.requirePermission(PERMISSIONS.ATTENDANCE_READ), async (request, response, next) => {
+    try {
+      const { date, reviewStatus, limit, skip } = request.query || {}
+      const result = await service.listAutoPunchOuts({ date, reviewStatus, limit, skip })
+      return response.json({ success: true, data: result.records, total: result.total })
+    } catch (error) { next(error) }
+  })
+
+  // 17. HR / Admin Review & Correction Action on Auto Punch-Out
+  router.post('/auto-punch-outs/:id/review', auth.authenticate, auth.requirePermission(PERMISSIONS.ATTENDANCE_WRITE), async (request, response, next) => {
+    try {
+      const { action, reviewRemarks, correction } = request.body || {}
+      if (!action || !['confirm', 'correct'].includes(action)) {
+        throw Object.assign(new Error('action must be either "confirm" or "correct".'), { statusCode: 400 })
+      }
+      const user = request.auth.user
+      const reviewedBy = user.displayName || user.name || user.username || user.employeeId || 'HR Admin'
+      const reviewStatus = action === 'correct' ? 'corrected' : 'confirmed'
+
+      const result = await service.reviewAutoPunchOut(request.params.id, {
+        reviewStatus,
+        reviewedBy,
+        reviewRemarks,
+        correction: action === 'correct' ? correction : null,
+      })
+      if (!result) {
+        throw Object.assign(new Error('Attendance record not found.'), { statusCode: 404 })
+      }
+      return response.json({ success: true, data: result })
+    } catch (error) { next(error) }
+  })
+
+  // 18. Get Audit Events & Geofence History for an Attendance Record
+  router.get('/records/:id/audit', auth.authenticate, auth.requirePermission(PERMISSIONS.ATTENDANCE_READ), async (request, response, next) => {
+    try {
+      const record = await service.getRecordById ? await service.getRecordById(request.params.id) : null
+      return response.json({ success: true, data: record?.auditEvents || [] })
+    } catch (error) { next(error) }
+  })
+
   return router
 }

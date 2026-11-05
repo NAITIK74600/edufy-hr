@@ -128,7 +128,7 @@ export function createMongoAttendanceRepository() {
           { employeeId: { $regex: new RegExp(`^${empCode}$`, 'i') } },
           ...(isObjectId ? [{ userId: empCode }] : []),
         ],
-        date,
+        ...(date ? { date } : {}),
         checkOut: { $in: [null, ''] },
       }
       const now = new Date()
@@ -142,6 +142,138 @@ export function createMongoAttendanceRepository() {
           { $set: { disconnectedSince: now } },
         )
       }
+    },
+    async updatePresenceDetails(employeeId, date, updates = {}, auditEvent = null) {
+      const empCode = String(employeeId || '').trim()
+      const isObjectId = /^[0-9a-fA-F]{24}$/.test(empCode)
+      const filter = {
+        $or: [
+          { employeeId: { $regex: new RegExp(`^${empCode}$`, 'i') } },
+          ...(isObjectId ? [{ userId: empCode }] : []),
+        ],
+        ...(date ? { date } : {}),
+        checkOut: { $in: [null, ''] },
+      }
+      const updateDoc = { $set: updates }
+      if (auditEvent) {
+        updateDoc.$push = { auditEvents: auditEvent }
+      }
+      return AttendanceRecord.findOneAndUpdate(filter, updateDoc, { new: true }).lean()
+    },
+    async findExpiredGeofenceRecords(now = new Date()) {
+      const query = {
+        checkIn: { $nin: [null, ''] },
+        checkOut: { $in: [null, ''] },
+        geofenceGraceExpiresAt: { $ne: null, $lte: now },
+      }
+      return AttendanceRecord.find(query).lean()
+    },
+    async findExpiredOfflineRecords(cutoffDate) {
+      const query = {
+        checkIn: { $nin: [null, ''] },
+        checkOut: { $in: [null, ''] },
+        lastConnectedAt: { $ne: null, $lte: cutoffDate },
+        geofenceStatus: { $ne: 'outside' }, // Geofence exit timeout takes priority if outside
+      }
+      return AttendanceRecord.find(query).lean()
+    },
+    async findActiveSessionsForCutoff(date) {
+      const query = {
+        checkIn: { $nin: [null, ''] },
+        checkOut: { $in: [null, ''] },
+      }
+      if (date) query.date = date
+      return AttendanceRecord.find(query).lean()
+    },
+    async findRecordsPendingAdvanceWarning(date) {
+      const query = {
+        checkIn: { $nin: [null, ''] },
+        checkOut: { $in: [null, ''] },
+        advanceWarningSentAt: null,
+      }
+      if (date) query.date = date
+      return AttendanceRecord.find(query).lean()
+    },
+    async atomicFinalizePunchOut(recordId, finalData = {}, auditEvent = null) {
+      const updateDoc = { $set: finalData }
+      if (auditEvent) {
+        updateDoc.$push = { auditEvents: auditEvent }
+      }
+      // Strict atomic condition: only finalize if session is still unclosed
+      return AttendanceRecord.findOneAndUpdate(
+        {
+          _id: recordId,
+          checkIn: { $nin: [null, ''] },
+          checkOut: { $in: [null, ''] },
+        },
+        updateDoc,
+        { new: true }
+      ).lean()
+    },
+    async recordAuditEvent(recordId, auditEvent) {
+      return AttendanceRecord.findByIdAndUpdate(
+        recordId,
+        { $push: { auditEvents: auditEvent } },
+        { new: true }
+      ).lean()
+    },
+    async listAutoPunchOuts({ date, reviewStatus, limit = 50, skip = 0 } = {}) {
+      const query = { autoPunchOut: true }
+      if (date) query.date = date
+      if (reviewStatus && reviewStatus !== 'all') query.reviewStatus = reviewStatus
+      const [records, total] = await Promise.all([
+        AttendanceRecord.find(query)
+          .sort({ updatedAt: -1 })
+          .skip(Number(skip) || 0)
+          .limit(Number(limit) || 50)
+          .lean(),
+        AttendanceRecord.countDocuments(query),
+      ])
+      return { records: records.map((r) => ({ ...r, id: String(r._id) })), total }
+    },
+    async reviewAutoPunchOut(recordId, { reviewStatus, reviewedBy, reviewRemarks, correction = null } = {}) {
+      const updateDoc = {
+        $set: {
+          reviewStatus: reviewStatus || 'confirmed',
+          reviewedBy: reviewedBy || 'HR Admin',
+          reviewedAt: new Date(),
+          reviewRemarks: reviewRemarks || '',
+        },
+      }
+      if (correction) {
+        if (correction.checkOut) updateDoc.$set.checkOut = correction.checkOut
+        if (correction.checkOutAt) updateDoc.$set.checkOutAt = correction.checkOutAt
+        if (correction.totalHours) updateDoc.$set.totalHours = correction.totalHours
+        if (correction.status) updateDoc.$set.status = correction.status
+        updateDoc.$push = {
+          correctionHistory: {
+            correctedBy: reviewedBy || 'HR Admin',
+            correctedAt: new Date(),
+            previousCheckOut: correction.previousCheckOut || '',
+            newCheckOut: correction.checkOut || '',
+            reason: reviewRemarks || 'Administrative correction',
+          },
+          auditEvents: {
+            eventType: 'HR_MANUAL_CORRECTION',
+            eventTimestamp: new Date(),
+            description: `Attendance manually corrected by ${reviewedBy || 'HR Admin'}: ${reviewRemarks || ''}`,
+            source: 'hr',
+            metadata: correction,
+          },
+        }
+      } else {
+        updateDoc.$push = {
+          auditEvents: {
+            eventType: 'HR_AUTO_PUNCHOUT_CONFIRMED',
+            eventTimestamp: new Date(),
+            description: `Auto punch-out reviewed and confirmed by ${reviewedBy || 'HR Admin'}`,
+            source: 'hr',
+            metadata: { reviewRemarks },
+          },
+        }
+      }
+      const updated = await AttendanceRecord.findByIdAndUpdate(recordId, updateDoc, { new: true }).lean()
+      return updated ? { ...updated, id: String(updated._id) } : null
     },
         async findActiveTodayRecords(date) {
       const query = {

@@ -114,11 +114,14 @@ export async function createUnifiedNotification({
   }
 
   // 1. Idempotency check: prevent duplicate notifications
-  if (idempotencyKey) {
-    const existing = await Notification.findOne({ idempotencyKey }).lean()
-    if (existing) {
-      return existing
-    }
+  const isDbReady = Boolean(mongoose.connection && mongoose.connection.readyState === 1)
+  if (idempotencyKey && isDbReady) {
+    try {
+      const existing = await Notification.findOne({ idempotencyKey }).lean()
+      if (existing) {
+        return existing
+      }
+    } catch {}
   }
 
   const notificationId = `notif_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
@@ -146,36 +149,40 @@ export async function createUnifiedNotification({
   }
 
   let notificationDoc
-  try {
-    notificationDoc = await Notification.create(docData)
-  } catch (createErr) {
-    if (createErr?.code === 11000) {
-      if (docData.idempotencyKey) {
-        const existing = await Notification.findOne({ idempotencyKey: docData.idempotencyKey }).lean()
-        if (existing) return existing
-      }
-      docData.idempotencyKey = `auto_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
-      docData.notificationId = `notif_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
-      try {
-        notificationDoc = await Notification.create(docData)
-      } catch (fallbackErr) {
-        return {
-          notificationId: docData.notificationId,
-          recipientId: targetRecipientId,
-          title,
-          message,
-          category,
-          eventType,
+  if (!isDbReady) {
+    notificationDoc = { ...docData, _id: notificationId, id: notificationId, createdAt: new Date() }
+  } else {
+    try {
+      notificationDoc = await Notification.create(docData)
+    } catch (createErr) {
+      if (createErr?.code === 11000) {
+        if (docData.idempotencyKey) {
+          const existing = await Notification.findOne({ idempotencyKey: docData.idempotencyKey }).lean()
+          if (existing) return existing
         }
+        docData.idempotencyKey = `auto_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
+        docData.notificationId = `notif_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
+        try {
+          notificationDoc = await Notification.create(docData)
+        } catch (fallbackErr) {
+          return {
+            notificationId: docData.notificationId,
+            recipientId: targetRecipientId,
+            title,
+            message,
+            category,
+            eventType,
+          }
+        }
+      } else {
+        throw createErr
       }
-    } else {
-      throw createErr
     }
   }
 
   // Also sync to WorkspaceNotification model for backward compatibility
   try {
-    if (workspaceModels?.notifications) {
+    if (isDbReady && workspaceModels?.notifications) {
       const workspaceNotifData = {
         ownerId: targetRecipientId,
         recipientId: targetRecipientId,
@@ -240,12 +247,14 @@ export async function createUnifiedNotification({
   }
 
   // Update delivery status on record
-  if (pushStatus !== 'pending') {
-    await Notification.updateOne({ _id: notificationDoc._id }, { $set: { pushDeliveryStatus: pushStatus } })
+  if (pushStatus !== 'pending' && isDbReady && notificationDoc?._id && typeof notificationDoc.save === 'function') {
+    try {
+      await Notification.updateOne({ _id: notificationDoc._id }, { $set: { pushDeliveryStatus: pushStatus } })
+    } catch {}
   }
 
   return {
-    ...notificationDoc.toObject(),
+    ...(typeof notificationDoc?.toObject === 'function' ? notificationDoc.toObject() : notificationDoc),
     pushDeliveryStatus: pushStatus,
   }
 }

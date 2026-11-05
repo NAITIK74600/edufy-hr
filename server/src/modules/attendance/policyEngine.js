@@ -1,3 +1,4 @@
+import mongoose from 'mongoose'
 import { Shift } from '../../models/Shift.js'
 import { ShiftAssignment } from '../../models/ShiftAssignment.js'
 import { AttendanceSettings } from '../../models/AttendanceSettings.js'
@@ -128,6 +129,14 @@ export function normalizeShiftConfig(raw) {
 export async function resolveEmployeeShift(employeeId, dateStr) {
   const cleanEmpId = String(employeeId || '').trim().toUpperCase()
   const targetDate = String(dateStr || '').trim()
+
+  if (!mongoose.connection || mongoose.connection.readyState !== 1) {
+    return {
+      shift: STANDARD_SHIFT_DEF,
+      source: 'default_fallback',
+      assignmentId: null,
+    }
+  }
 
   // 1. Authoritative Attendance Settings configured by Admin
   let adminShift = null

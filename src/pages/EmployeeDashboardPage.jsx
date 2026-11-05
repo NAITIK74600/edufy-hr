@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo, useRef } from 'react'
 import {
   AlertCircle,
+  AlertTriangle,
   ArrowRight,
   Award,
   BriefcaseBusiness,
@@ -609,7 +610,6 @@ function GPSAttendanceStation({ user, todayRecord, onPunch, onStartBreak, onEndB
         if (typeof localStorage !== 'undefined') {
           localStorage.removeItem(offCampusStartKey)
         }
-        setOffCampusStartEpoch(null)
       }
     } catch (err) {
       setGpsError(err.message)
@@ -917,11 +917,16 @@ function GPSAttendanceStation({ user, todayRecord, onPunch, onStartBreak, onEndB
         </div>
       )}
 
-      {isCheckedIn && !isCompleted && isOutsideCampus && (
-        <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', color: '#9a3412', padding: '10px 14px', borderRadius: '10px', fontSize: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
+      {isCheckedIn && !isCompleted && (isOutsideCampus || serverVerification?.geofenceStatus === 'outside') && (
+        <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', color: '#9a3412', padding: '12px 14px', borderRadius: '10px', fontSize: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Pause size={16} style={{ flexShrink: 0, color: '#ea580c' }} />
-            <div><strong>Work Timer Paused (Outside Campus):</strong> Outside geofence and off office Wi-Fi. Returning to campus (≤{maxGeofenceRadius}m) will automatically resume work.</div>
+            <AlertTriangle size={18} style={{ flexShrink: 0, color: '#ea580c' }} />
+            <div>
+              <strong>Outside Office Geofence:</strong> Your device appears outside {nearestOfficeName || 'office campus'} ({distanceLabel} away).
+              <div style={{ fontSize: '11px', marginTop: '2px', color: '#c2410c' }}>
+                ⏳ <strong>2-Hour Grace Period Active</strong> {serverVerification?.remainingGraceMinutes ? `(${serverVerification.remainingGraceMinutes}m remaining)` : ''}. Return to campus to continue your session, otherwise auto punch-out is scheduled.
+              </div>
+            </div>
           </div>
           <button
             type="button"
@@ -929,7 +934,7 @@ function GPSAttendanceStation({ user, todayRecord, onPunch, onStartBreak, onEndB
             disabled={detectingGps}
             style={{ flexShrink: 0, padding: '6px 12px', borderRadius: '8px', background: '#ea580c', color: '#fff', border: 0, fontWeight: 700, fontSize: '11px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
           >
-            <LocateFixed size={12} className={detectingGps ? 'animate-spin' : ''} /> {detectingGps ? 'Detecting…' : 'Re-detect GPS'}
+            <LocateFixed size={12} className={detectingGps ? 'animate-spin' : ''} /> {detectingGps ? 'Detecting…' : 'Re-verify GPS'}
           </button>
         </div>
       )}

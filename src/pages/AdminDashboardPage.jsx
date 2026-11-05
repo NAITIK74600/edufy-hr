@@ -4993,6 +4993,15 @@ function AdminSettingsModule({ user: propUser }) {
   const [lunchBreakEnd, setLunchBreakEnd] = useState(initialShift.lunchBreakEnd || '14:30')
   const [autoPunchOutEnabled, setAutoPunchOutEnabled] = useState(initialShift.autoPunchOutEnabled ?? true)
   const [autoPunchOutTime, setAutoPunchOutTime] = useState(initialShift.autoPunchOutTime || '21:30')
+  const [geofenceAutoPunchOutEnabled, setGeofenceAutoPunchOutEnabled] = useState(initialShift.geofenceAutoPunchOutEnabled ?? true)
+  const [geofenceGracePeriodMinutes, setGeofenceGracePeriodMinutes] = useState(initialShift.geofenceGracePeriodMinutes ?? 120)
+  const [geofenceGpsAccuracyThresholdMeters, setGeofenceGpsAccuracyThresholdMeters] = useState(initialShift.geofenceGpsAccuracyThresholdMeters ?? 50)
+  const [geofenceExitWarningEnabled, setGeofenceExitWarningEnabled] = useState(initialShift.geofenceExitWarningEnabled ?? true)
+  const [offlineAutoPunchOutEnabled, setOfflineAutoPunchOutEnabled] = useState(initialShift.offlineAutoPunchOutEnabled ?? true)
+  const [offlineGracePeriodMinutes, setOfflineGracePeriodMinutes] = useState(initialShift.offlineGracePeriodMinutes ?? 120)
+  const [dailyCutoffWarningEnabled, setDailyCutoffWarningEnabled] = useState(initialShift.dailyCutoffWarningEnabled ?? true)
+  const [dailyCutoffWarningMinutesBefore, setDailyCutoffWarningMinutesBefore] = useState(initialShift.dailyCutoffWarningMinutesBefore ?? 15)
+  const [attendanceTimezone, setAttendanceTimezone] = useState(initialShift.timezone || 'Asia/Kolkata')
   const [shiftSaving, setShiftSaving] = useState(false)
 
   // Help Desk Configuration State
@@ -5036,6 +5045,15 @@ function AdminSettingsModule({ user: propUser }) {
       if (ar.lunchBreakEnd) setLunchBreakEnd(ar.lunchBreakEnd)
       if (ar.autoPunchOutEnabled !== undefined) setAutoPunchOutEnabled(Boolean(ar.autoPunchOutEnabled))
       if (ar.autoPunchOutTime) setAutoPunchOutTime(ar.autoPunchOutTime)
+      if (ar.geofenceAutoPunchOutEnabled !== undefined) setGeofenceAutoPunchOutEnabled(Boolean(ar.geofenceAutoPunchOutEnabled))
+      if (ar.geofenceGracePeriodMinutes !== undefined) setGeofenceGracePeriodMinutes(Number(ar.geofenceGracePeriodMinutes) || 120)
+      if (ar.geofenceGpsAccuracyThresholdMeters !== undefined) setGeofenceGpsAccuracyThresholdMeters(Number(ar.geofenceGpsAccuracyThresholdMeters) || 50)
+      if (ar.geofenceExitWarningEnabled !== undefined) setGeofenceExitWarningEnabled(Boolean(ar.geofenceExitWarningEnabled))
+      if (ar.offlineAutoPunchOutEnabled !== undefined) setOfflineAutoPunchOutEnabled(Boolean(ar.offlineAutoPunchOutEnabled))
+      if (ar.offlineGracePeriodMinutes !== undefined) setOfflineGracePeriodMinutes(Number(ar.offlineGracePeriodMinutes) || 120)
+      if (ar.dailyCutoffWarningEnabled !== undefined) setDailyCutoffWarningEnabled(Boolean(ar.dailyCutoffWarningEnabled))
+      if (ar.dailyCutoffWarningMinutesBefore !== undefined) setDailyCutoffWarningMinutesBefore(Number(ar.dailyCutoffWarningMinutesBefore) || 15)
+      if (ar.timezone) setAttendanceTimezone(ar.timezone)
     }
     // Sync help desk fields
     const hd = storeState.companySettings?.helpDeskSettings
@@ -5388,6 +5406,17 @@ function AdminSettingsModule({ user: propUser }) {
           lunchBreakEnd: lunchBreakEnd || '14:30',
           autoPunchOutEnabled: Boolean(autoPunchOutEnabled),
           autoPunchOutTime: autoPunchOutTime || '21:30',
+          geofenceAutoPunchOutEnabled: Boolean(geofenceAutoPunchOutEnabled),
+          geofenceGracePeriodMinutes: Number(geofenceGracePeriodMinutes) || 120,
+          geofenceGpsAccuracyThresholdMeters: Number(geofenceGpsAccuracyThresholdMeters) || 50,
+          geofenceExitWarningEnabled: Boolean(geofenceExitWarningEnabled),
+          offlineAutoPunchOutEnabled: Boolean(offlineAutoPunchOutEnabled),
+          offlineGracePeriodMinutes: Number(offlineGracePeriodMinutes) || 120,
+          dailyCutoffAutoPunchOutEnabled: Boolean(autoPunchOutEnabled),
+          dailyCutoffTime: autoPunchOutTime || '21:30',
+          dailyCutoffWarningEnabled: Boolean(dailyCutoffWarningEnabled),
+          dailyCutoffWarningMinutesBefore: Number(dailyCutoffWarningMinutesBefore) || 15,
+          timezone: attendanceTimezone || 'Asia/Kolkata',
         },
       })
       try {
@@ -6304,11 +6333,94 @@ function AdminSettingsModule({ user: propUser }) {
                 )}
               </div>
 
-              {/* Scheduled End-of-Day Auto Punch-Out Card */}
+              {/* ENGINE A: Geofence & Inactivity Auto Punch-Out Card */}
+              <div style={{ marginTop: '16px', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '8px', padding: '16px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                  <strong style={{ fontSize: '13.5px', color: '#1e40af', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    📍 Engine A: Geofence Exit &amp; Offline Auto Punch-Out
+                  </strong>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 600, color: '#1e40af', cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={geofenceAutoPunchOutEnabled}
+                      onChange={(e) => setGeofenceAutoPunchOutEnabled(e.target.checked)}
+                      style={{ accentColor: '#2563eb', width: '15px', height: '15px', cursor: 'pointer' }}
+                    />
+                    Enable Geofence Monitoring
+                  </label>
+                </div>
+                <p style={{ fontSize: '11.5px', color: '#1e3a8a', margin: '0 0 12px' }}>
+                  When an employee exits the authorized campus geofence, a 2-hour server grace period starts and a warning notification is sent. If they return inside within 2 hours, the session continues normally. If they do not return, the system automatically closes their shift.
+                </p>
+
+                {geofenceAutoPunchOutEnabled && (
+                  <div style={{ display: 'grid', gap: '12px', gridTemplateColumns: '1fr 1fr' }}>
+                    <div>
+                      <label style={{ fontSize: '11px', display: 'block', color: '#1e40af', marginBottom: '3px', fontWeight: 600 }}>
+                        Geofence Grace Period (minutes)
+                      </label>
+                      <input
+                        type="number"
+                        min="15"
+                        max="360"
+                        className="text-input"
+                        value={geofenceGracePeriodMinutes}
+                        onChange={(e) => setGeofenceGracePeriodMinutes(e.target.value)}
+                        style={{ width: '100%', padding: '8px 10px', fontSize: '13px', background: '#fff' }}
+                      />
+                      <span style={{ fontSize: '10px', color: '#3b82f6', marginTop: '2px', display: 'block' }}>
+                        Default: 120 minutes (2 hours)
+                      </span>
+                    </div>
+
+                    <div>
+                      <label style={{ fontSize: '11px', display: 'block', color: '#1e40af', marginBottom: '3px', fontWeight: 600 }}>
+                        GPS Accuracy Threshold (meters)
+                      </label>
+                      <input
+                        type="number"
+                        min="10"
+                        max="200"
+                        className="text-input"
+                        value={geofenceGpsAccuracyThresholdMeters}
+                        onChange={(e) => setGeofenceGpsAccuracyThresholdMeters(e.target.value)}
+                        style={{ width: '100%', padding: '8px 10px', fontSize: '13px', background: '#fff' }}
+                      />
+                      <span style={{ fontSize: '10px', color: '#3b82f6', marginTop: '2px', display: 'block' }}>
+                        Readings coarser than this (e.g. indoor drift) will not trigger false exit. Default: 50m
+                      </span>
+                    </div>
+
+                    <div style={{ gridColumn: 'span 2', display: 'flex', gap: '20px', marginTop: '4px' }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#1e40af', cursor: 'pointer' }}>
+                        <input
+                          type="checkbox"
+                          checked={geofenceExitWarningEnabled}
+                          onChange={(e) => setGeofenceExitWarningEnabled(e.target.checked)}
+                          style={{ accentColor: '#2563eb' }}
+                        />
+                        Send Warning Notification to Employee upon Geofence Exit
+                      </label>
+
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#1e40af', cursor: 'pointer' }}>
+                        <input
+                          type="checkbox"
+                          checked={offlineAutoPunchOutEnabled}
+                          onChange={(e) => setOfflineAutoPunchOutEnabled(e.target.checked)}
+                          style={{ accentColor: '#2563eb' }}
+                        />
+                        Enable Fallback Auto Punch-Out for Inactive/Offline Devices
+                      </label>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* ENGINE B: Scheduled End-of-Day Auto Punch-Out Card */}
               <div style={{ marginTop: '16px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '8px', padding: '16px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
                   <strong style={{ fontSize: '13.5px', color: '#166534', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    ⏰ Scheduled End-of-Day Auto Punch-Out
+                    ⏰ Engine B: Scheduled Daily Cut-Off Auto Punch-Out
                   </strong>
                   <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 600, color: '#166534', cursor: 'pointer' }}>
                     <input
@@ -6317,11 +6429,11 @@ function AdminSettingsModule({ user: propUser }) {
                       onChange={(e) => setAutoPunchOutEnabled(e.target.checked)}
                       style={{ accentColor: '#16a34a', width: '15px', height: '15px', cursor: 'pointer' }}
                     />
-                    Enable Auto Punch-Out
+                    Enable Daily Cut-Off
                   </label>
                 </div>
                 <p style={{ fontSize: '11.5px', color: '#14532d', margin: '0 0 12px' }}>
-                  Employees will NOT be kicked or auto-punched out during their active working hours. Only at the scheduled cut-off time (e.g., 9:30 PM), if an employee has forgotten to punch out manually, the system will automatically close their shift.
+                  A daily server safety mechanism. If an employee forgets to punch out manually, the system automatically closes their shift at the cut-off time (default: 09:30 PM). Active working hours are never interrupted during the day.
                 </p>
 
                 {autoPunchOutEnabled && (
@@ -6341,6 +6453,35 @@ function AdminSettingsModule({ user: propUser }) {
                       <span style={{ fontSize: '10px', color: '#15803d', marginTop: '2px', display: 'block' }}>
                         Default: 21:30 (9:30 PM IST)
                       </span>
+                    </div>
+
+                    <div>
+                      <label style={{ fontSize: '11px', display: 'block', color: '#166534', marginBottom: '3px', fontWeight: 600 }}>
+                        Organization Timezone
+                      </label>
+                      <input
+                        type="text"
+                        className="text-input"
+                        value={attendanceTimezone}
+                        onChange={(e) => setAttendanceTimezone(e.target.value)}
+                        style={{ width: '100%', padding: '8px 10px', fontSize: '13px', background: '#fff' }}
+                        placeholder="Asia/Kolkata"
+                      />
+                      <span style={{ fontSize: '10px', color: '#15803d', marginTop: '2px', display: 'block' }}>
+                        Used for accurate server-side time calculation (Default: Asia/Kolkata)
+                      </span>
+                    </div>
+
+                    <div style={{ gridColumn: 'span 2', display: 'flex', gap: '20px', marginTop: '4px' }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#166534', cursor: 'pointer' }}>
+                        <input
+                          type="checkbox"
+                          checked={dailyCutoffWarningEnabled}
+                          onChange={(e) => setDailyCutoffWarningEnabled(e.target.checked)}
+                          style={{ accentColor: '#16a34a' }}
+                        />
+                        Send Advance Reminder Notification (15 min before cut-off)
+                      </label>
                     </div>
                   </div>
                 )}

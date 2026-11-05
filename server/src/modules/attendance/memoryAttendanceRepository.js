@@ -113,6 +113,108 @@ export function createMemoryAttendanceRepository(seedRecords = []) {
         }
       }
     },
+    async updatePresenceDetails(employeeId, date, updates = {}, auditEvent = null) {
+      const targetDate = date || new Date().toISOString().slice(0, 10)
+      const rec = await this.findByEmployeeAndDate(employeeId, targetDate) || records.find((r) => r.employeeId?.toUpperCase() === employeeId?.toUpperCase() && r.checkIn && !r.checkOut)
+      if (rec && !rec.checkOut) {
+        Object.assign(rec, updates)
+        if (auditEvent) {
+          rec.auditEvents = rec.auditEvents || []
+          rec.auditEvents.push(auditEvent)
+        }
+        return { ...rec }
+      }
+      return null
+    },
+    async findExpiredGeofenceRecords(now = new Date()) {
+      return records.filter(
+        (r) => r.checkIn && !r.checkOut && r.geofenceGraceExpiresAt && new Date(r.geofenceGraceExpiresAt).getTime() <= now.getTime()
+      )
+    },
+    async findExpiredOfflineRecords(cutoffDate) {
+      return records.filter(
+        (r) =>
+          r.checkIn &&
+          !r.checkOut &&
+          r.lastConnectedAt &&
+          new Date(r.lastConnectedAt).getTime() <= cutoffDate.getTime() &&
+          r.geofenceStatus !== 'outside'
+      )
+    },
+    async findActiveSessionsForCutoff(date) {
+      return records.filter((r) => (!date || r.date === date) && r.checkIn && !r.checkOut)
+    },
+    async findRecordsPendingAdvanceWarning(date) {
+      return records.filter((r) => (!date || r.date === date) && r.checkIn && !r.checkOut && !r.advanceWarningSentAt)
+    },
+    async atomicFinalizePunchOut(recordId, finalData = {}, auditEvent = null) {
+      const rec = records.find((r) => r.id === recordId || String(r._id) === String(recordId))
+      if (!rec || !rec.checkIn || rec.checkOut) {
+        return null // Already punched out or not checked in
+      }
+      Object.assign(rec, finalData)
+      if (auditEvent) {
+        rec.auditEvents = rec.auditEvents || []
+        rec.auditEvents.push(auditEvent)
+      }
+      return { ...rec }
+    },
+    async recordAuditEvent(recordId, auditEvent) {
+      const rec = records.find((r) => r.id === recordId || String(r._id) === String(recordId))
+      if (rec) {
+        rec.auditEvents = rec.auditEvents || []
+        rec.auditEvents.push(auditEvent)
+        return { ...rec }
+      }
+      return null
+    },
+    async listAutoPunchOuts({ date, reviewStatus, limit = 50, skip = 0 } = {}) {
+      let filtered = records.filter((r) => r.autoPunchOut)
+      if (date) filtered = filtered.filter((r) => r.date === date)
+      if (reviewStatus && reviewStatus !== 'all') filtered = filtered.filter((r) => r.reviewStatus === reviewStatus)
+      const total = filtered.length
+      const page = filtered.slice(Number(skip) || 0, (Number(skip) || 0) + (Number(limit) || 50))
+      return { records: page.map((r) => ({ ...r, id: r.id || String(r._id) })), total }
+    },
+    async reviewAutoPunchOut(recordId, { reviewStatus, reviewedBy, reviewRemarks, correction = null } = {}) {
+      const rec = records.find((r) => r.id === recordId || String(r._id) === String(recordId))
+      if (!rec) return null
+      rec.reviewStatus = reviewStatus || 'confirmed'
+      rec.reviewedBy = reviewedBy || 'HR Admin'
+      rec.reviewedAt = new Date()
+      rec.reviewRemarks = reviewRemarks || ''
+      rec.auditEvents = rec.auditEvents || []
+      if (correction) {
+        if (correction.checkOut) rec.checkOut = correction.checkOut
+        if (correction.checkOutAt) rec.checkOutAt = correction.checkOutAt
+        if (correction.totalHours) rec.totalHours = correction.totalHours
+        if (correction.status) rec.status = correction.status
+        rec.correctionHistory = rec.correctionHistory || []
+        rec.correctionHistory.push({
+          correctedBy: reviewedBy || 'HR Admin',
+          correctedAt: new Date(),
+          previousCheckOut: correction.previousCheckOut || '',
+          newCheckOut: correction.checkOut || '',
+          reason: reviewRemarks || 'Administrative correction',
+        })
+        rec.auditEvents.push({
+          eventType: 'HR_MANUAL_CORRECTION',
+          eventTimestamp: new Date(),
+          description: `Attendance manually corrected by ${reviewedBy || 'HR Admin'}`,
+          source: 'hr',
+          metadata: correction,
+        })
+      } else {
+        rec.auditEvents.push({
+          eventType: 'HR_AUTO_PUNCHOUT_CONFIRMED',
+          eventTimestamp: new Date(),
+          description: `Auto punch-out reviewed and confirmed by ${reviewedBy || 'HR Admin'}`,
+          source: 'hr',
+          metadata: { reviewRemarks },
+        })
+      }
+      return { ...rec }
+    },
     async findActiveTodayRecords(date) {
       return records.filter((r) => (!date || r.date === date) && r.checkIn && !r.checkOut)
     },

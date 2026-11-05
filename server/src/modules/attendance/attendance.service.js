@@ -9,7 +9,9 @@ import {
   evaluatePost25thDoubleLop,
 } from './policyEngine.js'
 import { BlockList, isIP } from 'node:net'
-import { dispatchAttendanceNotification } from '../../services/unifiedNotification.service.js'
+import mongoose from 'mongoose'
+import { dispatchAttendanceNotification, createUnifiedNotification } from '../../services/unifiedNotification.service.js'
+import { Employee } from '../../models/Employee.js'
 
 export const DEFAULT_LOCATIONS = [
   {
@@ -115,6 +117,28 @@ const DEFAULT_ATTENDANCE_RULES = {
   lunchBreakEnd: '14:30',
   autoPunchOutEnabled: true,
   autoPunchOutTime: '21:30',
+  geofenceAutoPunchOutEnabled: true,
+  geofenceGracePeriodMinutes: 120,
+  geofenceGpsAccuracyThresholdMeters: 50,
+  geofenceExitWarningEnabled: true,
+  offlineAutoPunchOutEnabled: true,
+  offlineGracePeriodMinutes: 120,
+  offlineWarningEnabled: true,
+  dailyCutoffAutoPunchOutEnabled: true,
+  dailyCutoffTime: '21:30',
+  dailyCutoffWarningEnabled: true,
+  dailyCutoffWarningMinutesBefore: 15,
+  timezone: 'Asia/Kolkata',
+  applicableShifts: ['all'],
+  applicableLocations: ['all'],
+  applicableEmployeeGroups: ['all'],
+  notifyEmployeeOnAutoPunchOut: true,
+  notifyHrOnAutoPunchOut: true,
+  notifyAdminOnAutoPunchOut: true,
+  notifyManagerOnAutoPunchOut: true,
+  sendEmailOnAutoPunchOut: false,
+  sendPushOnAutoPunchOut: true,
+  enableAuditLogging: true,
 }
 
 export function calculateTimeOverlapMinutes(startA, endA, startB, endB) {
@@ -614,6 +638,10 @@ export function createAttendanceService({ repository, companySettings = {} }) {
       }
     },
 
+    getSettings() {
+      return this.getConfig()
+    },
+
     updateConfig(newConfig = {}) {
       if (newConfig.officeNetworkIPs !== undefined) officeNetworkIPs = newConfig.officeNetworkIPs
       if (newConfig.locations !== undefined) locations = newConfig.locations
@@ -643,6 +671,10 @@ export function createAttendanceService({ repository, companySettings = {} }) {
 
     async getTodayRecord(employeeId, date = getTodayString()) {
       return repository.findByEmployeeAndDate(employeeId, date)
+    },
+
+    async getRecordById(id) {
+      return repository.findById ? repository.findById(id) : null
     },
 
     async listSelf(user, filters = {}) {
@@ -787,9 +819,31 @@ export function createAttendanceService({ repository, companySettings = {} }) {
         notes: punchEval.isLate ? punchEval.notes : `Verified Attendance (${resolvedShiftConfig.name})`,
         lastConnectedAt: now,
         disconnectedSince: null,
+        geofenceStatus: 'inside',
+        geofenceExitAt: null,
+        geofenceGraceExpiresAt: null,
+        geofenceWarningSentAt: null,
+        offlineDetectedAt: null,
+        offlineGraceExpiresAt: null,
+        offlineWarningSentAt: null,
+        lastVerifiedLocationAt: now,
+        lastVerifiedLatitude: latitude !== undefined && latitude !== null ? Number(latitude) : null,
+        lastVerifiedLongitude: longitude !== undefined && longitude !== null ? Number(longitude) : null,
+        lastVerifiedAccuracy: accuracy !== undefined && accuracy !== null ? Math.round(Number(accuracy)) : null,
+        lastVerifiedLocationName: (/san francisco|austin|london/i.test(verification.nearestLocation || '') || !verification.nearestLocation) ? 'IGNITE CAMPUS' : verification.nearestLocation,
         autoPunchOut: false,
         punchOutReason: '',
         punchOutType: 'manual',
+        reviewStatus: 'none',
+        auditEvents: [
+          {
+            eventType: 'CHECK_IN',
+            eventTimestamp: now,
+            description: `Employee checked in via ${verification.method}`,
+            source: 'device',
+            metadata: { verificationMethod: verification.method, clientIp, latitude, longitude, accuracy },
+          },
+        ],
       }
 
       return repository.punchIn(record)
@@ -1100,64 +1154,489 @@ export function createAttendanceService({ repository, companySettings = {} }) {
     },
 
     async updatePresence({ employeeId, latitude, longitude, wifiSSID, clientIp, bssid, accuracy }) {
-      const verification = verifyLocation(latitude, longitude, wifiSSID, clientIp, bssid, accuracy)
-      const isConnected = Boolean(verification.isGpsVerified || verification.isWifiVerified || verification.isIpVerified)
+      const now = new Date()
       const workDate = getTodayString()
+      const verification = verifyLocation(latitude, longitude, wifiSSID, clientIp, bssid, accuracy)
+      const settings = this.getSettings ? this.getSettings() : this.getConfig()
+      const rules = settings?.attendanceRules || DEFAULT_ATTENDANCE_RULES
 
-      if (repository.updatePresence) {
-        await repository.updatePresence(employeeId, workDate, isConnected)
+      const existing = await repository.findByEmployeeAndDate(employeeId, workDate)
+      if (!existing || !existing.checkIn || existing.checkOut) {
+        return {
+          ...verification,
+          isConnected: Boolean(verification.isGpsVerified || verification.isWifiVerified || verification.isIpVerified),
+          geofenceStatus: 'unknown',
+          geofenceGraceExpiresAt: null,
+          remainingGraceMinutes: 0,
+          autoPunchedOut: Boolean(existing?.autoPunchOut),
+        }
+      }
+
+      const numAcc = Number(accuracy)
+      const maxAccuracyThreshold = Number(rules.geofenceGpsAccuracyThresholdMeters) || 50
+      const isAccurateGps = Number.isFinite(numAcc) && numAcc > 0 && numAcc <= maxAccuracyThreshold
+
+      const isOnOfficeNetwork = Boolean(verification.isIpVerified || verification.isWifiVerified)
+      const isInsideGeofence = Boolean(verification.isGpsVerified)
+      const isPhysicallyPresent = isOnOfficeNetwork || isInsideGeofence
+
+      let currentGeofenceStatus = existing.geofenceStatus || 'inside'
+      let geofenceGraceExpiresAt = existing.geofenceGraceExpiresAt || null
+      let geofenceExitAt = existing.geofenceExitAt || null
+      let geofenceWarningSentAt = existing.geofenceWarningSentAt || null
+      let auditEventToLog = null
+      let notificationToSend = null
+
+      if (isPhysicallyPresent) {
+        // Employee is inside office or on office Wi-Fi
+        if (currentGeofenceStatus === 'outside' || geofenceGraceExpiresAt) {
+          // Employee has RETURNED inside the grace period!
+          currentGeofenceStatus = 'inside'
+          geofenceGraceExpiresAt = null
+          geofenceExitAt = null
+          geofenceWarningSentAt = null
+
+          auditEventToLog = {
+            eventType: 'GEOFENCE_RETURN_VERIFIED',
+            eventTimestamp: now,
+            description: `Employee returned inside authorized office location (${verification.nearestLocation || 'Office'})`,
+            source: 'device',
+            metadata: { latitude, longitude, accuracy, clientIp, method: verification.method },
+          }
+
+          notificationToSend = {
+            type: 'RETURN',
+            title: 'Attendance Confirmed Inside Office',
+            message: 'Welcome back! Your return to the office has been verified. Your attendance session continues normally.',
+          }
+        } else {
+          currentGeofenceStatus = 'inside'
+        }
+      } else {
+        // Device is NOT verified on office network or inside geofence
+        // Check if GPS is accurate enough to confirm a genuine exit
+        const hasCoords = Number.isFinite(Number(latitude)) && Number.isFinite(Number(longitude))
+        if (hasCoords && isAccurateGps && verification.distanceMeters !== null && verification.distanceMeters > (verification.maxAllowedRadius || 50)) {
+          // Genuine confirmed exit!
+          if (currentGeofenceStatus !== 'outside') {
+            currentGeofenceStatus = 'outside'
+            geofenceExitAt = now
+            const graceMins = Number(rules.geofenceGracePeriodMinutes) || 120
+            geofenceGraceExpiresAt = new Date(now.getTime() + graceMins * 60 * 1000)
+
+            auditEventToLog = {
+              eventType: 'GEOFENCE_EXIT_DETECTED',
+              eventTimestamp: now,
+              description: `Device detected outside authorized geofence (${Math.round(verification.distanceMeters)}m away). 2-hour grace period initiated.`,
+              source: 'device',
+              metadata: { latitude, longitude, accuracy, distanceMeters: verification.distanceMeters, graceExpiresAt: geofenceGraceExpiresAt },
+            }
+
+            if (rules.geofenceExitWarningEnabled !== false && !geofenceWarningSentAt) {
+              geofenceWarningSentAt = now
+              notificationToSend = {
+                type: 'EXIT_WARNING',
+                title: 'Outside Office Geofence Warning',
+                message: 'Your device appears to be outside the authorized office location. Your attendance session is still active. Please return to the office location within 2 hours. Otherwise, your attendance will be automatically punched out.',
+              }
+            }
+          }
+        } else {
+          // GPS is either unavailable, indoor weak signal, or accuracy is poor (>50m).
+          // DO NOT falsely claim geofence exit!
+        }
+      }
+
+      const presenceUpdates = {
+        lastConnectedAt: now,
+        disconnectedSince: null,
+        geofenceStatus: currentGeofenceStatus,
+        geofenceExitAt,
+        geofenceGraceExpiresAt,
+        geofenceWarningSentAt,
+      }
+
+      if (isPhysicallyPresent) {
+        presenceUpdates.lastVerifiedLocationAt = now
+        presenceUpdates.lastVerifiedLatitude = latitude ? Number(latitude) : null
+        presenceUpdates.lastVerifiedLongitude = longitude ? Number(longitude) : null
+        presenceUpdates.lastVerifiedAccuracy = accuracy ? Math.round(Number(accuracy)) : null
+        presenceUpdates.lastVerifiedLocationName = verification.nearestLocation || 'IGNITE CAMPUS'
+      }
+
+      if (repository.updatePresenceDetails) {
+        await repository.updatePresenceDetails(employeeId, workDate, presenceUpdates, auditEventToLog)
+      } else if (repository.updatePresence) {
+        await repository.updatePresence(employeeId, workDate, isPhysicallyPresent)
+      }
+
+      if (notificationToSend) {
+        try {
+          await createUnifiedNotification({
+            employeeId,
+            title: notificationToSend.title,
+            message: notificationToSend.message,
+            category: 'attendance',
+            eventType: notificationToSend.type === 'EXIT_WARNING' ? 'ATTENDANCE_WARNING_60' : 'ATTENDANCE_RESTORED',
+            targetUrl: '#/employee/attendance',
+            priority: notificationToSend.type === 'EXIT_WARNING' ? 'urgent' : 'high',
+            idempotencyKey: `${workDate}_${notificationToSend.type}_${employeeId}_${Date.now().toString(36)}`,
+          })
+        } catch (notifErr) {
+          console.warn('[updatePresence Notification Notice]:', notifErr.message)
+        }
+      }
+
+      let remainingGraceMinutes = 0
+      if (geofenceGraceExpiresAt) {
+        remainingGraceMinutes = Math.max(0, Math.round((new Date(geofenceGraceExpiresAt).getTime() - now.getTime()) / 60000))
       }
 
       return {
         ...verification,
-        isConnected,
+        isConnected: isPhysicallyPresent,
+        geofenceStatus: currentGeofenceStatus,
+        geofenceGraceExpiresAt,
+        remainingGraceMinutes,
         autoPunchedOut: false,
       }
     },
 
-    async autoPunchOutScheduledCutoff() {
-      try {
-        const settings = await this.getSettings()
-        const rules = settings?.attendanceRules || {}
-        if (rules.autoPunchOutEnabled === false) return []
+    async finalizeAttendanceRecord({
+      recordId,
+      employeeId,
+      employeeName,
+      workDate,
+      punchOutTime,
+      punchOutAt = new Date(),
+      reasonCode = 'MANUAL',
+      reasonText = 'Normal check-out',
+      policy = 'MANUAL',
+      isAutoPunchOut = false,
+      source = 'system',
+    }) {
+      const record = await repository.findByEmployeeAndDate(employeeId, workDate)
+      if (!record || !record.checkIn || record.checkOut) {
+        return null // Session already finalized or no check-in
+      }
 
-        const cutOffTimeStr = rules.autoPunchOutTime || '21:30'
-        const cutOffMinutes = parseTimeToMinutes(cutOffTimeStr) ?? (21 * 60 + 30)
+      const now = punchOutAt instanceof Date ? punchOutAt : new Date(punchOutAt)
+      const formattedTime = punchOutTime || formatCurrentTime(now)
 
-        // Compare current time in Asia/Kolkata (IST)
-        const nowIst = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }))
-        const currentMins = nowIst.getHours() * 60 + nowIst.getMinutes()
+      // Calculate working hours & breaks
+      let elapsedMins = 0
+      if (record.checkInAt) {
+        elapsedMins = Math.max(0, Math.floor((now.getTime() - new Date(record.checkInAt).getTime()) / 60000))
+      } else if (record.checkIn) {
+        const inM = parseTimeToMinutes(record.checkIn)
+        const outM = parseTimeToMinutes(formattedTime)
+        if (inM !== null && outM !== null) {
+          elapsedMins = outM >= inM ? outM - inM : (1440 - inM) + outM
+        }
+      }
 
-        if (currentMins < cutOffMinutes) {
-          return [] // Cut-off time not yet reached today
+      const breaksList = Array.isArray(record.breaks) ? [...record.breaks] : []
+      if (record.isOnBreak && record.currentBreak?.startAt) {
+        const bStart = new Date(record.currentBreak.startAt).getTime()
+        const bDuration = Math.max(1, Math.round((now.getTime() - bStart) / 60000))
+        breaksList.push({
+          type: record.currentBreak.type || 'lunch',
+          startTime: formatCurrentTime(new Date(bStart)),
+          startAt: new Date(bStart),
+          endTime: formattedTime,
+          endAt: now,
+          durationMinutes: bDuration,
+        })
+      }
+
+      const totalBreakMinutes = breaksList.reduce((sum, b) => sum + (Number(b.durationMinutes) || 0), 0)
+      const netWorkMinutes = Math.max(0, elapsedMins - totalBreakMinutes)
+      const h = Math.floor(netWorkMinutes / 60)
+      const m = netWorkMinutes % 60
+      const breakPart = totalBreakMinutes > 0 ? ` • ${totalBreakMinutes}m Break` : ''
+      const tag = isAutoPunchOut ? 'Auto Punch Out' : 'Completed'
+      const totalHoursStr = `${h}h ${m}m (${tag})${breakPart}`
+
+      const auditEvent = {
+        eventType: isAutoPunchOut ? 'AUTO_PUNCH_OUT_EXECUTED' : 'MANUAL_PUNCH_OUT',
+        eventTimestamp: now,
+        description: `${tag} executed. Reason: ${reasonText} (${reasonCode})`,
+        source,
+        metadata: {
+          reasonCode,
+          reasonText,
+          policy,
+          totalHours: totalHoursStr,
+          elapsedMinutes: elapsedMins,
+          netWorkMinutes,
+          totalBreakMinutes,
+        },
+      }
+
+      const finalData = {
+        checkOut: formattedTime,
+        checkOutAt: now,
+        totalHours: totalHoursStr,
+        status: isAutoPunchOut ? (record.status || 'present') : (record.status || 'present'),
+        isOnBreak: false,
+        currentBreak: null,
+        breaks: breaksList,
+        totalBreakMinutes,
+        autoPunchOut: isAutoPunchOut,
+        punchOutReason: reasonText,
+        punchOutType: isAutoPunchOut ? 'auto' : 'manual',
+        autoPunchOutReasonCode: reasonCode,
+        autoPunchOutPolicy: policy,
+        autoPunchOutExecutedAt: isAutoPunchOut ? now : null,
+        reviewStatus: isAutoPunchOut ? 'pending' : 'none',
+        geofenceStatus: 'inside',
+        geofenceExitAt: null,
+        geofenceGraceExpiresAt: null,
+        offlineGraceExpiresAt: null,
+        notes: [record.notes, reasonText].filter(Boolean).join(' | '),
+      }
+
+      const finalized = await repository.atomicFinalizePunchOut(record.id || record._id, finalData, auditEvent)
+      if (!finalized) {
+        return null // Race condition prevented: already punched out
+      }
+
+      // Dispatch Notifications
+      if (isAutoPunchOut) {
+        let empDetails = null
+        try {
+          if (mongoose.connection && mongoose.connection.readyState === 1) {
+            empDetails = await Employee.findOne({ employeeId: employeeId.toUpperCase() }).lean()
+          }
+        } catch {}
+
+        const dept = empDetails?.department || 'Operations'
+        const mgrName = empDetails?.managerName || 'Assigned Manager'
+        const officeLoc = record.locationName || 'IGNITE CAMPUS'
+
+        // 1. Employee Confirmation
+        const employeeMsg =
+          reasonCode === 'GEOFENCE_EXIT_TIMEOUT'
+            ? 'Your attendance has been automatically punched out because you did not return to the authorized office location within the permitted 2-hour grace period.'
+            : reasonCode === 'SYSTEM_DAILY_CUTOFF'
+            ? `Your attendance has been automatically closed at the scheduled daily system cut-off time (${formattedTime}).`
+            : `Your attendance has been automatically closed after 2 hours of inactivity/offline status.`
+
+        try {
+          await createUnifiedNotification({
+            employeeId,
+            title: 'Attendance Auto Punch-Out Completed',
+            message: employeeMsg,
+            category: 'attendance',
+            eventType: 'AUTO_PUNCH_OUT_COMPLETED',
+            targetUrl: '#/employee/attendance',
+            priority: 'urgent',
+            idempotencyKey: `${workDate}_AUTOPUNCH_EMP_${employeeId}_${recordId}`,
+            metadata: {
+              reasonCode,
+              reasonText,
+              policy,
+              totalHours: totalHoursStr,
+            },
+          })
+        } catch (e) {
+          console.warn('[finalize Employee Notification Notice]:', e.message)
         }
 
+        // 2. HR & Admin Notifications
+        const categoryLabel = reasonCode === 'GEOFENCE_EXIT_TIMEOUT' ? 'GEOFENCE AUTO PUNCH-OUT' : 'DAILY SYSTEM CUT-OFF AUTO PUNCH-OUT'
+        const hrTitle = `[${categoryLabel}] ${employeeName} (${employeeId})`
+        const hrMessage = `Auto punch-out executed for ${employeeName} (${employeeId}) | Dept: ${dept} | Manager: ${mgrName} | Shift duration: ${totalHoursStr} | Reason: ${reasonText}`
+
+        const hrPayload = {
+          title: hrTitle,
+          message: hrMessage,
+          category: 'attendance',
+          eventType: 'AUTO_PUNCH_OUT_HR_ALERT',
+          targetUrl: '#/admin/attendance-review',
+          priority: 'high',
+          idempotencyKey: `${workDate}_AUTOPUNCH_HR_${employeeId}_${recordId}`,
+          metadata: {
+            employeeId,
+            employeeName,
+            department: dept,
+            managerName: mgrName,
+            officeLocation: officeLoc,
+            checkIn: record.checkIn,
+            checkInAt: record.checkInAt,
+            lastVerifiedLocationAt: record.lastVerifiedLocationAt || record.checkInAt,
+            lastVerifiedLatitude: record.lastVerifiedLatitude || record.latitude,
+            lastVerifiedLongitude: record.lastVerifiedLongitude || record.longitude,
+            autoPunchOutAt: now,
+            autoPunchOutReason: reasonText,
+            reasonCode,
+            policy,
+            totalHours: totalHoursStr,
+            attendanceId: recordId,
+          },
+        }
+
+        try {
+          await createUnifiedNotification({ ...hrPayload, recipientRole: 'admin' })
+          await createUnifiedNotification({ ...hrPayload, recipientRole: 'hr', idempotencyKey: `${workDate}_AUTOPUNCH_HR_ROLE_${employeeId}_${recordId}` })
+        } catch (hrNotifErr) {
+          console.warn('[finalize HR Notification Notice]:', hrNotifErr.message)
+        }
+      }
+
+      return finalized
+    },
+
+    async processAutoPunchOuts() {
+      const results = {
+        geofenceTimeouts: [],
+        offlineTimeouts: [],
+        dailyCutoffs: [],
+        advanceWarningsSent: 0,
+      }
+
+      try {
+        const settings = this.getSettings ? this.getSettings() : this.getConfig()
+        const rules = settings?.attendanceRules || DEFAULT_ATTENDANCE_RULES
+        const now = new Date()
         const workDate = getTodayString()
-        const activeRecords = await repository.findActiveTodayRecords(workDate)
-        if (!activeRecords || activeRecords.length === 0) return []
 
-        const formattedCutoff = formatTime12(cutOffTimeStr) || '9:30 PM'
-        const results = []
-
-        for (const record of activeRecords) {
-          try {
-            const updated = await this.checkOut({
-              employeeId: record.employeeId,
-              employeeName: record.employeeName,
-              date: workDate,
-              autoPunchOut: true,
-              punchOutReason: `Auto Punch Out (Scheduled cut-off at ${formattedCutoff})`,
-            })
-            results.push(updated)
-          } catch (err) {
-            console.error(`[AutoPunchCutoff] Failed to auto punch out employee ${record.employeeId}:`, err.message)
+        // =========================================================================
+        // ENGINE A: Geofence Grace Period Expiry (2 Hours Outside Office)
+        // =========================================================================
+        if (rules.geofenceAutoPunchOutEnabled !== false) {
+          const expiredGeofence = await repository.findExpiredGeofenceRecords(now)
+          for (const rec of expiredGeofence || []) {
+            try {
+              const punchOutTargetDate = rec.geofenceGraceExpiresAt ? new Date(rec.geofenceGraceExpiresAt) : now
+              const finalized = await this.finalizeAttendanceRecord({
+                recordId: rec.id || rec._id,
+                employeeId: rec.employeeId,
+                employeeName: rec.employeeName,
+                workDate: rec.date || workDate,
+                punchOutTime: formatCurrentTime(punchOutTargetDate),
+                punchOutAt: punchOutTargetDate,
+                reasonCode: 'GEOFENCE_EXIT_TIMEOUT',
+                reasonText: 'Auto Punch Out (Geofence exit timeout - outside office for 2 hours)',
+                policy: 'ENGINE_A_GEOFENCE',
+                isAutoPunchOut: true,
+                source: 'scheduler',
+              })
+              if (finalized) results.geofenceTimeouts.push(finalized)
+            } catch (err) {
+              console.error(`[AutoPunchOut Engine A Geofence Error] ${rec.employeeId}:`, err.message)
+            }
           }
         }
-        return results
-      } catch (err) {
-        console.error('[AutoPunchCutoff] Error executing scheduled cutoff:', err.message)
-        return []
+
+        // =========================================================================
+        // ENGINE A FALLBACK: Device Offline Timeout (2 Hours Inactive/Disconnected)
+        // =========================================================================
+        if (rules.offlineAutoPunchOutEnabled !== false) {
+          const offlineMins = Number(rules.offlineGracePeriodMinutes) || 120
+          const offlineCutoffDate = new Date(now.getTime() - offlineMins * 60 * 1000)
+          const expiredOffline = await repository.findExpiredOfflineRecords(offlineCutoffDate)
+          for (const rec of expiredOffline || []) {
+            try {
+              const checkInTime = rec.checkInAt ? new Date(rec.checkInAt).getTime() : 0
+              if (checkInTime && (now.getTime() - checkInTime) < (offlineMins * 60 * 1000)) {
+                continue
+              }
+              const finalized = await this.finalizeAttendanceRecord({
+                recordId: rec.id || rec._id,
+                employeeId: rec.employeeId,
+                employeeName: rec.employeeName,
+                workDate: rec.date || workDate,
+                punchOutTime: formatCurrentTime(now),
+                punchOutAt: now,
+                reasonCode: 'OFFLINE_TIMEOUT',
+                reasonText: `Auto Punch Out (Device offline & inactive for ${offlineMins} minutes)`,
+                policy: 'ENGINE_A_OFFLINE',
+                isAutoPunchOut: true,
+                source: 'scheduler',
+              })
+              if (finalized) results.offlineTimeouts.push(finalized)
+            } catch (err) {
+              console.error(`[AutoPunchOut Engine A Offline Error] ${rec.employeeId}:`, err.message)
+            }
+          }
+        }
+
+        // =========================================================================
+        // ENGINE B: Daily System Cut-Off (Admin Configured, e.g., 21:30 / 9:30 PM)
+        // =========================================================================
+        if (rules.dailyCutoffAutoPunchOutEnabled !== false && rules.autoPunchOutEnabled !== false) {
+          const tz = rules.timezone || 'Asia/Kolkata'
+          const cutOffTimeStr = rules.dailyCutoffTime || rules.autoPunchOutTime || '21:30'
+          const cutOffMinutes = parseTimeToMinutes(cutOffTimeStr) ?? (21 * 60 + 30)
+
+          const nowTz = new Date(new Date().toLocaleString('en-US', { timeZone: tz }))
+          const currentMins = nowTz.getHours() * 60 + nowTz.getMinutes()
+
+          // Advance Warning (e.g. 15 mins before cut-off)
+          const warningMinsBefore = Number(rules.dailyCutoffWarningMinutesBefore) || 15
+          if (rules.dailyCutoffWarningEnabled !== false && currentMins >= (cutOffMinutes - warningMinsBefore) && currentMins < cutOffMinutes) {
+            const pendingWarningRecords = await repository.findRecordsPendingAdvanceWarning(workDate)
+            for (const rec of pendingWarningRecords || []) {
+              try {
+                await createUnifiedNotification({
+                  employeeId: rec.employeeId,
+                  title: 'Daily Cut-Off Advance Reminder',
+                  message: `Reminder: Daily automatic punch-out is scheduled at ${formatTime12(cutOffTimeStr)}. If you finish earlier, please punch out manually.`,
+                  category: 'attendance',
+                  eventType: 'ATTENDANCE_WARNING_15',
+                  targetUrl: '#/employee/attendance',
+                  priority: 'normal',
+                  idempotencyKey: `${workDate}_ADVANCE_WARN_${rec.employeeId}`,
+                })
+                if (repository.updatePresenceDetails) {
+                  await repository.updatePresenceDetails(rec.employeeId, workDate, { advanceWarningSentAt: now })
+                }
+                results.advanceWarningsSent++
+              } catch {}
+            }
+          }
+
+          // At or after cut-off time:
+          if (currentMins >= cutOffMinutes) {
+            const activeToday = await repository.findActiveSessionsForCutoff(workDate)
+            for (const rec of activeToday || []) {
+              try {
+                // Shift-aware check:
+                if (rec.shiftCode && /overnight|night/i.test(rec.shiftCode)) {
+                  continue
+                }
+
+                const finalized = await this.finalizeAttendanceRecord({
+                  recordId: rec.id || rec._id,
+                  employeeId: rec.employeeId,
+                  employeeName: rec.employeeName,
+                  workDate: rec.date || workDate,
+                  punchOutTime: formatTime12(cutOffTimeStr) || formatCurrentTime(now),
+                  punchOutAt: now,
+                  reasonCode: 'SYSTEM_DAILY_CUTOFF',
+                  reasonText: `Auto Punch Out (Scheduled daily system cut-off at ${formatTime12(cutOffTimeStr) || '9:30 PM'})`,
+                  policy: 'ENGINE_B_DAILY_CUTOFF',
+                  isAutoPunchOut: true,
+                  source: 'scheduler',
+                })
+                if (finalized) results.dailyCutoffs.push(finalized)
+              } catch (err) {
+                console.error(`[AutoPunchOut Engine B Error] ${rec.employeeId}:`, err.message)
+              }
+            }
+          }
+        }
+      } catch (globalErr) {
+        console.error('[processAutoPunchOuts Global Notice]:', globalErr.message)
       }
+
+      return results
+    },
+
+    async autoPunchOutScheduledCutoff() {
+      const results = await this.processAutoPunchOuts()
+      return [...results.geofenceTimeouts, ...results.offlineTimeouts, ...results.dailyCutoffs]
     },
 
     async autoPunchOutDisconnectedRecords() {
@@ -1166,6 +1645,14 @@ export function createAttendanceService({ repository, companySettings = {} }) {
 
     async autoPunchOutCompletedWorkHours() {
       return this.autoPunchOutScheduledCutoff()
+    },
+
+    async listAutoPunchOuts(query = {}) {
+      return repository.listAutoPunchOuts ? repository.listAutoPunchOuts(query) : { records: [], total: 0 }
+    },
+
+    async reviewAutoPunchOut(recordId, reviewPayload = {}) {
+      return repository.reviewAutoPunchOut ? repository.reviewAutoPunchOut(recordId, reviewPayload) : null
     },
 
     async saveRecord(recordData) {
