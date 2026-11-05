@@ -4,7 +4,7 @@ import { sendWelcomeEmail, sendDocumentStatusEmail, sendExitInitiatedEmail, send
 import { createUnifiedNotification } from '../../services/unifiedNotification.service.js'
 
 const protectedFields = ['permissions', 'passwordHash', 'authVersion', 'salaryRecord']
-const editableFields = ['employeeId', 'name', 'displayName', 'email', 'password', 'department', 'team', 'teamId', 'squad', 'squadId', 'teamLeadId', 'teamLeadName', 'managerName', 'designation', 'location', 'campus', 'employmentType', 'joiningDate', 'employmentEndDate', 'managerId', 'phone', 'bankDetails', 'emergencyContact', 'exitDetails', 'onboardingChecklist', 'offboardingChecklist', 'role', 'status', 'salary', 'salaryStructure', 'parentsContact', 'identity', 'onboardingDocs', 'documents', 'onboardingStatus', 'onboardingSubmittedAt', 'onboardingVerifiedAt', 'onboardingVerifiedBy', 'onboardingNotes', 'onboardingRejectionReason', 'financeDetails', 'reportingManager', 'policyConsents', 'complianceDocs', 'avatarUrl']
+const editableFields = ['employeeId', 'name', 'displayName', 'email', 'password', 'department', 'team', 'teamId', 'squad', 'squadId', 'teamLeadId', 'teamLeadName', 'managerName', 'designation', 'location', 'campus', 'employmentType', 'joiningDate', 'employmentEndDate', 'managerId', 'phone', 'bankDetails', 'emergencyContact', 'exitDetails', 'onboardingChecklist', 'offboardingChecklist', 'role', 'status', 'salary', 'salaryStructure', 'parentsContact', 'identity', 'onboardingDocs', 'documents', 'onboardingStatus', 'onboardingSubmittedAt', 'onboardingVerifiedAt', 'onboardingVerifiedBy', 'onboardingNotes', 'onboardingRejectionReason', 'onboardingUnlockedAt', 'financeDetails', 'reportingManager', 'policyConsents', 'complianceDocs', 'avatarUrl']
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 function validationError(message, fields = {}) {
@@ -22,10 +22,16 @@ function normalizeDate(value, field) {
   return date
 }
 
-function validatePayload(payload, { partial = false, canAssignManager = false, canManageSalary = false, currentRole, actorRole } = {}) {
+function validatePayload(payload, { partial = false, canAssignManager = false, canManageSalary = false, currentRole, actorRole, currentSalary, currentSalaryStructure } = {}) {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) throw validationError('Enter an employee object.')
   for (const field of protectedFields) {
-    if (Object.prototype.hasOwnProperty.call(payload, field)) throw validationError(`The field ${field} cannot be changed through this endpoint.`, { [field]: 'Protected field.' })
+    if (Object.prototype.hasOwnProperty.call(payload, field)) {
+      if (partial) {
+        delete payload[field]
+      } else {
+        throw validationError(`The field ${field} cannot be changed through this endpoint.`, { [field]: 'Protected field.' })
+      }
+    }
   }
   const fields = {}
   const errors = {}
@@ -42,11 +48,33 @@ function validatePayload(payload, { partial = false, canAssignManager = false, c
     if (Object.keys(errors).length) throw validationError('Please provide all required employee fields.', errors)
   }
   for (const field of ['name', 'email', 'employeeId', 'phone', 'department', 'designation', 'location', 'campus']) {
-    if (payload[field] !== undefined && typeof payload[field] !== 'string') errors[field] = 'Enter text.'
+    if (payload[field] !== undefined) {
+      if (payload[field] === null) {
+        payload[field] = ''
+        if (fields[field] !== undefined) fields[field] = ''
+      } else if (typeof payload[field] === 'number') {
+        payload[field] = String(payload[field])
+        if (fields[field] !== undefined) fields[field] = payload[field]
+      } else if (typeof payload[field] !== 'string') {
+        errors[field] = 'Enter text.'
+      }
+    }
   }
   if (payload.email !== undefined && !emailPattern.test(String(payload.email).trim())) errors.email = 'Enter a valid email address.'
   if (payload.name !== undefined && !String(payload.name).trim()) errors.name = 'Name is required.'
-  if (payload.employeeId !== undefined && !/^[A-Za-z0-9_-]+$/.test(String(payload.employeeId).trim())) errors.employeeId = 'Use letters, numbers, hyphens, or underscores.'
+  if (payload.employeeId !== undefined) {
+    const trimmedEmpId = String(payload.employeeId).trim()
+    if (!trimmedEmpId) {
+      if (partial) {
+        delete payload.employeeId
+        delete fields.employeeId
+      }
+    } else if (!/^[A-Za-z0-9_-]+$/.test(trimmedEmpId)) {
+      errors.employeeId = 'Use letters, numbers, hyphens, or underscores.'
+    } else {
+      fields.employeeId = trimmedEmpId.toUpperCase()
+    }
+  }
   if (payload.employmentType !== undefined) {
     const et = String(payload.employmentType).trim().toLowerCase().replace(/[-\s]/g, '_')
     if (['full_time', 'part_time', 'contractor', 'intern'].includes(et)) {
@@ -58,7 +86,8 @@ function validatePayload(payload, { partial = false, canAssignManager = false, c
     }
   }
   if (payload.role !== undefined && payload.role !== currentRole && (['admin', 'hr'].includes(payload.role) || ['admin', 'hr'].includes(currentRole))) {
-    if (actorRole !== 'admin' && !(actorRole === 'hr' && payload.role === 'hr')) {
+    const isAdminActor = ['admin', 'super_admin', 'director', 'managing_director', 'co_founder'].includes(actorRole)
+    if (!isAdminActor && !(actorRole === 'hr' && payload.role === 'hr')) {
       throw validationError('The field role cannot be changed to or from Admin/HR through this endpoint.', { role: 'Protected role.' })
     }
   }
@@ -71,18 +100,34 @@ function validatePayload(payload, { partial = false, canAssignManager = false, c
       fields.status = 'active'
     }
   }
-  if (payload.onboardingStatus !== undefined && !['invited', 'draft', 'submitted', 'in_review', 'action_required', 'revision_requested', 'verified', 'completed'].includes(payload.onboardingStatus)) {
-    errors.onboardingStatus = 'Choose a valid onboarding status.'
+  if (payload.onboardingStatus !== undefined) {
+    let ost = String(payload.onboardingStatus).trim().toLowerCase()
+    if (ost === 'pending') ost = 'submitted'
+    if (ost === 'rejected') ost = 'action_required'
+    if (ost === 'approved') ost = 'verified'
+    const allowedOnboarding = ['invited', 'draft', 'submitted', 'in_review', 'action_required', 'revision_requested', 'verified', 'completed']
+    if (allowedOnboarding.includes(ost)) {
+      fields.onboardingStatus = ost
+    } else {
+      errors.onboardingStatus = 'Choose a valid onboarding status.'
+    }
   }
-  if (payload.password !== undefined && (typeof payload.password !== 'string' || payload.password.length < 8)) {
-    errors.password = 'Enter a password of at least eight characters.'
+  if (payload.password !== undefined) {
+    if (partial && (payload.password === '' || payload.password === null)) {
+      delete payload.password
+      delete fields.password
+    } else if (typeof payload.password !== 'string' || payload.password.length < 8) {
+      errors.password = 'Enter a password of at least eight characters.'
+    }
   }
   if (payload.salary !== undefined) {
-    if (!canManageSalary) throw Object.assign(validationError('Payroll management permission is required to change salary.'), { statusCode: 403, code: 'FORBIDDEN' })
+    const isSalaryUnchanged = partial && currentSalary !== undefined && Number(payload.salary) === Number(currentSalary)
+    if (!isSalaryUnchanged && !canManageSalary) throw Object.assign(validationError('Payroll management permission is required to change salary.'), { statusCode: 403, code: 'FORBIDDEN' })
     if (!Number.isFinite(payload.salary) || payload.salary < 0 || payload.salary > 100000000) errors.salary = 'Enter a non-negative annual salary up to 100000000.'
   }
   if (payload.salaryStructure !== undefined) {
-    if (!canManageSalary) throw Object.assign(validationError('Payroll management permission is required to change salary.'), { statusCode: 403, code: 'FORBIDDEN' })
+    const isStructureUnchanged = partial && currentSalaryStructure !== undefined && JSON.stringify(payload.salaryStructure) === JSON.stringify(currentSalaryStructure)
+    if (!isStructureUnchanged && !canManageSalary) throw Object.assign(validationError('Payroll management permission is required to change salary.'), { statusCode: 403, code: 'FORBIDDEN' })
     if (typeof payload.salaryStructure === 'object' && payload.salaryStructure !== null) {
       const basic = Math.max(0, Number(payload.salaryStructure.basic) || 0)
       const hra = Math.max(0, Number(payload.salaryStructure.hra) || 0)
@@ -96,9 +141,30 @@ function validatePayload(payload, { partial = false, canAssignManager = false, c
       }
     }
   }
-  if (payload.joiningDate !== undefined && !payload.joiningDate) errors.joiningDate = 'Joining date is required.'
+  if (payload.joiningDate !== undefined) {
+    if (partial && (!payload.joiningDate || payload.joiningDate === '')) {
+      delete payload.joiningDate
+      delete fields.joiningDate
+    } else if (!payload.joiningDate) {
+      errors.joiningDate = 'Joining date is required.'
+    }
+  }
   for (const dateField of ['joiningDate', 'employmentEndDate']) {
-    if (payload[dateField] !== undefined) fields[dateField] = normalizeDate(payload[dateField], dateField) || null
+    if (payload[dateField] !== undefined) {
+      if (partial && (payload[dateField] === null || payload[dateField] === '')) {
+        fields[dateField] = null
+      } else {
+        try {
+          fields[dateField] = normalizeDate(payload[dateField], dateField) || null
+        } catch (dateErr) {
+          if (partial) {
+            delete fields[dateField]
+          } else {
+            throw dateErr
+          }
+        }
+      }
+    }
   }
   if (fields.joiningDate && fields.employmentEndDate && fields.employmentEndDate < fields.joiningDate) errors.employmentEndDate = 'Employment end date must be on or after joining date.'
   if (Object.keys(errors).length) throw validationError('Please correct the employee fields.', errors)
@@ -162,11 +228,16 @@ async function resolveReportingManager(employee, repository) {
 
 export function createEmployeeService({ repository }) {
   function options(actor, employee) {
+    const isLeadership = ['admin', 'super_admin', 'director', 'managing_director', 'co_founder'].includes(actor?.role)
+    const hasPayrollPerm = hasPermission(actor, 'payroll.write') || hasPermission(actor, '*')
     return {
-      partial: Boolean(employee), currentRole: employee?.role,
+      partial: Boolean(employee),
+      currentRole: employee?.role,
       actorRole: actor?.role,
-      canAssignManager: hasPermission(actor, 'employees.manager.assign') || hasPermission(actor, 'employees.write'),
-      canManageSalary: ['admin', 'hr'].includes(actor.role) && hasPermission(actor, 'payroll.write'),
+      canAssignManager: isLeadership || hasPermission(actor, 'employees.manager.assign') || hasPermission(actor, 'employees.write'),
+      canManageSalary: isLeadership || (['admin', 'hr'].includes(actor?.role) && hasPayrollPerm) || hasPayrollPerm,
+      currentSalary: employee?.salary !== undefined ? Number(employee.salary) : undefined,
+      currentSalaryStructure: employee?.salaryStructure || undefined,
     }
   }
   function preventSelfDeactivation(id, status, actor) {
@@ -305,9 +376,11 @@ export function createEmployeeService({ repository }) {
         throw error
       }
       const values = validatePayload(payload, options(actor, employee))
-      if (values.employeeId) {
+      if (values.employeeId !== undefined) {
         const newCode = String(values.employeeId).trim().toUpperCase()
-        if (newCode !== employee.employeeId) {
+        if (!newCode || newCode === employee.employeeId) {
+          delete values.employeeId
+        } else {
           const existing = await repository.findById(newCode)
           if (existing && String(existing.id ?? existing._id) !== String(employee.id ?? employee._id)) {
             throw validationError(`Employee code "${newCode}" is already in use by ${existing.name || 'another employee'}.`, { employeeId: 'Code already in use.' })
@@ -318,8 +391,6 @@ export function createEmployeeService({ repository }) {
           if (repository.updateEmployeeCode) {
             await repository.updateEmployeeCode(oldCode, newCode, employee.id ?? employee._id)
           }
-        } else {
-          values.employeeId = employee.employeeId
         }
       }
       preventSelfDeactivation(id, values.status, actor)

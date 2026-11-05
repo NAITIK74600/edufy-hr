@@ -193,7 +193,7 @@ export function OnboardingDossierView({ employee, canEdit = false, canVerify = f
   }
   const finance = employee?.financeDetails || {}
 
-  const onboardingStatus = localStatus || employee?.onboardingStatus || 'pending'
+  const onboardingStatus = localStatus || (employee?.onboardingStatus === 'pending' ? 'draft' : (employee?.onboardingStatus || 'draft'))
   const isVerified = onboardingStatus === 'verified'
   const isSubmitted = onboardingStatus === 'submitted'
   const isRevisionRequested = onboardingStatus === 'revision_requested'

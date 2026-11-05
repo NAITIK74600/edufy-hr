@@ -360,8 +360,24 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
     return pending
   }
   function employeePayload(data) {
-    const allowed = ['employeeId', 'name', 'displayName', 'email', 'password', 'phone', 'department', 'team', 'teamId', 'squad', 'squadId', 'teamLeadId', 'teamLeadName', 'managerId', 'managerName', 'designation', 'location', 'campus', 'employmentType', 'joiningDate', 'employmentEndDate', 'onboardingChecklist', 'offboardingChecklist', 'exitDetails', 'emergencyContact', 'role', 'status', 'salary', 'salaryStructure', 'parentsContact', 'onboardingDocs', 'documents', 'identity', 'onboardingStatus', 'onboardingSubmittedAt', 'onboardingVerifiedAt', 'onboardingVerifiedBy', 'onboardingNotes', 'onboardingRejectionReason', 'financeDetails', 'reportingManager', 'policyConsents', 'complianceDocs', 'avatarUrl']
+    const allowed = ['employeeId', 'name', 'displayName', 'email', 'password', 'phone', 'department', 'team', 'teamId', 'squad', 'squadId', 'teamLeadId', 'teamLeadName', 'managerId', 'managerName', 'designation', 'location', 'campus', 'employmentType', 'joiningDate', 'employmentEndDate', 'onboardingChecklist', 'offboardingChecklist', 'exitDetails', 'emergencyContact', 'role', 'status', 'salary', 'salaryStructure', 'parentsContact', 'onboardingDocs', 'documents', 'identity', 'onboardingStatus', 'onboardingSubmittedAt', 'onboardingVerifiedAt', 'onboardingVerifiedBy', 'onboardingNotes', 'onboardingRejectionReason', 'onboardingUnlockedAt', 'financeDetails', 'reportingManager', 'policyConsents', 'complianceDocs', 'avatarUrl']
     const payload = Object.fromEntries(allowed.filter((key) => data[key] !== undefined).map((key) => [key, data[key]]))
+    delete payload.permissions
+    delete payload.authVersion
+    delete payload.passwordHash
+    delete payload.salaryRecord
+    delete payload._id
+    delete payload.id
+    if (payload.password === '' || payload.password === null) delete payload.password
+    if (payload.employeeId !== undefined && !String(payload.employeeId).trim()) delete payload.employeeId
+    if (payload.joiningDate !== undefined && !payload.joiningDate) delete payload.joiningDate
+    if (payload.onboardingStatus) {
+      const ost = String(payload.onboardingStatus).trim().toLowerCase()
+      if (ost === 'pending') payload.onboardingStatus = 'submitted'
+      else if (ost === 'rejected') payload.onboardingStatus = 'action_required'
+      else if (ost === 'approved') payload.onboardingStatus = 'verified'
+      else payload.onboardingStatus = ost
+    }
     if (payload.team && !payload.squad) payload.squad = payload.team
     if (payload.squad && !payload.team) payload.team = payload.squad
     if (payload.teamId && !payload.squadId) payload.squadId = payload.teamId
@@ -381,7 +397,7 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
     if (data.policyConsents !== undefined) payload.policyConsents = data.policyConsents
     if (data.complianceDocs !== undefined) payload.complianceDocs = data.complianceDocs
     if (data.phone !== undefined) payload.phone = String(data.phone || '').trim()
-    if (data.employeeId !== undefined) payload.employeeId = String(data.employeeId || '').trim().toUpperCase()
+    if (data.employeeId !== undefined && payload.employeeId) payload.employeeId = String(payload.employeeId).trim().toUpperCase()
     if (data.bankDetails || data.bankName !== undefined || data.accountNumber !== undefined || data.ifscCode !== undefined || data.panTaxId !== undefined || data.uanNumber !== undefined) {
       payload.bankDetails = { ...(data.bankDetails || {}) }
       for (const key of ['bankName', 'accountNumber', 'ifscCode', 'panTaxId', 'uanNumber']) {
@@ -1013,28 +1029,42 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
       if (!user && rawLocal.updateOnboardingDocs) return rawLocal.updateOnboardingDocs(id, payload)
       return mutate(async () => {
         const isSelf = String(user?.id) === String(id) || String(user?.employeeId) === String(id)
+        const cleanPayload = { ...payload }
+        delete cleanPayload.permissions
+        delete cleanPayload.authVersion
+        delete cleanPayload.passwordHash
+        delete cleanPayload.salaryRecord
+        delete cleanPayload._id
+        delete cleanPayload.id
+        if (cleanPayload.onboardingStatus) {
+          const ost = String(cleanPayload.onboardingStatus).trim().toLowerCase()
+          if (ost === 'pending') cleanPayload.onboardingStatus = 'submitted'
+          else if (ost === 'rejected') cleanPayload.onboardingStatus = 'action_required'
+          else if (ost === 'approved') cleanPayload.onboardingStatus = 'verified'
+          else cleanPayload.onboardingStatus = ost
+        }
         if (isSelf) {
-          const res = await apiClient.patch('/employees/me/onboarding', payload)
+          const res = await apiClient.patch('/employees/me/onboarding', cleanPayload)
           return res.data
         }
         const record = employee(id)
+        const targetId = record?.id || record?._id || record?.employeeId || id
         try {
-          const res = await apiClient.patch(`/employees/${record.id}`, payload)
+          const res = await apiClient.patch(`/employees/${encodeURIComponent(targetId)}`, cleanPayload)
           return res.data
         } catch (err) {
-          if (err?.message?.includes('not editable')) {
-            const clean = { ...payload }
-            delete clean.onboardingStatus
-            delete clean.onboardingVerifiedAt
-            delete clean.onboardingVerifiedBy
-            delete clean.onboardingRejectionReason
-            delete clean.onboardingSubmittedAt
-            delete clean.onboardingNotes
-            if (Object.keys(clean).length > 0) {
-              const res = await apiClient.patch(`/employees/${record.id}`, clean)
+          const clean = { ...cleanPayload }
+          delete clean.onboardingStatus
+          delete clean.onboardingVerifiedAt
+          delete clean.onboardingVerifiedBy
+          delete clean.onboardingRejectionReason
+          delete clean.onboardingSubmittedAt
+          delete clean.onboardingNotes
+          if (Object.keys(clean).length > 0) {
+            try {
+              const res = await apiClient.patch(`/employees/${encodeURIComponent(targetId)}`, clean)
               return res.data
-            }
-            return { success: true }
+            } catch { }
           }
           throw err
         }
@@ -1521,16 +1551,22 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
           notify()
           return fresh
         } catch (err) {
-          if (err?.message?.includes('not editable')) {
-            const clean = employeePayload(data)
-            delete clean.onboardingStatus
-            delete clean.onboardingVerifiedAt
-            delete clean.onboardingVerifiedBy
-            delete clean.onboardingRejectionReason
-            delete clean.onboardingSubmittedAt
-            delete clean.onboardingNotes
-            delete clean.offboardingChecklist
-            if (Object.keys(clean).length > 0) {
+          const clean = employeePayload(data)
+          delete clean.permissions
+          delete clean.authVersion
+          delete clean.passwordHash
+          delete clean.salaryRecord
+          delete clean._id
+          delete clean.id
+          delete clean.onboardingStatus
+          delete clean.onboardingVerifiedAt
+          delete clean.onboardingVerifiedBy
+          delete clean.onboardingRejectionReason
+          delete clean.onboardingSubmittedAt
+          delete clean.onboardingNotes
+          delete clean.offboardingChecklist
+          if (Object.keys(clean).length > 0) {
+            try {
               const res = await apiClient.patch(`/employees/${encodeURIComponent(targetId)}`, clean)
               const resData = res?.data ?? res
               const fresh = resData ? normalizeEmployee(resData) : { ...record, ...clean }
@@ -1540,8 +1576,7 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
               }
               notify()
               return fresh
-            }
-            return record
+            } catch { }
           }
           throw err
         }

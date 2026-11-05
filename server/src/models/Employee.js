@@ -80,10 +80,11 @@ const employeeSchema = new mongoose.Schema({
   onboardingDocs: { type: mongoose.Schema.Types.Mixed, select: false },
   onboardingStatus: {
     type: String,
-    enum: ['invited', 'draft', 'submitted', 'in_review', 'action_required', 'revision_requested', 'verified', 'completed'],
+    enum: ['invited', 'draft', 'submitted', 'in_review', 'action_required', 'revision_requested', 'verified', 'completed', 'pending', 'rejected', 'approved'],
     default: 'invited',
     index: true,
   },
+  onboardingUnlockedAt: Date,
   onboardingSubmittedAt: Date,
   onboardingVerifiedAt: Date,
   onboardingVerifiedBy: { type: mongoose.Schema.Types.Mixed },

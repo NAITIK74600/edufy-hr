@@ -5030,9 +5030,11 @@ const localStore = {
     notifyListeners()
     if (typeof apiClient !== 'undefined') {
       const realId = emp.id || emp._id || emp.employeeId || id
+      const rawStatus = payload.onboardingStatus ? String(payload.onboardingStatus).trim().toLowerCase() : ''
+      const normalizedStatus = rawStatus === 'pending' ? 'submitted' : (rawStatus === 'rejected' ? 'action_required' : (rawStatus === 'approved' ? 'verified' : payload.onboardingStatus))
       apiClient.patch(`/employees/${encodeURIComponent(realId)}`, {
         onboardingDocs: emp.onboardingDocs,
-        ...(payload.onboardingStatus ? { onboardingStatus: payload.onboardingStatus } : {}),
+        ...(normalizedStatus ? { onboardingStatus: normalizedStatus } : {}),
         ...(payload.onboardingVerifiedAt ? { onboardingVerifiedAt: payload.onboardingVerifiedAt } : {}),
         ...(payload.onboardingVerifiedBy ? { onboardingVerifiedBy: payload.onboardingVerifiedBy } : {}),
       }).catch((err) => console.warn('Backend onboarding docs sync error:', err?.message || err))

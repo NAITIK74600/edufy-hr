@@ -313,6 +313,35 @@ export function createEmployeeRouter({ auth, service, userStore, employeeReposit
         return response.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'You do not have permission to update this employee.' } })
       }
       let updateBody = request.body ?? {}
+      if (typeof updateBody === 'object' && updateBody !== null) {
+        updateBody = { ...updateBody }
+        delete updateBody.permissions
+        delete updateBody.passwordHash
+        delete updateBody.authVersion
+        delete updateBody.salaryRecord
+        delete updateBody._id
+        delete updateBody.id
+        delete updateBody.__v
+        delete updateBody.createdAt
+        delete updateBody.updatedAt
+        if (updateBody.password === '' || updateBody.password === null) delete updateBody.password
+        if (updateBody.phone !== undefined) {
+          if (updateBody.phone === null) updateBody.phone = ''
+          else if (typeof updateBody.phone === 'number') updateBody.phone = String(updateBody.phone)
+        }
+        if (updateBody.employeeId !== undefined && (!updateBody.employeeId || !String(updateBody.employeeId).trim())) {
+          delete updateBody.employeeId
+        }
+        if (updateBody.joiningDate !== undefined && (!updateBody.joiningDate || updateBody.joiningDate === '')) {
+          delete updateBody.joiningDate
+        }
+        if (updateBody.onboardingStatus) {
+          const st = String(updateBody.onboardingStatus).trim().toLowerCase()
+          if (st === 'pending') updateBody.onboardingStatus = 'submitted'
+          else if (st === 'rejected') updateBody.onboardingStatus = 'action_required'
+          else if (st === 'approved') updateBody.onboardingStatus = 'verified'
+        }
+      }
       if (isSelf) {
         if (!hasPermission(request.auth.user, PERMISSIONS.EMPLOYEES_WRITE)) {
           const allowedSelfFields = ['identity', 'parentsContact', 'emergencyContact', 'bankDetails', 'onboardingDocs', 'phone', 'financeDetails', 'complianceDocs', 'policyConsents', 'avatarUrl']

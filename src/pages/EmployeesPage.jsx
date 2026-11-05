@@ -498,6 +498,13 @@ function EmployeeDirectory({ route } = {}) {
         uanNumber: String(editingEmployee.uanNumber || '').trim(),
       },
     }
+    delete updates.permissions
+    delete updates.authVersion
+    delete updates.passwordHash
+    delete updates.salaryRecord
+    delete updates._id
+    delete updates.__v
+    if (updates.onboardingStatus === 'pending') updates.onboardingStatus = 'submitted'
 
     setModalError('')
     try {
@@ -2995,10 +3002,19 @@ function EmployeeDetail({ id }) {
     if (!editingEmployee || !editingEmployee.name || !editingEmployee.email) return
 
     const targetId = editingEmployee.id || editingEmployee._id || editingEmployee.employeeId
-    await hrStore.updateEmployee(targetId, {
+    const updates = {
       ...editingEmployee,
       salary: Number(editingEmployee.salary) || 0,
-    })
+    }
+    delete updates.permissions
+    delete updates.authVersion
+    delete updates.passwordHash
+    delete updates.salaryRecord
+    delete updates._id
+    delete updates.__v
+    if (updates.onboardingStatus === 'pending') updates.onboardingStatus = 'submitted'
+
+    await hrStore.updateEmployee(targetId, updates)
     setEditingEmployee(null)
   })
 
