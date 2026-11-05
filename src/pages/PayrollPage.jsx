@@ -218,7 +218,7 @@ export function PayrollPage() {
   const netPay = Math.max(0, grossEarnings - totalDeductions)
   const netPayInWords = useMemo(() => numberToWordsINR(netPay), [netPay])
 
-  // When selected employee changes in form, pre-populate standard salary
+  // When selected employee changes in form, pre-populate standard salary and sync live attendance/leave context
   const handleSelectEmployee = (empId) => {
     setSelectedEmpId(empId)
     const emp = employees.find((e) => String(e._id || e.id) === String(empId) || String(e.employeeId) === String(empId))
@@ -278,12 +278,38 @@ export function PayrollPage() {
 
     const pf = Math.min(1800, Math.round(basic * 0.12))
     const pt = 200
-    setFormDeductions([
+    const initialDeductions = [
       { name: 'Provident Fund (P.F.)', amount: pf },
       { name: 'Professional Tax', amount: pt },
       { name: 'ESI', amount: 0 },
       { name: 'TDS / Income Tax', amount: 0 },
-    ])
+    ]
+    setFormDeductions(initialDeductions)
+
+    // Automatically sync live attendance & leave LOP context from backend
+    const empCode = emp.employeeId || emp.code
+    if (empCode) {
+      apiClient.get('/payroll/context', { params: { employeeId: empCode, month: formMonth } })
+        .then((res) => {
+          const ctx = res.data?.data
+          if (ctx) {
+            const liveLopDays = Number(ctx.lopDays) || 0
+            setFormLopDays(liveLopDays)
+            const stdDays = Number(formStandardDays) || 30
+            setFormPayableDays(Math.max(0, stdDays - liveLopDays))
+            if (liveLopDays > 0) {
+              const lopDeduction = Math.round((baseSalary / stdDays) * liveLopDays)
+              setFormDeductions((prev) => {
+                const baseList = prev.filter(
+                  (d) => !d.name.toLowerCase().includes('loss of pay') && !d.name.toLowerCase().includes('lop')
+                )
+                return [...baseList, { name: 'Loss of Pay (LOP)', amount: lopDeduction }]
+              })
+            }
+          }
+        })
+        .catch(() => {})
+    }
   }
 
   // Edit existing record in form
@@ -781,6 +807,31 @@ export function PayrollPage() {
                   const d = getDaysInMonth(newMonth)
                   setFormStandardDays(d)
                   setFormPayableDays(Math.max(0, d - formLopDays + formLopReversalDays + formArrearDays))
+
+                  if (selectedEmpId) {
+                    const emp = employees.find((e) => String(e._id || e.id) === String(selectedEmpId) || String(e.employeeId) === String(selectedEmpId))
+                    const empCode = emp?.employeeId || emp?.code
+                    if (empCode) {
+                      apiClient.get('/payroll/context', { params: { employeeId: empCode, month: newMonth } })
+                        .then((res) => {
+                          const ctx = res.data?.data
+                          if (ctx) {
+                            const liveLopDays = Number(ctx.lopDays) || 0
+                            setFormLopDays(liveLopDays)
+                            setFormPayableDays(Math.max(0, d - liveLopDays))
+                            const baseSal = Number(emp.baseSalary || emp.salary || 30000)
+                            const lopDed = liveLopDays > 0 ? Math.round((baseSal / d) * liveLopDays) : 0
+                            setFormDeductions((prev) => {
+                              const baseList = prev.filter(
+                                (item) => !item.name.toLowerCase().includes('loss of pay') && !item.name.toLowerCase().includes('lop')
+                              )
+                              return lopDed > 0 ? [...baseList, { name: 'Loss of Pay (LOP)', amount: lopDed }] : baseList
+                            })
+                          }
+                        })
+                        .catch(() => {})
+                    }
+                  }
                 }}
                 existingRecords={payrollRecords}
                 showPresets={true}
