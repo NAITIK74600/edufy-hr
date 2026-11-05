@@ -1,3 +1,5 @@
+import { parseLocationHash } from '../navigation/navigationResolver.js'
+
 export const adminRoutes = [
   { path: '/admin', label: 'Admin Overview', group: 'Administration', description: 'System health, telemetry and global pulse', permission: 'admin.access' },
   { path: '/admin/users', label: 'User Management', group: 'Administration', description: 'Manage accounts, credentials, and roles', permission: 'admin.access' },
@@ -78,34 +80,41 @@ export const authRoutes = [
 
 export const allRoutes = [...adminRoutes, ...hrRoutes, ...employeeRoutes, ...authRoutes]
 
-export function findRoute(path) {
-  if (path === '/admin/login') {
-    return { path, label: 'Admin Login', group: 'Auth', description: 'Edufyi Administrator Console Authentication' }
+export function findRoute(rawPath) {
+  if (!rawPath) return undefined
+  const { path: cleanPath, query } = parseLocationHash(rawPath)
+
+  if (cleanPath === '/admin/login') {
+    return { path: cleanPath, query, label: 'Admin Login', group: 'Auth', description: 'Edufyi Administrator Console Authentication' }
   }
-  if (path === '/hr/login') {
-    return { path, label: 'HR Login', group: 'Auth', description: 'Edufyi People Operations Authentication' }
+  if (cleanPath === '/hr/login') {
+    return { path: cleanPath, query, label: 'HR Login', group: 'Auth', description: 'Edufyi People Operations Authentication' }
   }
-  if (path === '/employee/login') {
-    return { path, label: 'Employee Login', group: 'Auth', description: 'Edufyi Employee Self-Service Authentication' }
+  if (cleanPath === '/employee/login') {
+    return { path: cleanPath, query, label: 'Employee Login', group: 'Auth', description: 'Edufyi Employee Self-Service Authentication' }
   }
-  if (path === '/employee/organization') {
-    return allRoutes.find((route) => route.path === '/employee/hierarchy')
+  if (cleanPath === '/employee/organization') {
+    const matched = allRoutes.find((route) => route.path === '/employee/hierarchy')
+    return matched ? { ...matched, query } : undefined
   }
-  const exact = allRoutes.find((route) => route.path === path)
-  if (exact) return exact
-  if (path.startsWith('/admin')) {
-    return { path, label: 'Administration', group: 'Administration', description: 'System Administration module', permission: 'admin.access' }
+  const exact = allRoutes.find((route) => route.path === cleanPath)
+  if (exact) return { ...exact, query }
+
+  if (cleanPath.startsWith('/admin')) {
+    return { path: cleanPath, query, label: 'Administration', group: 'Administration', description: 'System Administration module', permission: 'admin.access' }
   }
-  if (path === '/hr/people/new') return { path, label: 'New employee', group: 'HR Ops', description: 'Create an employee profile', permission: 'employees.write' }
-  if (/^\/hr\/people\/[^/]+(\/edit)?$/.test(path)) {
-    const editing = path.endsWith('/edit')
-    return { path, label: editing ? 'Edit employee' : 'Employee profile', group: 'HR Ops', description: 'Employee profile and employment history', permission: editing ? 'employees.write' : 'employees.read' }
+  if (cleanPath === '/hr/people/new') return { path: cleanPath, query, label: 'New employee', group: 'HR Ops', description: 'Create an employee profile', permission: 'employees.write' }
+  if (/^\/hr\/people\/[^/]+(\/edit)?$/.test(cleanPath)) {
+    const editing = cleanPath.endsWith('/edit')
+    return { path: cleanPath, query, label: editing ? 'Edit employee' : 'Employee profile', group: 'HR Ops', description: 'Employee profile and employment history', permission: editing ? 'employees.write' : 'employees.read' }
   }
   return undefined
 }
 
 export function readPath() {
-  const path = window.location.hash.replace(/^#/, '') || ''
+  const hash = (typeof window !== 'undefined' ? window.location.hash : '') || ''
+  const { path: cleanPath } = parseLocationHash(hash)
+  const path = cleanPath || ''
   if (!path || path === '/') {
     if (typeof window !== 'undefined' && window.localStorage) {
       try {

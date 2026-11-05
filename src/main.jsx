@@ -204,13 +204,15 @@ function DataStatus({ children }) {
 }
 
 function useRoute() {
-  const [path, setPath] = useState(readPath)
+  const [rawHash, setRawHash] = useState(() => (typeof window !== 'undefined' ? window.location.hash : ''))
   useEffect(() => {
-    const update = () => setPath(readPath())
+    const update = () => setRawHash(window.location.hash || '')
     window.addEventListener('hashchange', update)
     return () => window.removeEventListener('hashchange', update)
   }, [])
-  return findRoute(path) ?? { path, label: 'Not found', group: 'Error', description: 'Unknown route' }
+  const cleanPath = readPath()
+  const matched = findRoute(rawHash || cleanPath)
+  return matched ?? { path: cleanPath, query: {}, label: 'Not found', group: 'Error', description: 'Unknown route' }
 }
 
 function App() {
@@ -322,7 +324,7 @@ function App() {
       : route.path.startsWith('/admin/people')
       ? <EmployeesPage route={{ ...route, path: route.path.replace('/admin/people', '/hr/people') }} />
       : route.path === '/admin/leave'
-      ? <LeaveManagementPage mode="hr" />
+      ? <LeaveManagementPage mode="admin" route={route} query={route.query} />
       : route.path === '/admin/attendance'
       ? <WorkspaceModulePage route={{ ...route, path: '/hr/attendance' }} />
       : route.path === '/admin/hierarchy' || route.path === '/hr/hierarchy' || route.path === '/employee/hierarchy' || route.path === '/employee/organization'
@@ -336,11 +338,11 @@ function App() {
       : route.path === '/hr/people' || route.path === '/hr/people/new' || route.path.startsWith('/hr/people/')
       ? <EmployeesPage route={route} />
       : route.path === '/hr/leave'
-      ? <LeaveManagementPage mode="hr" />
+      ? <LeaveManagementPage mode="hr" route={route} query={route.query} />
       : route.path === '/employee/leave'
-      ? <LeaveManagementPage mode="self" />
+      ? <LeaveManagementPage mode="self" route={route} query={route.query} />
       : route.path === '/employee/team-leave'
-      ? <LeaveManagementPage mode="team" />
+      ? <LeaveManagementPage mode="team" route={route} query={route.query} />
       : route.path.startsWith('/employee')
       ? <EmployeeDashboardPage route={route} />
       : <WorkspaceModulePage route={route} />

@@ -172,8 +172,8 @@ export function createLeaveService({ repository, employeeRepository, notificatio
   async function getRequest(id, actor, scope = 'self') {
     const request = await repository.findRequest(id)
     if (!request) throw error('Leave request not found.', 404, 'LEAVE_REQUEST_NOT_FOUND')
-    const permission = scope === 'team' ? PERMISSIONS.LEAVE_TEAM_READ : scope === 'hr' ? PERMISSIONS.LEAVE_HR_READ : PERMISSIONS.LEAVE_SELF_READ
-    const canUseReviewPermission = (scope === 'team' && hasPermission(actor, PERMISSIONS.LEAVE_TEAM_APPROVE)) || (scope === 'hr' && hasPermission(actor, PERMISSIONS.LEAVE_HR_REVIEW))
+    const permission = (scope === 'admin' || scope === 'hr') ? PERMISSIONS.LEAVE_HR_READ : scope === 'team' ? PERMISSIONS.LEAVE_TEAM_READ : PERMISSIONS.LEAVE_SELF_READ
+    const canUseReviewPermission = (scope === 'team' && hasPermission(actor, PERMISSIONS.LEAVE_TEAM_APPROVE)) || ((scope === 'hr' || scope === 'admin') && (hasPermission(actor, PERMISSIONS.LEAVE_HR_REVIEW) || hasPermission(actor, PERMISSIONS.ADMIN_ACCESS)))
     if ((!hasPermission(actor, permission) && !canUseReviewPermission) || !actorCanAccess(request, actor, permission)) throw error('You do not have access to this leave request.', 403, 'FORBIDDEN')
     return request
   }
@@ -214,20 +214,24 @@ export function createLeaveService({ repository, employeeRepository, notificatio
     }
   }
 
-  async function notifyHr(event, request, message) {
+  async function notifyHr(event, request, message, title = 'Leave Review Required') {
     if (!notifier?.notify || !employeeRepository.list) return
     const result = await employeeRepository.list({ limit: 100, status: 'active' })
     const recipients = (result.records ?? result ?? []).filter((employee) =>
       ['admin', 'hr', 'director', 'managing_director', 'co_founder'].includes(employee.role)
     )
-    await Promise.all(recipients.map((employee) => notifyRecipient(idOf(employee), event, request, message)))
+    const reqId = idOf(request)
+    const targetUrl = `#/hr/leave?tab=approvals&id=${reqId}`
+    await Promise.all(recipients.map((employee) => notifyRecipient(idOf(employee), event, request, message, title, targetUrl)))
   }
 
-  async function notifyAdmin(event, request, message) {
+  async function notifyAdmin(event, request, message, title = 'LOP Sign-off Required') {
     if (!notifier?.notify || !employeeRepository.list) return
     const result = await employeeRepository.list({ limit: 100, status: 'active' })
     const recipients = (result.records ?? result ?? []).filter((employee) => employee.role === 'admin')
-    await Promise.all(recipients.map((employee) => notifyRecipient(idOf(employee), event, request, message)))
+    const reqId = idOf(request)
+    const targetUrl = `#/admin/leave?tab=approvals&filter=pending_admin&id=${reqId}`
+    await Promise.all(recipients.map((employee) => notifyRecipient(idOf(employee), event, request, message, title, targetUrl, 'urgent')))
   }
 
   return {
@@ -438,7 +442,7 @@ export function createLeaveService({ repository, employeeRepository, notificatio
           request,
           `${empName} (${employee.department || 'Team'}) applied for ${units} day(s) of ${leaveTypeUpper} (${startDate} to ${endDate}). Reason: "${payload.reason}"`,
           `📅 New Team Leave: ${empName} (${leaveTypeUpper})`,
-          '#/hr/leave',
+          `#/employee/team-leave?id=${idOf(request)}`,
           'high'
         )
       }
@@ -659,19 +663,19 @@ export function createLeaveService({ repository, employeeRepository, notificatio
 
       if (nextStatus === 'pending_admin') {
         await notifyAdmin('LEAVE_PENDING_ADMIN', updated, `HR verified 25th Month LOP leave for ${empDisplayName}. Admin final approval required.`, `⚠️ 25th Month LOP: ${empDisplayName}`)
-        await notifyRecipient(empIdToFind, 'LEAVE_PENDING_ADMIN', updated, 'Your 25th Month LOP leave was verified by HR and submitted to Administrator for final approval.', 'Leave Submitted to Admin')
+        await notifyRecipient(empIdToFind, 'LEAVE_PENDING_ADMIN', updated, 'Your 25th Month LOP leave was verified by HR and submitted to Administrator for final approval.', 'Leave Submitted to Admin', `#/employee/leave?id=${idOf(updated)}`)
       } else if (nextStatus === 'pending_hr' || isDirector) {
         await notifyHr('LEAVE_PENDING_HR', updated, isDirector ? `Managing Director approved manager leave for ${empDisplayName}; synchronized to HR panel.` : `Manager approved leave for ${empDisplayName}; HR review is required.`, `📋 Leave Awaiting HR Review: ${empDisplayName}`)
-        await notifyRecipient(empIdToFind, 'LEAVE_FORWARDED', updated, 'Your leave request was endorsed by your manager and forwarded to HR for final review.', 'Leave Endorsed by Manager')
+        await notifyRecipient(empIdToFind, 'LEAVE_FORWARDED', updated, 'Your leave request was endorsed by your manager and forwarded to HR for final review.', 'Leave Endorsed by Manager', `#/employee/leave?id=${idOf(updated)}`)
       }
 
       if (nextStatus === 'approved') {
-        await notifyRecipient(empIdToFind, 'LEAVE_APPROVED', updated, `Your ${leaveTypeTitle} request (${updated.startDate ? new Date(updated.startDate).toLocaleDateString('en-GB') : ''} to ${updated.endDate ? new Date(updated.endDate).toLocaleDateString('en-GB') : ''}) was approved by ${actor.displayName || actor.name || 'Management'}.`, '✅ Leave Request Approved', '#/employee/leave', 'high')
+        await notifyRecipient(empIdToFind, 'LEAVE_APPROVED', updated, `Your ${leaveTypeTitle} request (${updated.startDate ? new Date(updated.startDate).toLocaleDateString('en-GB') : ''} to ${updated.endDate ? new Date(updated.endDate).toLocaleDateString('en-GB') : ''}) was approved by ${actor.displayName || actor.name || 'Management'}.`, '✅ Leave Request Approved', `#/employee/leave?id=${idOf(updated)}`, 'high')
         if (mgrIdToFind && idOf(mgrIdToFind) !== idOf(actor.id)) {
-          await notifyRecipient(mgrIdToFind, 'LEAVE_APPROVED', updated, `${empDisplayName}'s ${leaveTypeTitle} request was approved.`, `Leave Approved: ${empDisplayName}`, '#/hr/leave')
+          await notifyRecipient(mgrIdToFind, 'LEAVE_APPROVED', updated, `${empDisplayName}'s ${leaveTypeTitle} request was approved.`, `Leave Approved: ${empDisplayName}`, `#/employee/team-leave?id=${idOf(updated)}`)
         }
       } else if (nextStatus === 'rejected') {
-        await notifyRecipient(empIdToFind, 'LEAVE_REJECTED', updated, `Your ${leaveTypeTitle} request was declined. Reason: "${payload.reason || payload.comment || 'Declined'}"`, '❌ Leave Request Declined', '#/employee/leave', 'high')
+        await notifyRecipient(empIdToFind, 'LEAVE_REJECTED', updated, `Your ${leaveTypeTitle} request was declined. Reason: "${payload.reason || payload.comment || 'Declined'}"`, '❌ Leave Request Declined', `#/employee/leave?id=${idOf(updated)}`, 'high')
       }
 
       if (['approved', 'rejected'].includes(nextStatus)) {

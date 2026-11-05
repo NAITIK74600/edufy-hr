@@ -1,3 +1,4 @@
+import { resolveNotificationRoute as resolveNotificationRouteFromResolver } from '../navigation/navigationResolver.js'
 import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react'
 import {
   Network,
@@ -429,97 +430,7 @@ export function HRLayout({ route, children }) {
   }
 
   function resolveNotificationRoute(n) {
-    if (!n) return `#/${isAdmin ? 'admin' : (isHR ? 'hr' : 'employee')}`
-    const portal = isAdmin ? 'admin' : (isHR ? 'hr' : 'employee')
-
-    // 1. Explicit link/path provided
-    const direct = n.link || n.url || n.path || n.route || n.targetUrl || n.target
-    if (direct && typeof direct === 'string') {
-      if (direct.startsWith('#')) return direct
-      if (direct.startsWith('/')) return `#${direct}`
-      return `#/${direct}`
-    }
-
-    const type = (n.type || '').toLowerCase()
-    const title = (n.title || '').toLowerCase()
-    const msg = (n.message || '').toLowerCase()
-    const text = `${type} ${title} ${msg}`
-
-    // 2. Salary & Payroll
-    if (type === 'salary' || text.includes('salary') || text.includes('payslip') || text.includes('payroll') || text.includes('wage') || text.includes('disbursement')) {
-      return portal === 'employee' ? '#/employee/salary' : `#/${portal}/payroll`
-    }
-
-    // 3. Team approvals (manager view)
-    if (portal === 'employee' && (type === 'team_leave' || text.includes('team lead leave') || text.includes('manager approval') || text.includes('approval request') || n.metadata?.type === 'approval_request')) {
-      return '#/employee/team-leave'
-    }
-
-    // 4. Leave
-    if (type === 'leave' || type === 'leave_hr' || text.includes('leave') || text.includes('vacation') || text.includes('sick leave')) {
-      return `#/${portal}/leave`
-    }
-
-    // 5. Attendance & Punch
-    if (type === 'attendance' || text.includes('attendance') || text.includes('punch') || text.includes('clock-in') || text.includes('check-in') || text.includes('geofence') || text.includes('shift')) {
-      return `#/${portal}/attendance`
-    }
-
-    // 6. Tasks & Daily Reports
-    if (text.includes('daily report') || text.includes('standup') || text.includes('work report')) {
-      return portal === 'employee' ? '#/employee/daily-report' : (isAdmin ? '#/admin/reports' : '#/hr/reports')
-    }
-    if (type === 'task' || type === 'tasks' || text.includes('task') || text.includes('todo') || text.includes('assignment')) {
-      return `#/${portal}/tasks`
-    }
-
-    // 7. Announcements & Broadcasts
-    if (type === 'announcement' || text.includes('announcement') || text.includes('broadcast')) {
-      return `#/${portal}/announcements`
-    }
-
-    // 8. Helpdesk & Support Tickets
-    if (type === 'ticket' || type === 'tickets' || type === 'helpdesk' || text.includes('ticket') || text.includes('support ticket') || text.includes('help desk')) {
-      return `#/${portal}/helpdesk`
-    }
-
-    // 9. Expenses
-    if (type === 'expense' || type === 'expenses' || text.includes('expense') || text.includes('reimbursement')) {
-      return portal === 'employee' ? '#/employee/expenses' : (isAdmin ? '#/admin/reports' : '#/hr/reports')
-    }
-
-    // 10. Training & Learning Courses
-    if (type === 'training' || type === 'learning' || type === 'course' || text.includes('training') || text.includes('course') || text.includes('certificate') || text.includes('quiz')) {
-      return portal === 'employee' ? '#/employee/training' : `#/${portal}/learning`
-    }
-
-    // 11. Performance & Appraisals
-    if (type === 'performance' || text.includes('performance') || text.includes('appraisal') || text.includes('kpi') || text.includes('okr')) {
-      return `#/${portal}/performance`
-    }
-
-    // 12. Onboarding & People
-    if (type.startsWith('onboarding') || text.includes('onboarding') || text.includes('employee profile')) {
-      return portal === 'employee' ? '#/employee/profile' : `#/${portal}/people`
-    }
-
-    // 13. Policies & Handbooks
-    if (type === 'document' || type === 'policy' || type === 'policies' || text.includes('policy') || text.includes('handbook') || text.includes('nda')) {
-      return `#/${portal}/policies`
-    }
-
-    // 14. Holidays
-    if (type === 'holiday' || type === 'holidays' || text.includes('holiday')) {
-      return `#/${portal}/holidays`
-    }
-
-    // 15. User accounts & Credentials
-    if (type === 'user' || type === 'users' || text.includes('account created') || text.includes('credential')) {
-      return portal === 'employee' ? '#/employee/profile' : `#/${portal}/users`
-    }
-
-    // 16. Fallback to Notifications Center
-    return `#/${portal}/notifications`
+    return resolveNotificationRouteFromResolver(n, user)
   }
 
   function handleNotificationNavigation(n) {
