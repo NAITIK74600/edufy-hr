@@ -148,8 +148,12 @@ function RequestCard({ request, onSelect, selected, onQuickApprove, onQuickRejec
         background: selected ? 'rgba(0, 110, 111, 0.03)' : '#ffffff',
         boxShadow: selected ? '0 4px 14px rgba(0, 110, 111, 0.08)' : '0 2px 6px rgba(35, 38, 35, 0.02)',
         transition: 'all 0.18s ease',
+        flex: '0 0 auto',
         flexShrink: 0,
-        minHeight: 'fit-content',
+        flexGrow: 0,
+        minHeight: '88px',
+        height: 'auto',
+        overflow: 'visible',
         width: '100%',
         boxSizing: 'border-box',
       }}

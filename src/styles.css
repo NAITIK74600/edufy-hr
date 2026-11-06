@@ -1303,8 +1303,10 @@ label.form-label {
   max-width: 100%;
   min-width: 0;
   box-sizing: border-box;
+  flex: 0 0 auto !important;
   flex-shrink: 0 !important;
-  min-height: fit-content !important;
+  flex-grow: 0 !important;
+  min-height: 88px !important;
   height: auto !important;
   display: flex;
   flex-direction: column;
@@ -1313,10 +1315,10 @@ label.form-label {
   border: 1px solid var(--line);
   border-radius: 11px;
   padding: 13px 15px;
-  background: #fffefa;
+  background: #ffffff;
   color: var(--ink);
-  overflow: visible;
-  transition: transform .2s ease, border-color .2s ease, box-shadow .2s ease;
+  overflow: visible !important;
+  transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease;
 }
 
 .leave-request-card:hover,
