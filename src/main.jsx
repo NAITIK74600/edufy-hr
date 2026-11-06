@@ -383,6 +383,7 @@ function registerServiceWorker() {
       .register('/sw.js', { scope: '/' })
       .then((reg) => {
         console.log('[PWA] Service Worker registered with scope:', reg.scope)
+        reg.update().catch(() => {})
         if ('sync' in reg) {
           reg.sync.register('sync-attendance-heartbeat').catch(() => {})
         }

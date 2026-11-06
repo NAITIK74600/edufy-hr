@@ -151,7 +151,7 @@ function RequestCard({ request, onSelect, selected, onQuickApprove, onQuickRejec
         flex: '0 0 auto',
         flexShrink: 0,
         flexGrow: 0,
-        minHeight: '88px',
+        minHeight: '102px',
         height: 'auto',
         overflow: 'visible',
         width: '100%',
@@ -2723,7 +2723,21 @@ export function LeaveManagementPage({ mode = 'self', route, query: propQuery }) 
                   </span>
                 </div>
 
-                <div className="leave-request-list">
+                <div
+                  className="leave-request-list"
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '12px',
+                    maxHeight: 'calc(100vh - 260px)',
+                    minHeight: '420px',
+                    overflowY: 'auto',
+                    overflowX: 'hidden',
+                    paddingRight: '6px',
+                    width: '100%',
+                    boxSizing: 'border-box'
+                  }}
+                >
                   {filteredRequests.length ? (
                     filteredRequests.map((request, idx) => (
                       <RequestCard

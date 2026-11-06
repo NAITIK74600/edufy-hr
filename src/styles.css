@@ -1220,16 +1220,16 @@ label.form-label {
 }
 
 .leave-request-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 12px !important;
   margin-top: 14px;
   min-width: 0;
   max-width: 100%;
   width: 100%;
   box-sizing: border-box;
-  max-height: calc(100vh - 270px);
-  min-height: 400px;
+  max-height: calc(100vh - 260px) !important;
+  min-height: 420px !important;
   overflow-y: auto !important;
   overflow-x: hidden !important;
   padding-right: 6px;
@@ -1299,18 +1299,18 @@ label.form-label {
 }
 
 .leave-request-card {
-  width: 100%;
-  max-width: 100%;
-  min-width: 0;
-  box-sizing: border-box;
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  box-sizing: border-box !important;
   flex: 0 0 auto !important;
   flex-shrink: 0 !important;
   flex-grow: 0 !important;
-  min-height: 88px !important;
+  min-height: 102px !important;
   height: auto !important;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 10px !important;
   text-align: left;
   border: 1px solid var(--line);
   border-radius: 11px;
