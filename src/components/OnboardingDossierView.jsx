@@ -38,7 +38,13 @@ import { VERIFICATION_TEMPLATES } from '../constants/verificationConstants.js'
 
 
 function ModalDocInput({ doc, currentDoc, onSelect }) {
-  const hasFile = Boolean(currentDoc && (currentDoc.url || currentDoc.fileName || (Array.isArray(currentDoc.files) && currentDoc.files.length > 0)))
+  const hasFile = Boolean(
+    currentDoc && (
+      currentDoc.url ||
+      currentDoc.fileName ||
+      (Array.isArray(currentDoc.files) && currentDoc.files.length > 0)
+    )
+  )
   const isReuploadRequested = Boolean(
     currentDoc && (
       currentDoc.reuploadRequested === true ||
@@ -46,55 +52,109 @@ function ModalDocInput({ doc, currentDoc, onSelect }) {
       currentDoc.status === 'rejected'
     )
   )
-  const isLocked = hasFile && !isReuploadRequested
+  const isVerified = currentDoc?.status === 'verified'
+  const fileName = Array.isArray(currentDoc?.files) && currentDoc.files.length > 1
+    ? `${currentDoc.files.length} files attached (${currentDoc.files.map((f) => f.name).join(', ')})`
+    : (currentDoc?.fileName || (hasFile ? 'Document Attached' : ''))
 
   return (
-    <div style={{ padding: '10px', border: '1px solid var(--border-color)', borderRadius: '8px', background: isReuploadRequested ? '#fff5f5' : (isLocked ? '#f8fafc' : '#fcfdfd') }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-        <span style={{ fontSize: '12px', fontWeight: 600 }}>
-          {doc.label} {doc.multiple ? '(Multiple Files Allowed)' : ''}
-        </span>
-        {isLocked ? (
-          <span style={{ fontSize: '9.5px', padding: '1px 6px', borderRadius: '4px', background: '#e2e8f0', color: '#475569', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
-            <Lock size={9} /> {currentDoc.status === 'verified' ? 'VERIFIED' : 'LOCKED'}
+    <div
+      style={{
+        padding: '12px 14px',
+        border: isReuploadRequested
+          ? '1.5px solid #fca5a5'
+          : hasFile
+          ? '1.5px solid #a7f3d0'
+          : '1px solid #e2e8f0',
+        borderRadius: '10px',
+        background: isReuploadRequested
+          ? '#fef2f2'
+          : hasFile
+          ? '#f0fdf4'
+          : '#ffffff',
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'space-between',
+        gap: '9px',
+        boxSizing: 'border-box',
+        transition: 'all 0.18s ease',
+      }}
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
+        <div>
+          <span style={{ fontSize: '12.5px', fontWeight: 600, color: '#1e293b', display: 'block' }}>
+            {doc.label} {doc.multiple ? '(Multiple Files Allowed)' : ''}
           </span>
-        ) : isReuploadRequested ? (
-          <span style={{ fontSize: '9.5px', padding: '1px 6px', borderRadius: '4px', background: '#fee2e2', color: '#b91c1c', fontWeight: 700 }}>
-            RE-UPLOAD REQUESTED
+          <small style={{ color: '#64748b', fontSize: '10.5px' }}>
+            {doc.category === 'photo' ? 'Photo / Headshot (JPEG, PNG)' : doc.multiple ? 'PDF, PNG, JPG (select multiple)' : 'PDF, JPG, PNG'}
+          </small>
+        </div>
+        {isReuploadRequested ? (
+          <span style={{ fontSize: '9.5px', padding: '2px 6px', borderRadius: '4px', background: '#fee2e2', color: '#b91c1c', fontWeight: 700, flexShrink: 0 }}>
+            RE-UPLOAD
+          </span>
+        ) : isVerified ? (
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', fontSize: '9.5px', fontWeight: 700, color: '#047857', background: '#dcfce7', padding: '2px 7px', borderRadius: '4px', flexShrink: 0 }}>
+            <CheckCircle2 size={11} /> VERIFIED
+          </span>
+        ) : hasFile ? (
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', fontSize: '9.5px', fontWeight: 700, color: '#0284c7', background: '#e0f2fe', padding: '2px 7px', borderRadius: '4px', flexShrink: 0 }}>
+            <Check size={11} /> ATTACHED
           </span>
         ) : null}
       </div>
 
       {isReuploadRequested && (currentDoc?.reuploadRemarks || currentDoc?.rejectionReason) && (
-        <div style={{ padding: '4px 6px', background: '#fee2e2', border: '1px solid #fecaca', borderRadius: '4px', fontSize: '10px', color: '#991b1b', marginBottom: '6px' }}>
+        <div style={{ padding: '5px 8px', background: '#fee2e2', border: '1px solid #fecaca', borderRadius: '5px', fontSize: '10.5px', color: '#991b1b' }}>
           <strong>HR Note:</strong> {currentDoc.reuploadRemarks || currentDoc.rejectionReason}
         </div>
       )}
 
-      {isLocked ? (
-        <div style={{ padding: '6px 8px', background: '#e2e8f0', borderRadius: '4px', fontSize: '11px', color: '#475569', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-            <Lock size={11} /> Locked (Awaiting HR review)
+      {hasFile && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: '#065f46', background: 'rgba(255, 255, 255, 0.85)', padding: '6px 9px', borderRadius: '6px', border: '1px solid #bbf7d0', overflow: 'hidden' }}>
+          <FileText size={13} style={{ flexShrink: 0, color: '#059669' }} />
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600, flex: 1 }}>
+            {fileName}
           </span>
-          <span style={{ fontWeight: 600, color: 'var(--teal)', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '140px' }}>
-            {currentDoc.fileName || 'Attached'}
-          </span>
+          {currentDoc?.size && (
+            <span style={{ fontSize: '9.5px', color: '#047857', flexShrink: 0 }}>
+              {currentDoc.size}
+            </span>
+          )}
         </div>
-      ) : (
-        <input
-          type="file"
-          accept="*/*"
-          multiple={Boolean(doc.multiple)}
-          style={{ fontSize: '11px', width: '100%' }}
-          onChange={(e) => onSelect(doc.key, e)}
-        />
       )}
 
-      {!isLocked && currentDoc?.fileName && (
-        <div style={{ marginTop: '6px', fontSize: '11px', color: 'var(--teal)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-          <CheckCircle2 size={12} /> {currentDoc.fileName}
-        </div>
-      )}
+      <div>
+        <label
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '6px',
+            width: '100%',
+            padding: '7px 12px',
+            borderRadius: '7px',
+            fontSize: '11.5px',
+            fontWeight: 600,
+            cursor: 'pointer',
+            border: hasFile ? '1px solid #86efac' : '1px solid #cbd5e1',
+            background: hasFile ? '#ffffff' : '#f8fafc',
+            color: hasFile ? '#047857' : '#334155',
+            boxSizing: 'border-box',
+            transition: 'background 0.15s ease',
+          }}
+        >
+          <Upload size={13} />
+          <span>{hasFile ? 'Replace Document' : 'Choose File'}</span>
+          <input
+            type="file"
+            accept="*/*"
+            multiple={Boolean(doc.multiple)}
+            style={{ display: 'none' }}
+            onChange={(e) => onSelect(doc.key, e)}
+          />
+        </label>
+      </div>
     </div>
   )
 }
@@ -2257,239 +2317,367 @@ export function OnboardingDossierView({ employee, canEdit = false, canVerify = f
                 flex: 1,
                 overflowY: 'auto',
                 padding: '24px',
-                display: 'grid',
-                gap: '22px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '20px',
+                background: '#f8fafc',
               }}
             >
-              {/* 1. Identity Credentials */}
-              <div>
-                <h4 style={{ margin: '0 0 10px', fontSize: '13px', color: 'var(--teal)', fontWeight: 600 }}>1. Government & Statutory Identity</h4>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
-                  <label style={{ display: 'grid', gap: '4px', fontSize: '12px' }}>
+              {/* 1. Identity Credentials Card */}
+              <div
+                style={{
+                  background: '#ffffff',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: '14px',
+                  padding: '20px 22px',
+                  boxShadow: '0 1px 3px rgba(0, 0, 0, 0.04)',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', paddingBottom: '12px', borderBottom: '1px solid #f1f5f9' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(0, 110, 111, 0.08)', color: 'var(--teal, #006e6f)', display: 'grid', placeItems: 'center', flexShrink: 0 }}>
+                      <ShieldCheck size={18} />
+                    </div>
+                    <div>
+                      <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 700, color: 'var(--ink)' }}>
+                        1. Government & Statutory Identity
+                      </h4>
+                      <p style={{ margin: '2px 0 0', fontSize: '11px', color: '#64748b' }}>
+                        Mandatory government identifiers required for statutory compliance and payroll.
+                      </p>
+                    </div>
+                  </div>
+                  <span style={{ fontSize: '10.5px', fontWeight: 700, color: 'var(--teal)', background: '#f0fdfa', border: '1px solid #ccfbf1', padding: '2px 8px', borderRadius: '999px' }}>
+                    Identity
+                  </span>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px' }}>
+                  <label style={{ display: 'grid', gap: '5px', fontSize: '12px', fontWeight: 600, color: '#334155' }}>
                     Aadhar Card Number
                     <input
                       type="text"
                       className="ui-input"
-                      value={editData.identity.aadharNumber}
+                      value={editData.identity.aadharNumber || ''}
                       onChange={(e) => setEditData({ ...editData, identity: { ...editData.identity, aadharNumber: e.target.value } })}
                       placeholder="12-digit UIDAI number"
+                      maxLength={16}
                     />
                   </label>
-                  <label style={{ display: 'grid', gap: '4px', fontSize: '12px' }}>
+                  <label style={{ display: 'grid', gap: '5px', fontSize: '12px', fontWeight: 600, color: '#334155' }}>
                     PAN Card Number
                     <input
                       type="text"
                       className="ui-input"
-                      value={editData.identity.panNumber}
+                      value={editData.identity.panNumber || ''}
                       onChange={(e) => setEditData({ ...editData, identity: { ...editData.identity, panNumber: e.target.value.toUpperCase() } })}
                       placeholder="e.g. ABCDE1234F"
+                      maxLength={10}
+                      style={{ textTransform: 'uppercase' }}
                     />
                   </label>
-                  <label style={{ display: 'grid', gap: '4px', fontSize: '12px' }}>
+                  <label style={{ display: 'grid', gap: '5px', fontSize: '12px', fontWeight: 600, color: '#334155' }}>
                     Passport Number
                     <input
                       type="text"
                       className="ui-input"
-                      value={editData.identity.passportNumber}
+                      value={editData.identity.passportNumber || ''}
                       onChange={(e) => setEditData({ ...editData, identity: { ...editData.identity, passportNumber: e.target.value.toUpperCase() } })}
-                      placeholder="e.g. Z1234567"
+                      placeholder="e.g. Z1234567 (Optional)"
+                      maxLength={15}
+                      style={{ textTransform: 'uppercase' }}
                     />
                   </label>
-                  <label style={{ display: 'grid', gap: '4px', fontSize: '12px' }}>
+                  <label style={{ display: 'grid', gap: '5px', fontSize: '12px', fontWeight: 600, color: '#334155' }}>
                     Universal Account Number (PF UAN)
                     <input
                       type="text"
                       className="ui-input"
-                      value={editData.identity.uanNumber}
+                      value={editData.identity.uanNumber || ''}
                       onChange={(e) => setEditData({ ...editData, identity: { ...editData.identity, uanNumber: e.target.value } })}
                       placeholder="12-digit EPFO UAN"
+                      maxLength={16}
                     />
                   </label>
                 </div>
               </div>
 
-              {/* 2. Bank Details */}
-              <div>
-                <h4 style={{ margin: '0 0 10px', fontSize: '13px', color: 'var(--teal)', fontWeight: 600 }}>2. Bank Account Details (For Monthly Salary Credit)</h4>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
-                  <label style={{ display: 'grid', gap: '4px', fontSize: '12px' }}>
+              {/* 2. Bank Details Card */}
+              <div
+                style={{
+                  background: '#ffffff',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: '14px',
+                  padding: '20px 22px',
+                  boxShadow: '0 1px 3px rgba(0, 0, 0, 0.04)',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', paddingBottom: '12px', borderBottom: '1px solid #f1f5f9' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(0, 110, 111, 0.08)', color: 'var(--teal, #006e6f)', display: 'grid', placeItems: 'center', flexShrink: 0 }}>
+                      <CreditCard size={18} />
+                    </div>
+                    <div>
+                      <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 700, color: 'var(--ink)' }}>
+                        2. Bank Account Details (Salary Disbursement)
+                      </h4>
+                      <p style={{ margin: '2px 0 0', fontSize: '11px', color: '#64748b' }}>
+                        Official bank account for monthly salary credit and expense reimbursements.
+                      </p>
+                    </div>
+                  </div>
+                  <span style={{ fontSize: '10.5px', fontWeight: 700, color: 'var(--teal)', background: '#f0fdfa', border: '1px solid #ccfbf1', padding: '2px 8px', borderRadius: '999px' }}>
+                    Salary Credit
+                  </span>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px' }}>
+                  <label style={{ display: 'grid', gap: '5px', fontSize: '12px', fontWeight: 600, color: '#334155' }}>
                     Bank Name
                     <input
                       type="text"
                       className="ui-input"
-                      value={editData.bankDetails.bankName}
+                      value={editData.bankDetails.bankName || ''}
                       onChange={(e) => setEditData({ ...editData, bankDetails: { ...editData.bankDetails, bankName: e.target.value } })}
-                      placeholder="e.g. HDFC Bank"
+                      placeholder="e.g. HDFC Bank, ICICI Bank, SBI"
                     />
                   </label>
-                  <label style={{ display: 'grid', gap: '4px', fontSize: '12px' }}>
+                  <label style={{ display: 'grid', gap: '5px', fontSize: '12px', fontWeight: 600, color: '#334155' }}>
                     Bank Account Number
                     <input
                       type="text"
                       className="ui-input"
-                      value={editData.bankDetails.accountNumber}
+                      value={editData.bankDetails.accountNumber || ''}
                       onChange={(e) => setEditData({ ...editData, bankDetails: { ...editData.bankDetails, accountNumber: e.target.value } })}
                       placeholder="Full account number"
                     />
                   </label>
-                  <label style={{ display: 'grid', gap: '4px', fontSize: '12px' }}>
+                  <label style={{ display: 'grid', gap: '5px', fontSize: '12px', fontWeight: 600, color: '#334155' }}>
                     Bank IFSC Code
                     <input
                       type="text"
                       className="ui-input"
-                      value={editData.bankDetails.ifscCode}
+                      value={editData.bankDetails.ifscCode || ''}
                       onChange={(e) => setEditData({ ...editData, bankDetails: { ...editData.bankDetails, ifscCode: e.target.value.toUpperCase() } })}
                       placeholder="e.g. HDFC0001234"
+                      maxLength={11}
+                      style={{ textTransform: 'uppercase' }}
                     />
                   </label>
-                  <label style={{ display: 'grid', gap: '4px', fontSize: '12px' }}>
+                  <label style={{ display: 'grid', gap: '5px', fontSize: '12px', fontWeight: 600, color: '#334155' }}>
                     Account Holder Name
                     <input
                       type="text"
                       className="ui-input"
-                      value={editData.bankDetails.accountHolderName}
+                      value={editData.bankDetails.accountHolderName || ''}
                       onChange={(e) => setEditData({ ...editData, bankDetails: { ...editData.bankDetails, accountHolderName: e.target.value } })}
-                      placeholder={employee?.name || 'Self'}
+                      placeholder={employee?.name || 'Full legal name on passbook'}
                     />
                   </label>
                 </div>
               </div>
 
-              {/* 3. Document File Uploads */}
-              <div>
-                <h4 style={{ margin: '0 0 10px', fontSize: '13px', color: 'var(--teal)', fontWeight: 600 }}>3. Document & Media Uploads</h4>
-                <p style={{ margin: '-6px 0 12px', fontSize: '11px', color: 'var(--text-secondary)' }}>
-                  Upload documents or media files (PDF, JPG, PNG, WebP, Video, Audio, or Word documents).
-                </p>
+              {/* 3. Family & Emergency Contacts Card (MOVED BEFORE DOCUMENT UPLOADS) */}
+              <div
+                style={{
+                  background: '#ffffff',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: '14px',
+                  padding: '20px 22px',
+                  boxShadow: '0 1px 3px rgba(0, 0, 0, 0.04)',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', paddingBottom: '12px', borderBottom: '1px solid #f1f5f9' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(0, 110, 111, 0.08)', color: 'var(--teal, #006e6f)', display: 'grid', placeItems: 'center', flexShrink: 0 }}>
+                      <Users size={18} />
+                    </div>
+                    <div>
+                      <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 700, color: 'var(--ink)' }}>
+                        3. Family & Emergency Contacts
+                      </h4>
+                      <p style={{ margin: '2px 0 0', fontSize: '11px', color: '#64748b' }}>
+                        Parental information and designated emergency contact for immediate reachability.
+                      </p>
+                    </div>
+                  </div>
+                  <span style={{ fontSize: '10.5px', fontWeight: 700, color: 'var(--teal)', background: '#f0fdfa', border: '1px solid #ccfbf1', padding: '2px 8px', borderRadius: '999px' }}>
+                    Contacts
+                  </span>
+                </div>
 
-                {/* 3.1 Statutory & Identity */}
-                <div style={{ marginBottom: '14px' }}>
-                  <h5 style={{ margin: '0 0 8px', fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)' }}>Statutory & Identity Documents</h5>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
-                    {docList.filter(d => ['photo', 'identity', 'bank'].includes(d.category)).map((doc) => {
-                      const currentDoc = editData.onboardingDocs?.[doc.key]
-                      return (
-                        <div key={doc.key} style={{ padding: '10px', border: '1px solid var(--border-color)', borderRadius: '8px', background: '#fcfdfd' }}>
-                          <span style={{ fontSize: '12px', fontWeight: 600, display: 'block', marginBottom: '6px' }}>{doc.label}</span>
-                          <input
-                            type="file"
-                            accept="*/*"
-                            style={{ fontSize: '11px', width: '100%' }}
-                            onChange={(e) => handleFileSelect(doc.key, e)}
-                          />
-                          {currentDoc?.fileName && (
-                            <div style={{ marginTop: '6px', fontSize: '11px', color: 'var(--teal)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                              <CheckCircle2 size={12} /> {currentDoc.fileName}
-                            </div>
-                          )}
-                        </div>
-                      )
-                    })}
+                {/* Subsection A: Parents Information */}
+                <div style={{ marginBottom: '18px' }}>
+                  <span style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#334155', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    • Parents / Guardian Information
+                  </span>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px' }}>
+                    <label style={{ display: 'grid', gap: '5px', fontSize: '12px', fontWeight: 600, color: '#334155' }}>
+                      Father's Full Name
+                      <input
+                        type="text"
+                        className="ui-input"
+                        value={editData.parentsContact.fatherName || ''}
+                        onChange={(e) => setEditData({ ...editData, parentsContact: { ...editData.parentsContact, fatherName: e.target.value } })}
+                        placeholder="Father's full name"
+                      />
+                    </label>
+                    <label style={{ display: 'grid', gap: '5px', fontSize: '12px', fontWeight: 600, color: '#334155' }}>
+                      Mother's Full Name
+                      <input
+                        type="text"
+                        className="ui-input"
+                        value={editData.parentsContact.motherName || ''}
+                        onChange={(e) => setEditData({ ...editData, parentsContact: { ...editData.parentsContact, motherName: e.target.value } })}
+                        placeholder="Mother's full name"
+                      />
+                    </label>
+                    <label style={{ display: 'grid', gap: '5px', fontSize: '12px', fontWeight: 600, color: '#334155' }}>
+                      Parents' Contact Phone
+                      <input
+                        type="tel"
+                        className="ui-input"
+                        value={editData.parentsContact.parentPhone || ''}
+                        onChange={(e) => setEditData({ ...editData, parentsContact: { ...editData.parentsContact, parentPhone: e.target.value } })}
+                        placeholder="e.g. +91 98765 43210"
+                      />
+                    </label>
+                    <label style={{ display: 'grid', gap: '5px', fontSize: '12px', fontWeight: 600, color: '#334155' }}>
+                      Permanent Residence Address
+                      <input
+                        type="text"
+                        className="ui-input"
+                        value={editData.parentsContact.address || ''}
+                        onChange={(e) => setEditData({ ...editData, parentsContact: { ...editData.parentsContact, address: e.target.value } })}
+                        placeholder="House / Street / City / State / Pincode"
+                      />
+                    </label>
                   </div>
                 </div>
 
-                {/* 3.2 Academic Marksheets */}
-                <div style={{ marginBottom: '14px' }}>
-                  <h5 style={{ margin: '0 0 8px', fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)' }}>Academic Marksheets & Degrees</h5>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
-                    {docList.filter(d => d.category === 'education').map((doc) => {
-                      const currentDoc = editData.onboardingDocs?.[doc.key]
-                      return (
-                        <div key={doc.key} style={{ padding: '10px', border: '1px solid var(--border-color)', borderRadius: '8px', background: '#fcfdfd' }}>
-                          <span style={{ fontSize: '12px', fontWeight: 600, display: 'block', marginBottom: '6px' }}>
-                            {doc.label} {doc.multiple ? '(Multiple Files Allowed)' : ''}
-                          </span>
-                          <input
-                            type="file"
-                            accept="*/*"
-                            multiple={Boolean(doc.multiple)}
-                            style={{ fontSize: '11px', width: '100%' }}
-                            onChange={(e) => handleFileSelect(doc.key, e)}
-                          />
-                          {currentDoc?.files?.length > 1 ? (
-                            <div style={{ marginTop: '6px', fontSize: '11px', color: 'var(--teal)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                              <CheckCircle2 size={12} /> {currentDoc.files.length} files attached
-                            </div>
-                          ) : currentDoc?.fileName && (
-                            <div style={{ marginTop: '6px', fontSize: '11px', color: 'var(--teal)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                              <CheckCircle2 size={12} /> {currentDoc.fileName}
-                            </div>
-                          )}
-                        </div>
-                      )
-                    })}
+                {/* Subsection B: Emergency Contact (Clean, Separate Inputs) */}
+                <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '16px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '12px' }}>
+                    <span style={{ fontSize: '12px', fontWeight: 700, color: '#0f766e', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                      • Designated Emergency Contact
+                    </span>
+                    <span style={{ fontSize: '10.5px', color: '#64748b' }}>
+                      (Immediate point of contact in case of emergency)
+                    </span>
                   </div>
-                </div>
-
-                {/* 3.3 Previous Employment Documents */}
-                <div style={{ marginBottom: '14px' }}>
-                  <h5 style={{ margin: '0 0 8px', fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)' }}>Previous Employment Documents</h5>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
-                    {docList.filter(d => d.category === 'previous_employment').map((doc) => {
-                      const currentDoc = editData.onboardingDocs?.[doc.key]
-                      return (
-                        <div key={doc.key} style={{ padding: '10px', border: '1px solid var(--border-color)', borderRadius: '8px', background: '#fcfdfd' }}>
-                          <span style={{ fontSize: '12px', fontWeight: 600, display: 'block', marginBottom: '6px' }}>{doc.label}</span>
-                          <input
-                            type="file"
-                            accept="*/*"
-                            style={{ fontSize: '11px', width: '100%' }}
-                            onChange={(e) => handleFileSelect(doc.key, e)}
-                          />
-                          {currentDoc?.fileName && (
-                            <div style={{ marginTop: '6px', fontSize: '11px', color: 'var(--teal)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                              <CheckCircle2 size={12} /> {currentDoc.fileName}
-                            </div>
-                          )}
-                        </div>
-                      )
-                    })}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px' }}>
+                    <label style={{ display: 'grid', gap: '5px', fontSize: '12px', fontWeight: 600, color: '#334155' }}>
+                      Emergency Contact Name
+                      <input
+                        type="text"
+                        className="ui-input"
+                        value={editData.emergencyContact.name || ''}
+                        onChange={(e) => setEditData({ ...editData, emergencyContact: { ...editData.emergencyContact, name: e.target.value } })}
+                        placeholder="e.g. Rajesh Kumar"
+                      />
+                    </label>
+                    <label style={{ display: 'grid', gap: '5px', fontSize: '12px', fontWeight: 600, color: '#334155' }}>
+                      Relationship to Employee
+                      <input
+                        type="text"
+                        className="ui-input"
+                        value={editData.emergencyContact.relationship || ''}
+                        onChange={(e) => setEditData({ ...editData, emergencyContact: { ...editData.emergencyContact, relationship: e.target.value } })}
+                        placeholder="e.g. Father, Mother, Spouse, Sibling, Friend"
+                      />
+                    </label>
+                    <label style={{ display: 'grid', gap: '5px', fontSize: '12px', fontWeight: 600, color: '#334155' }}>
+                      Emergency Contact Phone Number
+                      <input
+                        type="tel"
+                        className="ui-input"
+                        value={editData.emergencyContact.phone || ''}
+                        onChange={(e) => setEditData({ ...editData, emergencyContact: { ...editData.emergencyContact, phone: e.target.value } })}
+                        placeholder="e.g. +91 98765 43210"
+                      />
+                    </label>
                   </div>
                 </div>
               </div>
 
-              {/* 4. Family & Emergency Contacts */}
-              <div>
-                <h4 style={{ margin: '0 0 10px', fontSize: '13px', color: 'var(--teal)', fontWeight: 600 }}>4. Family & Emergency Contacts</h4>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
-                  <label style={{ display: 'grid', gap: '4px', fontSize: '12px' }}>
-                    Father's Name
-                    <input
-                      type="text"
-                      className="ui-input"
-                      value={editData.parentsContact.fatherName}
-                      onChange={(e) => setEditData({ ...editData, parentsContact: { ...editData.parentsContact, fatherName: e.target.value } })}
-                    />
-                  </label>
-                  <label style={{ display: 'grid', gap: '4px', fontSize: '12px' }}>
-                    Mother's Name
-                    <input
-                      type="text"
-                      className="ui-input"
-                      value={editData.parentsContact.motherName}
-                      onChange={(e) => setEditData({ ...editData, parentsContact: { ...editData.parentsContact, motherName: e.target.value } })}
-                    />
-                  </label>
-                  <label style={{ display: 'grid', gap: '4px', fontSize: '12px' }}>
-                    Emergency Contact Name & Phone
-                    <input
-                      type="text"
-                      className="ui-input"
-                      placeholder="Name (Phone)"
-                      value={editData.emergencyContact.name ? `${editData.emergencyContact.name} (${editData.emergencyContact.phone || ''})` : ''}
-                      onChange={(e) => {
-                        const val = e.target.value
-                        setEditData({
-                          ...editData,
-                          emergencyContact: {
-                            ...editData.emergencyContact,
-                            name: val.split('(')[0]?.trim() || val,
-                            phone: val.includes('(') ? val.split('(')[1]?.replace(')', '').trim() : editData.emergencyContact.phone,
-                          }
-                        })
-                      }}
-                    />
-                  </label>
+              {/* 4. Document & Media Uploads Card (PLACED AT THE END BEFORE SUBMISSION) */}
+              <div
+                style={{
+                  background: '#ffffff',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: '14px',
+                  padding: '20px 22px',
+                  boxShadow: '0 1px 3px rgba(0, 0, 0, 0.04)',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', paddingBottom: '12px', borderBottom: '1px solid #f1f5f9' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(0, 110, 111, 0.08)', color: 'var(--teal, #006e6f)', display: 'grid', placeItems: 'center', flexShrink: 0 }}>
+                      <Upload size={18} />
+                    </div>
+                    <div>
+                      <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 700, color: 'var(--ink)' }}>
+                        4. Document & Media Uploads
+                      </h4>
+                      <p style={{ margin: '2px 0 0', fontSize: '11px', color: '#64748b' }}>
+                        Upload clear scans or photos (PDF, JPG, PNG, WebP) for HR verification.
+                      </p>
+                    </div>
+                  </div>
+                  <span style={{ fontSize: '10.5px', fontWeight: 700, color: 'var(--teal)', background: '#f0fdfa', border: '1px solid #ccfbf1', padding: '2px 8px', borderRadius: '999px' }}>
+                    Attestation
+                  </span>
+                </div>
+
+                {/* 4.1 Statutory & Identity Documents */}
+                <div style={{ marginBottom: '20px' }}>
+                  <span style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#334155', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    • Statutory & Identity Documents
+                  </span>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: '12px' }}>
+                    {docList.filter((d) => ['photo', 'identity', 'bank'].includes(d.category)).map((doc) => (
+                      <ModalDocInput
+                        key={doc.key}
+                        doc={doc}
+                        currentDoc={editData.onboardingDocs?.[doc.key]}
+                        onSelect={handleFileSelect}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                {/* 4.2 Academic Marksheets */}
+                <div style={{ marginBottom: '20px' }}>
+                  <span style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#334155', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    • Academic Marksheets & Degrees
+                  </span>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: '12px' }}>
+                    {docList.filter((d) => d.category === 'education').map((doc) => (
+                      <ModalDocInput
+                        key={doc.key}
+                        doc={doc}
+                        currentDoc={editData.onboardingDocs?.[doc.key]}
+                        onSelect={handleFileSelect}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                {/* 4.3 Previous Employment Documents */}
+                <div>
+                  <span style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#334155', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    • Previous Employment Records
+                  </span>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: '12px' }}>
+                    {docList.filter((d) => d.category === 'previous_employment').map((doc) => (
+                      <ModalDocInput
+                        key={doc.key}
+                        doc={doc}
+                        currentDoc={editData.onboardingDocs?.[doc.key]}
+                        onSelect={handleFileSelect}
+                      />
+                    ))}
+                  </div>
                 </div>
               </div>
             </form>
