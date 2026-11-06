@@ -764,7 +764,8 @@ label.form-label {
 .route-motion > div > *, .main-content :is(.dashboard-grid, .lower-grid) > * { min-width: 0; }
 @media (max-width: 560px) { .topbar { height: calc(56px + env(safe-area-inset-top, 0px)); padding-top: env(safe-area-inset-top, 0px); padding-left: calc(14px + env(safe-area-inset-left, 0px)); padding-right: calc(14px + env(safe-area-inset-right, 0px)); }.breadcrumbs { font-size: 11px; }.search-box { display: none; }.page-content { padding: 29px 17px 20px; }.page-heading { display: block; margin-bottom: 26px; }.page-heading h1 { font-size: 26px; }.heading-actions { margin-top: 20px; }.select-control { flex: 1; justify-content: center; }.primary-button { flex: 1; justify-content: center; }.metric-grid { gap: 9px; }.metric-card { min-height: 117px; padding: 13px; gap: 8px; }.metric-copy strong { font-size: 24px; }.metric-copy > span { font-size: 10px; }.metric-copy small { font-size: 9px; }.metric-icon { width: 30px; height: 30px; }.panel { padding: 18px 15px; }.attendance-summary { align-items: flex-start; display: block; }.attendance-legend { margin-top: 15px; }.chart-wrap { height: 148px; }.chart-footer { display: block; line-height: 2; }.dashboard-grid, .lower-grid { gap: 12px; }.page-footer { display: grid; gap: 7px; }.announcement-feature h3 { font-size: 11px; } }
 
-@keyframes fadeUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes fadeUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+@keyframes dialogPop { from { opacity: 0; transform: scale(0.96) translateY(6px); } to { opacity: 1; transform: none; } }
 @keyframes pulseGlow { 0%, 100% { box-shadow: 0 0 0 0 rgba(29, 138, 122, .12); } 50% { box-shadow: 0 0 0 10px rgba(29, 138, 122, 0); } }
 
 .nav-item, .ui-button, .panel, .metric-card, .hero-card, .auth-card, .status-strip, .workspace-live-pill, .input-with-icon { animation: fadeUp .45s ease both; }
@@ -1227,9 +1228,31 @@ label.form-label {
   max-width: 100%;
   width: 100%;
   box-sizing: border-box;
-  max-height: calc(100vh - 250px);
-  overflow-y: auto;
-  padding-right: 4px;
+  max-height: calc(100vh - 270px);
+  min-height: 400px;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  padding-right: 6px;
+  overscroll-behavior: contain;
+}
+
+.leave-request-list::-webkit-scrollbar,
+.leave-detail-panel::-webkit-scrollbar {
+  width: 6px;
+}
+.leave-request-list::-webkit-scrollbar-track,
+.leave-detail-panel::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.03);
+  border-radius: 999px;
+}
+.leave-request-list::-webkit-scrollbar-thumb,
+.leave-detail-panel::-webkit-scrollbar-thumb {
+  background: rgba(0, 110, 111, 0.28);
+  border-radius: 999px;
+}
+.leave-request-list::-webkit-scrollbar-thumb:hover,
+.leave-detail-panel::-webkit-scrollbar-thumb:hover {
+  background: var(--teal, #006e6f);
 }
 
 .leave-top-decision-bar {
@@ -1280,6 +1303,8 @@ label.form-label {
   max-width: 100%;
   min-width: 0;
   box-sizing: border-box;
+  flex-shrink: 0 !important;
+  min-height: 84px !important;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -2456,24 +2481,34 @@ label.form-label {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 
-/* Leave Reject Modal */
+/* Leave Reject & Confirmation Dialogs */
+.dialog-backdrop,
 .reject-modal-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.45);
-  backdrop-filter: blur(4px);
-  z-index: 1000;
-  display: grid;
-  place-items: center;
-  padding: 20px;
+  position: fixed !important;
+  inset: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  z-index: 99999 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  background: rgba(15, 23, 42, 0.65) !important;
+  backdrop-filter: blur(4px) !important;
+  padding: 20px !important;
+  box-sizing: border-box !important;
 }
+.dialog,
 .reject-modal {
-  width: min(100%, 460px);
-  background: #fffefa;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 22px;
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.15);
+  position: relative !important;
+  margin: auto !important;
+  width: min(100%, 460px) !important;
+  background: #ffffff !important;
+  border: 1px solid var(--line, #e2e8f0) !important;
+  border-radius: 14px !important;
+  padding: 24px !important;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25) !important;
+  box-sizing: border-box !important;
+  animation: dialogPop 0.18s cubic-bezier(0.16, 1, 0.3, 1) !important;
 }
 
 /* User Profile Image & Avatar System */

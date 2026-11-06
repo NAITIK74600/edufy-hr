@@ -1,5 +1,6 @@
 import { parseLocationHash } from '../navigation/navigationResolver.js'
 import { useEffect, useState, useMemo } from 'react'
+import { createPortal } from 'react-dom'
 import {
   AlertCircle,
   ArrowLeft,
@@ -100,7 +101,7 @@ function RequestStatus({ status }) {
   )
 }
 
-function RequestCard({ request, onSelect, selected, onQuickApprove, onQuickReject }) {
+function RequestCard({ request, onSelect, selected, onQuickApprove, onQuickReject, onDeleteRequest }) {
   if (!request) return null
   const employee = request.employeeName || request.employeeId?.name || 'Employee'
   const empCode = request.employeeCode || (typeof request.employeeId === 'object' ? request.employeeId?.employeeId : '') || ''
@@ -138,6 +139,10 @@ function RequestCard({ request, onSelect, selected, onQuickApprove, onQuickRejec
         background: selected ? 'rgba(0, 110, 111, 0.03)' : '#ffffff',
         boxShadow: selected ? '0 4px 14px rgba(0, 110, 111, 0.08)' : '0 2px 6px rgba(35, 38, 35, 0.02)',
         transition: 'all 0.18s ease',
+        flexShrink: 0,
+        minHeight: '84px',
+        width: '100%',
+        boxSizing: 'border-box',
       }}
     >
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: '11px', width: '100%' }}>
@@ -232,12 +237,12 @@ function RequestCard({ request, onSelect, selected, onQuickApprove, onQuickRejec
           <strong style={{ color: '#334155' }}>Note:</strong> {request.reason || 'No justification specified'}
         </span>
 
-        {isPending && onQuickApprove && (
-          <div
-            className="emp-action-group"
-            onClick={(e) => e.stopPropagation()}
-            style={{ marginLeft: 'auto', flexShrink: 0, display: 'flex', gap: '6px' }}
-          >
+        <div
+          className="emp-action-group"
+          onClick={(e) => e.stopPropagation()}
+          style={{ marginLeft: 'auto', flexShrink: 0, display: 'flex', alignItems: 'center', gap: '6px' }}
+        >
+          {isPending && onQuickApprove && (
             <button
               type="button"
               className="emp-action-btn view"
@@ -247,6 +252,8 @@ function RequestCard({ request, onSelect, selected, onQuickApprove, onQuickRejec
             >
               <Check size={11} /> Approve
             </button>
+          )}
+          {isPending && onQuickReject && (
             <button
               type="button"
               className="emp-action-btn delete"
@@ -256,8 +263,19 @@ function RequestCard({ request, onSelect, selected, onQuickApprove, onQuickRejec
             >
               <X size={11} /> Reject
             </button>
-          </div>
-        )}
+          )}
+          {onDeleteRequest && (
+            <button
+              type="button"
+              className="emp-action-btn delete"
+              onClick={() => onDeleteRequest(request)}
+              title="Delete Leave Request"
+              style={{ padding: '3px 7px', fontSize: '10.5px' }}
+            >
+              <Trash2 size={11} />
+            </button>
+          )}
+        </div>
       </div>
     </div>
   )
@@ -736,8 +754,8 @@ function RequestDetail({ request, mode, onRefresh, onDeleteRequest, onPromptReje
         </div>
       )}
 
-      {/* Action for HR if already decided: Delete option */}
-      {mode === 'hr' && !canHrDecide && onDeleteRequest && (
+      {/* Action for HR/Admin if already decided: Delete option */}
+      {(isHrOrAdmin || mode === 'hr' || mode === 'admin') && !canHrDecide && onDeleteRequest && (
         <div style={{ marginTop: '16px', display: 'flex', justifyContent: 'flex-end' }}>
           <button
             type="button"
@@ -2140,6 +2158,20 @@ export function LeaveManagementPage({ mode = 'self', route, query: propQuery }) 
     setRejectReason('')
   }
 
+  useEffect(() => {
+    if (!rejectingLeave) return
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') setRejectingLeave(null)
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.body.style.overflow = prev
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [rejectingLeave])
+
   const handleConfirmReject = storeAction(async () => {
     if (!rejectingLeave) return
     const reason = rejectReason.trim() || 'Declined due to operational coverage requirements.'
@@ -2662,6 +2694,7 @@ export function LeaveManagementPage({ mode = 'self', route, query: propQuery }) 
                         onSelect={setSelected}
                         onQuickApprove={isManagement ? handleQuickApprove : null}
                         onQuickReject={isManagement ? handleQuickRejectPrompt : null}
+                        onDeleteRequest={isManagement ? setLeaveToDelete : null}
                         key={request?.id || request?._id || idx}
                       />
                     ))
@@ -2872,9 +2905,41 @@ export function LeaveManagementPage({ mode = 'self', route, query: propQuery }) 
       />
 
       {/* REJECT LEAVE MODAL WITH DECISION NOTES */}
-      {rejectingLeave && (
-        <div className="reject-modal-backdrop" onClick={() => setRejectingLeave(null)}>
-          <div className="reject-modal" onClick={(e) => e.stopPropagation()}>
+      {rejectingLeave && typeof document !== 'undefined' && createPortal(
+        <div 
+          className="reject-modal-backdrop" 
+          onClick={() => setRejectingLeave(null)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            width: '100vw',
+            height: '100vh',
+            zIndex: 99999,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: 'rgba(15, 23, 42, 0.65)',
+            backdropFilter: 'blur(4px)',
+            padding: '20px',
+            boxSizing: 'border-box'
+          }}
+        >
+          <div 
+            className="reject-modal" 
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              position: 'relative',
+              margin: 'auto',
+              width: 'min(100%, 480px)',
+              background: '#ffffff',
+              border: '1px solid var(--line, #e2e8f0)',
+              borderRadius: '14px',
+              padding: '24px',
+              boxShadow: '0 20px 45px -10px rgba(0, 0, 0, 0.35)',
+              boxSizing: 'border-box',
+              animation: 'dialogPop 0.18s cubic-bezier(0.16, 1, 0.3, 1)'
+            }}
+          >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
               <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 700 }}>
                 Decline Leave Request: {rejectingLeave.employeeName}
@@ -2917,7 +2982,8 @@ export function LeaveManagementPage({ mode = 'self', route, query: propQuery }) 
               </Button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )
