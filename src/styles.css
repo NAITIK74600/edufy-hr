@@ -1304,17 +1304,18 @@ label.form-label {
   min-width: 0;
   box-sizing: border-box;
   flex-shrink: 0 !important;
-  min-height: 84px !important;
+  min-height: fit-content !important;
+  height: auto !important;
   display: flex;
   flex-direction: column;
   gap: 10px;
   text-align: left;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: 11px;
   padding: 13px 15px;
   background: #fffefa;
   color: var(--ink);
-  overflow: hidden;
+  overflow: visible;
   transition: transform .2s ease, border-color .2s ease, box-shadow .2s ease;
 }
 

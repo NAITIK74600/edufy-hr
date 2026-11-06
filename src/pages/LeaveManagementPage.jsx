@@ -1,5 +1,5 @@
 import { parseLocationHash } from '../navigation/navigationResolver.js'
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import {
   AlertCircle,
@@ -103,6 +103,14 @@ function RequestStatus({ status }) {
 
 function RequestCard({ request, onSelect, selected, onQuickApprove, onQuickReject, onDeleteRequest }) {
   if (!request) return null
+  const cardRef = useRef(null)
+
+  useEffect(() => {
+    if (selected && cardRef.current) {
+      cardRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    }
+  }, [selected])
+
   const employee = request.employeeName || request.employeeId?.name || 'Employee'
   const empCode = request.employeeCode || (typeof request.employeeId === 'object' ? request.employeeId?.employeeId : '') || ''
   const isHalfDay = Boolean(request.isHalfDay || request.days === 0.5 || request.units === 0.5)
@@ -125,6 +133,7 @@ function RequestCard({ request, onSelect, selected, onQuickApprove, onQuickRejec
 
   return (
     <div
+      ref={cardRef}
       className={`leave-request-card ${selected ? 'selected' : ''}`}
       onClick={() => onSelect(request)}
       style={{
@@ -140,7 +149,7 @@ function RequestCard({ request, onSelect, selected, onQuickApprove, onQuickRejec
         boxShadow: selected ? '0 4px 14px rgba(0, 110, 111, 0.08)' : '0 2px 6px rgba(35, 38, 35, 0.02)',
         transition: 'all 0.18s ease',
         flexShrink: 0,
-        minHeight: '84px',
+        minHeight: 'fit-content',
         width: '100%',
         boxSizing: 'border-box',
       }}
@@ -176,10 +185,12 @@ function RequestCard({ request, onSelect, selected, onQuickApprove, onQuickRejec
                 </span>
               )}
             </div>
-            <RequestStatus status={request.status} />
+            <div style={{ flexShrink: 0 }}>
+              <RequestStatus status={request.status} />
+            </div>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '5px', flexWrap: 'wrap', marginTop: '4px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', rowGap: '4px', flexWrap: 'wrap', marginTop: '5px' }}>
             <span style={{ fontSize: '11px', color: '#4b5563', fontWeight: 500 }}>
               {isHalfDay ? formatDate(request.startDate) : `${formatDate(request.startDate)} → ${formatDate(request.endDate)}`}
             </span>
@@ -422,12 +433,35 @@ function RequestDetail({ request, mode, onRefresh, onDeleteRequest, onPromptReje
 
   return (
     <div className="panel leave-detail-panel">
-      <div className="panel-heading" style={{ paddingBottom: '12px' }}>
+      <div className="panel-heading" style={{ paddingBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
         <div>
           <p className="section-kicker">Leave Dossier</p>
-          <h2>{leaveTypeLabels[request.leaveType] || request.leaveType?.toUpperCase()}</h2>
+          <h2 style={{ margin: 0 }}>{leaveTypeLabels[request.leaveType] || request.leaveType?.toUpperCase()}</h2>
         </div>
-        <RequestStatus status={currentStatus} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <RequestStatus status={currentStatus} />
+          {onDeleteRequest && (
+            <button
+              type="button"
+              className="emp-action-btn delete"
+              onClick={() => onDeleteRequest(request)}
+              title="Delete Leave Request"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
+                padding: '5px 10px',
+                fontSize: '11px',
+                fontWeight: 600,
+                borderRadius: '7px',
+                cursor: 'pointer',
+              }}
+            >
+              <Trash2 size={13} />
+              <span>Delete</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* TOP PROMINENT DECISION BAR — NEVER NEED TO SCROLL TO FIND APPROVE/REJECT */}
@@ -2911,13 +2945,15 @@ export function LeaveManagementPage({ mode = 'self', route, query: propQuery }) 
           onClick={() => setRejectingLeave(null)}
           style={{
             position: 'fixed',
-            inset: 0,
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
             width: '100vw',
             height: '100vh',
-            zIndex: 99999,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
+            zIndex: 999999,
+            display: 'grid',
+            placeItems: 'center',
             background: 'rgba(15, 23, 42, 0.65)',
             backdropFilter: 'blur(4px)',
             padding: '20px',

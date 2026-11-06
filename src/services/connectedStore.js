@@ -1028,7 +1028,24 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
     updateOnboardingDocs(id, payload) {
       if (!user && rawLocal.updateOnboardingDocs) return rawLocal.updateOnboardingDocs(id, payload)
       return mutate(async () => {
-        const isSelf = String(user?.id) === String(id) || String(user?.employeeId) === String(id)
+        const record = employee(id) || employee(user?.id) || employee(user?.employeeId)
+        const targetId = record?.id || record?._id || record?.employeeId || id
+        const isSelf = Boolean(
+          user && (
+            String(user.id) === String(id) ||
+            String(user._id) === String(id) ||
+            (user.employeeId && String(user.employeeId).toUpperCase() === String(id).toUpperCase()) ||
+            (record && (
+              String(record.id) === String(user.id) ||
+              String(record._id) === String(user.id) ||
+              String(record.id) === String(user._id) ||
+              String(record._id) === String(user._id) ||
+              (user.employeeId && record.employeeId && String(user.employeeId).toUpperCase() === String(record.employeeId).toUpperCase()) ||
+              (user.email && record.email && String(user.email).toLowerCase() === String(record.email).toLowerCase())
+            )) ||
+            (typeof window !== 'undefined' && window.location.hash.startsWith('#/employee'))
+          )
+        )
         const cleanPayload = { ...payload }
         delete cleanPayload.permissions
         delete cleanPayload.authVersion
@@ -1045,12 +1062,16 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
         }
         if (isSelf) {
           const res = await apiClient.patch('/employees/me/onboarding', cleanPayload)
+          if (rawLocal.updateOnboardingDocs) {
+            rawLocal.updateOnboardingDocs(targetId || id, cleanPayload)
+          }
           return res.data
         }
-        const record = employee(id)
-        const targetId = record?.id || record?._id || record?.employeeId || id
         try {
           const res = await apiClient.patch(`/employees/${encodeURIComponent(targetId)}`, cleanPayload)
+          if (rawLocal.updateOnboardingDocs) {
+            rawLocal.updateOnboardingDocs(targetId, cleanPayload)
+          }
           return res.data
         } catch (err) {
           const clean = { ...cleanPayload }
@@ -1063,6 +1084,9 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
           if (Object.keys(clean).length > 0) {
             try {
               const res = await apiClient.patch(`/employees/${encodeURIComponent(targetId)}`, clean)
+              if (rawLocal.updateOnboardingDocs) {
+                rawLocal.updateOnboardingDocs(targetId, clean)
+              }
               return res.data
             } catch { }
           }
@@ -1073,23 +1097,39 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
     requestOnboardingRevision(id, reason = 'Employee requested document revision') {
       if (!user && rawLocal.requestOnboardingRevision) return rawLocal.requestOnboardingRevision(id, reason)
       return mutate(async () => {
-        const isSelf = String(user?.id) === String(id) || String(user?.employeeId) === String(id) || !id
+        const record = employee(id) || employee(user?.id) || employee(user?.employeeId)
+        const targetId = record?.id || record?._id || record?.employeeId || id
+        const isSelf = Boolean(
+          user && (
+            String(user.id) === String(id) ||
+            String(user._id) === String(id) ||
+            (user.employeeId && String(user.employeeId).toUpperCase() === String(id).toUpperCase()) ||
+            (record && (
+              String(record.id) === String(user.id) ||
+              String(record._id) === String(user.id) ||
+              String(record.id) === String(user._id) ||
+              String(record._id) === String(user._id) ||
+              (user.employeeId && record.employeeId && String(user.employeeId).toUpperCase() === String(record.employeeId).toUpperCase())
+            )) ||
+            (typeof window !== 'undefined' && window.location.hash.startsWith('#/employee'))
+          )
+        )
         if (isSelf) {
           try {
             const res = await apiClient.post('/employees/me/request-revision', { reason })
             if (rawLocal.requestOnboardingRevision) {
-              rawLocal.requestOnboardingRevision(id || user?.id || user?.employeeId, reason)
+              rawLocal.requestOnboardingRevision(targetId || id, reason)
             }
             return res.data
           } catch (err) {
             if (rawLocal.requestOnboardingRevision) {
-              return rawLocal.requestOnboardingRevision(id || user?.id || user?.employeeId, reason)
+              return rawLocal.requestOnboardingRevision(targetId || id, reason)
             }
             throw err
           }
         }
         if (rawLocal.requestOnboardingRevision) {
-          return rawLocal.requestOnboardingRevision(id, reason)
+          return rawLocal.requestOnboardingRevision(targetId || id, reason)
         }
         return { success: true }
       })

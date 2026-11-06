@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
+import { apiClient } from '../services/apiClient'
 import {
   FileText,
   Upload,
@@ -118,7 +120,7 @@ export function OnboardingDossierView({ employee, canEdit = false, canVerify = f
   const isSelfServiceUser = !canVerifyDocs
 
   // Employees, Managers, HR, and Directors can upload their initial compliance documents ONLY on their OWN profile
-  const canUpload = (Boolean(canEdit) || isSelf) && !canVerifyDocs
+  const canUpload = (Boolean(canEdit) || isSelf || isEmployeePortal) && !canVerifyDocs
 
   const [activeTab, setActiveTab] = useState(initialTab || 'verification')
 
@@ -227,6 +229,54 @@ export function OnboardingDossierView({ employee, canEdit = false, canVerify = f
     },
     onboardingDocs: { ...docs },
   })
+
+  // Keep editData populated and synced with current employee record
+  useEffect(() => {
+    if (employee) {
+      setEditData((prev) => ({
+        identity: {
+          aadharNumber: employee.identity?.aadharNumber || prev.identity?.aadharNumber || '',
+          panNumber: employee.identity?.panNumber || prev.identity?.panNumber || '',
+          passportNumber: employee.identity?.passportNumber || prev.identity?.passportNumber || '',
+          uanNumber: employee.identity?.uanNumber || prev.identity?.uanNumber || '',
+          hasExistingUan: employee.identity?.hasExistingUan ?? Boolean(employee.identity?.uanNumber || prev.identity?.uanNumber),
+        },
+        parentsContact: {
+          fatherName: employee.parentsContact?.fatherName || prev.parentsContact?.fatherName || '',
+          motherName: employee.parentsContact?.motherName || prev.parentsContact?.motherName || '',
+          parentPhone: employee.parentsContact?.parentPhone || employee.parentsContact?.phone || prev.parentsContact?.parentPhone || '',
+          address: employee.parentsContact?.address || prev.parentsContact?.address || '',
+        },
+        emergencyContact: {
+          name: employee.emergencyContact?.name || prev.emergencyContact?.name || '',
+          relationship: employee.emergencyContact?.relationship || prev.emergencyContact?.relationship || '',
+          phone: employee.emergencyContact?.phone || prev.emergencyContact?.phone || '',
+        },
+        bankDetails: {
+          bankName: employee.bankDetails?.bankName || prev.bankDetails?.bankName || '',
+          accountNumber: employee.bankDetails?.accountNumber || prev.bankDetails?.accountNumber || '',
+          ifscCode: employee.bankDetails?.ifscCode || prev.bankDetails?.ifscCode || '',
+          accountHolderName: employee.bankDetails?.accountHolderName || employee?.name || prev.bankDetails?.accountHolderName || '',
+        },
+        onboardingDocs: {
+          ...(employee.onboardingDocs || {}),
+          ...(prev.onboardingDocs || {}),
+          ...localDocs,
+        },
+      }))
+    }
+  }, [employee, isEditing])
+
+  // Prevent background scroll when any modal is open
+  useEffect(() => {
+    const hasOpenModal = Boolean(viewingDoc || isEditing || rejectModal || employeeRevisionModal)
+    if (!hasOpenModal) return
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = prev
+    }
+  }, [viewingDoc, isEditing, rejectModal, employeeRevisionModal])
 
   // Finance details state (Always editable by employee)
   const [financeData, setFinanceData] = useState({
@@ -368,11 +418,22 @@ export function OnboardingDossierView({ employee, canEdit = false, canVerify = f
       }
 
       const empId = employee?.id || employee?._id || employee?.employeeId
-      if (hrStore.approveOnboarding) {
-        await hrStore.approveOnboarding(empId, { verifiedBy: verifierName })
+      if (isSelf || isEmployeePortal) {
+        try {
+          await apiClient.patch('/employees/me/onboarding', payload)
+          if (hrStore.updateOnboardingDocs) {
+            hrStore.updateOnboardingDocs(empId, payload)
+          }
+        } catch (apiErr) {
+          if (hrStore.updateOnboardingDocs) {
+            await hrStore.updateOnboardingDocs(empId, payload)
+          } else {
+            throw apiErr
+          }
+        }
       } else if (hrStore.updateOnboardingDocs) {
         await hrStore.updateOnboardingDocs(empId, payload)
-      } else {
+      } else if (hrStore.updateEmployee) {
         await hrStore.updateEmployee(empId, payload)
       }
 
@@ -461,16 +522,24 @@ export function OnboardingDossierView({ employee, canEdit = false, canVerify = f
         onboardingSubmittedAt: new Date().toISOString(),
       }
 
-      if (hrStore.approveOnboarding) {
-        await hrStore.approveOnboarding(empId)
+      if (isSelf || isEmployeePortal) {
+        try {
+          await apiClient.patch('/employees/me/onboarding', payload)
+          if (hrStore.updateOnboardingDocs) {
+            hrStore.updateOnboardingDocs(empId, payload)
+          }
+        } catch (apiErr) {
+          if (hrStore.updateOnboardingDocs) {
+            await hrStore.updateOnboardingDocs(empId, payload)
+          } else {
+            throw apiErr
+          }
+        }
       } else if (hrStore.updateOnboardingDocs) {
         await hrStore.updateOnboardingDocs(empId, payload)
-      } else {
+      } else if (hrStore.updateEmployee) {
         await hrStore.updateEmployee(empId, payload)
       }
-      setLocalStatus('verified')
-      setLocalDocs(verifiedDocs)
-      setLocalDocOverrides(verifiedDocs)
 
       hrStore.addNotification({
         id: `notif-doc-uploaded-${Date.now()}`,
@@ -510,9 +579,22 @@ export function OnboardingDossierView({ employee, canEdit = false, canVerify = f
       }
       setLocalStatus('submitted')
 
-      if (hrStore.updateOnboardingDocs) {
+      if (isSelf || isEmployeePortal) {
+        try {
+          await apiClient.patch('/employees/me/onboarding', payload)
+          if (hrStore.updateOnboardingDocs) {
+            hrStore.updateOnboardingDocs(empId, payload)
+          }
+        } catch (apiErr) {
+          if (hrStore.updateOnboardingDocs) {
+            await hrStore.updateOnboardingDocs(empId, payload)
+          } else {
+            throw apiErr
+          }
+        }
+      } else if (hrStore.updateOnboardingDocs) {
         await hrStore.updateOnboardingDocs(empId, payload)
-      } else {
+      } else if (hrStore.updateEmployee) {
         await hrStore.updateEmployee(empId, payload)
       }
 
@@ -1755,7 +1837,7 @@ export function OnboardingDossierView({ employee, canEdit = false, canVerify = f
       )}
 
       {/* Document Full View Modal */}
-      {viewingDoc && (
+      {viewingDoc && typeof document !== "undefined" && createPortal(
         <div
           style={{
             position: 'fixed',
@@ -2101,55 +2183,106 @@ export function OnboardingDossierView({ employee, canEdit = false, canVerify = f
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Edit Onboarding Details Modal */}
-      {isEditing && (
+      {isEditing && typeof document !== 'undefined' && createPortal(
         <div
-          style={{ position: 'fixed', inset: 0, zIndex: 100000, background: 'rgba(0,0,0,0.6)', display: 'grid', placeItems: 'center', padding: '20px' }}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 100000,
+            background: 'rgba(15, 23, 42, 0.75)',
+            backdropFilter: 'blur(4px)',
+            display: 'grid',
+            placeItems: 'center',
+            padding: '16px',
+            boxSizing: 'border-box'
+          }}
           onClick={() => setIsEditing(false)}
         >
           <div
             className="panel"
-            style={{ width: '92%', maxWidth: '780px', maxHeight: '88vh', overflow: 'auto', padding: '24px', background: '#ffffff', borderRadius: '12px' }}
+            style={{
+              width: '100%',
+              maxWidth: '840px',
+              height: '90vh',
+              maxHeight: '90vh',
+              display: 'flex',
+              flexDirection: 'column',
+              padding: 0,
+              background: '#ffffff',
+              borderRadius: '16px',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.35)',
+              overflow: 'hidden',
+              boxSizing: 'border-box',
+            }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+            {/* Sticky Header */}
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                padding: '18px 24px',
+                borderBottom: '1px solid var(--border-color)',
+                background: '#ffffff',
+                flexShrink: 0,
+              }}
+            >
               <div>
-                <h3 style={{ margin: 0, fontSize: '17px', fontWeight: 700 }}>Update Onboarding & Statutory Details</h3>
+                <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 700, color: 'var(--ink)' }}>Update Onboarding & Statutory Details</h3>
                 <p style={{ margin: '4px 0 0', fontSize: '12px', color: 'var(--text-secondary)' }}>
                   Once submitted, HR will review and verify your documents. After HR approval, onboarding data will be locked.
                 </p>
               </div>
-              <button type="button" className="icon-button" onClick={() => setIsEditing(false)}><X size={16} /></button>
+              <button
+                type="button"
+                className="icon-button"
+                onClick={() => setIsEditing(false)}
+                style={{ background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', padding: '6px' }}
+              >
+                <X size={18} />
+              </button>
             </div>
 
-            <form onSubmit={handleSave} style={{ display: 'grid', gap: '20px' }}>
+            {/* Scrollable Form Body */}
+            <form
+              id="onboarding-edit-form"
+              onSubmit={handleSave}
+              style={{
+                flex: 1,
+                overflowY: 'auto',
+                padding: '24px',
+                display: 'grid',
+                gap: '22px',
+              }}
+            >
               {/* 1. Identity Credentials */}
               <div>
                 <h4 style={{ margin: '0 0 10px', fontSize: '13px', color: 'var(--teal)', fontWeight: 600 }}>1. Government & Statutory Identity</h4>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
                   <label style={{ display: 'grid', gap: '4px', fontSize: '12px' }}>
-                    Aadhar Card Number *
+                    Aadhar Card Number
                     <input
                       type="text"
                       className="ui-input"
                       value={editData.identity.aadharNumber}
                       onChange={(e) => setEditData({ ...editData, identity: { ...editData.identity, aadharNumber: e.target.value } })}
                       placeholder="12-digit UIDAI number"
-                      required
                     />
                   </label>
                   <label style={{ display: 'grid', gap: '4px', fontSize: '12px' }}>
-                    PAN Card Number *
+                    PAN Card Number
                     <input
                       type="text"
                       className="ui-input"
                       value={editData.identity.panNumber}
                       onChange={(e) => setEditData({ ...editData, identity: { ...editData.identity, panNumber: e.target.value.toUpperCase() } })}
                       placeholder="e.g. ABCDE1234F"
-                      required
                     />
                   </label>
                   <label style={{ display: 'grid', gap: '4px', fontSize: '12px' }}>
@@ -2180,36 +2313,33 @@ export function OnboardingDossierView({ employee, canEdit = false, canVerify = f
                 <h4 style={{ margin: '0 0 10px', fontSize: '13px', color: 'var(--teal)', fontWeight: 600 }}>2. Bank Account Details (For Monthly Salary Credit)</h4>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
                   <label style={{ display: 'grid', gap: '4px', fontSize: '12px' }}>
-                    Bank Name *
+                    Bank Name
                     <input
                       type="text"
                       className="ui-input"
                       value={editData.bankDetails.bankName}
                       onChange={(e) => setEditData({ ...editData, bankDetails: { ...editData.bankDetails, bankName: e.target.value } })}
                       placeholder="e.g. HDFC Bank"
-                      required
                     />
                   </label>
                   <label style={{ display: 'grid', gap: '4px', fontSize: '12px' }}>
-                    Bank Account Number *
+                    Bank Account Number
                     <input
                       type="text"
                       className="ui-input"
                       value={editData.bankDetails.accountNumber}
                       onChange={(e) => setEditData({ ...editData, bankDetails: { ...editData.bankDetails, accountNumber: e.target.value } })}
                       placeholder="Full account number"
-                      required
                     />
                   </label>
                   <label style={{ display: 'grid', gap: '4px', fontSize: '12px' }}>
-                    Bank IFSC Code *
+                    Bank IFSC Code
                     <input
                       type="text"
                       className="ui-input"
                       value={editData.bankDetails.ifscCode}
                       onChange={(e) => setEditData({ ...editData, bankDetails: { ...editData.bankDetails, ifscCode: e.target.value.toUpperCase() } })}
                       placeholder="e.g. HDFC0001234"
-                      required
                     />
                   </label>
                   <label style={{ display: 'grid', gap: '4px', fontSize: '12px' }}>
@@ -2362,21 +2492,51 @@ export function OnboardingDossierView({ employee, canEdit = false, canVerify = f
                   </label>
                 </div>
               </div>
+            </form>
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', paddingTop: '12px', borderTop: '1px solid var(--border-color)' }}>
-                <button type="button" className="ui-button secondary" onClick={() => setIsEditing(false)}>
+            {/* Sticky Action Footer */}
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                padding: '14px 24px',
+                borderTop: '1px solid var(--border-color)',
+                background: '#f8fafc',
+                flexShrink: 0,
+                flexWrap: 'wrap',
+                gap: '12px',
+              }}
+            >
+              <span style={{ fontSize: '12px', color: '#64748b' }}>
+                * All statutory and bank details are encrypted and sent directly to HR for verification.
+              </span>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button
+                  type="button"
+                  className="ui-button secondary"
+                  onClick={() => setIsEditing(false)}
+                  disabled={saving}
+                >
                   Cancel
                 </button>
-                <button type="submit" className="ui-button primary" disabled={saving}>
+                <button
+                  type="submit"
+                  form="onboarding-edit-form"
+                  className="ui-button primary"
+                  disabled={saving}
+                  style={{ fontWeight: 600, padding: '9px 20px', background: 'var(--teal)', borderColor: 'var(--teal)', color: '#ffffff' }}
+                >
                   {saving ? 'Saving & Submitting...' : 'Submit for HR Verification'}
                 </button>
               </div>
-            </form>
+            </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
       {/* Rejection with Reason Modal */}
-      {rejectModal && (
+      {rejectModal && typeof document !== "undefined" && createPortal(
         <div
           style={{
             position: 'fixed',
@@ -2471,11 +2631,12 @@ export function OnboardingDossierView({ employee, canEdit = false, canVerify = f
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Employee Revision Request Modal */}
-      {employeeRevisionModal && (
+      {employeeRevisionModal && typeof document !== "undefined" && createPortal(
         <div
           style={{
             position: 'fixed',
@@ -2560,7 +2721,8 @@ export function OnboardingDossierView({ employee, canEdit = false, canVerify = f
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )

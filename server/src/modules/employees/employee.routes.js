@@ -98,11 +98,15 @@ export function createEmployeeRouter({ auth, service, userStore, employeeReposit
           const prev = existingDocs[k]
           const prevHasFile = Boolean(prev && (prev.url || prev.fileName || (Array.isArray(prev.files) && prev.files.length > 0)))
           const isReuploadAllowed = Boolean(
-            prev && (
-              prev.reuploadRequested === true ||
-              prev.status === 'reupload_requested' ||
-              prev.status === 'rejected'
-            )
+            currentEmployee?.onboardingStatus === 'revision_requested' ||
+            currentEmployee?.onboardingStatus === 'action_required' ||
+            currentEmployee?.onboardingStatus === 'draft' ||
+            currentEmployee?.onboardingStatus === 'incomplete' ||
+            !currentEmployee?.onboardingStatus ||
+            prev?.reuploadRequested === true ||
+            prev?.status === 'reupload_requested' ||
+            prev?.status === 'rejected' ||
+            prev?.status === 'draft'
           )
           const isReplacingFile = Boolean(
             prevHasFile &&
@@ -344,7 +348,7 @@ export function createEmployeeRouter({ auth, service, userStore, employeeReposit
       }
       if (isSelf) {
         if (!hasPermission(request.auth.user, PERMISSIONS.EMPLOYEES_WRITE)) {
-          const allowedSelfFields = ['identity', 'parentsContact', 'emergencyContact', 'bankDetails', 'onboardingDocs', 'phone', 'financeDetails', 'complianceDocs', 'policyConsents', 'avatarUrl']
+          const allowedSelfFields = ['identity', 'parentsContact', 'emergencyContact', 'bankDetails', 'onboardingDocs', 'phone', 'financeDetails', 'complianceDocs', 'policyConsents', 'avatarUrl', 'onboardingStatus', 'onboardingSubmittedAt', 'onboardingNotes']
           updateBody = Object.fromEntries(Object.entries(updateBody).filter(([key]) => allowedSelfFields.includes(key)))
         }
         // Self-updates can NEVER set onboardingStatus to verified or self-verify documents, regardless of role!
