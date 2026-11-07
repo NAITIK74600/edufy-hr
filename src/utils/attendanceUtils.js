@@ -66,7 +66,7 @@ export function formatAttendanceNotes(notes) {
  * - On Leave (approved leave)
  * - Loss of Pay (explicit LOP)
  */
-export function getDailyAttendanceStatus(r, attendanceRules = null) {
+export function getDailyAttendanceStatus(r, attendanceRules = null, allLeaves = []) {
   if (!r || (!r.checkIn && r.status !== 'on-leave' && r.status !== 'holiday')) {
     if (r?.status === 'on-leave') return { label: 'On Leave', tone: 'neutral' }
     if (r?.status === 'holiday') return { label: 'Holiday', tone: 'info' }
@@ -77,17 +77,65 @@ export function getDailyAttendanceStatus(r, attendanceRules = null) {
     return { label: 'On Leave', tone: 'neutral' }
   }
 
-  // Explicit LOP
-  if (r.status === 'lop' || r.isLop) {
+  // Resolve approved leave from record or allLeaves fallback first
+  let approvedLeave = r?.approvedLeave
+  if (!approvedLeave && Array.isArray(allLeaves) && allLeaves.length > 0 && r?.employeeId) {
+    const empCode = String(r.employeeId).toUpperCase()
+    const targetDate = r.date || ''
+    const matched = allLeaves.find((l) => {
+      if (l.status !== 'approved') return false
+      const lEmpCode = String(l.employeeCode || l.employeeId?.employeeId || l.employeeId?._id || l.employeeId || '').toUpperCase()
+      const lEmpName = String(l.employeeName || l.employeeId?.name || '').toUpperCase()
+      const rEmpName = String(r.employeeName || '').toUpperCase()
+      const isEmpMatch = (lEmpCode && lEmpCode === empCode) || (lEmpName && rEmpName && (lEmpName === rEmpName || lEmpName.includes(rEmpName) || rEmpName.includes(lEmpName)))
+      if (!isEmpMatch) return false
+      const s = typeof l.startDate === 'string' ? l.startDate.slice(0, 10) : new Date(l.startDate).toISOString().slice(0, 10)
+      const e = typeof l.endDate === 'string' ? l.endDate.slice(0, 10) : new Date(l.endDate).toISOString().slice(0, 10)
+      const inRange = targetDate >= s && targetDate <= e
+      const inBreakdown = Array.isArray(l.dayBreakdown) && l.dayBreakdown.some((d) => d.date === targetDate)
+      return inRange || inBreakdown
+    })
+    if (matched) {
+      approvedLeave = {
+        id: matched.id || matched._id,
+        leaveType: matched.leaveType,
+        isHalfDay: Boolean(matched.isHalfDay || matched.units === 0.5 || matched.days === 0.5),
+        halfDayPeriod: matched.halfDayPeriod || (matched.isHalfDay ? 'first_half' : null),
+        isPaid: matched.paidUnits > 0 || (matched.leaveType !== 'lop' && matched.leaveType !== 'double_lop'),
+      }
+    }
+  }
+
+  const isApprovedPaidHalfDay = Boolean(
+    approvedLeave && approvedLeave.isHalfDay && approvedLeave.isPaid
+  )
+
+  // Explicit LOP (ignore stale LOP flag if employee has approved paid half-day leave)
+  if (!isApprovedPaidHalfDay && (r.status === 'lop' || r.isLop)) {
     return { label: 'Loss of Pay', tone: 'danger' }
   }
 
   // Check if this record is associated with an approved first-half or second-half leave
-  const occ = r.policyEvaluation?.occurrence || r.occurrence
-  const isFirstHalfLeave = r.halfDayPeriod === 'first_half' || r.approvedLeave?.halfDayPeriod === 'first_half' || occ === 'half_day_leave_on_time'
-  const isSecondHalfLeave = r.halfDayPeriod === 'second_half' || r.approvedLeave?.halfDayPeriod === 'second_half' || occ === 'half_day_leave_checkout'
-  const isApprovedHalfDay = isFirstHalfLeave || isSecondHalfLeave || Boolean(r.approvedLeave?.isHalfDay)
-  const isHalfDayOnTime = occ === 'half_day_leave_on_time' || (isFirstHalfLeave && r.isLate === false)
+  const occ = r.policyEvaluation?.occurrence || r.policyEvaluation?.punch?.occurrence || r.occurrence
+  const isFirstHalfLeave = r.halfDayPeriod === 'first_half' || approvedLeave?.halfDayPeriod === 'first_half' || occ === 'half_day_leave_on_time'
+  const isSecondHalfLeave = r.halfDayPeriod === 'second_half' || approvedLeave?.halfDayPeriod === 'second_half' || occ === 'half_day_leave_checkout'
+  const isApprovedHalfDay = isFirstHalfLeave || isSecondHalfLeave || Boolean(approvedLeave?.isHalfDay)
+
+  let isFirstHalfOnTimeArrival = false
+  if (isFirstHalfLeave && r.checkIn) {
+    const inM = parseTimeToMinutes(r.checkIn)
+    const startM = attendanceRules?.workStartTime ? parseTimeToMinutes(attendanceRules.workStartTime) : 660 // default 11:00 AM
+    const endM = attendanceRules?.workEndTime ? parseTimeToMinutes(attendanceRules.workEndTime) : 1200 // default 08:00 PM
+    const grace = Number.isFinite(Number(attendanceRules?.gracePeriodMinutes)) && Number(attendanceRules.gracePeriodMinutes) >= 0
+      ? Number(attendanceRules.gracePeriodMinutes)
+      : 30
+    const midShiftM = startM + Math.round((endM - startM) / 2) // 03:30 PM (930)
+    if (inM !== null && inM <= (midShiftM + grace)) {
+      isFirstHalfOnTimeArrival = true
+    }
+  }
+
+  const isHalfDayOnTime = occ === 'half_day_leave_on_time' || isFirstHalfOnTimeArrival || (isFirstHalfLeave && (r.isLate === false || r.status === 'half-day' || !r.isLate))
   const isHalfDayCheckout = occ === 'half_day_leave_checkout' || (isSecondHalfLeave && !r.isEarlyLogout)
 
   // DYNAMIC CHECK: Evaluate punch-in against active shift rules
@@ -152,7 +200,7 @@ export function getDailyAttendanceStatus(r, attendanceRules = null) {
   if (r.checkIn) {
     // If on approved half-day leave:
     if (isApprovedHalfDay) {
-      if (isPunchLate) {
+      if (isPunchLate && !isHalfDayOnTime) {
         return { label: 'Late (2nd Half)', tone: 'warning' }
       }
       return { label: 'Present (1/2 Day Leave)', tone: 'info' }
@@ -179,23 +227,69 @@ export function getDailyAttendanceStatus(r, attendanceRules = null) {
  * - Every 3 occurrences (e.g. 2 early logout + 1 late login = 3) = 0.5 LOP day
  * - 6 occurrences = 1.0 LOP day
  */
-export function getLateCountInfo(r, allAttendance = [], targetDate = '', attendanceRules = null) {
+export function getLateCountInfo(r, allAttendance = [], targetDate = '', attendanceRules = null, allLeaves = []) {
   if (!r) return { count: 0, lopDays: 0, lateCount: 0, earlyLogoutCount: 0, isLate: false, isEarlyLogout: false }
   const empCode = String(r.employeeId || '').toUpperCase()
   const dateStr = r.date || targetDate || ''
   const monthPrefix = dateStr.slice(0, 7)
 
+  const resolveLeaveForRec = (record) => {
+    if (record?.approvedLeave) return record.approvedLeave
+    if (!Array.isArray(allLeaves) || allLeaves.length === 0 || !record?.employeeId) return null
+    const code = String(record.employeeId).toUpperCase()
+    const recDate = record.date || targetDate || ''
+    const matched = allLeaves.find((l) => {
+      if (l.status !== 'approved') return false
+      const lEmpCode = String(l.employeeCode || l.employeeId?.employeeId || l.employeeId?._id || l.employeeId || '').toUpperCase()
+      const lEmpName = String(l.employeeName || l.employeeId?.name || '').toUpperCase()
+      const rEmpName = String(record.employeeName || '').toUpperCase()
+      const isEmpMatch = (lEmpCode && lEmpCode === code) || (lEmpName && rEmpName && (lEmpName === rEmpName || lEmpName.includes(rEmpName) || rEmpName.includes(lEmpName)))
+      if (!isEmpMatch) return false
+      const s = typeof l.startDate === 'string' ? l.startDate.slice(0, 10) : new Date(l.startDate).toISOString().slice(0, 10)
+      const e = typeof l.endDate === 'string' ? l.endDate.slice(0, 10) : new Date(l.endDate).toISOString().slice(0, 10)
+      const inRange = recDate >= s && recDate <= e
+      const inBreakdown = Array.isArray(l.dayBreakdown) && l.dayBreakdown.some((d) => d.date === recDate)
+      return inRange || inBreakdown
+    })
+    if (matched) {
+      return {
+        id: matched.id || matched._id,
+        leaveType: matched.leaveType,
+        isHalfDay: Boolean(matched.isHalfDay || matched.units === 0.5 || matched.days === 0.5),
+        halfDayPeriod: matched.halfDayPeriod || (matched.isHalfDay ? 'first_half' : null),
+        isPaid: matched.paidUnits > 0 || (matched.leaveType !== 'lop' && matched.leaveType !== 'double_lop'),
+      }
+    }
+    return null
+  }
+
   // Dynamically test if a record is late under active shift rules
   const isRecordLate = (record) => {
-    const occ = record.policyEvaluation?.occurrence || record.occurrence
-    const isHalfDayOnTime = occ === 'half_day_leave_on_time' || (record.approvedLeave?.halfDayPeriod === 'first_half' && !record.isLate) || (record.halfDayPeriod === 'first_half' && !record.isLate)
+    const recLeave = resolveLeaveForRec(record)
+    const occ = record.policyEvaluation?.occurrence || record.policyEvaluation?.punch?.occurrence || record.occurrence
+    const isFirstHalf = record.halfDayPeriod === 'first_half' || recLeave?.halfDayPeriod === 'first_half'
+    const isHalfDayOnTime = occ === 'half_day_leave_on_time' || (isFirstHalf && !record.isLate)
     if (isHalfDayOnTime) return false
+
+    if (isFirstHalf) {
+      // Arriving for 2nd half on 1st-half leave: check arrival against mid-shift
+      if (record.checkIn) {
+        const inM = parseTimeToMinutes(record.checkIn)
+        const startM = attendanceRules?.workStartTime ? parseTimeToMinutes(attendanceRules.workStartTime) : 660 // default 11:00 AM
+        const endM = attendanceRules?.workEndTime ? parseTimeToMinutes(attendanceRules.workEndTime) : 1200 // default 08:00 PM
+        const grace = Number.isFinite(Number(attendanceRules?.gracePeriodMinutes)) && Number(attendanceRules.gracePeriodMinutes) >= 0
+          ? Number(attendanceRules.gracePeriodMinutes)
+          : 30
+        const midShiftM = startM + Math.round((endM - startM) / 2) // e.g. 11:00 AM to 08:00 PM -> 03:30 PM (930)
+        if (inM !== null && inM <= (midShiftM + grace)) {
+          return false // On time for 2nd half!
+        }
+      }
+      return Boolean(record.isLate)
+    }
 
     if (record.isLate || record.status === 'late') return true
     if (record.checkIn) {
-      if (record.halfDayPeriod === 'first_half' || record.approvedLeave?.halfDayPeriod === 'first_half') {
-        return false
-      }
       const inM = parseTimeToMinutes(record.checkIn)
       const startM = attendanceRules?.workStartTime ? parseTimeToMinutes(attendanceRules.workStartTime) : 660
       const grace = Number.isFinite(Number(attendanceRules?.gracePeriodMinutes)) && Number(attendanceRules.gracePeriodMinutes) >= 0
@@ -210,8 +304,10 @@ export function getLateCountInfo(r, allAttendance = [], targetDate = '', attenda
 
   // Dynamically test if a record is early logout under active shift rules
   const isRecordEarlyLogout = (record) => {
-    const occ = record.policyEvaluation?.occurrence || record.occurrence
-    const isHalfDayCheckout = occ === 'half_day_leave_checkout' || (record.approvedLeave?.halfDayPeriod === 'second_half' && !record.isEarlyLogout) || (record.halfDayPeriod === 'second_half' && !record.isEarlyLogout)
+    const recLeave = resolveLeaveForRec(record)
+    const occ = record.policyEvaluation?.occurrence || record.policyEvaluation?.checkout?.occurrence || record.occurrence
+    const isSecondHalf = record.halfDayPeriod === 'second_half' || recLeave?.halfDayPeriod === 'second_half'
+    const isHalfDayCheckout = occ === 'half_day_leave_checkout' || (isSecondHalf && !record.isEarlyLogout)
     if (isHalfDayCheckout) return false
 
     if (record.isEarlyLogout || record.status === 'early-logout') return true

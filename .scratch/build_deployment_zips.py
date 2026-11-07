@@ -8,6 +8,7 @@ os.chdir(ROOT_DIR)
 TARGET_ZIPS = [
     "edufyi-hr-code-update.zip",
     "edufyi-hr-hosting.zip",
+    "edufyi-hr-webuzo-deploy.zip",
 ]
 
 INCLUDE_DIRS = [

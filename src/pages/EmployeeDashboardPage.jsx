@@ -1651,7 +1651,7 @@ function ESSOverview({ user }) {
                   </tr>
                 ) : (
                   recentUserLogs.map((log) => {
-                    const statusInfo = getDailyAttendanceStatus(log, storeState.companySettings?.attendanceRules)
+                    const statusInfo = getDailyAttendanceStatus(log, storeState.companySettings?.attendanceRules, storeState.leaves)
                     return (
                       <tr key={log.id || log._id || log.date}>
                         <td><strong>{log.date}</strong></td>
@@ -1959,8 +1959,8 @@ function ESSAttendanceView({ user }) {
               }}
             >
               {(() => {
-                const statusInfo = getDailyAttendanceStatus({ ...row, checkIn: row.in, checkOut: row.out }, storeState.companySettings?.attendanceRules)
-                const lateInfo = getLateCountInfo(row, storeState.attendance, row.date, storeState.companySettings?.attendanceRules)
+                const statusInfo = getDailyAttendanceStatus({ ...row, checkIn: row.in, checkOut: row.out }, storeState.companySettings?.attendanceRules, storeState.leaves)
+                const lateInfo = getLateCountInfo(row, storeState.attendance, row.date, storeState.companySettings?.attendanceRules, storeState.leaves)
                 return (
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div>
@@ -2033,8 +2033,8 @@ function ESSAttendanceView({ user }) {
                 </tr>
               ) : (
                 filteredLogs.map((row, idx) => {
-                  const statusInfo = getDailyAttendanceStatus({ ...row, checkIn: row.in, checkOut: row.out }, storeState.companySettings?.attendanceRules)
-                  const lateInfo = getLateCountInfo(row, storeState.attendance, row.date, storeState.companySettings?.attendanceRules)
+                  const statusInfo = getDailyAttendanceStatus({ ...row, checkIn: row.in, checkOut: row.out }, storeState.companySettings?.attendanceRules, storeState.leaves)
+                  const lateInfo = getLateCountInfo(row, storeState.attendance, row.date, storeState.companySettings?.attendanceRules, storeState.leaves)
                   return (
                     <tr key={idx}>
                       <td><strong>{row.date}</strong></td>

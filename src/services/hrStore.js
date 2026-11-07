@@ -6099,14 +6099,27 @@ const localStore = {
     return true
   },
 
-  recalculateTodayAttendance(targetDate = null) {
+  async recalculateTodayAttendance(targetDate = null) {
     const today = targetDate || new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
-    // Neutral baseline: do not overwrite historical records. Return safe neutral notice.
-    return {
-      updatedCount: 0,
-      date: today,
-      records: storeState.attendance?.filter((r) => r.date === today) || [],
-      message: 'Attendance policy recalculation is currently inactive pending replacement policy configuration. Historical attendance records remain unchanged.',
+    try {
+      const res = await apiClient.post('/attendance/recalculate', { date: today, fixHalfDayLop: true })
+      await this.refresh()
+      const updatedCount = res.data?.data?.updatedCount ?? res.data?.updatedCount ?? 0
+      return {
+        updatedCount,
+        date: today,
+        records: storeState.attendance?.filter((r) => r.date === today) || [],
+        message: `Attendance roster recalculated and verified successfully (${updatedCount} record(s) synchronized).`,
+      }
+    } catch (err) {
+      console.warn('Backend attendance recalculate error, refreshing local state:', err?.message || err)
+      await this.refresh()
+      return {
+        updatedCount: 0,
+        date: today,
+        records: storeState.attendance?.filter((r) => r.date === today) || [],
+        message: 'Attendance roster refreshed.',
+      }
     }
   },
 

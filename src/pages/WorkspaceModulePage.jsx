@@ -814,8 +814,8 @@ function AttendanceModule() {
                 const presence = resolveAttendancePresence(r, maxGeofenceRadius) || {}
                 const isInside = presence.isInside !== undefined ? presence.isInside : (r.distanceMeters !== undefined && r.distanceMeters !== null ? r.distanceMeters <= maxGeofenceRadius : r.gpsVerified)
                 const distText = presence.distText || (r.distanceMeters !== undefined && r.distanceMeters !== null ? `${r.distanceMeters}m` : (r.wifiVerified ? `<${maxGeofenceRadius}m` : '—'))
-                const statusInfo = getDailyAttendanceStatus(r, storeState.companySettings?.attendanceRules)
-                const lateInfo = getLateCountInfo(r, storeState.attendance, selectedDate, storeState.companySettings?.attendanceRules)
+                const statusInfo = getDailyAttendanceStatus(r, storeState.companySettings?.attendanceRules, storeState.leaves)
+                const lateInfo = getLateCountInfo(r, storeState.attendance, selectedDate, storeState.companySettings?.attendanceRules, storeState.leaves)
                 return (
                   <div
                     key={r.id}
@@ -1123,7 +1123,7 @@ function AttendanceModule() {
                   key: 'status',
                   label: 'Status',
                   render: (r) => {
-                    const statusInfo = getDailyAttendanceStatus(r, storeState.companySettings?.attendanceRules)
+                    const statusInfo = getDailyAttendanceStatus(r, storeState.companySettings?.attendanceRules, storeState.leaves)
                     return (
                       <StatusBadge tone={statusInfo.tone}>
                         {statusInfo.label}
@@ -1135,7 +1135,7 @@ function AttendanceModule() {
                   key: 'lateCount',
                   label: 'Late / Early Count',
                   render: (r) => {
-                    const info = getLateCountInfo(r, storeState.attendance, selectedDate, storeState.companySettings?.attendanceRules)
+                    const info = getLateCountInfo(r, storeState.attendance, selectedDate, storeState.companySettings?.attendanceRules, storeState.leaves)
                     if (!info || info.count <= 0) {
                       return <span style={{ color: 'var(--muted)', fontSize: '12px' }}>—</span>
                     }
