@@ -495,6 +495,12 @@ function GPSAttendanceStation({ user, todayRecord, onPunch, onStartBreak, onEndB
   const isFullDayQualified = netWorkSeconds >= FULL_DAY_SECS
   const isHalfDayQualified = netWorkSeconds >= HALF_DAY_SECS && netWorkSeconds < FULL_DAY_SECS
   const isBelowHalfDay = netWorkSeconds < HALF_DAY_SECS
+  const isApprovedHalfDayLeave = Boolean(
+    todayRecord?.approvedLeave?.isHalfDay ||
+    todayRecord?.halfDayPeriod ||
+    todayRecord?.isHalfDay
+  )
+  const isHalfDayTargetMet = netWorkSeconds >= (3.5 * 3600)
 
   const currentBreakSeconds = useMemo(() => {
     if (!isOnBreak || !currentBreakStartEpoch) return 0
@@ -800,7 +806,7 @@ function GPSAttendanceStation({ user, todayRecord, onPunch, onStartBreak, onEndB
           <div className="ess-qualification-box">
             <div className="ess-qualification-header">
               <span style={{ color: 'var(--muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                Shift Qualification
+                {isApprovedHalfDayLeave ? 'Approved 1/2 Day Shift' : 'Shift Qualification'}
               </span>
               <span
                 style={{
@@ -808,16 +814,24 @@ function GPSAttendanceStation({ user, todayRecord, onPunch, onStartBreak, onEndB
                   fontWeight: 700,
                   padding: '2px 8px',
                   borderRadius: '6px',
-                  background: isFullDayQualified ? '#dcfce7' : isHalfDayQualified ? '#fef3c7' : '#fee2e2',
-                  color: isFullDayQualified ? '#15803d' : isHalfDayQualified ? '#b45309' : '#b91c1c',
-                  border: `1px solid ${isFullDayQualified ? '#86efac' : isHalfDayQualified ? '#fde68a' : '#fca5a5'}`,
+                  background: isApprovedHalfDayLeave
+                    ? (isHalfDayTargetMet ? '#dcfce7' : '#fef3c7')
+                    : (isFullDayQualified ? '#dcfce7' : isHalfDayQualified ? '#fef3c7' : '#fee2e2'),
+                  color: isApprovedHalfDayLeave
+                    ? (isHalfDayTargetMet ? '#15803d' : '#b45309')
+                    : (isFullDayQualified ? '#15803d' : isHalfDayQualified ? '#b45309' : '#b91c1c'),
+                  border: `1px solid ${isApprovedHalfDayLeave
+                    ? (isHalfDayTargetMet ? '#86efac' : '#fde68a')
+                    : (isFullDayQualified ? '#86efac' : isHalfDayQualified ? '#fde68a' : '#fca5a5')}`,
                 }}
               >
-                {isFullDayQualified
-                  ? 'Full Day Qualified (8+ hrs)'
-                  : isHalfDayQualified
-                    ? 'Half Day Qualified (4+ hrs)'
-                    : 'Below Min Half Day (<4 hrs)'}
+                {isApprovedHalfDayLeave
+                  ? (isHalfDayTargetMet ? '1/2 Day Target Met (3.5+ hrs)' : 'In Progress (Target: 3.5h – 4h)')
+                  : (isFullDayQualified
+                    ? 'Full Day Qualified (8+ hrs)'
+                    : isHalfDayQualified
+                      ? 'Half Day Qualified (4+ hrs)'
+                      : 'Below Min Half Day (<4 hrs)')}
               </span>
             </div>
 
@@ -825,16 +839,18 @@ function GPSAttendanceStation({ user, todayRecord, onPunch, onStartBreak, onEndB
               <div
                 className="ess-qualification-fill"
                 style={{
-                  width: `${Math.min(100, Math.round((netWorkSeconds / FULL_DAY_SECS) * 100))}%`,
-                  background: isFullDayQualified ? '#16a34a' : isHalfDayQualified ? '#f59e0b' : '#ef4444',
+                  width: `${Math.min(100, Math.round((netWorkSeconds / (isApprovedHalfDayLeave ? HALF_DAY_SECS : FULL_DAY_SECS)) * 100))}%`,
+                  background: isApprovedHalfDayLeave
+                    ? (isHalfDayTargetMet ? '#16a34a' : '#f59e0b')
+                    : (isFullDayQualified ? '#16a34a' : isHalfDayQualified ? '#f59e0b' : '#ef4444'),
                 }}
               />
             </div>
 
             <div className="ess-qualification-footer">
-              <span>Min Half Day: <strong>4h</strong></span>
-              <span>Progress: <strong>{Math.min(100, Math.round((netWorkSeconds / FULL_DAY_SECS) * 100))}%</strong></span>
-              <span>Full Day: <strong>8h</strong></span>
+              <span>Min Half Day: <strong>{isApprovedHalfDayLeave ? '3.5h' : '4h'}</strong></span>
+              <span>Progress: <strong>{Math.min(100, Math.round((netWorkSeconds / (isApprovedHalfDayLeave ? HALF_DAY_SECS : FULL_DAY_SECS)) * 100))}%</strong></span>
+              <span>{isApprovedHalfDayLeave ? 'Shift Target:' : 'Full Day:'} <strong>{isApprovedHalfDayLeave ? '4h (Approved Leave)' : '8h'}</strong></span>
             </div>
           </div>
 

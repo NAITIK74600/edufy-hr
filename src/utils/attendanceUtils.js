@@ -86,12 +86,13 @@ export function getDailyAttendanceStatus(r, attendanceRules = null) {
   const occ = r.policyEvaluation?.occurrence || r.occurrence
   const isFirstHalfLeave = r.halfDayPeriod === 'first_half' || r.approvedLeave?.halfDayPeriod === 'first_half' || occ === 'half_day_leave_on_time'
   const isSecondHalfLeave = r.halfDayPeriod === 'second_half' || r.approvedLeave?.halfDayPeriod === 'second_half' || occ === 'half_day_leave_checkout'
+  const isApprovedHalfDay = isFirstHalfLeave || isSecondHalfLeave || Boolean(r.approvedLeave?.isHalfDay)
   const isHalfDayOnTime = occ === 'half_day_leave_on_time' || (isFirstHalfLeave && r.isLate === false)
   const isHalfDayCheckout = occ === 'half_day_leave_checkout' || (isSecondHalfLeave && !r.isEarlyLogout)
 
   // DYNAMIC CHECK: Evaluate punch-in against active shift rules
   let isPunchLate = isHalfDayOnTime ? false : Boolean(r.isLate || r.status === 'late')
-  let isPunchHalfDay = Boolean(r.isHalfDay || r.status === 'half-day' || isFirstHalfLeave || isSecondHalfLeave)
+  let isPunchHalfDay = Boolean(r.isHalfDay || r.status === 'half-day' || isApprovedHalfDay)
   if (r.checkIn && !isFirstHalfLeave) {
     const checkInM = parseTimeToMinutes(r.checkIn)
     const startM = attendanceRules?.workStartTime ? parseTimeToMinutes(attendanceRules.workStartTime) : 660 // default 11:00 AM
@@ -100,7 +101,7 @@ export function getDailyAttendanceStatus(r, attendanceRules = null) {
       : 30
     if (checkInM !== null && startM !== null) {
       isPunchLate = checkInM > (startM + grace)
-      // When punch-in is 1 hour (60 mins) or more late -> marked as Half Day!
+      // When punch-in is 1 hour (60 mins) or more late -> marked as Half Day upon checkout!
       if (checkInM >= (startM + 60)) {
         isPunchHalfDay = true
       }
@@ -121,12 +122,12 @@ export function getDailyAttendanceStatus(r, attendanceRules = null) {
     }
   }
 
-  // If employee has checked out, status is determined by worked duration or 1-hour late punch
+  // If employee has checked out, status is determined by worked duration or approved leave
   if (hasCheckedOut && workedHours !== null) {
     // If on approved half-day leave and completed required half-shift (worked >= 3.5 hrs or on-time half-day checkout):
-    if (isFirstHalfLeave || isSecondHalfLeave || isHalfDayCheckout) {
+    if (isApprovedHalfDay || isHalfDayCheckout) {
       if (workedHours >= 3.5 || isHalfDayCheckout) {
-        return { label: 'Half Day', tone: 'warning' }
+        return { label: '1/2 Day (Approved)', tone: 'info' }
       }
       return { label: 'Absent', tone: 'danger' }
     }
@@ -147,12 +148,22 @@ export function getDailyAttendanceStatus(r, attendanceRules = null) {
     return isPunchLate ? { label: 'Late', tone: 'warning' } : { label: 'On-Time', tone: 'info' }
   }
 
-  // If employee is actively working (no checkout yet) or check-in only
+  // If employee is actively working (punch-in recorded, no checkout yet)
   if (r.checkIn) {
-    if (isPunchHalfDay) {
-      return { label: 'Half Day', tone: 'warning' }
+    // If on approved half-day leave:
+    if (isApprovedHalfDay) {
+      if (isPunchLate) {
+        return { label: 'Late (2nd Half)', tone: 'warning' }
+      }
+      return { label: 'Present (1/2 Day Leave)', tone: 'info' }
     }
-    return isPunchLate ? { label: 'Late', tone: 'warning' } : { label: 'On-Time', tone: 'info' }
+
+    // Active regular punch-in (before checkout):
+    // An actively working employee is PRESENT! If they arrived late (even >60m), label them 'Late' (not 'Half Day' while actively working!)
+    if (isPunchLate) {
+      return { label: 'Late', tone: 'warning' }
+    }
+    return { label: 'On-Time', tone: 'info' }
   }
 
   if (r.status === 'absent') {
