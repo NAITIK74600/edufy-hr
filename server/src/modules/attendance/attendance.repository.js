@@ -522,8 +522,29 @@ export function createMongoAttendanceRepository() {
       const earlyLogout = docs.filter((r) => r.status === 'early-logout' || r.isEarlyLogout).length
       const lop = docs.filter((r) => r.status === 'lop' || r.isLop).length
       const onLeave = docs.filter((r) => r.status === 'on-leave').length
-      const absent = docs.filter((r) => r.status === 'absent').length
-      return { total: docs.length, present, late, halfDay, earlyLogout, lop, onLeave, absent }
+      let absent = docs.filter((r) => r.status === 'absent').length
+
+      // Active employees who did not punch in are counted as absent
+      let totalActive = docs.length
+      try {
+        if (mongoose.connection?.readyState === 1) {
+          const activeEmployees = await Employee.find({ status: { $ne: 'inactive' } }).select('employeeId _id').lean()
+          if (activeEmployees.length > 0) {
+            totalActive = activeEmployees.length
+            const recordedCodes = new Set(docs.map((d) => String(d.employeeId || '').toUpperCase()))
+            let missingPunchCount = 0
+            for (const emp of activeEmployees) {
+              const code = String(emp.employeeId || '').toUpperCase()
+              if (!recordedCodes.has(code)) {
+                missingPunchCount++
+              }
+            }
+            absent += missingPunchCount
+          }
+        }
+      } catch {}
+
+      return { total: Math.max(docs.length, totalActive), present, late, halfDay, earlyLogout, lop, onLeave, absent }
     },
   }
 }

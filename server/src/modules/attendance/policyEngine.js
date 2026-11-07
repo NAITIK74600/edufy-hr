@@ -239,7 +239,7 @@ export async function resolveEmployeeShift(employeeId, dateStr) {
  * - After 11:15 AM and up to 12:00 PM: Late Login (present, late occurrence)
  * - After 12:00 PM (half-day cutoff): Half Day (half-day status)
  */
-export function evaluatePunchIn({ checkInTime, shift = STANDARD_SHIFT_DEF }) {
+export function evaluatePunchIn({ checkInTime, shift = STANDARD_SHIFT_DEF, approvedLeave = null }) {
   const normShift = normalizeShiftConfig(shift)
   const inMins = parseTimeToMinutes(checkInTime)
   if (inMins === null) {
@@ -253,6 +253,42 @@ export function evaluatePunchIn({ checkInTime, shift = STANDARD_SHIFT_DEF }) {
     }
   }
 
+  // CASE A: Employee has an approved half-day leave for the first half (morning)
+  // When on first_half leave, their scheduled arrival is the second half start.
+  if (approvedLeave && (approvedLeave.isHalfDay || approvedLeave.halfDayPeriod) && (approvedLeave.halfDayPeriod === 'first_half' || approvedLeave.period === 'first_half')) {
+    const { startMinutes, endMinutes, gracePeriodMinutes = 30 } = normShift
+    // Mid-shift marks the boundary of first and second half (e.g. 02:00 PM for 09:30 AM - 06:30 PM, or 03:30 PM for 11:00 AM - 08:00 PM)
+    const midShiftMinutes = startMinutes + Math.round((endMinutes - startMinutes) / 2)
+    // Grace cutoff for second half arrival (gracePeriodMinutes after mid-shift start)
+    const secondHalfGraceCutoff = midShiftMinutes + gracePeriodMinutes
+    const leaveLabel = approvedLeave.leaveType ? `${String(approvedLeave.leaveType).toUpperCase()} (1st Half)` : '1st Half Leave'
+
+    // If employee punches in anywhere from 90 mins before second half up to the grace cutoff: On-Time!
+    if (inMins <= secondHalfGraceCutoff) {
+      return {
+        status: 'half-day',
+        isLate: false,
+        isHalfDay: true,
+        halfDayPeriod: 'first_half',
+        lateMinutes: 0,
+        occurrence: 'half_day_leave_on_time',
+        notes: `On-time punch for 2nd half (${checkInTime}, approved ${leaveLabel})`,
+      }
+    }
+
+    // After second half grace cutoff -> Late for second half
+    const lateMins = Math.max(1, inMins - midShiftMinutes)
+    return {
+      status: 'half-day',
+      isLate: true,
+      isHalfDay: true,
+      halfDayPeriod: 'first_half',
+      lateMinutes: lateMins,
+      occurrence: 'late_login',
+      notes: `Late Login for 2nd half (${lateMins}m past ${formatMinutesToTime(midShiftMinutes)} start, approved ${leaveLabel})`,
+    }
+  }
+
   const { startMinutes, graceCutoffMinutes, halfDayCutoffMinutes, isOvernight } = normShift
 
   // Calculate relative arrival relative to shift start
@@ -263,14 +299,18 @@ export function evaluatePunchIn({ checkInTime, shift = STANDARD_SHIFT_DEF }) {
 
   // Check boundary rules: arrival before shift start or within grace cutoff is on-time
   if (relativeMins <= 0 || inMins <= graceCutoffMinutes) {
-    // Within grace period (e.g. 11:00 AM or 11:15 AM)
+    const isSecondHalfLeave = approvedLeave && (approvedLeave.isHalfDay || approvedLeave.halfDayPeriod) && (approvedLeave.halfDayPeriod === 'second_half' || approvedLeave.period === 'second_half')
+    const leaveLabel = approvedLeave?.leaveType ? `${String(approvedLeave.leaveType).toUpperCase()} (2nd Half)` : '2nd Half Leave'
     return {
-      status: 'present',
+      status: isSecondHalfLeave ? 'half-day' : 'present',
       isLate: false,
-      isHalfDay: false,
+      isHalfDay: Boolean(isSecondHalfLeave),
+      halfDayPeriod: isSecondHalfLeave ? 'second_half' : null,
       lateMinutes: 0,
       occurrence: 'on_time',
-      notes: `On-time punch (${checkInTime} within grace limit of ${formatMinutesToTime(graceCutoffMinutes)})`,
+      notes: isSecondHalfLeave
+        ? `On-time punch for 1st half (${checkInTime}, approved ${leaveLabel})`
+        : `On-time punch (${checkInTime} within grace limit of ${formatMinutesToTime(graceCutoffMinutes)})`,
     }
   }
 
@@ -313,6 +353,7 @@ export function evaluateCheckOut({
   shift = STANDARD_SHIFT_DEF,
   elapsedMinutes = null,
   verifiedCampusMinutes = null,
+  approvedLeave = null,
 }) {
   const normShift = normalizeShiftConfig(shift)
   const outMins = parseTimeToMinutes(checkOutTime)
@@ -324,6 +365,34 @@ export function evaluateCheckOut({
       isCampusShortfall: false,
       occurrence: 'invalid_time',
       notes: 'Check-out timestamp requires verification',
+    }
+  }
+
+  // CASE B: Employee has an approved half-day leave for the second half (afternoon)
+  // They are authorized to leave after completing their first half (mid-shift).
+  if (approvedLeave && (approvedLeave.isHalfDay || approvedLeave.halfDayPeriod) && (approvedLeave.halfDayPeriod === 'second_half' || approvedLeave.period === 'second_half')) {
+    const { startMinutes, endMinutes } = normShift
+    const midShiftMinutes = startMinutes + Math.round((endMinutes - startMinutes) / 2)
+    const effectiveDuration = verifiedCampusMinutes !== null
+      ? verifiedCampusMinutes
+      : (elapsedMinutes !== null ? elapsedMinutes : (inMins !== null ? Math.max(0, outMins - inMins) : 0))
+    const leaveLabel = approvedLeave.leaveType ? `${String(approvedLeave.leaveType).toUpperCase()} (2nd Half)` : '2nd Half Leave'
+
+    // Minimum 3.5 hours (210 mins) or punch-out at/after midShiftMinutes - 30 is considered completed first half
+    if (effectiveDuration >= 210 || outMins >= (midShiftMinutes - 30)) {
+      return {
+        isEarlyLogout: false,
+        isCampusShortfall: false,
+        occurrence: 'half_day_leave_checkout',
+        notes: `Shift completed for 1st half (${checkOutTime}, approved ${leaveLabel})`,
+      }
+    }
+
+    return {
+      isEarlyLogout: true,
+      isCampusShortfall: true,
+      occurrence: 'early_logout',
+      notes: `Early departure before 1st half completed (${Math.floor(effectiveDuration / 60)}h ${effectiveDuration % 60}m worked, approved ${leaveLabel})`,
     }
   }
 
@@ -367,10 +436,14 @@ export function evaluateRepeatedOccurrences(records = []) {
   let earlyLogoutCount = 0
 
   for (const r of records) {
-    if (r.isLate || r.status === 'late' || r.policyEvaluation?.occurrence === 'late_login') {
+    const occ = r.policyEvaluation?.occurrence || r.occurrence
+    const isHalfDayOnTime = occ === 'half_day_leave_on_time' || (r.approvedLeave?.halfDayPeriod === 'first_half' && !r.isLate)
+    const isHalfDayCheckout = occ === 'half_day_leave_checkout' || (r.approvedLeave?.halfDayPeriod === 'second_half' && !r.isEarlyLogout)
+
+    if (!isHalfDayOnTime && (r.isLate || r.status === 'late' || occ === 'late_login')) {
       lateCount++
     }
-    if (r.isEarlyLogout || r.status === 'early-logout' || r.policyEvaluation?.occurrence === 'early_logout') {
+    if (!isHalfDayCheckout && (r.isEarlyLogout || r.status === 'early-logout' || occ === 'early_logout')) {
       earlyLogoutCount++
     }
   }

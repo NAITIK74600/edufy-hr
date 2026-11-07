@@ -261,7 +261,7 @@ export function createApp(options = {}) {
   const leaveRepository = options.leaveRepository ?? (useDatabase ? createMongoLeaveRepository() : createMemoryLeaveRepository())
   const leaveService = options.leaveService ?? createLeaveService({ repository: leaveRepository, employeeRepository, notificationService: options.notificationService })
   const attendanceRepository = options.attendanceRepository ?? (useDatabase ? createMongoAttendanceRepository() : createMemoryAttendanceRepository())
-  const attendanceService = options.attendanceService ?? createAttendanceService({ repository: attendanceRepository, companySettings: options.companySettings })
+  const attendanceService = options.attendanceService ?? createAttendanceService({ repository: attendanceRepository, companySettings: options.companySettings, leaveRepository })
   app.locals.attendanceService = attendanceService
   const jwtSecret = options.jwtSecret ?? process.env.JWT_SECRET ?? (process.env.NODE_ENV === 'production' ? null : crypto.randomBytes(32).toString('hex'))
   if (!jwtSecret) throw new Error('JWT_SECRET is required in production')

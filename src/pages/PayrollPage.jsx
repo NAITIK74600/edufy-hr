@@ -82,7 +82,20 @@ function calculateEmpAttendanceContext(emp, monthStr, attendanceList = [], leave
       lop += isDouble ? 2 : 1
       counted.add(dateStr)
     } else if (isHalf) {
-      lop += 0.5
+      // Check if employee has an approved paid half-day leave for this date
+      const hasPaidHalfDay = (leavesList || []).some((l) => {
+        const lEmp = String(l.employeeId?._id || l.employeeId?.employeeId || l.employeeId || '').toUpperCase()
+        if (!((empId && lEmp === empId) || (empObjId && lEmp === empObjId.toUpperCase()))) return false
+        if (l.status !== 'approved' || !l.isHalfDay) return false
+        const sStr = typeof l.startDate === 'string' ? l.startDate.slice(0, 10) : new Date(l.startDate).toISOString().slice(0, 10)
+        const eStr = typeof l.endDate === 'string' ? l.endDate.slice(0, 10) : new Date(l.endDate).toISOString().slice(0, 10)
+        if (dateStr < sStr || dateStr > eStr) return false
+        return l.paidUnits > 0 || (l.leaveType !== 'lop' && l.leaveType !== 'double_lop')
+      })
+
+      if (!hasPaidHalfDay) {
+        lop += 0.5
+      }
       counted.add(dateStr)
     }
   }
@@ -98,8 +111,60 @@ function calculateEmpAttendanceContext(emp, monthStr, attendanceList = [], leave
     }
   }
 
-  const late = records.filter((r) => r.isLate || r.status === 'late').length
-  const early = records.filter((r) => r.isEarlyLogout || r.status === 'early-logout').length
+  // Missing working days (No punch-in means absent):
+  if (monthStr && typeof monthStr === 'string') {
+    const cleanMonth = monthStr.trim()
+    let y = 0
+    let m = 0
+    const yyyymm = /^(\d{4})-(\d{1,2})$/.exec(cleanMonth)
+    if (yyyymm) {
+      y = Number(yyyymm[1])
+      m = Number(yyyymm[2])
+    } else {
+      const parsed = new Date(`${cleanMonth} 1, 2026`)
+      if (!isNaN(parsed.getTime())) {
+        y = parsed.getFullYear()
+        m = parsed.getMonth() + 1
+      }
+    }
+
+    if (y && m) {
+      const daysInMonth = new Date(y, m, 0).getDate()
+      const today = new Date()
+      const isCurrentMonth = today.getFullYear() === y && (today.getMonth() + 1) === m
+      const limitDay = isCurrentMonth ? today.getDate() : daysInMonth
+
+      for (let d = 1; d <= limitDay; d++) {
+        const dStr = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+        const dayDate = new Date(y, m - 1, d)
+        const dayOfWeek = dayDate.getDay() // 0 = Sun, 6 = Sat
+        if (dayOfWeek !== 0 && dayOfWeek !== 6 && !counted.has(dStr)) {
+          const hasLeave = (leavesList || []).some((l) => {
+            const lEmp = String(l.employeeId?._id || l.employeeId?.employeeId || l.employeeId || '').toUpperCase()
+            if (!((empId && lEmp === empId) || (empObjId && lEmp === empObjId.toUpperCase()))) return false
+            if (l.status !== 'approved') return false
+            const sStr = typeof l.startDate === 'string' ? l.startDate.slice(0, 10) : new Date(l.startDate).toISOString().slice(0, 10)
+            const eStr = typeof l.endDate === 'string' ? l.endDate.slice(0, 10) : new Date(l.endDate).toISOString().slice(0, 10)
+            return dStr >= sStr && dStr <= eStr
+          })
+          if (!hasLeave) {
+            const isDouble = d >= 25
+            lop += isDouble ? 2 : 1
+            counted.add(dStr)
+          }
+        }
+      }
+    }
+  }
+
+  const late = records.filter((r) => {
+    const isHalfDayOnTime = r.occurrence === 'half_day_leave_on_time' || (r.approvedLeave?.halfDayPeriod === 'first_half' && !r.isLate)
+    return !isHalfDayOnTime && (r.isLate || r.status === 'late')
+  }).length
+  const early = records.filter((r) => {
+    const isHalfDayCheckout = r.occurrence === 'half_day_leave_checkout' || (r.approvedLeave?.halfDayPeriod === 'second_half' && !r.isEarlyLogout)
+    return !isHalfDayCheckout && (r.isEarlyLogout || r.status === 'early-logout')
+  }).length
   lop += Math.floor((late + early) / 3) * 0.5
 
   return { lopDays: lop, attendanceDays: records.length, lateCount: late }

@@ -67,7 +67,11 @@ export function formatAttendanceNotes(notes) {
  * - Loss of Pay (explicit LOP)
  */
 export function getDailyAttendanceStatus(r, attendanceRules = null) {
-  if (!r) return { label: 'Absent', tone: 'danger' }
+  if (!r || (!r.checkIn && r.status !== 'on-leave' && r.status !== 'holiday')) {
+    if (r?.status === 'on-leave') return { label: 'On Leave', tone: 'neutral' }
+    if (r?.status === 'holiday') return { label: 'Holiday', tone: 'info' }
+    return { label: 'Absent', tone: 'danger' }
+  }
 
   if (r.status === 'on-leave') {
     return { label: 'On Leave', tone: 'neutral' }
@@ -78,10 +82,17 @@ export function getDailyAttendanceStatus(r, attendanceRules = null) {
     return { label: 'Loss of Pay', tone: 'danger' }
   }
 
+  // Check if this record is associated with an approved first-half or second-half leave
+  const occ = r.policyEvaluation?.occurrence || r.occurrence
+  const isFirstHalfLeave = r.halfDayPeriod === 'first_half' || r.approvedLeave?.halfDayPeriod === 'first_half' || occ === 'half_day_leave_on_time'
+  const isSecondHalfLeave = r.halfDayPeriod === 'second_half' || r.approvedLeave?.halfDayPeriod === 'second_half' || occ === 'half_day_leave_checkout'
+  const isHalfDayOnTime = occ === 'half_day_leave_on_time' || (isFirstHalfLeave && r.isLate === false)
+  const isHalfDayCheckout = occ === 'half_day_leave_checkout' || (isSecondHalfLeave && !r.isEarlyLogout)
+
   // DYNAMIC CHECK: Evaluate punch-in against active shift rules
-  let isPunchLate = Boolean(r.isLate || r.status === 'late')
-  let isPunchHalfDay = Boolean(r.isHalfDay || r.status === 'half-day')
-  if (r.checkIn) {
+  let isPunchLate = isHalfDayOnTime ? false : Boolean(r.isLate || r.status === 'late')
+  let isPunchHalfDay = Boolean(r.isHalfDay || r.status === 'half-day' || isFirstHalfLeave || isSecondHalfLeave)
+  if (r.checkIn && !isFirstHalfLeave) {
     const checkInM = parseTimeToMinutes(r.checkIn)
     const startM = attendanceRules?.workStartTime ? parseTimeToMinutes(attendanceRules.workStartTime) : 660 // default 11:00 AM
     const grace = Number.isFinite(Number(attendanceRules?.gracePeriodMinutes)) && Number(attendanceRules.gracePeriodMinutes) >= 0
@@ -112,6 +123,14 @@ export function getDailyAttendanceStatus(r, attendanceRules = null) {
 
   // If employee has checked out, status is determined by worked duration or 1-hour late punch
   if (hasCheckedOut && workedHours !== null) {
+    // If on approved half-day leave and completed required half-shift (worked >= 3.5 hrs or on-time half-day checkout):
+    if (isFirstHalfLeave || isSecondHalfLeave || isHalfDayCheckout) {
+      if (workedHours >= 3.5 || isHalfDayCheckout) {
+        return { label: 'Half Day', tone: 'warning' }
+      }
+      return { label: 'Absent', tone: 'danger' }
+    }
+
     // 1. Absent: worked less than 4 hours (< 4 hrs)
     if (workedHours < 4) {
       return { label: 'Absent', tone: 'danger' }
@@ -157,8 +176,15 @@ export function getLateCountInfo(r, allAttendance = [], targetDate = '', attenda
 
   // Dynamically test if a record is late under active shift rules
   const isRecordLate = (record) => {
+    const occ = record.policyEvaluation?.occurrence || record.occurrence
+    const isHalfDayOnTime = occ === 'half_day_leave_on_time' || (record.approvedLeave?.halfDayPeriod === 'first_half' && !record.isLate) || (record.halfDayPeriod === 'first_half' && !record.isLate)
+    if (isHalfDayOnTime) return false
+
     if (record.isLate || record.status === 'late') return true
     if (record.checkIn) {
+      if (record.halfDayPeriod === 'first_half' || record.approvedLeave?.halfDayPeriod === 'first_half') {
+        return false
+      }
       const inM = parseTimeToMinutes(record.checkIn)
       const startM = attendanceRules?.workStartTime ? parseTimeToMinutes(attendanceRules.workStartTime) : 660
       const grace = Number.isFinite(Number(attendanceRules?.gracePeriodMinutes)) && Number(attendanceRules.gracePeriodMinutes) >= 0
@@ -173,6 +199,10 @@ export function getLateCountInfo(r, allAttendance = [], targetDate = '', attenda
 
   // Dynamically test if a record is early logout under active shift rules
   const isRecordEarlyLogout = (record) => {
+    const occ = record.policyEvaluation?.occurrence || record.occurrence
+    const isHalfDayCheckout = occ === 'half_day_leave_checkout' || (record.approvedLeave?.halfDayPeriod === 'second_half' && !record.isEarlyLogout) || (record.halfDayPeriod === 'second_half' && !record.isEarlyLogout)
+    if (isHalfDayCheckout) return false
+
     if (record.isEarlyLogout || record.status === 'early-logout') return true
     if (record.checkIn && record.checkOut && record.checkOut !== '—' && record.checkOut !== '-' && !String(record.checkOut).includes('Active')) {
       const inM = parseTimeToMinutes(record.checkIn)

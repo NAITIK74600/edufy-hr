@@ -246,11 +246,26 @@ function AttendanceModule() {
       return !punchedEmpIdSet.has(code) && !punchedEmpIdSet.has(name) && !punchedEmpIdSet.has(id)
     })
   }, [dayRecords, summaryEmployees, search])
+  const onLeaveEmpIdSet = useMemo(() => {
+    const set = new Set()
+    for (const l of (storeState.leaves || [])) {
+      if (l.status !== 'approved' || l.isHalfDay) continue
+      const s = typeof l.startDate === 'string' ? l.startDate.slice(0, 10) : new Date(l.startDate).toISOString().slice(0, 10)
+      const e = typeof l.endDate === 'string' ? l.endDate.slice(0, 10) : new Date(l.endDate).toISOString().slice(0, 10)
+      if (selectedDate >= s && selectedDate <= e) {
+        const empCode = String(l.employeeId?._id || l.employeeId?.employeeId || l.employeeId || '').toUpperCase()
+        if (empCode) set.add(empCode)
+      }
+    }
+    return set
+  }, [storeState.leaves, selectedDate])
+
   const presentCount = dayRecords.filter((a) => a.status === 'present').length
   const lateCount = dayRecords.filter((a) => a.status === 'late').length
   const halfDayCount = dayRecords.filter((a) => a.status === 'half-day').length
-  const onLeaveCount = dayRecords.filter((a) => a.status === 'on-leave').length
-  const absentCount = dayRecords.filter((a) => a.status === 'absent').length
+  const onLeaveCount = Math.max(dayRecords.filter((a) => a.status === 'on-leave').length, onLeaveEmpIdSet.size)
+  const missingPunchesCount = notPunchedInList.filter(emp => !onLeaveEmpIdSet.has(String(emp.employeeId || '').toUpperCase())).length
+  const absentCount = dayRecords.filter((a) => a.status === 'absent').length + missingPunchesCount
   const totalRoster = allEmployees.length
   const attendanceRate = totalRoster
     ? Math.round(((presentCount + lateCount + halfDayCount * 0.5) / totalRoster) * 100)
@@ -1296,12 +1311,14 @@ function AttendanceModule() {
                 key: 'combinedInfractions',
                 label: 'Late + Early (Total)',
                 render: (emp) => {
-                  const lCount = monthlyAttendance.filter(
-                    (a) => a.employeeId === emp.employeeId && (a.status === 'late' || a.isLate)
-                  ).length
-                  const eCount = monthlyAttendance.filter(
-                    (a) => a.employeeId === emp.employeeId && (a.status === 'early-logout' || a.isEarlyLogout)
-                  ).length
+                  const lCount = monthlyAttendance.filter((a) => {
+                    const isHalfDayOnTime = a.occurrence === 'half_day_leave_on_time' || (a.approvedLeave?.halfDayPeriod === 'first_half' && !a.isLate)
+                    return a.employeeId === emp.employeeId && !isHalfDayOnTime && (a.status === 'late' || a.isLate)
+                  }).length
+                  const eCount = monthlyAttendance.filter((a) => {
+                    const isHalfDayCheckout = a.occurrence === 'half_day_leave_checkout' || (a.approvedLeave?.halfDayPeriod === 'second_half' && !a.isEarlyLogout)
+                    return a.employeeId === emp.employeeId && !isHalfDayCheckout && (a.status === 'early-logout' || a.isEarlyLogout)
+                  }).length
                   const total = lCount + eCount
                   const halfLop = Math.floor(total / 3) * 0.5
                   return (
@@ -1336,12 +1353,14 @@ function AttendanceModule() {
                   const absents = monthlyAttendance.filter(
                     (a) => a.employeeId === emp.employeeId && a.status === 'absent'
                   ).length
-                  const lCount = monthlyAttendance.filter(
-                    (a) => a.employeeId === emp.employeeId && (a.status === 'late' || a.isLate)
-                  ).length
-                  const eCount = monthlyAttendance.filter(
-                    (a) => a.employeeId === emp.employeeId && (a.status === 'early-logout' || a.isEarlyLogout)
-                  ).length
+                  const lCount = monthlyAttendance.filter((a) => {
+                    const isHalfDayOnTime = a.occurrence === 'half_day_leave_on_time' || (a.approvedLeave?.halfDayPeriod === 'first_half' && !a.isLate)
+                    return a.employeeId === emp.employeeId && !isHalfDayOnTime && (a.status === 'late' || a.isLate)
+                  }).length
+                  const eCount = monthlyAttendance.filter((a) => {
+                    const isHalfDayCheckout = a.occurrence === 'half_day_leave_checkout' || (a.approvedLeave?.halfDayPeriod === 'second_half' && !a.isEarlyLogout)
+                    return a.employeeId === emp.employeeId && !isHalfDayCheckout && (a.status === 'early-logout' || a.isEarlyLogout)
+                  }).length
                   const infractionLop = Math.floor((lCount + eCount) / 3) * 0.5
                   const totalLop = absents + infractionLop
                   return (

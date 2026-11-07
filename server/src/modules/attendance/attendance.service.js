@@ -12,6 +12,7 @@ import { BlockList, isIP } from 'node:net'
 import mongoose from 'mongoose'
 import { dispatchAttendanceNotification, createUnifiedNotification } from '../../services/unifiedNotification.service.js'
 import { Employee } from '../../models/Employee.js'
+import { LeaveRequest } from '../../models/LeaveRequest.js'
 
 export const DEFAULT_LOCATIONS = [
   {
@@ -434,7 +435,7 @@ function isIpMatching(clientIp, allowedIPs = []) {
   })
 }
 
-export function createAttendanceService({ repository, companySettings = {} }) {
+export function createAttendanceService({ repository, companySettings = {}, leaveRepository = null }) {
   let isProcessingAutoPunchOuts = false
   let locations = companySettings.locations || []
   let allowedWifiSSIDs = companySettings.allowedWifiSSIDs || []
@@ -462,6 +463,164 @@ export function createAttendanceService({ repository, companySettings = {} }) {
     requireManagerApproval: true,
     requireHrApproval: true,
     approvalWorkflow: 'manager_hr',
+  }
+
+  async function getApprovedLeaveForDate(employeeId, workDate) {
+    if (!employeeId || !workDate) return null
+    try {
+      let empObjId = null
+      if (mongoose.isValidObjectId(employeeId)) {
+        empObjId = employeeId
+      } else if (mongoose.connection?.readyState === 1) {
+        const empDoc = await Employee.findOne({ employeeId: String(employeeId).toUpperCase() }).select('_id').lean()
+        if (empDoc) empObjId = empDoc._id
+      }
+
+      const orClauses = []
+      if (empObjId) orClauses.push({ employeeId: empObjId })
+      if (employeeId) orClauses.push({ employeeId: String(employeeId).toUpperCase() }, { employeeId })
+
+      const targetDateStart = new Date(`${workDate}T00:00:00.000Z`)
+      const targetDateEnd = new Date(`${workDate}T23:59:59.999Z`)
+
+      if (mongoose.connection?.readyState === 1) {
+        const req = await LeaveRequest.findOne({
+          $or: orClauses,
+          status: 'approved',
+          startDate: { $lte: targetDateEnd },
+          endDate: { $gte: targetDateStart },
+        }).lean()
+
+        if (req) {
+          let dayInfo = null
+          if (Array.isArray(req.dayBreakdown) && req.dayBreakdown.length > 0) {
+            dayInfo = req.dayBreakdown.find((d) => d.date === workDate)
+          }
+          const isPaid = dayInfo ? Boolean(dayInfo.isPaid) : (req.paidUnits > 0 || (req.leaveType !== 'lop' && req.leaveType !== 'double_lop'))
+          return {
+            id: String(req._id),
+            leaveType: req.leaveType,
+            isHalfDay: Boolean(req.isHalfDay),
+            halfDayPeriod: req.halfDayPeriod || null,
+            isPaid,
+            isDoubleLop: Boolean(req.isDoubleLop || dayInfo?.isDoubleLop),
+          }
+        }
+      }
+
+      if (leaveRepository?.listRequests) {
+        const requests = await leaveRepository.listRequests({ employeeId: empObjId || employeeId })
+        const match = (requests || []).find((r) => {
+          if (r.status !== 'approved') return false
+          const sStr = typeof r.startDate === 'string' ? r.startDate.slice(0, 10) : new Date(r.startDate).toISOString().slice(0, 10)
+          const eStr = typeof r.endDate === 'string' ? r.endDate.slice(0, 10) : new Date(r.endDate).toISOString().slice(0, 10)
+          return workDate >= sStr && workDate <= eStr
+        })
+        if (match) {
+          return {
+            id: String(match.id || match._id),
+            leaveType: match.leaveType,
+            isHalfDay: Boolean(match.isHalfDay),
+            halfDayPeriod: match.halfDayPeriod || null,
+            isPaid: match.paidUnits > 0 || (match.leaveType !== 'lop' && match.leaveType !== 'double_lop'),
+            isDoubleLop: Boolean(match.isDoubleLop),
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('[AttendanceService] getApprovedLeaveForDate error:', err?.message || err)
+    }
+    return null
+  }
+
+  async function ensureDailyAbsenceRecords(workDate = getTodayString()) {
+    try {
+      if (mongoose.connection?.readyState !== 1) return
+      const activeEmps = await Employee.find({ status: 'active' }).select('employeeId _id name displayName department').lean()
+      if (!activeEmps || activeEmps.length === 0) return
+
+      const dayDocs = await repository.list({ date: workDate })
+      const punchedMap = new Map()
+      for (const d of (dayDocs || [])) {
+        if (d.employeeId) punchedMap.set(String(d.employeeId).toUpperCase(), d)
+      }
+
+      for (const emp of activeEmps) {
+        const code = String(emp.employeeId || '').toUpperCase()
+        if (!code) continue
+        const existingRec = punchedMap.get(code)
+        if (existingRec && existingRec.checkIn) {
+          continue // Already punched in
+        }
+
+        // Check if employee has approved leave
+        const approvedLeave = await getApprovedLeaveForDate(emp.employeeId || emp._id, workDate)
+        if (approvedLeave && !approvedLeave.isHalfDay) {
+          // On approved full-day leave
+          if (!existingRec) {
+            await repository.save({
+              employeeId: code,
+              employeeName: emp.displayName || emp.name || 'Employee',
+              date: workDate,
+              status: 'on-leave',
+              isLate: false,
+              isHalfDay: false,
+              checkIn: null,
+              checkOut: null,
+              totalHours: '0.0 hrs',
+              notes: `On Approved ${approvedLeave.leaveType ? approvedLeave.leaveType.toUpperCase() : 'Leave'}`,
+            })
+          } else if (existingRec.status !== 'on-leave' && !existingRec.checkIn) {
+            await repository.save({
+              ...existingRec,
+              status: 'on-leave',
+              notes: `On Approved ${approvedLeave.leaveType ? approvedLeave.leaveType.toUpperCase() : 'Leave'}`,
+            })
+          }
+        } else if (approvedLeave && approvedLeave.isHalfDay) {
+          // Half-day leave but NO punch-in recorded for the working half -> unpunched half is absent
+          if (!existingRec) {
+            await repository.save({
+              employeeId: code,
+              employeeName: emp.displayName || emp.name || 'Employee',
+              date: workDate,
+              status: 'absent',
+              isLate: false,
+              isHalfDay: true,
+              halfDayPeriod: approvedLeave.halfDayPeriod,
+              checkIn: null,
+              checkOut: null,
+              totalHours: '0.0 hrs',
+              notes: `Approved 1/2 Day Leave (${approvedLeave.leaveType || 'Leave'}) - Missing punch for working half (Absent)`,
+            })
+          }
+        } else {
+          // No leave and no punch-in -> ABSENT!
+          if (!existingRec) {
+            await repository.save({
+              employeeId: code,
+              employeeName: emp.displayName || emp.name || 'Employee',
+              date: workDate,
+              status: 'absent',
+              isLate: false,
+              isHalfDay: false,
+              checkIn: null,
+              checkOut: null,
+              totalHours: '0.0 hrs',
+              notes: 'Absent (No punch-in recorded)',
+            })
+          } else if (!existingRec.checkIn && existingRec.status !== 'absent') {
+            await repository.save({
+              ...existingRec,
+              status: 'absent',
+              notes: 'Absent (No punch-in recorded)',
+            })
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('[AttendanceService] ensureDailyAbsenceRecords error:', err?.message || err)
+    }
   }
 
   function verifyLocation(latitude, longitude, wifiSSID, clientIp, bssid = null, accuracy = null) {
@@ -684,11 +843,23 @@ export function createAttendanceService({ repository, companySettings = {} }) {
     },
 
     async listAll(filters = {}) {
+      if (filters.date) {
+        await ensureDailyAbsenceRecords(filters.date)
+      }
       return repository.list(filters)
     },
 
     async getSummary(date = getTodayString()) {
+      await ensureDailyAbsenceRecords(date)
       return repository.getSummary(date)
+    },
+
+    async getApprovedLeave(employeeId, workDate) {
+      return getApprovedLeaveForDate(employeeId, workDate)
+    },
+
+    async ensureDailyAbsence(workDate) {
+      return ensureDailyAbsenceRecords(workDate)
     },
 
     async punchIn(args) {
@@ -776,14 +947,15 @@ export function createAttendanceService({ repository, companySettings = {} }) {
         resolvedShiftConfig = { ...STANDARD_SHIFT_DEF }
       }
 
-      const punchEval = evaluatePunchIn({ checkInTime, shift: resolvedShiftConfig })
+      const approvedLeave = await getApprovedLeaveForDate(employeeId, workDate)
+      const punchEval = evaluatePunchIn({ checkInTime, shift: resolvedShiftConfig, approvedLeave })
 
       // Calculate occurrence index for the month
       let currentLateCount = 0
       try {
         const monthKey = workDate.slice(0, 7)
         const priorMonthRecords = await repository.list({ employeeId: employeeId.toUpperCase(), month: monthKey })
-        const priorLates = (priorMonthRecords || []).filter(r => r.date !== workDate && (r.isLate || r.status === 'late')).length
+        const priorLates = (priorMonthRecords || []).filter(r => r.date !== workDate && (r.isLate || r.status === 'late') && r.policyEvaluation?.occurrence !== 'half_day_leave_on_time').length
         currentLateCount = priorLates + (punchEval.isLate ? 1 : 0)
       } catch {
         currentLateCount = punchEval.isLate ? 1 : 0
@@ -840,6 +1012,13 @@ export function createAttendanceService({ repository, companySettings = {} }) {
         status: punchEval.status,
         isLate: punchEval.isLate,
         isHalfDay: punchEval.isHalfDay,
+        halfDayPeriod: approvedLeave?.halfDayPeriod || (punchEval.isHalfDay ? 'first_half' : null),
+        approvedLeave: approvedLeave ? {
+          id: approvedLeave.id,
+          leaveType: approvedLeave.leaveType,
+          halfDayPeriod: approvedLeave.halfDayPeriod,
+          isPaid: approvedLeave.isPaid,
+        } : null,
         lateCount: currentLateCount,
         shift: resolvedShiftConfig.name,
         shiftCode: resolvedShiftConfig.shiftId.toLowerCase(),
@@ -861,7 +1040,7 @@ export function createAttendanceService({ repository, companySettings = {} }) {
         locationName: (/san francisco|austin|london/i.test(verification.nearestLocation || '') || !verification.nearestLocation) ? 'IGNITE CAMPUS' : verification.nearestLocation,
         verificationMethod: verification.method,
         totalHours: 'Active (Live)',
-        notes: punchEval.isLate ? punchEval.notes : `Verified Attendance (${resolvedShiftConfig.name})`,
+        notes: punchEval.notes || (punchEval.isLate ? punchEval.notes : `Verified Attendance (${resolvedShiftConfig.name})`),
         lastConnectedAt: now,
         disconnectedSince: null,
         geofenceStatus: 'inside',
@@ -1125,12 +1304,14 @@ export function createAttendanceService({ repository, companySettings = {} }) {
         ? Math.max(0, elapsed - totalBreakMinutes - offCampusMinutes)
         : 0
 
+      const approvedLeave = await getApprovedLeaveForDate(employeeId, workDate)
       const checkoutEval = evaluateCheckOut({
         checkOutTime,
         checkInTime: existing.checkIn,
         shift: resolvedOutShift,
         elapsedMinutes: elapsed,
         verifiedCampusMinutes: verifiedDurationMinutes,
+        approvedLeave,
       })
 
       // Count prior early logouts in the month
@@ -1139,7 +1320,7 @@ export function createAttendanceService({ repository, companySettings = {} }) {
         try {
           const monthKey = workDate.slice(0, 7)
           const priorMonthRecords = await repository.list({ employeeId: employeeId.toUpperCase(), month: monthKey })
-          const priorEarly = (priorMonthRecords || []).filter(r => r.date !== workDate && (r.isEarlyLogout || r.status === 'early-logout')).length
+          const priorEarly = (priorMonthRecords || []).filter(r => r.date !== workDate && (r.isEarlyLogout || r.status === 'early-logout') && r.policyEvaluation?.occurrence !== 'half_day_leave_checkout').length
           currentEarlyCount = priorEarly + 1
         } catch {
           currentEarlyCount = (existing.earlyLogoutCount || 0) + 1
@@ -1154,8 +1335,8 @@ export function createAttendanceService({ repository, companySettings = {} }) {
       })
 
       let finalStatus = existing.status || 'present'
-      let finalHalfDay = Boolean(existing.isHalfDay)
-      if (existing.isHalfDay || existing.status === 'half-day') {
+      let finalHalfDay = Boolean(existing.isHalfDay || approvedLeave?.isHalfDay)
+      if (existing.isHalfDay || existing.status === 'half-day' || approvedLeave?.isHalfDay) {
         finalHalfDay = true
         finalStatus = 'half-day'
       } else if (attendanceRules?.minCampusHours && checkoutEval.isCampusShortfall && verifiedDurationMinutes < (resolvedOutShift.requiredCampusMinutes || 240)) {
@@ -1958,7 +2139,8 @@ export function createAttendanceService({ repository, companySettings = {} }) {
         if (!rec.checkIn) continue
         const resShift = await resolveEmployeeShift(rec.employeeId, rec.date || date)
         const shiftConfig = resShift.shift
-        const punchEval = evaluatePunchIn({ checkInTime: rec.checkIn, shift: shiftConfig })
+        const approvedLeave = await getApprovedLeaveForDate(rec.employeeId, rec.date || date)
+        const punchEval = evaluatePunchIn({ checkInTime: rec.checkIn, shift: shiftConfig, approvedLeave })
 
         let checkoutEval = null
         if (rec.checkOut) {
@@ -1967,6 +2149,7 @@ export function createAttendanceService({ repository, companySettings = {} }) {
             checkInTime: rec.checkIn,
             shift: shiftConfig,
             verifiedCampusMinutes: rec.verifiedCampusMinutes,
+            approvedLeave,
           })
         }
 
@@ -1981,7 +2164,7 @@ export function createAttendanceService({ repository, companySettings = {} }) {
           try {
             const monthKey = (rec.date || today).slice(0, 7)
             const priorMonthRecords = await repository.list({ employeeId: rec.employeeId.toUpperCase(), month: monthKey })
-            const priorLates = (priorMonthRecords || []).filter(r => r.date < (rec.date || today) && (r.isLate || r.status === 'late')).length
+            const priorLates = (priorMonthRecords || []).filter(r => r.date < (rec.date || today) && (r.isLate || r.status === 'late') && r.policyEvaluation?.occurrence !== 'half_day_leave_on_time').length
             recLateCount = priorLates + 1
           } catch {
             recLateCount = 1
@@ -2003,15 +2186,16 @@ export function createAttendanceService({ repository, companySettings = {} }) {
           shiftCode: shiftConfig.shiftId.toLowerCase(),
           isLate: punchEval.isLate,
           lateCount: recLateCount,
-          isHalfDay: punchEval.isHalfDay || (checkoutEval ? checkoutEval.isCampusShortfall : false),
+          isHalfDay: punchEval.isHalfDay || (checkoutEval ? checkoutEval.isCampusShortfall : false) || Boolean(approvedLeave?.isHalfDay),
+          halfDayPeriod: approvedLeave?.halfDayPeriod || rec.halfDayPeriod || null,
           status: finalStatus,
           isEarlyLogout: checkoutEval ? checkoutEval.isEarlyLogout : false,
           totalHours: isStillActive
             ? 'Active (Live)'
             : (typeof rec.totalHours === 'string' && rec.totalHours.includes('Active') ? '8.0 hrs' : rec.totalHours),
-          notes: punchEval.isLate
+          notes: punchEval.notes || (punchEval.isLate
             ? punchEval.notes
-            : `Verified Attendance (${shiftConfig.name})`,
+            : `Verified Attendance (${shiftConfig.name})`),
           doubleLopStatus: doubleLopEval.applies ? (rec.doubleLopStatus === 'approved' ? 'approved' : 'none') : 'none',
           isDoubleLop: rec.doubleLopStatus === 'approved',
           policyEvaluation: { punch: punchEval, checkout: checkoutEval },

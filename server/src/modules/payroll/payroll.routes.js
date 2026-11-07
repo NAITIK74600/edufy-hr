@@ -264,7 +264,18 @@ export function calculateAttendanceLopContext({ attendance = [], leave = [], per
       totalLopDays += isMonthEndDoubleLop ? 2 : 1
       countedDates.add(dateStr)
     } else if (isHalfDayRecord) {
-      totalLopDays += 0.5
+      // Check if this half-day is covered by an approved PAID leave (e.g. casual or sick leave)
+      const isPaidHalfDayLeave = leave.some((req) => {
+        if (req.status !== 'approved' || !req.isHalfDay) return false
+        if (Array.isArray(req.dayBreakdown) && req.dayBreakdown.length > 0) {
+          return req.dayBreakdown.some((d) => d.date === dateStr && d.isPaid)
+        }
+        return req.paidUnits > 0 || (req.leaveType !== 'lop' && req.leaveType !== 'double_lop')
+      })
+
+      if (!isPaidHalfDayLeave) {
+        totalLopDays += 0.5
+      }
       countedDates.add(dateStr)
     } else if (record.status === 'on-leave' && isExplicitDoubleLop) {
       totalLopDays += 2
@@ -347,15 +358,51 @@ async function context(employee, month) {
 
     // 3. Process combined late logins & early logouts LOP:
     // Rule: Every 3 infractions (late login or early logout, combined) = 0.5 LOP day
-    const lateLoginsCount = attendance.filter((r) => r.isLate || r.status === 'late').length
-    const earlyLogoutDays = attendance.filter((r) => r.isEarlyLogout || r.status === 'early-logout').length
+    // Half-day leave arrivals and checkouts are NOT infractions!
+    const lateLoginsCount = attendance.filter((r) => {
+      const isHalfDayOnTime = r.policyEvaluation?.occurrence === 'half_day_leave_on_time' || (r.approvedLeave?.halfDayPeriod === 'first_half' && !r.isLate)
+      return !isHalfDayOnTime && (r.isLate || r.status === 'late')
+    }).length
+    const earlyLogoutDays = attendance.filter((r) => {
+      const isHalfDayCheckout = r.policyEvaluation?.occurrence === 'half_day_leave_checkout' || (r.approvedLeave?.halfDayPeriod === 'second_half' && !r.isEarlyLogout)
+      return !isHalfDayCheckout && (r.isEarlyLogout || r.status === 'early-logout')
+    }).length
     const combinedInfractions = lateLoginsCount + earlyLogoutDays
     const lateEarlyLopDays = Math.floor(combinedInfractions / 3) * 0.5
     totalLopDays += lateEarlyLopDays
 
+    // 4. Missing working days: if an employee has NO punch-in and NO approved leave on a working day
+    // (excluding future dates and weekends), that day is ABSENT!
+    const todayStr = new Date().toISOString().slice(0, 10)
+    const effectiveTo = period.to < todayStr ? period.to : todayStr
+    let missingAbsentDays = 0
+
+    const curDate = new Date(`${period.from}T00:00:00.000Z`)
+    const maxDate = new Date(`${effectiveTo}T00:00:00.000Z`)
+    while (curDate <= maxDate) {
+      const dStr = curDate.toISOString().slice(0, 10)
+      const dayOfWeek = curDate.getUTCDay()
+      if (dayOfWeek !== 0 && dayOfWeek !== 6 && !countedDates.has(dStr)) {
+        const hasLeave = leave.some((req) => {
+          if (req.status !== 'approved') return false
+          const s = typeof req.startDate === 'string' ? req.startDate.slice(0, 10) : new Date(req.startDate).toISOString().slice(0, 10)
+          const e = typeof req.endDate === 'string' ? req.endDate.slice(0, 10) : new Date(req.endDate).toISOString().slice(0, 10)
+          return dStr >= s && dStr <= e
+        })
+        if (!hasLeave) {
+          const dayOfMonth = curDate.getUTCDate()
+          const isMonthEndDoubleLop = dayOfMonth >= 25
+          totalLopDays += isMonthEndDoubleLop ? 2 : 1
+          missingAbsentDays++
+          countedDates.add(dStr)
+        }
+      }
+      curDate.setUTCDate(curDate.getUTCDate() + 1)
+    }
+
     return {
       attendanceDays: attendance.length,
-      absentDays: attendance.filter((record) => record.status === 'absent').length,
+      absentDays: attendance.filter((record) => record.status === 'absent').length + missingAbsentDays,
       halfDays: attendance.filter((record) => record.status === 'half-day').length,
       lateCount: lateLoginsCount,
       earlyLogoutDays,
