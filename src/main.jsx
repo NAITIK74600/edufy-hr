@@ -379,7 +379,15 @@ if (container) {
 // Register PWA Service Worker for Offline, Mobile App & Background Execution
 function registerServiceWorker() {
   if (typeof window !== 'undefined' && 'serviceWorker' in navigator && window.location.protocol.startsWith('http')) {
-    navigator.serviceWorker
+    let refreshing = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!refreshing) {
+        refreshing = true;
+        window.location.reload();
+      }
+    });
+
+navigator.serviceWorker
       .register('/sw.js', { scope: '/' })
       .then((reg) => {
         console.log('[PWA] Service Worker registered with scope:', reg.scope)

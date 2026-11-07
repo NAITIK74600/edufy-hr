@@ -2600,10 +2600,20 @@ export function LeaveManagementPage({ mode = 'self', route, query: propQuery }) 
                 alignItems: 'center',
                 flexWrap: 'wrap',
                 gap: '12px',
+                width: '100%',
               }}
             >
-              <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-                <div className="module-search" style={{ minWidth: '220px' }}>
+              <div
+                style={{
+                  display: 'flex',
+                  gap: '10px',
+                  alignItems: 'center',
+                  flexWrap: 'wrap',
+                  flex: '1 1 auto',
+                  minWidth: 0,
+                }}
+              >
+                <div className="module-search" style={{ flex: '1 1 240px', minWidth: '200px' }}>
                   <Search size={15} />
                   <input
                     placeholder="Search employee name, ID, or reason..."
@@ -2616,6 +2626,7 @@ export function LeaveManagementPage({ mode = 'self', route, query: propQuery }) 
                   className="leave-filter"
                   value={filter}
                   onChange={(event) => setFilter(event.target.value)}
+                  style={{ minWidth: '150px' }}
                 >
                   <option value="">All statuses</option>
                   <option value="pending_all">⚡ All Pending Action ({pendingCount})</option>
@@ -2630,6 +2641,7 @@ export function LeaveManagementPage({ mode = 'self', route, query: propQuery }) 
                   className="leave-filter"
                   value={typeFilter}
                   onChange={(event) => setTypeFilter(event.target.value)}
+                  style={{ minWidth: '150px' }}
                 >
                   <option value="all">All leave types</option>
                   <option value="casual">Casual Leave (CL)</option>
@@ -2642,7 +2654,7 @@ export function LeaveManagementPage({ mode = 'self', route, query: propQuery }) 
               </div>
 
               {/* View Mode Toggle */}
-              <div className="view-mode-toggle">
+              <div className="view-mode-toggle" style={{ flexShrink: 0 }}>
                 <button
                   type="button"
                   className={`view-mode-btn ${viewMode === 'split' ? 'active' : ''}`}
