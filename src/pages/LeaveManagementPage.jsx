@@ -33,7 +33,7 @@ import {
 } from 'lucide-react'
 import { Button, ConfirmationDialog, DataTable, EmptyState, Field, PageHeader, StatePanel, StatusBadge } from '../components/ui'
 import { apiClient } from '../services/apiClient'
-import { hrStore, storeAction } from '../services/hrStore'
+import { hrStore, storeAction, is25thMonthLop } from '../services/hrStore'
 import { todayKey } from '../services/connectedStore'
 import { LeaveBalanceTable, LeavePolicySettings } from './LeavePolicySettings'
 import { useAuth } from '../auth/AuthContext'
@@ -1970,6 +1970,21 @@ function GrantLeaveHR({ employees, onGranted, preselectedEmpId }) {
   )
 }
 
+export function isDoubleLopLeave(r) {
+  if (!r) return false
+  return Boolean(
+    r.status === 'pending_admin' ||
+    r.isDoubleLop ||
+    (r.doubleLopDays && r.doubleLopDays > 0) ||
+    (r.doubleLopUnits && r.doubleLopUnits > 0) ||
+    r.leaveType === 'double_lop' ||
+    r.leaveCategory === 'double_lop' ||
+    r.isPost25thLop ||
+    is25thMonthLop(r) ||
+    (r.dates && Array.isArray(r.dates) && r.dates.some((d) => d.isDoubleLop || d.leaveCategory === 'double_lop'))
+  )
+}
+
 export function LeaveManagementPage({ mode = 'self', route, query: propQuery }) {
   const { user } = useAuth()
   const [storeState, setStoreState] = useState(() => hrStore.getState())
@@ -1983,15 +1998,15 @@ export function LeaveManagementPage({ mode = 'self', route, query: propQuery }) 
     let tab = effectiveQuery.tab || ''
     if (!tab) {
       if (hash.includes('tab=policy')) tab = 'policy'
-      else if (hash.includes('tab=approvals')) tab = 'approvals'
       else if (hash.includes('tab=grant')) tab = 'grant'
       else if (hash.includes('tab=quotas')) tab = 'quotas'
       else if (hash.includes('tab=lop')) tab = 'lop'
+      else if (hash.includes('tab=approvals')) tab = 'approvals'
       else tab = 'approvals'
     }
-    const filterVal = effectiveQuery.filter || (hash.includes('filter=pending_admin') || tab === 'lop' ? 'pending_admin' : '')
+    const filterVal = effectiveQuery.filter || ''
     const idVal = effectiveQuery.id || effectiveQuery.leaveId || ''
-    return { tab: tab === 'lop' ? 'approvals' : tab, filter: filterVal, id: idVal, isLopTab: tab === 'lop' }
+    return { tab, filter: filterVal, id: idVal }
   }
 
   const initialInfo = getHashInfo()
@@ -2010,6 +2025,45 @@ export function LeaveManagementPage({ mode = 'self', route, query: propQuery }) 
   const [rejectReason, setRejectReason] = useState('')
   const [preselectedEmpId, setPreselectedEmpId] = useState('')
 
+  const navigateToTab = (newTab, newFilter = '') => {
+    setActiveTab(newTab)
+    setFilter(newFilter)
+    if (typeof window !== 'undefined') {
+      const basePath = window.location.hash.split('?')[0] || (mode === 'admin' ? '#/admin/leave' : '#/hr/leave')
+      const params = new URLSearchParams()
+      if (newTab && newTab !== 'approvals') {
+        params.set('tab', newTab)
+      }
+      if (newFilter) {
+        params.set('filter', newFilter)
+      }
+      const queryStr = params.toString()
+      const newHash = queryStr ? `${basePath}?${queryStr}` : basePath
+      if (window.location.hash !== newHash) {
+        window.history.replaceState(null, '', newHash)
+      }
+    }
+  }
+
+  const updateFilter = (newFilter) => {
+    setFilter(newFilter)
+    if (typeof window !== 'undefined') {
+      const basePath = window.location.hash.split('?')[0] || (mode === 'admin' ? '#/admin/leave' : '#/hr/leave')
+      const params = new URLSearchParams()
+      if (activeTab && activeTab !== 'approvals') {
+        params.set('tab', activeTab)
+      }
+      if (newFilter) {
+        params.set('filter', newFilter)
+      }
+      const queryStr = params.toString()
+      const newHash = queryStr ? `${basePath}?${queryStr}` : basePath
+      if (window.location.hash !== newHash) {
+        window.history.replaceState(null, '', newHash)
+      }
+    }
+  }
+
   useEffect(() => {
     if (!storeState.employees?.length) {
       hrStore.refresh().catch(() => {})
@@ -2025,24 +2079,29 @@ export function LeaveManagementPage({ mode = 'self', route, query: propQuery }) 
       const { query = {} } = parseLocationHash(hash)
       const effectiveQuery = { ...(propQuery || {}), ...query }
       if (effectiveQuery.tab) {
-        setActiveTab(effectiveQuery.tab === 'lop' ? 'approvals' : effectiveQuery.tab)
+        setActiveTab(effectiveQuery.tab)
+      } else {
+        setActiveTab('approvals')
       }
       if (effectiveQuery.filter !== undefined) {
         setFilter(effectiveQuery.filter)
-      } else if (effectiveQuery.tab === 'lop' || hash.includes('filter=pending_admin')) {
-        setFilter('pending_admin')
+      } else {
+        setFilter('')
       }
       if (effectiveQuery.id || effectiveQuery.leaveId) {
-        const tid = effectiveQuery.id || effectiveQuery.leaveId
-        setTargetEntityId(tid)
-        const matched = (storeState.leaves || []).find((l) => (l.id || l._id) === tid)
-        if (matched) setSelected(matched)
+        setTargetEntityId(effectiveQuery.id || effectiveQuery.leaveId)
       }
     }
     window.addEventListener('hashchange', syncFromHash)
-    syncFromHash()
     return () => window.removeEventListener('hashchange', syncFromHash)
-  }, [propQuery, storeState.leaves])
+  }, [propQuery])
+
+  useEffect(() => {
+    if (targetEntityId && storeState.leaves?.length) {
+      const matched = storeState.leaves.find((l) => (l.id || l._id) === targetEntityId)
+      if (matched) setSelected(matched)
+    }
+  }, [targetEntityId, storeState.leaves])
 
   function showFeedback(msg) {
     setFeedbackNotice(msg)
@@ -2052,8 +2111,8 @@ export function LeaveManagementPage({ mode = 'self', route, query: propQuery }) 
   const allLeaves = storeState.leaves || []
   const allEmployees = storeState.employees || []
 
-  // Filter requests based on mode
-  let filteredRequests = allLeaves
+  // Filter requests based on mode and tab
+  let filteredRequests = activeTab === 'lop' ? allDoubleLopLeaves : allLeaves
   if (mode === 'self') {
     const userEmpId = user?.employeeId
     const userId = user?.id || user?._id
@@ -2122,15 +2181,30 @@ export function LeaveManagementPage({ mode = 'self', route, query: propQuery }) 
 
   // Filter by status, type, and search
   filteredRequests = filteredRequests.filter((r) => {
-    if (filter === 'pending_all') {
-      const isP =
-        r.status === 'pending_tl' ||
-        r.status === 'pending_manager' ||
-        r.status === 'pending_director' ||
-        r.status === 'pending_hr' ||
-        r.status === 'pending_admin'
-      if (!isP) return false
-    } else if (filter && r.status !== filter) return false
+    if (activeTab === 'lop') {
+      if (filter === 'pending_admin') {
+        if (r.status !== 'pending_admin') return false
+      } else if (filter === 'pending_all') {
+        const isP = ['pending_tl', 'pending_manager', 'pending_director', 'pending_hr', 'pending_admin'].includes(r.status)
+        if (!isP) return false
+      } else if (filter === 'approved') {
+        if (r.status !== 'approved') return false
+      }
+    } else {
+      if (filter === 'pending_all') {
+        const isP =
+          r.status === 'pending_tl' ||
+          r.status === 'pending_manager' ||
+          r.status === 'pending_director' ||
+          r.status === 'pending_hr' ||
+          r.status === 'pending_admin'
+        if (!isP) return false
+      } else if (filter === 'pending_admin') {
+        if (r.status !== 'pending_admin') return false
+      } else if (filter && r.status !== filter) {
+        return false
+      }
+    }
     if (typeFilter !== 'all' && r.leaveType !== typeFilter) return false
     if (search) {
       const q = search.toLowerCase()
@@ -2165,9 +2239,16 @@ export function LeaveManagementPage({ mode = 'self', route, query: propQuery }) 
     if (latest !== selected) setSelected(latest)
   }, [filteredRequests, targetEntityId])
 
-  // KPIs
+  // KPIs & Double LOP Categorization
+  const allDoubleLopLeaves = useMemo(() => {
+    return allLeaves.filter(isDoubleLopLeave)
+  }, [allLeaves])
+
   const totalRequests = allLeaves.length
   const pendingAdminCount = allLeaves.filter((l) => l.status === 'pending_admin').length
+  const pendingDoubleLopCount = allLeaves.filter((l) => isDoubleLopLeave(l) && ['pending_tl', 'pending_manager', 'pending_director', 'pending_hr', 'pending_admin'].includes(l.status)).length
+  const approvedDoubleLopCount = allLeaves.filter((l) => isDoubleLopLeave(l) && l.status === 'approved').length
+
   const pendingCount = allLeaves.filter(
     (l) =>
       l.status === 'pending_manager' ||
@@ -2376,27 +2457,37 @@ export function LeaveManagementPage({ mode = 'self', route, query: propQuery }) 
         <section className="leave-kpi-grid">
           <div
             className="leave-kpi-card pending"
-            onClick={() => { setActiveTab('approvals'); setFilter(mode === 'admin' ? 'pending_admin' : 'pending_all'); }}
+            onClick={() => {
+              if (pendingAdminCount > 0) {
+                navigateToTab('lop', 'pending_admin')
+              } else {
+                navigateToTab('approvals', 'pending_all')
+              }
+            }}
             title="Click to filter pending requests"
           >
             <div className="leave-kpi-header">
-              <span className="leave-kpi-title">{mode === 'admin' ? 'Pending Admin LOP' : 'Pending HR Approvals'}</span>
+              <span className="leave-kpi-title">
+                {pendingAdminCount > 0 ? 'Pending Admin LOP' : 'Pending Approvals'}
+              </span>
               <div className="leave-kpi-icon-wrap pending">
                 <Clock3 size={15} />
               </div>
             </div>
             <div className="leave-kpi-value">
-              {mode === 'admin' ? pendingAdminCount : pendingCount}
+              {pendingAdminCount > 0 ? pendingAdminCount : pendingCount}
               <span className="leave-kpi-unit">Requests</span>
             </div>
             <div className="leave-kpi-sub">
-              {mode === 'admin' ? (pendingAdminCount ? 'Click to review pending authorization' : 'All LOP queues cleared') : (pendingCount ? 'Click to review pending action' : 'All queues cleared')}
+              {pendingAdminCount > 0
+                ? `${pendingAdminCount} LOP request(s) awaiting Admin sign-off`
+                : (pendingCount ? `${pendingCount} leave request(s) awaiting review` : 'All leave queues cleared')}
             </div>
           </div>
 
           <div
             className="leave-kpi-card approved"
-            onClick={() => { setActiveTab('approvals'); setFilter('approved'); }}
+            onClick={() => navigateToTab('approvals', 'approved')}
             title="Click to filter approved leaves"
           >
             <div className="leave-kpi-header">
@@ -2436,7 +2527,7 @@ export function LeaveManagementPage({ mode = 'self', route, query: propQuery }) 
 
           <div
             className="leave-kpi-card total"
-            onClick={() => { setActiveTab('approvals'); setFilter(''); }}
+            onClick={() => navigateToTab('approvals', '')}
             title="Click to view all requests"
           >
             <div className="leave-kpi-header">
@@ -2459,30 +2550,30 @@ export function LeaveManagementPage({ mode = 'self', route, query: propQuery }) 
         <div className="subnav-tabs">
           <button
             type="button"
-            className={`subnav-tab ${activeTab === 'approvals' && filter !== 'pending_admin' ? 'active' : ''}`}
-            onClick={() => { setActiveTab('approvals'); if (filter === 'pending_admin') setFilter(''); }}
+            className={`subnav-tab ${activeTab === 'approvals' ? 'active' : ''}`}
+            onClick={() => navigateToTab('approvals', '')}
           >
             <CalendarDays size={14} />
             <span>Leave Requests & Approvals</span>
-            <span className="badge-pill">{pendingCount ? `${pendingCount} Pending` : filteredRequests.length}</span>
+            <span className="badge-pill">{pendingCount ? `${pendingCount} Pending` : totalRequests}</span>
           </button>
 
           <button
             type="button"
-            className={`subnav-tab ${filter === 'pending_admin' ? 'active' : ''}`}
-            onClick={() => { setActiveTab('approvals'); setFilter('pending_admin'); }}
+            className={`subnav-tab ${activeTab === 'lop' ? 'active' : ''}`}
+            onClick={() => navigateToTab('lop', pendingAdminCount > 0 ? 'pending_admin' : '')}
           >
             <ShieldAlert size={14} style={{ color: pendingAdminCount > 0 ? '#ef4444' : 'inherit' }} />
             <span>25th+ Month-End LOP Sign-Offs</span>
             <span className="badge-pill" style={pendingAdminCount > 0 ? { background: '#ef4444', color: '#fff', fontWeight: 700 } : {}}>
-              {pendingAdminCount} Awaiting
+              {pendingAdminCount > 0 ? `${pendingAdminCount} Awaiting` : `${allDoubleLopLeaves.length} Records`}
             </span>
           </button>
 
           <button
             type="button"
             className={`subnav-tab ${activeTab === 'grant' ? 'active' : ''}`}
-            onClick={() => setActiveTab('grant')}
+            onClick={() => navigateToTab('grant', '')}
           >
             <Plus size={14} />
             <span>Grant / Record Leave</span>
@@ -2491,7 +2582,7 @@ export function LeaveManagementPage({ mode = 'self', route, query: propQuery }) 
           <button
             type="button"
             className={`subnav-tab ${activeTab === 'quotas' ? 'active' : ''}`}
-            onClick={() => setActiveTab('quotas')}
+            onClick={() => navigateToTab('quotas', '')}
           >
             <Users size={14} />
             <span>Employee Leave Balances & Quotas</span>
@@ -2501,7 +2592,7 @@ export function LeaveManagementPage({ mode = 'self', route, query: propQuery }) 
           <button
             type="button"
             className={`subnav-tab ${activeTab === 'policy' ? 'active' : ''}`}
-            onClick={() => setActiveTab('policy')}
+            onClick={() => navigateToTab('policy', '')}
           >
             <FileText size={14} />
             <span>Leave Policies & Holidays</span>
@@ -2549,41 +2640,75 @@ export function LeaveManagementPage({ mode = 'self', route, query: propQuery }) 
       {/* SELF-SERVICE APPLY */}
       {isSelf && <ApplyLeaveSelf onSubmitted={() => { hrStore.refresh().catch(() => {}); setRefreshKey((k) => k + 1) }} />}
 
-      {/* TAB 1: LEAVE REQUESTS & APPROVALS */}
-      {activeTab === 'approvals' && (
+      {/* TAB 1: LEAVE REQUESTS & APPROVALS AND TAB 2: 25TH+ LOP SIGN-OFFS */}
+      {(activeTab === 'approvals' || activeTab === 'lop') && (
         <>
-          {filter === 'pending_admin' && (
-            <div style={{
-              background: '#fef2f2',
-              border: '1px solid #fecaca',
-              borderRadius: '10px',
-              padding: '12px 16px',
-              marginBottom: '16px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: '12px',
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <ShieldAlert size={18} style={{ color: '#ef4444', flexShrink: 0 }} />
-                <div>
-                  <strong style={{ color: '#991b1b', fontSize: '12.5px' }}>
-                    Showing Month-End (25th+) LOP Requests Awaiting Admin Sign-off
-                  </strong>
-                  <div style={{ color: '#b91c1c', fontSize: '11px', marginTop: '2px' }}>
-                    HR Operations has verified these 25th+ month-end loss of pay leaves and forwarded them for final administrative sign-off.
+          {activeTab === 'lop' && (
+            pendingAdminCount > 0 ? (
+              <div style={{
+                background: '#fef2f2',
+                border: '1px solid #fecaca',
+                borderRadius: '10px',
+                padding: '12px 16px',
+                marginBottom: '16px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '12px',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <ShieldAlert size={18} style={{ color: '#ef4444', flexShrink: 0 }} />
+                  <div>
+                    <strong style={{ color: '#991b1b', fontSize: '12.5px' }}>
+                      Action Required: {pendingAdminCount} Month-End (25th+) LOP Request(s) Awaiting Admin Sign-off
+                    </strong>
+                    <div style={{ color: '#b91c1c', fontSize: '11px', marginTop: '2px' }}>
+                      HR Operations has verified these 25th+ month-end loss of pay leaves and forwarded them for final administrative sign-off.
+                    </div>
                   </div>
                 </div>
+                <button
+                  type="button"
+                  className="ui-button secondary"
+                  style={{ padding: '4px 10px', fontSize: '11.5px' }}
+                  onClick={() => navigateToTab('approvals', '')}
+                >
+                  ← Back to All Requests
+                </button>
               </div>
-              <button
-                type="button"
-                className="ui-button secondary"
-                style={{ padding: '4px 10px', fontSize: '11.5px' }}
-                onClick={() => setFilter('')}
-              >
-                Clear LOP Filter
-              </button>
-            </div>
+            ) : (
+              <div style={{
+                background: '#f0fdf4',
+                border: '1px solid #bbf7d0',
+                borderRadius: '10px',
+                padding: '12px 16px',
+                marginBottom: '16px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '12px',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <CheckCircle2 size={18} style={{ color: '#16a34a', flexShrink: 0 }} />
+                  <div>
+                    <strong style={{ color: '#166534', fontSize: '12.5px' }}>
+                      25th+ Month-End LOP & Double LOP Records ({allDoubleLopLeaves.length} Total)
+                    </strong>
+                    <div style={{ color: '#15803d', fontSize: '11px', marginTop: '2px' }}>
+                      All administrative sign-off queues are cleared (0 awaiting admin sign-off).
+                    </div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="ui-button secondary"
+                  style={{ padding: '4px 10px', fontSize: '11.5px' }}
+                  onClick={() => navigateToTab('approvals', '')}
+                >
+                  ← Back to All Requests
+                </button>
+              </div>
+            )
           )}
           <div
             style={{
@@ -2676,48 +2801,89 @@ export function LeaveManagementPage({ mode = 'self', route, query: propQuery }) 
 
             {/* Quick Status Filter Pills (No Scrolling Needed) */}
             <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-              <button
-                type="button"
-                className={`leave-pill-btn ${!filter ? 'active' : ''}`}
-                onClick={() => setFilter('')}
-              >
-                All Requests ({allLeaves.length})
-              </button>
-              <button
-                type="button"
-                className={`leave-pill-btn ${filter === 'pending_all' ? 'active' : ''}`}
-                onClick={() => setFilter(filter === 'pending_all' ? '' : 'pending_all')}
-                style={pendingCount > 0 ? {
-                  borderColor: '#f59e0b',
-                  color: filter === 'pending_all' ? '#ffffff' : '#b45309',
-                  background: filter === 'pending_all' ? '#f59e0b' : '#fef3c7',
-                  fontWeight: 700
-                } : {}}
-              >
-                ⚡ Pending Review ({pendingCount})
-              </button>
-              {pendingAdminCount > 0 && (
-                <button
-                  type="button"
-                  className={`leave-pill-btn ${filter === 'pending_admin' ? 'active' : ''}`}
-                  onClick={() => setFilter(filter === 'pending_admin' ? '' : 'pending_admin')}
-                  style={{
-                    borderColor: '#ef4444',
-                    color: filter === 'pending_admin' ? '#ffffff' : '#b91c1c',
-                    background: filter === 'pending_admin' ? '#ef4444' : '#fee2e2',
-                    fontWeight: 700
-                  }}
-                >
-                  🛡️ 25th+ Month-End LOP ({pendingAdminCount})
-                </button>
+              {activeTab === 'lop' ? (
+                <>
+                  <button
+                    type="button"
+                    className={`leave-pill-btn ${!filter || filter === 'all_lop' ? 'active' : ''}`}
+                    onClick={() => updateFilter('')}
+                  >
+                    All 25th+ / Double LOP ({allDoubleLopLeaves.length})
+                  </button>
+                  <button
+                    type="button"
+                    className={`leave-pill-btn ${filter === 'pending_admin' ? 'active' : ''}`}
+                    onClick={() => updateFilter(filter === 'pending_admin' ? '' : 'pending_admin')}
+                    style={pendingAdminCount > 0 ? {
+                      borderColor: '#ef4444',
+                      color: filter === 'pending_admin' ? '#ffffff' : '#b91c1c',
+                      background: filter === 'pending_admin' ? '#ef4444' : '#fee2e2',
+                      fontWeight: 700,
+                    } : {}}
+                  >
+                    ⚡ Awaiting Admin Sign-Off ({pendingAdminCount})
+                  </button>
+                  <button
+                    type="button"
+                    className={`leave-pill-btn ${filter === 'pending_all' ? 'active' : ''}`}
+                    onClick={() => updateFilter(filter === 'pending_all' ? '' : 'pending_all')}
+                  >
+                    In Review Pipeline ({pendingDoubleLopCount})
+                  </button>
+                  <button
+                    type="button"
+                    className={`leave-pill-btn ${filter === 'approved' ? 'active' : ''}`}
+                    onClick={() => updateFilter(filter === 'approved' ? '' : 'approved')}
+                  >
+                    Approved ({approvedDoubleLopCount})
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    className={`leave-pill-btn ${!filter ? 'active' : ''}`}
+                    onClick={() => updateFilter('')}
+                  >
+                    All Requests ({totalRequests})
+                  </button>
+                  <button
+                    type="button"
+                    className={`leave-pill-btn ${filter === 'pending_all' ? 'active' : ''}`}
+                    onClick={() => updateFilter(filter === 'pending_all' ? '' : 'pending_all')}
+                    style={pendingCount > 0 ? {
+                      borderColor: '#f59e0b',
+                      color: filter === 'pending_all' ? '#ffffff' : '#b45309',
+                      background: filter === 'pending_all' ? '#f59e0b' : '#fef3c7',
+                      fontWeight: 700,
+                    } : {}}
+                  >
+                    ⚡ Pending Review ({pendingCount})
+                  </button>
+                  {pendingAdminCount > 0 && (
+                    <button
+                      type="button"
+                      className="leave-pill-btn"
+                      onClick={() => navigateToTab('lop', 'pending_admin')}
+                      style={{
+                        borderColor: '#ef4444',
+                        color: '#b91c1c',
+                        background: '#fee2e2',
+                        fontWeight: 700,
+                      }}
+                    >
+                      🛡️ 25th+ Admin Sign-Off ({pendingAdminCount})
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className={`leave-pill-btn ${filter === 'approved' ? 'active' : ''}`}
+                    onClick={() => updateFilter(filter === 'approved' ? '' : 'approved')}
+                  >
+                    Approved ({approvedCount})
+                  </button>
+                </>
               )}
-              <button
-                type="button"
-                className={`leave-pill-btn ${filter === 'approved' ? 'active' : ''}`}
-                onClick={() => setFilter(filter === 'approved' ? '' : 'approved')}
-              >
-                Approved ({approvedCount})
-              </button>
             </div>
           </div>
 
@@ -2728,7 +2894,15 @@ export function LeaveManagementPage({ mode = 'self', route, query: propQuery }) 
                 <div className="panel-heading">
                   <div>
                     <p className="section-kicker">Queue & History</p>
-                    <h2>{mode === 'team' ? 'Direct Reports' : isManagement ? (filter === 'pending_admin' ? 'Pending Admin LOP Requests' : 'All Company Requests') : 'My Requests'}</h2>
+                    <h2>
+                      {mode === 'team'
+                        ? 'Direct Reports'
+                        : isManagement
+                        ? (activeTab === 'lop'
+                            ? (filter === 'pending_admin' ? 'Pending Admin LOP Requests' : '25th+ Month-End LOP & Double LOP Requests')
+                            : (filter === 'pending_all' ? 'Pending Approvals' : filter === 'approved' ? 'Approved Leaves' : 'All Company Requests'))
+                        : 'My Requests'}
+                    </h2>
                   </div>
                   <span style={{ fontSize: '11px', color: 'var(--muted)', fontWeight: 600 }}>
                     {filteredRequests.length} record(s)
@@ -2763,23 +2937,37 @@ export function LeaveManagementPage({ mode = 'self', route, query: propQuery }) 
                       />
                     ))
                   ) : (
-                    filter === 'pending_admin' ? (
+                    activeTab === 'lop' ? (
                       <div style={{ padding: '24px 16px', textAlign: 'center', background: '#f8fafc', borderRadius: '10px', border: '1px dashed #cbd5e1' }}>
                         <CheckCircle2 size={28} style={{ color: '#16a34a', margin: '0 auto 8px', display: 'block' }} />
                         <strong style={{ fontSize: '12.5px', color: '#1e293b', display: 'block', marginBottom: '4px' }}>
-                          No Pending LOP Approvals
+                          {filter === 'pending_admin' ? 'No Pending Admin LOP Approvals' : 'No 25th+ Month-End LOP Records'}
                         </strong>
                         <small style={{ color: '#64748b', fontSize: '11px', display: 'block', marginBottom: '10px' }}>
-                          No month-end (25th+) loss of pay requests are currently awaiting Admin sign-off.
+                          {filter === 'pending_admin'
+                            ? 'No month-end (25th+) loss of pay requests are currently awaiting Admin sign-off.'
+                            : 'No employee leave requests have been classified under 25th+ month-end LOP.'}
                         </small>
-                        <button
-                          type="button"
-                          className="ui-button secondary"
-                          style={{ padding: '4px 10px', fontSize: '11px' }}
-                          onClick={() => setFilter('')}
-                        >
-                          Show All Requests
-                        </button>
+                        <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                          {filter && (
+                            <button
+                              type="button"
+                              className="ui-button secondary"
+                              style={{ padding: '4px 10px', fontSize: '11px' }}
+                              onClick={() => updateFilter('')}
+                            >
+                              Show All Double LOP Records ({allDoubleLopLeaves.length})
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            className="ui-button"
+                            style={{ padding: '4px 10px', fontSize: '11px' }}
+                            onClick={() => navigateToTab('approvals', '')}
+                          >
+                            ← View All Company Requests ({totalRequests})
+                          </button>
+                        </div>
                       </div>
                     ) : (
                       <EmptyState

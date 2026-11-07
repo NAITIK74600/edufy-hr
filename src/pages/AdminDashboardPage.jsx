@@ -138,7 +138,7 @@ function AdminOverviewModule({ onNavigate }) {
             </div>
           </div>
           <a
-            href="#/admin/leave?tab=approvals&filter=pending_admin"
+            href="#/admin/leave?tab=lop&filter=pending_admin"
             className="ui-button"
             style={{
               background: '#b91c1c',

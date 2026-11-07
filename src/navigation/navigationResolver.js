@@ -155,14 +155,14 @@ export function resolveNotificationRoute(notification, user) {
   if (isLop) {
     if (isAdminUser(user) || isExecutiveUser(user)) {
       return buildLocationHash('/admin/leave', {
-        tab: 'approvals',
+        tab: 'lop',
         filter: 'pending_admin',
         ...(entityId ? { id: entityId } : {}),
       })
     }
     if (isHrUser(user)) {
       return buildLocationHash('/hr/leave', {
-        tab: 'approvals',
+        tab: 'lop',
         filter: 'pending_admin',
         ...(entityId ? { id: entityId } : {}),
       })
