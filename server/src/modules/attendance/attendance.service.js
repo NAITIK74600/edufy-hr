@@ -549,12 +549,32 @@ export function createAttendanceService({ repository, companySettings = {}, leav
         const code = String(emp.employeeId || '').toUpperCase()
         if (!code) continue
         const existingRec = punchedMap.get(code)
-        if (existingRec && existingRec.checkIn) {
-          continue // Already punched in
-        }
-
         // Check if employee has approved leave
         const approvedLeave = await getApprovedLeaveForDate(emp.employeeId || emp._id, workDate)
+
+        if (existingRec && existingRec.checkIn) {
+          // If already punched in and has approved half-day leave, heal any stale late / LOP penalties
+          if (approvedLeave && approvedLeave.isHalfDay) {
+            const isPaidHalf = approvedLeave.paidUnits > 0 || (approvedLeave.leaveType !== 'lop' && approvedLeave.leaveType !== 'double_lop')
+            const resShift = await resolveEmployeeShift(existingRec.employeeId, workDate)
+            const punchEval = evaluatePunchIn({ checkInTime: existingRec.checkIn, shift: resShift.shift, approvedLeave })
+            if (existingRec.isLate !== punchEval.isLate || (isPaidHalf && (existingRec.isLop || existingRec.isDoubleLop || (existingRec.penaltyDays && existingRec.penaltyDays > 0)))) {
+              existingRec.isLate = punchEval.isLate
+              existingRec.isHalfDay = true
+              existingRec.halfDayPeriod = approvedLeave.halfDayPeriod || existingRec.halfDayPeriod || 'first_half'
+              existingRec.status = 'half-day'
+              if (isPaidHalf) {
+                existingRec.isLop = false
+                existingRec.penaltyDays = 0
+                existingRec.doubleLopStatus = 'none'
+                existingRec.isDoubleLop = false
+              }
+              existingRec.notes = punchEval.notes || `Approved Half-Day Leave (${approvedLeave.leaveType})`
+              await repository.save(existingRec)
+            }
+          }
+          continue // Already punched in
+        }
         if (approvedLeave && !approvedLeave.isHalfDay) {
           // On approved full-day leave
           if (!existingRec) {
@@ -2123,23 +2143,51 @@ export function createAttendanceService({ repository, companySettings = {}, leav
       }
     },
 
-    async recalculateAttendance(date = getTodayString()) {
+    async recalculateAttendance(date = getTodayString(), options = {}) {
       const today = getTodayString()
-      if (date && date !== today) {
+      const target = (typeof date === 'string' && date.trim()) ? date.trim() : today
+      const isHistorical = target !== 'all' && !options.force && !options.fixHalfDayLop && target !== today
+
+      if (isHistorical) {
         return {
           updatedCount: 0,
-          date,
-          records: await repository.list({ date }),
+          date: target,
+          records: await repository.list({ date: target }),
           message: 'Attendance policy recalculation for historical dates is currently inactive pending replacement policy configuration. Historical records are preserved intact.',
         }
       }
-      const records = await repository.list({ date: today })
+
+      let query = {}
+      if (target === 'all') {
+        query = {}
+      } else if (/^\d{4}-\d{2}$/.test(target)) {
+        query = { month: target }
+      } else {
+        query = { date: target }
+      }
+
+      const records = await repository.list(query)
       let updatedCount = 0
       for (const rec of (records || [])) {
-        if (!rec.checkIn) continue
-        const resShift = await resolveEmployeeShift(rec.employeeId, rec.date || date)
+        const recDate = rec.date || (target.length === 10 ? target : today)
+        const resShift = await resolveEmployeeShift(rec.employeeId, recDate)
         const shiftConfig = resShift.shift
-        const approvedLeave = await getApprovedLeaveForDate(rec.employeeId, rec.date || date)
+        const approvedLeave = await getApprovedLeaveForDate(rec.employeeId, recDate)
+
+        if (!rec.checkIn) {
+          if (approvedLeave && !approvedLeave.isHalfDay) {
+            if (rec.status !== 'on-leave') {
+              rec.status = 'on-leave'
+              rec.notes = `Approved Leave (${approvedLeave.leaveType || 'Leave'})`
+              rec.isLop = false
+              rec.penaltyDays = 0
+              await repository.save(rec)
+              updatedCount++
+            }
+          }
+          continue
+        }
+
         const punchEval = evaluatePunchIn({ checkInTime: rec.checkIn, shift: shiftConfig, approvedLeave })
 
         let checkoutEval = null
@@ -2153,18 +2201,24 @@ export function createAttendanceService({ repository, companySettings = {}, leav
           })
         }
 
+        const isApprovedPaidHalfDay = Boolean(
+          approvedLeave && approvedLeave.isHalfDay && (
+            approvedLeave.paidUnits > 0 || (approvedLeave.leaveType !== 'lop' && approvedLeave.leaveType !== 'double_lop')
+          )
+        )
+
         const doubleLopEval = evaluatePost25thDoubleLop({
-          dateStr: rec.date || date,
-          isLop: rec.isLop || rec.status === 'lop',
+          dateStr: recDate,
+          isLop: isApprovedPaidHalfDay ? false : (rec.isLop || rec.status === 'lop'),
           isAbsent: rec.status === 'absent',
         })
 
         let recLateCount = 0
         if (punchEval.isLate) {
           try {
-            const monthKey = (rec.date || today).slice(0, 7)
+            const monthKey = recDate.slice(0, 7)
             const priorMonthRecords = await repository.list({ employeeId: rec.employeeId.toUpperCase(), month: monthKey })
-            const priorLates = (priorMonthRecords || []).filter(r => r.date < (rec.date || today) && (r.isLate || r.status === 'late') && r.policyEvaluation?.occurrence !== 'half_day_leave_on_time').length
+            const priorLates = (priorMonthRecords || []).filter(r => r.date < recDate && (r.isLate || r.status === 'late') && r.policyEvaluation?.occurrence !== 'half_day_leave_on_time').length
             recLateCount = priorLates + 1
           } catch {
             recLateCount = 1
@@ -2196,8 +2250,10 @@ export function createAttendanceService({ repository, companySettings = {}, leav
           notes: punchEval.notes || (punchEval.isLate
             ? punchEval.notes
             : `Verified Attendance (${shiftConfig.name})`),
-          doubleLopStatus: doubleLopEval.applies ? (rec.doubleLopStatus === 'approved' ? 'approved' : 'none') : 'none',
-          isDoubleLop: rec.doubleLopStatus === 'approved',
+          doubleLopStatus: isApprovedPaidHalfDay ? 'none' : (doubleLopEval.applies ? (rec.doubleLopStatus === 'approved' ? 'approved' : 'none') : 'none'),
+          isDoubleLop: isApprovedPaidHalfDay ? false : (rec.doubleLopStatus === 'approved'),
+          isLop: isApprovedPaidHalfDay ? false : (finalStatus === 'lop' || rec.isLop),
+          penaltyDays: isApprovedPaidHalfDay ? 0 : (rec.penaltyDays || 0),
           policyEvaluation: { punch: punchEval, checkout: checkoutEval },
         }
         await repository.save(updated)
@@ -2206,10 +2262,50 @@ export function createAttendanceService({ repository, companySettings = {}, leav
 
       return {
         updatedCount,
-        date,
-        records: await repository.list({ date }),
-        message: `Attendance recalculated for ${updatedCount} record(s) on ${date} under authoritative policy.`,
+        date: target,
+        records: await repository.list(query),
+        message: `Attendance recalculated for ${updatedCount} record(s) on ${target} under authoritative policy.`,
       }
+    },
+
+    // Specific repair utility for resolving false late / LOP on historical half-day leaves
+    async repairHalfDayLeaveAttendance() {
+      let repairedCount = 0
+      try {
+        const LeaveReq = mongoose.models.LeaveRequest
+        if (!LeaveReq) return { repairedCount: 0, message: 'Leave model not available' }
+        const approvedHalfDayLeaves = await LeaveReq.find({ isHalfDay: true, status: 'approved' }).lean()
+        for (const req of (approvedHalfDayLeaves || [])) {
+          const reqDate = typeof req.startDate === 'string' ? req.startDate.slice(0, 10) : new Date(req.startDate).toISOString().slice(0, 10)
+          const empIdCode = (req.employeeCode || req.employeeId || '').toString()
+          const records = await repository.list({ date: reqDate })
+          for (const rec of (records || [])) {
+            const matchesEmp = String(rec.employeeId).toUpperCase() === empIdCode.toUpperCase() || String(rec.employeeRef) === String(req.employeeId)
+            if (!matchesEmp) continue
+
+            const isPaidHalf = req.paidUnits > 0 || (req.leaveType !== 'lop' && req.leaveType !== 'double_lop')
+            const resShift = await resolveEmployeeShift(rec.employeeId, reqDate)
+            const punchEval = rec.checkIn ? evaluatePunchIn({ checkInTime: rec.checkIn, shift: resShift.shift, approvedLeave: req }) : { isLate: false, status: 'half-day' }
+
+            rec.isLate = punchEval.isLate
+            rec.isHalfDay = true
+            rec.halfDayPeriod = req.halfDayPeriod || rec.halfDayPeriod || 'first_half'
+            rec.status = 'half-day'
+            if (isPaidHalf) {
+              rec.isLop = false
+              rec.penaltyDays = 0
+              rec.doubleLopStatus = 'none'
+              rec.isDoubleLop = false
+            }
+            rec.notes = punchEval.notes || `Approved Half-Day Leave (${req.leaveType})`
+            await repository.save(rec)
+            repairedCount++
+          }
+        }
+      } catch (err) {
+        console.warn('[AttendanceService:repairHalfDayLeaveAttendance] Warning:', err.message)
+      }
+      return { repairedCount, message: `Repaired ${repairedCount} historical half-day attendance records.` }
     },
 
     async approveDoubleLop({ recordId, approved, actor, reason }) {
