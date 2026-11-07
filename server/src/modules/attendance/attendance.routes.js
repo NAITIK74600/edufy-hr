@@ -205,7 +205,8 @@ export function createAttendanceRouter({ auth, service, useDatabase = false, per
   router.post(['/recalculate', '/recalculateToday', '/attendance/recalculate'], auth.authenticate, auth.requirePermission(PERMISSIONS.ATTENDANCE_WRITE), async (request, response, next) => {
     try {
       const date = request.body?.date
-      const result = await service.recalculateAttendance(date)
+      await service.processAutoPunchOuts({ forceToday: false, date }).catch(() => {})
+      const result = await service.recalculateAttendance(date, { fixHalfDayLop: true })
       response.json({ success: true, data: result })
     } catch (error) { next(error) }
   })
@@ -657,6 +658,22 @@ export function createAttendanceRouter({ auth, service, useDatabase = false, per
         throw Object.assign(new Error('Attendance record not found.'), { statusCode: 404 })
       }
       return response.json({ success: true, data: result })
+    } catch (error) { next(error) }
+  })
+
+  // 17b. Trigger Auto Punch-Out On-Demand / Catch-Up
+  router.post(['/auto-punch-out/run-now', '/auto-punch-out/trigger', '/auto-punchout-run'], auth.authenticate, auth.requirePermission(PERMISSIONS.ATTENDANCE_WRITE), async (request, response, next) => {
+    try {
+      const forceToday = Boolean(request.body?.forceToday)
+      const date = request.body?.date
+      const results = await service.processAutoPunchOuts({ forceToday, date })
+      const totalFinalized = (results.pastCutoffs?.length || 0) + (results.dailyCutoffs?.length || 0) + (results.geofenceTimeouts?.length || 0) + (results.offlineTimeouts?.length || 0)
+      return response.json({
+        success: true,
+        message: `Auto punch-out executed successfully (${totalFinalized} session(s) finalized).`,
+        data: results,
+        totalFinalized,
+      })
     } catch (error) { next(error) }
   })
 

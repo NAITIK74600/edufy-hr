@@ -1,4 +1,4 @@
-import{n as e}from"./rolldown-runtime-WkwZ5CU-.js";import{At as t,Ht as n,O as r,T as i,W as a,dn as o,ht as s,it as c,jt as l,mn as u,ot as d,wt as f}from"./icons-vendor-BUCM2cJ5.js";import{a as p}from"./motion-vendor-5o_d79ke.js";import{d as m,f as h,p as g,u as _,x as v}from"./index-_AZ2bQve.js";var y=e(u(),1),b=p();function x(){return(0,b.jsx)(`style`,{children:`
+import{n as e}from"./rolldown-runtime-WkwZ5CU-.js";import{At as t,Ht as n,O as r,T as i,W as a,dn as o,ht as s,it as c,jt as l,mn as u,ot as d,wt as f}from"./icons-vendor-BUCM2cJ5.js";import{a as p}from"./motion-vendor-5o_d79ke.js";import{d as m,f as h,p as g,u as _,x as v}from"./index-yqeLl6sK.js";var y=e(u(),1),b=p();function x(){return(0,b.jsx)(`style`,{children:`
       .edufyi-login-root,
       .edufyi-login-root * {
         box-sizing: border-box !important;

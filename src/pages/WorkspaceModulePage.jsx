@@ -445,11 +445,11 @@ function AttendanceModule() {
         cName,
         a.date,
         a.checkIn || 'N/A',
-        a.checkOut || (a.status === 'present' || a.status === 'late' ? 'Active (Live)' : 'N/A'),
+        (!a.checkOut || a.checkOut === '—' || a.checkOut === '-') && a.date < todayKey() && a.checkIn ? '09:30 PM (Auto)' : (a.checkOut || (a.status === 'present' || a.status === 'late' ? 'Active (Live)' : 'N/A')),
         a.status,
         a.wifiSSID || 'None',
         a.wifiVerified ? 'YES' : 'NO',
-        a.totalHours || '0.0',
+        (!a.checkOut || a.checkOut === '—' || a.checkOut === '-' || (typeof a.totalHours === 'string' && a.totalHours.includes('Active'))) && a.date < todayKey() && a.checkIn ? computeWorkDuration(a.checkIn, '09:30 PM', a.totalBreakMinutes, true) : (a.totalHours || '0.0'),
         a.notes || '',
       ]
     })
@@ -477,15 +477,31 @@ function AttendanceModule() {
           variant="secondary"
           onClick={async () => {
             try {
-              const res = await hrStore.recalculateTodayAttendance()
-              showFeedback(res?.message || 'Attendance roster preserved in neutral mode pending replacement policy.')
+              showFeedback(`Recalculating roster for ${selectedDate}...`)
+              const res = await hrStore.recalculateTodayAttendance(selectedDate)
+              showFeedback(res?.message || 'Attendance roster recalculated successfully.')
             } catch (err) {
-              showFeedback(`✕ Failed to check attendance: ${err.message}`)
+              showFeedback(`✕ Failed to recalculate attendance: ${err.message}`)
             }
           }}
-          title="Verify attendance records status"
+          title="Verify and synchronize attendance records status"
         >
           <span>⚡</span> Recalculate Roster
+        </Button>
+        <Button
+          variant="secondary"
+          onClick={async () => {
+            try {
+              showFeedback('Executing Auto Punch-Out sweep...')
+              const res = await hrStore.triggerAutoPunchOut({ date: selectedDate })
+              showFeedback(res?.message || 'Auto punch-out executed successfully.')
+            } catch (err) {
+              showFeedback(`✕ Failed to run auto punch-out: ${err.message}`)
+            }
+          }}
+          title="Run Scheduled Daily Cut-Off / Past-Day Auto Punch-Out"
+        >
+          <span>⏰</span> Auto Punch-Out
         </Button>
         <Button variant="secondary" onClick={handleExportCSV}>
           <Download size={15} /> Export CSV
@@ -871,32 +887,58 @@ function AttendanceModule() {
                       </div>
                       <div>
                         <span style={{ color: 'var(--muted)', display: 'block', fontSize: '10px' }}>Check Out</span>
-                        <strong>{r.checkOut || (r.status === 'present' ? 'Active' : '—')}</strong>
-                        {(r.autoPunchOut || r.punchOutType === 'auto' || r.totalHours?.includes('Auto Punch Out')) && (
-                          <span
-                            title={r.punchOutReason || 'Auto punched out: GPS and WiFi disconnected for 2 hours'}
-                            style={{
-                              display: 'inline-block',
-                              marginLeft: '4px',
-                              fontSize: '8.5px',
-                              fontWeight: 700,
-                              textTransform: 'uppercase',
-                              padding: '1px 4px',
-                              borderRadius: '3px',
-                              background: '#fef3e2',
-                              color: '#b45309',
-                              border: '1px solid #fbd38d',
-                            }}
-                          >
-                            Auto Out
-                          </span>
-                        )}
+                        {(() => {
+                          const todayStr = todayKey()
+                          const isPast = r.date && r.date < todayStr
+                          const isUnclosed = !r.checkOut || r.checkOut === '—' || r.checkOut === '-'
+                          const displayOut = (!isUnclosed) ? r.checkOut : (isPast && r.checkIn) ? '09:30 PM' : (r.status === 'present' ? 'Active' : '—')
+                          const isAuto = Boolean(r.autoPunchOut || r.punchOutType === 'auto' || r.totalHours?.includes('Auto Punch Out') || (isPast && r.checkIn && isUnclosed))
+                          return (
+                            <>
+                              <strong>{displayOut}</strong>
+                              {isAuto && (
+                                <span
+                                  title={r.punchOutReason || 'Auto punched out: Scheduled daily cut-off'}
+                                  style={{
+                                    display: 'inline-block',
+                                    marginLeft: '4px',
+                                    fontSize: '8.5px',
+                                    fontWeight: 700,
+                                    textTransform: 'uppercase',
+                                    padding: '1px 4px',
+                                    borderRadius: '3px',
+                                    background: '#fef3e2',
+                                    color: '#b45309',
+                                    border: '1px solid #fbd38d',
+                                  }}
+                                >
+                                  Auto Out
+                                </span>
+                              )}
+                            </>
+                          )
+                        })()}
                       </div>
                       <div>
                         <span style={{ color: 'var(--muted)', display: 'block', fontSize: '10px' }}>Duration</span>
-                        <strong style={{ color: 'var(--teal)' }}>
-                          {(!r.checkOut || (typeof r.totalHours === 'string' && r.totalHours.includes('Active'))) ? 'Active (Live)' : (r.totalHours || '—')}
-                        </strong>
+                        {(() => {
+                          const todayStr = todayKey()
+                          const isPast = r.date && r.date < todayStr
+                          const isUnclosed = !r.checkOut || r.checkOut === '—' || r.checkOut === '-' || (typeof r.totalHours === 'string' && r.totalHours.includes('Active'))
+                          let dur = r.totalHours
+                          if (isPast && r.checkIn && isUnclosed) {
+                            dur = computeWorkDuration(r.checkIn, '09:30 PM', r.totalBreakMinutes, true)
+                          } else if (isUnclosed && !isPast) {
+                            dur = 'Active (Live)'
+                          } else if (!dur) {
+                            dur = '—'
+                          }
+                          return (
+                            <strong style={{ color: 'var(--teal)' }}>
+                              {dur}
+                            </strong>
+                          )
+                        })()}
                       </div>
                     </div>
 
@@ -996,42 +1038,58 @@ function AttendanceModule() {
                 {
                   key: 'checkOut',
                   label: 'Check-Out',
-                  render: (r) =>
-                    r.checkOut ? (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <span>{r.checkOut}</span>
-                        {(r.autoPunchOut || r.punchOutType === 'auto' || r.totalHours?.includes('Auto Punch Out')) && (
-                          <span
-                            title={r.punchOutReason || 'Auto punched out: GPS and WiFi disconnected for 2 hours'}
-                            style={{
-                              fontSize: '9px',
-                              fontWeight: 700,
-                              textTransform: 'uppercase',
-                              padding: '2px 5px',
-                              borderRadius: '4px',
-                              background: '#fef3e2',
-                              color: '#b45309',
-                              border: '1px solid #fbd38d',
-                              whiteSpace: 'nowrap',
-                            }}
-                          >
-                            Auto Punch Out
-                          </span>
-                        )}
-                      </div>
-                    ) : r.status === 'present' || r.status === 'late' ? (
+                  render: (r) => {
+                    const todayStr = todayKey()
+                    const isPast = r.date && r.date < todayStr
+                    const isUnclosed = !r.checkOut || r.checkOut === '—' || r.checkOut === '-'
+                    const effectiveOut = (!isUnclosed) ? r.checkOut : (isPast && r.checkIn) ? '09:30 PM' : null
+                    const isAuto = Boolean(r.autoPunchOut || r.punchOutType === 'auto' || r.totalHours?.includes('Auto Punch Out') || (isPast && r.checkIn && isUnclosed))
+
+                    if (effectiveOut) {
+                      return (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span>{effectiveOut}</span>
+                          {isAuto && (
+                            <span
+                              title={r.punchOutReason || 'Auto Punch Out (Scheduled daily system cut-off)'}
+                              style={{
+                                fontSize: '9px',
+                                fontWeight: 700,
+                                textTransform: 'uppercase',
+                                padding: '2px 5px',
+                                borderRadius: '4px',
+                                background: '#fef3e2',
+                                color: '#b45309',
+                                border: '1px solid #fbd38d',
+                                whiteSpace: 'nowrap',
+                              }}
+                            >
+                              Auto Punch Out
+                            </span>
+                          )}
+                        </div>
+                      )
+                    }
+                    return (r.status === 'present' || r.status === 'late') ? (
                       <span style={{ color: 'var(--teal)', fontWeight: 600 }}>Active (Live)</span>
                     ) : (
                       '—'
-                    ),
+                    )
+                  },
                 },
                 {
                   key: 'totalHours',
                   label: 'Work Duration / Breaks',
                   render: (r) => {
+                    const todayStr = todayKey()
+                    const isPast = r.date && r.date < todayStr
                     const isLateStatus = r.status === 'late'
                     let displayHours = r.totalHours || '—'
-                    if (!r.checkOut || (typeof displayHours === 'string' && displayHours.includes('Active'))) {
+                    const isUnclosed = !r.checkOut || r.checkOut === '—' || r.checkOut === '-' || (typeof displayHours === 'string' && displayHours.includes('Active'))
+
+                    if (isPast && r.checkIn && isUnclosed) {
+                      displayHours = computeWorkDuration(r.checkIn, '09:30 PM', r.totalBreakMinutes, true)
+                    } else if (isUnclosed && !isPast) {
                       let liveMins = 0
                       if (r.checkInAt) {
                         liveMins = Math.max(0, Math.floor((Date.now() - new Date(r.checkInAt).getTime()) / 60000))

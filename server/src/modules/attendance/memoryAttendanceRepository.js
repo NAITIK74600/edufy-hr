@@ -142,14 +142,31 @@ export function createMemoryAttendanceRepository(seedRecords = []) {
       )
     },
     async findActiveSessionsForCutoff(date) {
-      return records.filter((r) => (!date || r.date === date) && r.checkIn && !r.checkOut)
+      return records.filter((r) =>
+        (!date || r.date === date) &&
+        r.checkIn &&
+        (!r.checkOut || r.checkOut === '—' || r.checkOut === '-' || (typeof r.totalHours === 'string' && r.totalHours.includes('Active')))
+      )
+    },
+    async findUnclosedPastSessions(todayDate) {
+      return records.filter((r) =>
+        r.date < todayDate &&
+        r.checkIn &&
+        (!r.checkOut || r.checkOut === '—' || r.checkOut === '-' || (typeof r.totalHours === 'string' && r.totalHours.includes('Active')))
+      )
     },
     async findRecordsPendingAdvanceWarning(date) {
-      return records.filter((r) => (!date || r.date === date) && r.checkIn && !r.checkOut && !r.advanceWarningSentAt)
+      return records.filter((r) =>
+        (!date || r.date === date) &&
+        r.checkIn &&
+        (!r.checkOut || r.checkOut === '—' || r.checkOut === '-' || (typeof r.totalHours === 'string' && r.totalHours.includes('Active'))) &&
+        !r.advanceWarningSentAt
+      )
     },
     async atomicFinalizePunchOut(recordId, finalData = {}, auditEvent = null) {
       const rec = records.find((r) => r.id === recordId || String(r._id) === String(recordId))
-      if (!rec || !rec.checkIn || rec.checkOut) {
+      const isUnclosed = !rec?.checkOut || rec?.checkOut === '—' || rec?.checkOut === '-' || (typeof rec?.totalHours === 'string' && rec?.totalHours.includes('Active'))
+      if (!rec || !rec.checkIn || !isUnclosed) {
         return null // Already punched out or not checked in
       }
       Object.assign(rec, finalData)

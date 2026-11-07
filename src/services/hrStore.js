@@ -6123,6 +6123,26 @@ const localStore = {
     }
   },
 
+  async triggerAutoPunchOut(options = {}) {
+    try {
+      const payload = typeof options === 'object' ? options : { date: options }
+      const res = await apiClient.post('/attendance/auto-punch-out/run-now', payload)
+      await this.refresh()
+      const data = res.data?.data || res.data || {}
+      const totalClosed = res.data?.totalFinalized ?? ((data.pastCutoffs?.length || 0) + (data.dailyCutoffs?.length || 0) + (data.geofenceTimeouts?.length || 0) + (data.offlineTimeouts?.length || 0))
+      return {
+        success: true,
+        totalClosed,
+        data,
+        message: res.data?.message || `Auto Punch-Out executed successfully: ${totalClosed} unclosed session(s) finalized.`,
+      }
+    } catch (err) {
+      console.warn('Auto punch out trigger error:', err?.message || err)
+      await this.refresh()
+      throw err
+    }
+  },
+
   // Leaves Workflow
   is25thMonthLop(requestOrData) {
     return is25thMonthLop(requestOrData)

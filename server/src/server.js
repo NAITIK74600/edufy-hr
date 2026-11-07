@@ -147,7 +147,10 @@ const server = app.listen(...listenArgs, () => {
       }
     }).catch(() => {})
 
-    // Scheduled end-of-day auto punch-out cut-off checker (runs every 60 seconds)
+    // Immediate startup sweep for unclosed past sessions + scheduled cut-off checker (every 60s)
+    app.locals.attendanceService?.autoPunchOutScheduledCutoff?.().catch((err) => {
+      console.warn('[AutoPunchCutoff Startup Sweep] Notice:', err.message)
+    })
     setInterval(() => {
       app.locals.attendanceService?.autoPunchOutScheduledCutoff?.().catch((err) => {
         console.warn('[AutoPunchCutoff Daemon] Notice:', err.message)

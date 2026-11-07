@@ -179,16 +179,45 @@ export function createMongoAttendanceRepository() {
     },
     async findActiveSessionsForCutoff(date) {
       const query = {
-        checkIn: { $nin: [null, ''] },
-        checkOut: { $in: [null, ''] },
+        checkIn: { $nin: [null, '', '—', '-'] },
+        $or: [
+          { checkOut: null },
+          { checkOut: '' },
+          { checkOut: '—' },
+          { checkOut: '-' },
+          { totalHours: 'Active (Live)' },
+          { totalHours: /Active/i },
+        ],
       }
       if (date) query.date = date
       return AttendanceRecord.find(query).lean()
     },
+    async findUnclosedPastSessions(todayDate) {
+      const query = {
+        checkIn: { $nin: [null, '', '—', '-'] },
+        $or: [
+          { checkOut: null },
+          { checkOut: '' },
+          { checkOut: '—' },
+          { checkOut: '-' },
+          { totalHours: 'Active (Live)' },
+          { totalHours: /Active/i },
+        ],
+        date: { $lt: todayDate },
+      }
+      return AttendanceRecord.find(query).lean()
+    },
     async findRecordsPendingAdvanceWarning(date) {
       const query = {
-        checkIn: { $nin: [null, ''] },
-        checkOut: { $in: [null, ''] },
+        checkIn: { $nin: [null, '', '—', '-'] },
+        $or: [
+          { checkOut: null },
+          { checkOut: '' },
+          { checkOut: '—' },
+          { checkOut: '-' },
+          { totalHours: 'Active (Live)' },
+          { totalHours: /Active/i },
+        ],
         advanceWarningSentAt: null,
       }
       if (date) query.date = date
@@ -203,8 +232,15 @@ export function createMongoAttendanceRepository() {
       return AttendanceRecord.findOneAndUpdate(
         {
           _id: recordId,
-          checkIn: { $nin: [null, ''] },
-          checkOut: { $in: [null, ''] },
+          checkIn: { $nin: [null, '', '—', '-'] },
+          $or: [
+            { checkOut: null },
+            { checkOut: '' },
+            { checkOut: '—' },
+            { checkOut: '-' },
+            { totalHours: 'Active (Live)' },
+            { totalHours: /Active/i },
+          ],
         },
         updateDoc,
         { new: true }

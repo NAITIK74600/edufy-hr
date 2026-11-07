@@ -261,6 +261,19 @@ export function formatTime24(timeStr, referenceTime = null, isEndTime = false) {
   return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`
 }
 
+export function createCutOffDateTime(dateStr, timeStr = '21:30', timezone = 'Asia/Kolkata') {
+  if (!dateStr) return new Date()
+  const cleanDate = typeof dateStr === 'string' ? dateStr.slice(0, 10) : new Date(dateStr).toISOString().slice(0, 10)
+  const [h, m] = (timeStr || '21:30').split(':').map(Number)
+  const hNum = Number.isFinite(h) ? h : 21
+  const mNum = Number.isFinite(m) ? m : 30
+  const pad = (n) => String(n).padStart(2, '0')
+  if (timezone === 'Asia/Kolkata' || !timezone) {
+    return new Date(`${cleanDate}T${pad(hNum)}:${pad(mNum)}:00+05:30`)
+  }
+  return new Date(`${cleanDate}T${pad(hNum)}:${pad(mNum)}:00`)
+}
+
 /**
  * @deprecated Legacy shift and lateness resolution functions.
  * In the neutral policy baseline, automatic late classification and shift fallbacks are disabled.
@@ -639,6 +652,33 @@ export function createAttendanceService({ repository, companySettings = {}, leav
               await repository.save(existingRec)
             }
           }
+
+          // If this record belongs to a past date and was left unclosed, auto-finalize it at scheduled cut-off
+          const isUnclosedPast = !existingRec.checkOut || existingRec.checkOut === '—' || existingRec.checkOut === '-' || (typeof existingRec.totalHours === 'string' && existingRec.totalHours.includes('Active'))
+          if (isUnclosedPast && workDate < getTodayString()) {
+            try {
+              const cutOffTimeStr = attendanceRules?.dailyCutoffTime || attendanceRules?.autoPunchOutTime || '21:30'
+              const tz = attendanceRules?.timezone || 'Asia/Kolkata'
+              const cutOffDateTime = createCutOffDateTime(workDate, cutOffTimeStr, tz)
+              const formattedCutoff = formatTime12(cutOffTimeStr) || '09:30 PM'
+              await this.finalizeAttendanceSession({
+                recordId: existingRec.id || existingRec._id,
+                employeeId: existingRec.employeeId,
+                employeeName: existingRec.employeeName,
+                workDate,
+                punchOutTime: formattedCutoff,
+                punchOutAt: cutOffDateTime,
+                reasonCode: 'SYSTEM_DAILY_CUTOFF',
+                reasonText: `Auto Punch Out (Scheduled daily system cut-off at ${formattedCutoff})`,
+                policy: 'ENGINE_B_DAILY_CUTOFF',
+                isAutoPunchOut: true,
+                source: 'absence_engine_past_cutoff',
+              })
+            } catch (cutoffErr) {
+              console.warn(`[ensureDailyAbsenceRecords] Auto punch-out catchup notice for ${existingRec.employeeId}:`, cutoffErr.message)
+            }
+          }
+
           continue // Already punched in
         }
         if (approvedLeave && !approvedLeave.isHalfDay) {
@@ -1712,7 +1752,8 @@ export function createAttendanceService({ repository, companySettings = {}, leav
       if (!record && recordId) {
         record = repository.findById ? await repository.findById(recordId) : (repository.getRecordById ? await repository.getRecordById(recordId) : null)
       }
-      if (!record || !record.checkIn || record.checkOut) {
+      const isUnclosed = !record.checkOut || record.checkOut === '—' || record.checkOut === '-' || (typeof record.totalHours === 'string' && record.totalHours.includes('Active'))
+      if (!record || !record.checkIn || !isUnclosed) {
         return null // Session already finalized or no check-in
       }
 
@@ -1721,14 +1762,16 @@ export function createAttendanceService({ repository, companySettings = {}, leav
         return null
       }
 
-      const now = punchOutAt instanceof Date ? punchOutAt : new Date(punchOutAt)
+      const now = punchOutAt instanceof Date ? punchOutAt : (punchOutAt ? new Date(punchOutAt) : new Date())
       const formattedTime = punchOutTime || formatCurrentTime(now)
 
       // Calculate working hours & breaks
       let elapsedMins = 0
-      if (record.checkInAt) {
+      if (record.checkInAt && now) {
         elapsedMins = Math.max(0, Math.floor((now.getTime() - new Date(record.checkInAt).getTime()) / 60000))
-      } else if (record.checkIn) {
+      }
+      // If elapsedMins was not computed or exceeds 24 hours (e.g. past-date catchup), compute strictly from within-day shift times
+      if ((!elapsedMins || elapsedMins > 1440) && record.checkIn && formattedTime) {
         const inM = parseTimeToMinutes(record.checkIn)
         const outM = parseTimeToMinutes(formattedTime)
         if (inM !== null && outM !== null) {
@@ -1893,7 +1936,7 @@ export function createAttendanceService({ repository, companySettings = {}, leav
       return this.finalizeAttendanceSession(params)
     },
 
-    async processAutoPunchOuts() {
+    async processAutoPunchOuts(options = {}) {
       if (isProcessingAutoPunchOuts) {
         return { geofenceTimeouts: [], offlineTimeouts: [], dailyCutoffs: [], advanceWarningsSent: 0 }
       }
@@ -1909,7 +1952,9 @@ export function createAttendanceService({ repository, companySettings = {}, leav
         const settings = this.getSettings ? this.getSettings() : this.getConfig()
         const rules = settings?.attendanceRules || DEFAULT_ATTENDANCE_RULES
         const now = new Date()
-        const workDate = getTodayString()
+        const todayDate = getTodayString()
+        const targetDate = (options.date && /^\d{4}-\d{2}-\d{2}$/.test(options.date)) ? options.date : null
+        const workDate = targetDate || todayDate
 
         // =========================================================================
         // ENGINE A: Geofence Grace Period Expiry (2 Hours Outside Office)
@@ -2003,7 +2048,59 @@ export function createAttendanceService({ repository, companySettings = {}, leav
             currentMins = now.getHours() * 60 + now.getMinutes()
           }
 
-          // Advance Warning (e.g. 15 mins before cut-off)
+          // -----------------------------------------------------------------------
+          // B.1: CATCH UP UNCLOSED PAST SESSIONS (date < todayDate)
+          // Guarantees that any past day session left open (e.g. server idle/restarted)
+          // is automatically closed at that day's scheduled cut-off time.
+          // -----------------------------------------------------------------------
+          try {
+            const pastUnclosed = await repository.findUnclosedPastSessions(todayDate)
+            for (const rec of pastUnclosed || []) {
+              try {
+                const recDate = rec.date
+                if (!recDate || recDate >= todayDate) continue
+
+                let shiftDef = null
+                if (rec.shift) {
+                  const extracted = extractShiftTimes(rec.shift)
+                  shiftDef = normalizeShiftConfig({ shiftId: rec.shiftCode, name: rec.shift, ...extracted })
+                } else {
+                  const res = await resolveEmployeeShift(rec.employeeId, recDate)
+                  shiftDef = res.shift
+                }
+
+                const cutOffDateTime = createCutOffDateTime(recDate, cutOffTimeStr, tz)
+                const formattedCutoff = formatTime12(cutOffTimeStr) || '09:30 PM'
+
+                const finalized = await this.finalizeAttendanceSession({
+                  recordId: rec.id || rec._id,
+                  employeeId: rec.employeeId,
+                  employeeName: rec.employeeName,
+                  workDate: recDate,
+                  punchOutTime: formattedCutoff,
+                  punchOutAt: cutOffDateTime,
+                  reasonCode: 'SYSTEM_DAILY_CUTOFF',
+                  reasonText: `Auto Punch Out (Scheduled daily system cut-off at ${formattedCutoff})`,
+                  policy: 'ENGINE_B_DAILY_CUTOFF',
+                  isAutoPunchOut: true,
+                  source: 'scheduler_past_catchup',
+                })
+                if (finalized) {
+                  results.pastCutoffs = results.pastCutoffs || []
+                  results.pastCutoffs.push(finalized)
+                  results.dailyCutoffs.push(finalized)
+                }
+              } catch (err) {
+                console.error(`[AutoPunchOut Past Catchup Error] ${rec.employeeId} on ${rec.date}:`, err.message)
+              }
+            }
+          } catch (pastErr) {
+            console.error('[AutoPunchOut Past Catchup Global Notice]:', pastErr.message)
+          }
+
+          // -----------------------------------------------------------------------
+          // B.2: TODAY'S Advance Warning (e.g. 15 mins before cut-off)
+          // -----------------------------------------------------------------------
           const warningMinsBefore = Number(rules.dailyCutoffWarningMinutesBefore) || 15
           if (rules.dailyCutoffWarningEnabled !== false && currentMins >= (cutOffMinutes - warningMinsBefore) && currentMins < cutOffMinutes) {
             const pendingWarningRecords = await repository.findRecordsPendingAdvanceWarning(workDate)
@@ -2040,14 +2137,18 @@ export function createAttendanceService({ repository, companySettings = {}, leav
             }
           }
 
-          // At or after cut-off time:
-          if (currentMins >= cutOffMinutes) {
+          // -----------------------------------------------------------------------
+          // B.3: Cut-Off Execution (at or after cut-off time, or forceToday, or past date target)
+          // -----------------------------------------------------------------------
+          const shouldRunCutoffForWorkDate = (workDate < todayDate) || (currentMins >= cutOffMinutes) || Boolean(options.forceToday)
+          if (shouldRunCutoffForWorkDate) {
             const activeToday = await repository.findActiveSessionsForCutoff(workDate)
             for (const rec of activeToday || []) {
               try {
                 // Revalidate session:
                 const latest = await repository.findByEmployeeAndDate(rec.employeeId, rec.date || workDate)
-                if (!latest || !latest.checkIn || latest.checkOut) {
+                const isUnclosed = !latest?.checkOut || latest.checkOut === '—' || latest.checkOut === '-' || (typeof latest.totalHours === 'string' && latest.totalHours.includes('Active'))
+                if (!latest || !latest.checkIn || !isUnclosed) {
                   continue // Already punched out
                 }
 
@@ -2064,34 +2165,41 @@ export function createAttendanceService({ repository, companySettings = {}, leav
                 // Shift-awareness:
                 // 1. Overnight shifts:
                 if (shiftDef.isOvernight) {
-                  continue // Overnight shifts cross midnight, exempt from 21:30 daily day cutoff!
+                  continue // Overnight shifts cross midnight, exempt from standard evening cutoff
                 }
                 // 2. Evening shifts ending after cut-off time:
-                if (shiftDef.endMinutes && cutOffMinutes >= (shiftDef.startMinutes || 0) && shiftDef.endMinutes > cutOffMinutes) {
-                  continue // Shift ends after cut-off time, ongoing session!
+                if (!options.forceToday && workDate === todayDate && shiftDef.endMinutes && cutOffMinutes >= (shiftDef.startMinutes || 0) && shiftDef.endMinutes > cutOffMinutes) {
+                  continue // Shift ends after cut-off time, ongoing session
                 }
                 // 3. Minimum duration safeguard (checked in less than 60 mins ago):
-                if (latest.checkInAt) {
+                if (!options.forceToday && workDate === todayDate && latest.checkInAt) {
                   const elapsedSinceIn = (now.getTime() - new Date(latest.checkInAt).getTime()) / 60000
                   if (elapsedSinceIn < 60) {
                     continue
                   }
                 }
 
+                const cutOffDateTime = createCutOffDateTime(workDate, cutOffTimeStr, tz)
+                const formattedCutoff = formatTime12(cutOffTimeStr) || '09:30 PM'
+
                 const finalized = await this.finalizeAttendanceSession({
                   recordId: latest.id || latest._id,
                   employeeId: latest.employeeId,
                   employeeName: latest.employeeName,
                   workDate: latest.date || workDate,
-                  punchOutTime: formatTime12(cutOffTimeStr) || formatCurrentTime(now),
-                  punchOutAt: now,
+                  punchOutTime: formattedCutoff,
+                  punchOutAt: cutOffDateTime,
                   reasonCode: 'SYSTEM_DAILY_CUTOFF',
-                  reasonText: `Auto Punch Out (Scheduled daily system cut-off at ${formatTime12(cutOffTimeStr) || '9:30 PM'})`,
+                  reasonText: `Auto Punch Out (Scheduled daily system cut-off at ${formattedCutoff})`,
                   policy: 'ENGINE_B_DAILY_CUTOFF',
                   isAutoPunchOut: true,
                   source: 'scheduler',
                 })
-                if (finalized) results.dailyCutoffs.push(finalized)
+                if (finalized) {
+                  results.pastCutoffs = results.pastCutoffs || []
+                  results.pastCutoffs.push(finalized)
+                  results.dailyCutoffs.push(finalized)
+                }
               } catch (err) {
                 console.error(`[AutoPunchOut Engine B Error] ${rec.employeeId}:`, err.message)
               }
@@ -2107,8 +2215,8 @@ export function createAttendanceService({ repository, companySettings = {}, leav
       return results
     },
 
-    async autoPunchOutScheduledCutoff() {
-      const results = await this.processAutoPunchOuts()
+    async autoPunchOutScheduledCutoff(options = {}) {
+      const results = await this.processAutoPunchOuts(options)
       return [...results.geofenceTimeouts, ...results.offlineTimeouts, ...results.dailyCutoffs]
     },
 
@@ -2254,6 +2362,30 @@ export function createAttendanceService({ repository, companySettings = {}, leav
           continue
         }
 
+        const isPastDate = recDate < today
+        const isUnclosed = !rec.checkOut || rec.checkOut === '—' || rec.checkOut === '-' || (typeof rec.totalHours === 'string' && rec.totalHours.includes('Active'))
+        if (isPastDate && isUnclosed) {
+          const cutOffTimeStr = attendanceRules?.dailyCutoffTime || attendanceRules?.autoPunchOutTime || '21:30'
+          const formattedCutoff = formatTime12(cutOffTimeStr) || '09:30 PM'
+          const tz = attendanceRules?.timezone || 'Asia/Kolkata'
+          const cutOffDateTime = createCutOffDateTime(recDate, cutOffTimeStr, tz)
+          const inTime = parseTimeToMinutes(rec.checkIn)
+          const outTime = parseTimeToMinutes(formattedCutoff) || (21 * 60 + 30)
+          const bMins = Number(rec.totalBreakMinutes) || 0
+          const grossMins = Math.max(0, outTime - (inTime ?? outTime))
+          const netMins = Math.max(0, grossMins - bMins)
+          const hh = Math.floor(netMins / 60)
+          const mm = netMins % 60
+          rec.checkOut = formattedCutoff
+          rec.checkOutAt = cutOffDateTime
+          rec.autoPunchOut = true
+          rec.punchOutType = 'auto'
+          rec.punchOutReason = `Auto Punch Out (Scheduled daily system cut-off at ${formattedCutoff})`
+          rec.punchOutPolicy = 'ENGINE_B_DAILY_CUTOFF'
+          rec.totalHours = `${hh}h ${mm}m (Auto Punch Out)`
+          rec.verifiedCampusMinutes = grossMins
+        }
+
         const punchEval = evaluatePunchIn({ checkInTime: rec.checkIn, shift: shiftConfig, approvedLeave })
 
         let checkoutEval = null
@@ -2291,7 +2423,7 @@ export function createAttendanceService({ repository, companySettings = {}, leav
           }
         }
 
-        const isStillActive = !rec.checkOut
+        const isStillActive = !rec.checkOut && !isPastDate
         const finalStatus = punchEval.status === 'half-day'
           ? 'half-day'
           : checkoutEval?.isCampusShortfall

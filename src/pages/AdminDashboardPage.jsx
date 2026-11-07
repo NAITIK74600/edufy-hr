@@ -5003,6 +5003,8 @@ function AdminSettingsModule({ user: propUser }) {
   const [dailyCutoffWarningMinutesBefore, setDailyCutoffWarningMinutesBefore] = useState(initialShift.dailyCutoffWarningMinutesBefore ?? 15)
   const [attendanceTimezone, setAttendanceTimezone] = useState(initialShift.timezone || 'Asia/Kolkata')
   const [shiftSaving, setShiftSaving] = useState(false)
+  const [executingAutoPunch, setExecutingAutoPunch] = useState(false)
+  const [autoPunchFeedback, setAutoPunchFeedback] = useState(null)
 
   // Help Desk Configuration State
   const initialHelpDesk = storeState.companySettings?.helpDeskSettings || {}
@@ -6497,6 +6499,71 @@ function AdminSettingsModule({ user: propUser }) {
                         return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${p}`;
                       })()} will be automatically punched out.
                     </span>
+                  </div>
+                )}
+
+                <div style={{ marginTop: '14px', paddingTop: '12px', borderTop: '1px dashed #bbf7d0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                  <div>
+                    <span style={{ fontSize: '11.5px', color: '#166534', fontWeight: 700, display: 'block' }}>
+                      On-Demand / Catch-Up Auto Punch-Out
+                    </span>
+                    <span style={{ fontSize: '10.5px', color: '#15803d' }}>
+                      Immediately finalizes unclosed past sessions (e.g. yesterday) and executes scheduled cut-off on demand.
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={executingAutoPunch}
+                    onClick={async () => {
+                      try {
+                        setExecutingAutoPunch(true)
+                        setAutoPunchFeedback(null)
+                        const res = await hrStore.triggerAutoPunchOut()
+                        setAutoPunchFeedback({
+                          type: 'success',
+                          text: res?.message || 'Auto punch-out executed successfully.',
+                        })
+                      } catch (err) {
+                        setAutoPunchFeedback({
+                          type: 'error',
+                          text: `Execution failed: ${err.message}`,
+                        })
+                      } finally {
+                        setExecutingAutoPunch(false)
+                      }
+                    }}
+                    style={{
+                      fontSize: '11.5px',
+                      fontWeight: 600,
+                      padding: '6px 14px',
+                      borderRadius: '6px',
+                      background: '#166534',
+                      color: '#ffffff',
+                      border: 'none',
+                      cursor: executingAutoPunch ? 'not-allowed' : 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      opacity: executingAutoPunch ? 0.7 : 1,
+                    }}
+                  >
+                    <span>⚡</span> {executingAutoPunch ? 'Running Cut-Off Sweep...' : 'Execute Auto Punch-Out Now'}
+                  </button>
+                </div>
+                {autoPunchFeedback && (
+                  <div
+                    style={{
+                      marginTop: '8px',
+                      padding: '8px 12px',
+                      borderRadius: '6px',
+                      fontSize: '11.5px',
+                      fontWeight: 600,
+                      background: autoPunchFeedback.type === 'success' ? '#dcfce7' : '#fee2e2',
+                      color: autoPunchFeedback.type === 'success' ? '#166534' : '#991b1b',
+                      border: `1px solid ${autoPunchFeedback.type === 'success' ? '#86efac' : '#fca5a5'}`,
+                    }}
+                  >
+                    {autoPunchFeedback.text}
                   </div>
                 )}
               </div>
