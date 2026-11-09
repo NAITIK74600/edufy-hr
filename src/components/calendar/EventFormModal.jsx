@@ -472,6 +472,93 @@ export function EventFormModal({
                     onChange={(e) => setDescription(e.target.value)}
                   />
                 </Field>
+
+                {/* Quick Google Meet Integration Card in Details Tab */}
+                <div
+                  style={{
+                    padding: '14px 16px',
+                    borderRadius: '12px',
+                    background: meetingUrl ? '#f0fdf4' : '#f8fafc',
+                    border: meetingUrl ? '1.5px solid #86efac' : '1px dashed #cbd5e1',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    flexWrap: 'wrap',
+                    gap: '12px',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div
+                      style={{
+                        width: '38px',
+                        height: '38px',
+                        borderRadius: '8px',
+                        background: meetingUrl ? '#059669' : '#e2e8f0',
+                        color: meetingUrl ? '#ffffff' : '#64748b',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0,
+                      }}
+                    >
+                      <Video size={18} />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '13px', fontWeight: 700, color: meetingUrl ? '#065f46' : 'var(--ink, #1e293b)' }}>
+                        {meetingUrl ? 'Google Meet Video Call Attached' : 'Google Meet Video Conference'}
+                      </div>
+                      <div style={{ fontSize: '11px', color: meetingUrl ? '#047857' : 'var(--muted, #64748b)' }}>
+                        {meetingUrl ? meetingUrl : 'Attach a 1-click Google Meet video link for all participants'}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <button
+                      type="button"
+                      onClick={handleGenerateGoogleMeet}
+                      style={{
+                        padding: '6px 14px',
+                        background: '#059669',
+                        color: '#ffffff',
+                        border: 'none',
+                        borderRadius: '6px',
+                        fontSize: '12px',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                      }}
+                    >
+                      <Sparkles size={13} />
+                      {meetingUrl ? 'Regenerate Meet' : 'Add Google Meet'}
+                    </button>
+
+                    {meetingUrl && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMeetingUrl('')
+                          setMeetingProvider('none')
+                          setAutoCreateMeet(false)
+                        }}
+                        style={{
+                          padding: '6px 10px',
+                          background: '#fee2e2',
+                          color: '#b91c1c',
+                          border: 'none',
+                          borderRadius: '6px',
+                          fontSize: '11px',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                </div>
               </div>
             )}
 

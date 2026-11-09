@@ -49,11 +49,23 @@ const CATEGORY_COLORS = {
   'Special Holiday': { bg: '#fae8ff', text: '#a21caf', border: '#f5d0fe', badge: 'neutral' },
   'Emergency Holiday': { bg: '#fee2e2', text: '#b91c1c', border: '#fecaca', badge: 'danger' },
   'Birthday': { bg: '#fdf2f8', text: '#db2777', border: '#fbcfe8', badge: 'warning' },
+  'Employee Birthday': { bg: '#fdf2f8', text: '#db2777', border: '#fbcfe8', badge: 'warning' },
   'Work Anniversary': { bg: '#fffbeb', text: '#d97706', border: '#fef3c7', badge: 'warning' },
   'Leave': { bg: '#f5f3ff', text: '#7c3aed', border: '#ddd6fe', badge: 'neutral' },
   'Event': { bg: '#ecfdf5', text: '#059669', border: '#a7f3d0', badge: 'success' },
   'Meeting': { bg: '#eff6ff', text: '#1d4ed8', border: '#bfdbfe', badge: 'info' },
+  'Company Meeting': { bg: '#eff6ff', text: '#1d4ed8', border: '#bfdbfe', badge: 'info' },
+  'Department Meeting': { bg: '#e0e7ff', text: '#4338ca', border: '#c7d2fe', badge: 'info' },
+  'Individual Meeting': { bg: '#f0fdf4', text: '#15803d', border: '#bbf7d0', badge: 'success' },
+  'Client Meeting': { bg: '#fdf4ff', text: '#a21caf', border: '#f5d0fe', badge: 'neutral' },
   'Training': { bg: '#f0fdf4', text: '#15803d', border: '#bbf7d0', badge: 'success' },
+  'Training Session': { bg: '#f0fdf4', text: '#15803d', border: '#bbf7d0', badge: 'success' },
+  'Interview': { bg: '#fff7ed', text: '#c2410c', border: '#ffedd5', badge: 'warning' },
+  'Performance Review': { bg: '#f5f3ff', text: '#6d28d9', border: '#ddd6fe', badge: 'neutral' },
+  'Project Deadline': { bg: '#fef2f2', text: '#dc2626', border: '#fecaca', badge: 'danger' },
+  'Employee Onboarding': { bg: '#f0fdfa', text: '#0d9488', border: '#99f6e4', badge: 'success' },
+  'Office Event': { bg: '#ecfdf5', text: '#059669', border: '#a7f3d0', badge: 'success' },
+  'Custom Event': { bg: '#f8fafc', text: '#334155', border: '#e2e8f0', badge: 'neutral' },
   'Announcement': { bg: '#f8fafc', text: '#334155', border: '#e2e8f0', badge: 'neutral' },
 }
 
@@ -129,6 +141,12 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
   const [isDuplicateModalOpen, setIsDuplicateModalOpen] = useState(false)
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
   const [isImportModalOpen, setIsImportModalOpen] = useState(false)
+  const [isGoogleSyncModalOpen, setIsGoogleSyncModalOpen] = useState(false)
+  const [googleIntegration, setGoogleIntegration] = useState(null)
+
+  useEffect(() => {
+    calendarService.getIntegrations().then(setGoogleIntegration).catch(() => {})
+  }, [])
 
   // Form states for Add/Edit
   const [holidayForm, setHolidayForm] = useState({
@@ -1072,6 +1090,15 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
                 <CalendarRange size={14} />
                 <span className="hidden-mobile">iCal (ICS)</span>
               </Button>
+              <Button
+                variant="outline"
+                onClick={() => setIsGoogleSyncModalOpen(true)}
+                title="Google Calendar & Meet Video Call Integration"
+                style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: isSmallScreen ? '6px 8px' : '7px 12px' }}
+              >
+                <Video size={14} color="#059669" />
+                <span className="hidden-mobile">Google Sync</span>
+              </Button>
             </div>
 
             {/* Schedule Event Action (Primary for all users) */}
@@ -1512,8 +1539,9 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
                                 gap: '4px',
                               }}
                             >
-                              {ev.type === 'birthday' && <Cake size={10} />}
-                              {ev.type === 'anniversary' && <Award size={10} />}
+                              {(ev.type === 'birthday' || ev.category === 'Birthday' || ev.category === 'Employee Birthday') && <Cake size={10} />}
+                              {(ev.type === 'anniversary' || ev.category === 'Work Anniversary') && <Award size={10} />}
+                              {ev.meetingLink?.url && <Video size={10} color="#059669" />}
                               <span>{ev.title}</span>
                             </div>
                           )
@@ -1631,25 +1659,51 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
                       </div>
 
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px', paddingTop: '6px', borderTop: '1px solid rgba(0,0,0,0.06)' }}>
-                        <a
-                          href={getGoogleCalendarUrl(ev)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          style={{
-                            fontSize: '11px',
-                            fontWeight: 700,
-                            color: styleInfo.text,
-                            textDecoration: 'none',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '4px',
-                          }}
-                          onClick={(e) => e.stopPropagation()}
-                          title="Add event to Google Calendar"
-                        >
-                          <ExternalLink size={12} />
-                          <span>Add to G-Cal</span>
-                        </a>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          {ev.meetingLink?.url && (
+                            <a
+                              href={ev.meetingLink.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                              style={{
+                                padding: '3px 8px',
+                                borderRadius: '5px',
+                                background: '#059669',
+                                color: '#ffffff',
+                                fontSize: '11px',
+                                fontWeight: 700,
+                                textDecoration: 'none',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                              }}
+                              title="Join Google Meet Video Call"
+                            >
+                              <Video size={11} />
+                              <span>Join Meet</span>
+                            </a>
+                          )}
+                          <a
+                            href={getGoogleCalendarUrl(ev)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{
+                              fontSize: '11px',
+                              fontWeight: 700,
+                              color: styleInfo.text,
+                              textDecoration: 'none',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                            title="Add event to Google Calendar"
+                          >
+                            <ExternalLink size={12} />
+                            <span>Add to G-Cal</span>
+                          </a>
+                        </div>
 
                         {isLongWeekend(ev.date) && (
                           <span style={{ fontSize: '10px', fontWeight: 800, color: '#b45309' }}>
@@ -2951,6 +3005,160 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
                 onClick={handleCommitImport}
               >
                 {isImporting ? 'Importing...' : `Commit Import (${importPreview?.summary?.validCount || 0} holidays)`}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* GOOGLE CALENDAR & MEET INTEGRATION MODAL */}
+      {isGoogleSyncModalOpen && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15, 23, 42, 0.65)',
+            backdropFilter: 'blur(4px)',
+            zIndex: 1000,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '16px',
+          }}
+          onClick={() => setIsGoogleSyncModalOpen(false)}
+        >
+          <div
+            style={{
+              background: '#ffffff',
+              borderRadius: '16px',
+              maxWidth: '520px',
+              width: '100%',
+              padding: '24px',
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.2)',
+              position: 'relative',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: '#e0f2fe', color: '#0284c7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Video size={22} color="#059669" />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '17px', fontWeight: 800, color: 'var(--ink, #0f172a)' }}>
+                    Google Calendar & Meet Integration
+                  </h3>
+                  <span style={{ fontSize: '12px', color: '#64748b' }}>
+                    Video conferences, calendar sync, and meeting links
+                  </span>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsGoogleSyncModalOpen(false)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginBottom: '20px' }}>
+              {/* Status Row 1: Google Meet */}
+              <div style={{ padding: '14px', borderRadius: '10px', background: '#f0fdf4', border: '1px solid #bbf7d0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <div style={{ fontSize: '13px', fontWeight: 700, color: '#065f46', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#10b981', display: 'inline-block' }} />
+                    Google Meet Video Call Engine
+                  </div>
+                  <div style={{ fontSize: '11.5px', color: '#047857', marginTop: '2px' }}>
+                    Auto-generates room codes (`meet.google.com/xxx-yyyy-zzz`) for meetings and interviews.
+                  </div>
+                </div>
+                <a
+                  href="https://meet.google.com/new"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    padding: '6px 12px',
+                    borderRadius: '6px',
+                    background: '#059669',
+                    color: '#ffffff',
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    textDecoration: 'none',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                  }}
+                >
+                  <Video size={12} /> Test Meet
+                </a>
+              </div>
+
+              {/* Status Row 2: Google Calendar */}
+              <div style={{ padding: '14px', borderRadius: '10px', background: '#eff6ff', border: '1px solid #bfdbfe', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <div style={{ fontSize: '13px', fontWeight: 700, color: '#1e40af', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#3b82f6', display: 'inline-block' }} />
+                    Personal & Team Google Calendar Sync
+                  </div>
+                  <div style={{ fontSize: '11.5px', color: '#1d4ed8', marginTop: '2px' }}>
+                    1-Click "Add to Google Calendar" active on all holidays, team meetings, and deadlines.
+                  </div>
+                </div>
+                <Button
+                  variant="outline"
+                  onClick={() => calendarService.downloadExport('ics', currentYear)}
+                  style={{ fontSize: '11px', padding: '5px 10px' }}
+                >
+                  Export .ICS
+                </Button>
+              </div>
+
+              {/* Status Row 3: Corporate Google Workspace OAuth */}
+              <div style={{ padding: '14px', borderRadius: '10px', background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+                <div style={{ fontSize: '12.5px', fontWeight: 700, color: '#1e293b', marginBottom: '4px' }}>
+                  Enterprise Google Workspace OAuth
+                </div>
+                <p style={{ margin: '0 0 10px', fontSize: '11.5px', color: '#64748b', lineHeight: 1.4 }}>
+                  Connect your company's official Google Workspace to directly synchronize events with employees' primary Google Calendar accounts.
+                </p>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                  <span style={{ fontSize: '11px', color: googleIntegration?.isConnected ? '#059669' : '#64748b', fontWeight: 600 }}>
+                    {googleIntegration?.isConnected ? `Connected: ${googleIntegration.accountEmail}` : 'Status: Ready (Direct Meet & G-Cal Links Active)'}
+                  </span>
+                  {canManage && (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          const res = await calendarService.connectGoogle()
+                          if (res.authUrl) window.open(res.authUrl, '_blank')
+                          else showNotice(res.message || 'Google OAuth credentials not configured in environment variables.')
+                        } catch (err) {
+                          showNotice(err.message || 'Google OAuth not configured in server .env.')
+                        }
+                      }}
+                      style={{
+                        padding: '5px 12px',
+                        background: '#ffffff',
+                        border: '1px solid #cbd5e1',
+                        borderRadius: '6px',
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        color: '#0284c7',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Connect Google Workspace
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <Button variant="primary" onClick={() => setIsGoogleSyncModalOpen(false)}>
+                Done
               </Button>
             </div>
           </div>

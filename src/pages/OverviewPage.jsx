@@ -767,8 +767,26 @@ export function OverviewPage() {
       {/* Interactive Charts & Action Board */}
       <DashboardWidgets storeState={storeState} />
 
-      {/* Enterprise Calendar & Celebrations Widgets (Feature Locked) */}
-      {FEATURE_ENTERPRISE_CALENDAR_UNLOCKED && <CalendarWidgets user={user} />}
+      {/* Enterprise Calendar & Celebrations Widgets */}
+      <section style={{ margin: '18px 0 6px' }}>
+        <div style={{ marginBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 800, color: 'var(--ink, #0f172a)' }}>
+              Calendar & Workforce Celebrations
+            </h3>
+            <span style={{ fontSize: '11.5px', color: 'var(--muted, #64748b)' }}>
+              Holidays, employee birthdays, team anniversaries, and Google Meet video conferences
+            </span>
+          </div>
+          <a
+            href="#/hr/holidays"
+            style={{ fontSize: '12px', fontWeight: 700, color: 'var(--teal, #006E6F)', textDecoration: 'none' }}
+          >
+            Open Full Calendar →
+          </a>
+        </div>
+        <CalendarWidgets user={user} />
+      </section>
 
       {/* Focus & Priority Section */}
       <section className="advanced-grid">

@@ -60,6 +60,7 @@ import { formatINR } from '../utils/currency'
 import { generateNextEmployeeCode, generateAutoPassword, formatCredentialsShareText, copyTextToClipboard } from '../utils/credentialsHelper'
 import { getRoleBadgeLabel } from '../utils/greeting'
 import { HolidayCalendarShowcase } from '../components/HolidayCalendarShowcase'
+import { CalendarWidgets } from '../components/calendar/CalendarWidgets'
 import { todayKey } from '../services/connectedStore'
 
 function AdminModalPortal({ children }) {
@@ -230,6 +231,27 @@ function AdminOverviewModule({ onNavigate }) {
             </span>
           </div>
         </div>
+      </section>
+
+      {/* SMART HR CALENDAR & CELEBRATIONS WIDGETS */}
+      <section style={{ margin: '18px 0 22px' }}>
+        <div style={{ marginBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 800, color: 'var(--ink, #0f172a)' }}>
+              Calendar & Workforce Celebrations
+            </h3>
+            <span style={{ fontSize: '11.5px', color: 'var(--muted, #64748b)' }}>
+              Holidays, employee birthdays, team anniversaries, and Google Meet video conferences
+            </span>
+          </div>
+          <a
+            href="#/admin/settings"
+            style={{ fontSize: '12px', fontWeight: 700, color: 'var(--teal, #006E6F)', textDecoration: 'none' }}
+          >
+            Manage Calendar →
+          </a>
+        </div>
+        <CalendarWidgets user={{ role: 'admin' }} />
       </section>
 
       {/* SYSTEM KPI METRICS */}
