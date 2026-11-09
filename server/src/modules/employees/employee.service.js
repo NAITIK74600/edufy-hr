@@ -4,7 +4,7 @@ import { sendWelcomeEmail, sendDocumentStatusEmail, sendExitInitiatedEmail, send
 import { createUnifiedNotification } from '../../services/unifiedNotification.service.js'
 
 const protectedFields = ['permissions', 'passwordHash', 'authVersion', 'salaryRecord']
-const editableFields = ['employeeId', 'name', 'displayName', 'email', 'password', 'department', 'team', 'teamId', 'squad', 'squadId', 'teamLeadId', 'teamLeadName', 'managerName', 'designation', 'location', 'campus', 'employmentType', 'joiningDate', 'employmentEndDate', 'managerId', 'phone', 'bankDetails', 'emergencyContact', 'exitDetails', 'onboardingChecklist', 'offboardingChecklist', 'role', 'status', 'salary', 'salaryStructure', 'parentsContact', 'identity', 'onboardingDocs', 'documents', 'onboardingStatus', 'onboardingSubmittedAt', 'onboardingVerifiedAt', 'onboardingVerifiedBy', 'onboardingNotes', 'onboardingRejectionReason', 'onboardingUnlockedAt', 'financeDetails', 'reportingManager', 'policyConsents', 'complianceDocs', 'avatarUrl']
+const editableFields = ['employeeId', 'name', 'displayName', 'email', 'password', 'department', 'team', 'teamId', 'squad', 'squadId', 'teamLeadId', 'teamLeadName', 'managerName', 'designation', 'location', 'campus', 'employmentType', 'joiningDate', 'dob', 'employmentEndDate', 'managerId', 'phone', 'bankDetails', 'emergencyContact', 'exitDetails', 'onboardingChecklist', 'offboardingChecklist', 'role', 'status', 'salary', 'salaryStructure', 'parentsContact', 'identity', 'onboardingDocs', 'documents', 'onboardingStatus', 'onboardingSubmittedAt', 'onboardingVerifiedAt', 'onboardingVerifiedBy', 'onboardingNotes', 'onboardingRejectionReason', 'onboardingUnlockedAt', 'financeDetails', 'reportingManager', 'policyConsents', 'complianceDocs', 'avatarUrl']
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 function validationError(message, fields = {}) {
@@ -149,7 +149,7 @@ function validatePayload(payload, { partial = false, canAssignManager = false, c
       errors.joiningDate = 'Joining date is required.'
     }
   }
-  for (const dateField of ['joiningDate', 'employmentEndDate']) {
+  for (const dateField of ['joiningDate', 'employmentEndDate', 'dob']) {
     if (payload[dateField] !== undefined) {
       if (partial && (payload[dateField] === null || payload[dateField] === '')) {
         fields[dateField] = null

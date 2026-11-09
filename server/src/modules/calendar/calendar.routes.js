@@ -160,12 +160,9 @@ export function createCalendarRouter({ auth, useDatabase = true }) {
             }
           }
 
-          // Deterministic birthday fallback only if employee completely lacks dob
+          // Require valid employee date of birth from MongoDB record
           if (!bMonth || !bDay) {
-            const seed = (emp.employeeId || String(emp._id)).split('').reduce((acc, c) => acc + c.charCodeAt(0), 0)
-            bMonth = (seed % 12) + 1
-            const maxDays = [0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][bMonth]
-            bDay = String((seed % maxDays) + 1).padStart(2, '0')
+            continue
           }
 
           if (targetMonth && bMonth !== targetMonth) continue
@@ -1049,10 +1046,7 @@ export function createCalendarRouter({ auth, useDatabase = true }) {
           }
 
           if (!bMonth || !bDay) {
-            const seed = (emp.employeeId || String(emp._id)).split('').reduce((acc, c) => acc + c.charCodeAt(0), 0)
-            bMonth = (seed % 12) + 1
-            const maxDays = [0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][bMonth]
-            bDay = String((seed % maxDays) + 1).padStart(2, '0')
+            continue
           }
 
           if (bMonth === currentMonth) {

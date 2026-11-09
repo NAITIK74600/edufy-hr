@@ -5,6 +5,7 @@ import {
   FileCheck,
   ArrowLeft,
   Building2,
+  Cake,
   Check,
   CheckCircle2,
   Copy,
@@ -224,6 +225,7 @@ function EmployeeDirectory({ route } = {}) {
     salary: '',
     salaryStructure: { basic: '', hra: '', conveyance: '', ca: '', specialAllowance: '', sa: '', otherAllowance: '', oa: '' },
     joiningDate: new Date().toISOString().split('T')[0],
+    dob: '',
     managerId: '',
     managerName: '',
     // Official Banking & Statutory Details
@@ -445,6 +447,7 @@ function EmployeeDirectory({ route } = {}) {
       employmentType: emp.employmentType || (isInternEmp ? 'intern' : 'full_time'),
       department: cleanDept,
       designation: isDir ? (emp.designation && emp.designation.toLowerCase().includes('director') ? emp.designation : 'Managing Director') : (emp.designation || 'Pending Designation'),
+      dob: emp.dob ? String(emp.dob).slice(0, 10) : (emp.identity?.dob ? String(emp.identity.dob).slice(0, 10) : ''),
       bankName: emp.bankDetails?.bankName || '',
       accountNumber: emp.bankDetails?.accountNumber || '',
       ifscCode: emp.bankDetails?.ifscCode || '',
@@ -1915,6 +1918,16 @@ function EmployeeDirectory({ route } = {}) {
                           onChange={(e) => setNewEmpForm({ ...newEmpForm, joiningDate: e.target.value })}
                         />
                       </Field>
+                      <Field label="Date of Birth (DOB)" hint="For HR Calendar celebrations.">
+                        <input
+                          type="date"
+                          value={newEmpForm.dob || ''}
+                          onChange={(e) => setNewEmpForm({ ...newEmpForm, dob: e.target.value })}
+                        />
+                      </Field>
+                    </div>
+
+                    <div style={{ marginTop: '12px' }}>
                       <Field label="Initial Login Password" hint="Auto-generated credentials for first sign-in (min 8 chars).">
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                           <input
@@ -2514,7 +2527,14 @@ function EmployeeDirectory({ route } = {}) {
                   </Field>
                 </div>
 
-                <div style={{ marginTop: '12px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginTop: '12px' }}>
+                  <Field label="Date of Birth (DOB)" hint="For HR Calendar celebrations.">
+                    <input
+                      type="date"
+                      value={editingEmployee.dob ? String(editingEmployee.dob).slice(0, 10) : ''}
+                      onChange={(e) => setEditingEmployee({ ...editingEmployee, dob: e.target.value })}
+                    />
+                  </Field>
                   <Field label="Status" required>
                     <select
                       value={editingEmployee.status || 'active'}
@@ -3118,6 +3138,13 @@ function EmployeeDetail({ id }) {
               <strong>{employee.joiningDate}</strong>
             </div>
             <div>
+              <span>Date of Birth</span>
+              <strong style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Cake size={13} style={{ color: '#ec4899' }} />
+                {employee.dob ? new Date(employee.dob).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : (employee.identity?.dob ? new Date(employee.identity.dob).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : 'Not configured')}
+              </strong>
+            </div>
+            <div>
               <span>Reporting Manager</span>
               <strong>{employee.managerName || 'Not assigned'}</strong>
             </div>
@@ -3249,7 +3276,14 @@ function EmployeeDetail({ id }) {
                   </Field>
                 </div>
 
-                <div style={{ marginTop: '12px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginTop: '12px' }}>
+                  <Field label="Date of Birth (DOB)" hint="For HR Calendar celebrations.">
+                    <input
+                      type="date"
+                      value={editingEmployee.dob ? String(editingEmployee.dob).slice(0, 10) : ''}
+                      onChange={(e) => setEditingEmployee({ ...editingEmployee, dob: e.target.value })}
+                    />
+                  </Field>
                   <Field label="Status" required>
                     <select
                       value={editingEmployee.status || 'active'}
@@ -3382,6 +3416,7 @@ function EmployeeForm({ id }) {
     role: 'employee',
     status: 'active',
     joiningDate: new Date().toISOString().split('T')[0],
+    dob: '',
     salary: '0',
     managerId: '',
     managerName: '',
@@ -3403,7 +3438,8 @@ function EmployeeForm({ id }) {
         setForm({
           ...emp,
           phone: emp.phone || '',
-          bankName: emp.bankDetails?.bankName || '',
+          dob: emp.dob ? String(emp.dob).slice(0, 10) : (emp.identity?.dob ? String(emp.identity.dob).slice(0, 10) : ''),
+      bankName: emp.bankDetails?.bankName || '',
           accountNumber: emp.bankDetails?.accountNumber || '',
           ifscCode: emp.bankDetails?.ifscCode || '',
           panTaxId: emp.bankDetails?.panTaxId || '',
@@ -3558,6 +3594,14 @@ function EmployeeForm({ id }) {
               value={form.joiningDate}
               onChange={(e) => setForm({ ...form, joiningDate: e.target.value })}
               required
+            />
+          </Field>
+
+          <Field label="Date of Birth (DOB)" hint="For HR Calendar celebrations.">
+            <input
+              type="date"
+              value={form.dob || ''}
+              onChange={(e) => setForm({ ...form, dob: e.target.value })}
             />
           </Field>
 
