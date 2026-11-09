@@ -55,20 +55,26 @@ export const calendarService = {
 
       // Birthdays fallback
       employees.forEach((emp) => {
-        let d = null
-        if (emp.dob) {
-          d = new Date(emp.dob)
-        } else {
-          const seed = (emp.employeeId || String(emp.id || emp._id || '')).split('').reduce((acc, c) => acc + c.charCodeAt(0), 0)
-          const seedMonth = (seed % 12) + 1
-          const maxDays = [0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][seedMonth]
-          const seedDay = (seed % maxDays) + 1
-          const seedYear = 1995 + (seed % 8)
-          d = new Date(Date.UTC(seedYear, seedMonth - 1, seedDay))
+        const rawDob = emp.dob || emp.identity?.dob
+        let m = null
+        let day = null
+
+        if (rawDob) {
+          const d = new Date(rawDob)
+          if (!isNaN(d.getTime())) {
+            const istDate = new Date(d.getTime() + (5.5 * 60 * 60 * 1000))
+            m = istDate.getUTCMonth() + 1
+            day = String(istDate.getUTCDate()).padStart(2, '0')
+          }
         }
-        if (isNaN(d.getTime())) return
-        const m = d.getUTCMonth() + 1
-        const day = String(d.getUTCDate()).padStart(2, '0')
+
+        if (!m || !day) {
+          const seed = (emp.employeeId || String(emp.id || emp._id || '')).split('').reduce((acc, c) => acc + c.charCodeAt(0), 0)
+          m = (seed % 12) + 1
+          const maxDays = [0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][m]
+          day = String((seed % maxDays) + 1).padStart(2, '0')
+        }
+
         if (month && m !== parseInt(month, 10)) return
         const bDate = `${targetYear}-${String(m).padStart(2, '0')}-${day}`
         events.push({
@@ -77,6 +83,7 @@ export const calendarService = {
           name: emp.displayName || emp.name,
           date: bDate,
           endDate: bDate,
+          allDay: true,
           category: 'Employee Birthday',
           type: 'birthday',
           department: emp.department || 'General',

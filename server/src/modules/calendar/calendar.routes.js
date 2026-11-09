@@ -139,26 +139,34 @@ export function createCalendarRouter({ auth, useDatabase = true }) {
       // 2. Fetch Employee Birthdays (Respecting privacy permissions)
       try {
         const employees = await Employee.find({
-          status: { $in: ['active', 'onboarding'] },
-        }).select('_id employeeId firstName lastName name displayName department designation avatarUrl dob').lean().catch(() => [])
+          status: { $in: ['active', 'onboarding', 'notice', 'probation', 'Active', 'ONBOARDING'] },
+        }).select('_id employeeId firstName lastName name displayName department designation avatarUrl dob identity').lean().catch((err) => {
+          console.warn('[Calendar Birthday Query Error]:', err.message)
+          return []
+        })
 
         for (const emp of employees) {
-          let dobDate = null
-          if (emp.dob) {
-            dobDate = new Date(emp.dob)
-          } else {
-            // Deterministic birthday fallback so every staff member has their birthday shown
-            const seed = (emp.employeeId || String(emp._id)).split('').reduce((acc, c) => acc + c.charCodeAt(0), 0)
-            const seedMonth = (seed % 12) + 1
-            const maxDays = [0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][seedMonth]
-            const seedDay = (seed % maxDays) + 1
-            const seedYear = 1995 + (seed % 8)
-            dobDate = new Date(Date.UTC(seedYear, seedMonth - 1, seedDay))
-          }
-          if (isNaN(dobDate.getTime())) continue
+          const rawDob = emp.dob || emp.identity?.dob
+          let bMonth = null
+          let bDay = null
 
-          const bMonth = dobDate.getUTCMonth() + 1
-          const bDay = String(dobDate.getUTCDate()).padStart(2, '0')
+          if (rawDob) {
+            const d = new Date(rawDob)
+            if (!isNaN(d.getTime())) {
+              // Standardize to IST (UTC + 5:30) to eliminate any server/UTC timezone date shifts
+              const istDate = new Date(d.getTime() + (5.5 * 60 * 60 * 1000))
+              bMonth = istDate.getUTCMonth() + 1
+              bDay = String(istDate.getUTCDate()).padStart(2, '0')
+            }
+          }
+
+          // Deterministic birthday fallback only if employee completely lacks dob
+          if (!bMonth || !bDay) {
+            const seed = (emp.employeeId || String(emp._id)).split('').reduce((acc, c) => acc + c.charCodeAt(0), 0)
+            bMonth = (seed % 12) + 1
+            const maxDays = [0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][bMonth]
+            bDay = String((seed % maxDays) + 1).padStart(2, '0')
+          }
 
           if (targetMonth && bMonth !== targetMonth) continue
 
@@ -174,7 +182,7 @@ export function createCalendarRouter({ auth, useDatabase = true }) {
           }
 
           const isBirthdayFilter = filterCategory === 'all' ||
-            ['birthday', 'employee birthday', 'celebration', 'birthdays'].includes(filterCategory.toLowerCase())
+            ['birthday', 'employee birthday', 'celebration', 'birthdays', 'celebrations'].includes(filterCategory.toLowerCase())
 
           if (isBirthdayFilter) {
             events.push({
@@ -184,6 +192,7 @@ export function createCalendarRouter({ auth, useDatabase = true }) {
               name: displayName,
               date: bdayDate,
               endDate: bdayDate,
+              allDay: true,
               day: getWeekday(bdayDate),
               category: 'Employee Birthday',
               type: 'birthday',
@@ -342,6 +351,10 @@ export function createCalendarRouter({ auth, useDatabase = true }) {
 
       // Sort chronological by date
       events.sort((a, b) => a.date.localeCompare(b.date))
+
+      const typeCounts = {}
+      events.forEach(e => { typeCounts[e.type || e.category] = (typeCounts[e.type || e.category] || 0) + 1 })
+      console.log(`[CALENDAR EVENTS] Returning ${events.length} events. Types:`, JSON.stringify(typeCounts))
 
       res.json({
         success: true,
@@ -1014,27 +1027,36 @@ export function createCalendarRouter({ auth, useDatabase = true }) {
       // 3. Birthdays This Month
       const birthdaysThisMonth = []
       try {
-        const activeEmployees = await Employee.find({ status: { $in: ['active', 'onboarding'] } })
-          .select('_id employeeId firstName lastName name displayName department designation avatarUrl dob')
+        const activeEmployees = await Employee.find({
+          status: { $in: ['active', 'onboarding', 'notice', 'probation', 'Active', 'ONBOARDING'] },
+        })
+          .select('_id employeeId firstName lastName name displayName department designation avatarUrl dob identity')
           .lean()
           .catch(() => [])
 
         for (const emp of activeEmployees) {
-          let d = null
-          if (emp.dob) {
-            d = new Date(emp.dob)
-          } else {
-            const seed = (emp.employeeId || String(emp._id)).split('').reduce((acc, c) => acc + c.charCodeAt(0), 0)
-            const seedMonth = (seed % 12) + 1
-            const maxDays = [0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][seedMonth]
-            const seedDay = (seed % maxDays) + 1
-            const seedYear = 1995 + (seed % 8)
-            d = new Date(Date.UTC(seedYear, seedMonth - 1, seedDay))
+          const rawDob = emp.dob || emp.identity?.dob
+          let bMonth = null
+          let bDay = null
+
+          if (rawDob) {
+            const d = new Date(rawDob)
+            if (!isNaN(d.getTime())) {
+              const istDate = new Date(d.getTime() + (5.5 * 60 * 60 * 1000))
+              bMonth = istDate.getUTCMonth() + 1
+              bDay = String(istDate.getUTCDate()).padStart(2, '0')
+            }
           }
-          if (isNaN(d.getTime())) continue
-          const m = d.getUTCMonth() + 1
-          if (m === currentMonth) {
-            const bDate = `${currentYear}-${String(m).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`
+
+          if (!bMonth || !bDay) {
+            const seed = (emp.employeeId || String(emp._id)).split('').reduce((acc, c) => acc + c.charCodeAt(0), 0)
+            bMonth = (seed % 12) + 1
+            const maxDays = [0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][bMonth]
+            bDay = String((seed % maxDays) + 1).padStart(2, '0')
+          }
+
+          if (bMonth === currentMonth) {
+            const bDate = `${currentYear}-${String(bMonth).padStart(2, '0')}-${bDay}`
             birthdaysThisMonth.push({
               id: String(emp._id),
               name: emp.displayName || ((emp.firstName || '') + ' ' + (emp.lastName || '')).trim() || emp.name || 'Team Member',
@@ -1042,7 +1064,7 @@ export function createCalendarRouter({ auth, useDatabase = true }) {
               designation: emp.designation || 'Team Member',
               avatarUrl: emp.avatarUrl || null,
               date: bDate,
-              day: d.getUTCDate(),
+              day: parseInt(bDay, 10),
               daysRemaining: calculateDaysUntil(bDate),
             })
           }

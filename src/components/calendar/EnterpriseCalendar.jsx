@@ -846,8 +846,14 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
         <div
           className={`panel hover-card ${categoryFilter === 'Company Holiday' ? 'active-stat-card' : ''}`}
           onClick={() => {
-            setCategoryFilter(categoryFilter === 'Company Holiday' ? 'all' : 'Company Holiday')
+            const nextCat = categoryFilter === 'Company Holiday' ? 'all' : 'Company Holiday'
+            setCategoryFilter(nextCat)
             setViewMode('month')
+            if (nextCat === 'Company Holiday' && nextUpcomingHoliday?.date) {
+              setSelectedDate(nextUpcomingHoliday.date)
+              const [y, m, d] = nextUpcomingHoliday.date.split('-').map(Number)
+              if (y && m && d) setCurrentDate(new Date(y, m - 1, d))
+            }
           }}
           title="Click to view official company holidays"
           style={{
@@ -899,8 +905,14 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
         <div
           className={`panel hover-card ${categoryFilter === 'Employee Birthday' ? 'active-stat-card' : ''}`}
           onClick={() => {
-            setCategoryFilter(categoryFilter === 'Employee Birthday' ? 'all' : 'Employee Birthday')
+            const nextCat = categoryFilter === 'Employee Birthday' ? 'all' : 'Employee Birthday'
+            setCategoryFilter(nextCat)
             setViewMode('month')
+            if (nextCat === 'Employee Birthday' && nextBirthday?.date) {
+              setSelectedDate(nextBirthday.date)
+              const [y, m, d] = nextBirthday.date.split('-').map(Number)
+              if (y && m && d) setCurrentDate(new Date(y, m - 1, d))
+            }
           }}
           title="Click to view employee birthdays"
           style={{
@@ -948,8 +960,14 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
         <div
           className={`panel hover-card ${categoryFilter === 'Work Anniversary' ? 'active-stat-card' : ''}`}
           onClick={() => {
-            setCategoryFilter(categoryFilter === 'Work Anniversary' ? 'all' : 'Work Anniversary')
+            const nextCat = categoryFilter === 'Work Anniversary' ? 'all' : 'Work Anniversary'
+            setCategoryFilter(nextCat)
             setViewMode('month')
+            if (nextCat === 'Work Anniversary' && nextAnniversary?.date) {
+              setSelectedDate(nextAnniversary.date)
+              const [y, m, d] = nextAnniversary.date.split('-').map(Number)
+              if (y && m && d) setCurrentDate(new Date(y, m - 1, d))
+            }
           }}
           title="Click to view work anniversaries"
           style={{
@@ -1668,6 +1686,11 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
                         {cell.dayNum}
                       </span>
 
+                      {/* Birthday / Celebration Indicator (Visible even on Mobile) */}
+                      {cellEvents.some((e) => e.type === 'birthday' || e.category === 'Birthday' || e.category === 'Employee Birthday') && (
+                        <span title="Birthday celebrations on this day" style={{ fontSize: '11px', lineHeight: 1 }}>🎂</span>
+                      )}
+
                       {/* Small badge count if multiple events on desktop */}
                       <span
                         className="calendar-day-count-badge hidden-mobile"
@@ -1688,16 +1711,17 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
                     {/* Events display: Mobile dots */}
                     <div className="calendar-day-dots">
                       {cellEvents.slice(0, 3).map((ev) => {
+                        const isBday = ev.type === 'birthday' || ev.category === 'Birthday' || ev.category === 'Employee Birthday'
                         const styleInfo = CATEGORY_COLORS[ev.category] || CATEGORY_COLORS['Company Holiday']
                         return (
                           <span
                             key={ev.id}
                             title={`${ev.title} (${ev.category})`}
                             style={{
-                              width: '5px',
-                              height: '5px',
+                              width: isBday ? '7px' : '5px',
+                              height: isBday ? '7px' : '5px',
                               borderRadius: '50%',
-                              background: styleInfo.text || '#006E6F',
+                              background: isBday ? '#db2777' : (styleInfo.text || '#006E6F'),
                               display: 'inline-block',
                               flexShrink: 0,
                             }}
@@ -1913,20 +1937,20 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
             ) : (
               <div
                 style={{
-                  padding: '30px 16px',
+                  padding: '24px 16px',
                   textAlign: 'center',
                   background: 'var(--surface-hover, #f8fafc)',
                   borderRadius: '10px',
                   color: 'var(--muted, #64748b)',
                 }}
               >
-                <CalendarDays size={32} style={{ margin: '0 auto 8px', opacity: 0.4 }} />
+                <CalendarDays size={28} style={{ margin: '0 auto 6px', opacity: 0.4 }} />
                 <p style={{ margin: 0, fontSize: '13px', fontWeight: 600 }}>No official events scheduled.</p>
                 {canManage && (
                   <button
                     onClick={() => openAddModal(selectedDate)}
                     style={{
-                      marginTop: '10px',
+                      marginTop: '8px',
                       background: 'none',
                       border: 'none',
                       color: 'var(--teal, #006E6F)',
@@ -1937,6 +1961,70 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
                   >
                     + Schedule holiday on this day
                   </button>
+                )}
+
+                {/* Celebration Spotlight: Upcoming Birthdays in Current Month */}
+                {birthdaysList.length > 0 && (
+                  <div
+                    style={{
+                      marginTop: '16px',
+                      padding: '12px',
+                      borderRadius: '10px',
+                      background: '#fdf2f8',
+                      border: '1px solid #fbcfe8',
+                      textAlign: 'left',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                      <span style={{ fontSize: '11px', fontWeight: 800, color: '#db2777', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <Cake size={13} /> {MONTH_NAMES[currentDate.getMonth()]} Birthdays ({birthdaysList.length})
+                      </span>
+                      <span style={{ fontSize: '10px', fontWeight: 700, color: '#db2777', background: '#ffffff', padding: '1px 6px', borderRadius: '8px' }}>
+                        Celebrations
+                      </span>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      {birthdaysList.slice(0, 5).map((b) => (
+                        <div
+                          key={b.id}
+                          onClick={() => {
+                            if (b.date) {
+                              setSelectedDate(b.date)
+                              const [y, m, d] = b.date.split('-').map(Number)
+                              if (y && m && d) setCurrentDate(new Date(y, m - 1, d))
+                            }
+                          }}
+                          style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            fontSize: '11.5px',
+                            color: '#9d174d',
+                            cursor: 'pointer',
+                            padding: '4px 8px',
+                            borderRadius: '6px',
+                            background: '#ffffff',
+                            border: '1px solid #fce7f3',
+                            transition: 'all 0.15s ease',
+                          }}
+                          title={`Click to jump to ${b.date}`}
+                        >
+                          <span style={{ fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            🎂 {b.name}
+                          </span>
+                          <span style={{ fontSize: '10.5px', fontWeight: 700, color: '#be185d', flexShrink: 0, marginLeft: '6px' }}>
+                            {b.date ? b.date.slice(5) : ''} →
+                          </span>
+                        </div>
+                      ))}
+                      {birthdaysList.length > 5 && (
+                        <span style={{ fontSize: '10px', color: '#db2777', fontWeight: 700, textAlign: 'center', marginTop: '2px' }}>
+                          +{birthdaysList.length - 5} more birthdays this month
+                        </span>
+                      )}
+                    </div>
+                  </div>
                 )}
               </div>
             )}

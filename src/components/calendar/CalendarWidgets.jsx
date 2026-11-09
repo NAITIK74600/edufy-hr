@@ -80,16 +80,25 @@ export function CalendarWidgets({ user = null }) {
     widgetsData?.birthdaysThisMonth ||
     (storeState.employees || [])
       .filter((e) => {
-        if (!e.dob) return false
-        const d = new Date(e.dob)
-        return !isNaN(d.getTime()) && d.getUTCMonth() + 1 === currentMonth
+        const rawDob = e.dob || e.identity?.dob
+        if (!rawDob) return false
+        const d = new Date(rawDob)
+        if (isNaN(d.getTime())) return false
+        const istDate = new Date(d.getTime() + (5.5 * 60 * 60 * 1000))
+        return istDate.getUTCMonth() + 1 === currentMonth
       })
-      .map((e) => ({
-        id: e.id || e._id,
-        name: e.displayName || e.name,
-        department: e.department || 'General',
-        date: `${currentYear}-${String(currentMonth).padStart(2, '0')}-${String(new Date(e.dob).getUTCDate()).padStart(2, '0')}`,
-      }))
+      .map((e) => {
+        const rawDob = e.dob || e.identity?.dob
+        const d = new Date(rawDob)
+        const istDate = new Date(d.getTime() + (5.5 * 60 * 60 * 1000))
+        const day = String(istDate.getUTCDate()).padStart(2, '0')
+        return {
+          id: e.id || e._id,
+          name: e.displayName || e.name,
+          department: e.department || 'General',
+          date: `${currentYear}-${String(currentMonth).padStart(2, '0')}-${day}`,
+        }
+      })
 
   // 3. Anniversaries
   const anniversaries =
