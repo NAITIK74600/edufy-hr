@@ -1313,84 +1313,30 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
       </div>
 
       {/* ============================================================== */}
-      {/* MAIN VIEWPORT: MONTH / WEEK / DAY / YEAR / FLYERS              */}
+      {/* 1. MONTH VIEW (Default)                                        */}
       {/* ============================================================== */}
       {viewMode === 'month' && (
-        <div
-          className={`calendar-grid-layout ${isMobile ? 'is-mobile-layout' : ''}`}
-          style={
-            isMobile
-              ? {
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '16px',
-                  width: '100%',
-                  maxWidth: '100%',
-                  boxSizing: 'border-box',
-                }
-              : {
-                  display: 'grid',
-                  gridTemplateColumns: 'minmax(0, 1fr) 340px',
-                  gap: '20px',
-                  alignItems: 'start',
-                  width: '100%',
-                  maxWidth: '100%',
-                  boxSizing: 'border-box',
-                }
-          }
-        >
+        <div className={`calendar-grid-layout ${isMobile ? 'is-mobile-layout' : ''}`}>
           {/* Calendar Month Grid */}
-          <div
-            className="panel calendar-month-panel"
-            style={{
-              padding: isSmallScreen ? '10px 6px' : '16px',
-              borderRadius: '14px',
-              border: '1px solid var(--border, #e2e8f0)',
-              background: 'var(--card-bg, #ffffff)',
-              overflowX: 'auto',
-              WebkitOverflowScrolling: 'touch',
-              width: '100%',
-              maxWidth: '100%',
-              boxSizing: 'border-box',
-            }}
-          >
+          <div className="panel calendar-month-panel">
             {/* Day Header Row */}
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(7, minmax(0, 1fr))',
-                gap: isSmallScreen ? '2px' : '4px',
-                textAlign: 'center',
-                marginBottom: '8px',
-                width: '100%',
-              }}
-            >
+            <div className="calendar-day-headers">
               {DAY_NAMES.map((day, idx) => (
                 <div
                   key={day}
+                  className="calendar-day-header"
                   style={{
-                    padding: isSmallScreen ? '4px 1px' : '8px 4px',
-                    fontSize: isSmallScreen ? '10.5px' : '12px',
-                    fontWeight: 700,
                     color: idx === 0 || idx === 6 ? '#ef4444' : 'var(--muted, #64748b)',
-                    textTransform: 'uppercase',
-                    letterSpacing: isSmallScreen ? '0' : '0.05em',
                   }}
                 >
-                  {isSmallScreen ? day.slice(0, 3) : day}
+                  <span className="day-name-full">{day.slice(0, 3)}</span>
+                  <span className="day-name-micro">{day.slice(0, 1)}</span>
                 </div>
               ))}
             </div>
 
             {/* 7-Column Days Grid */}
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(7, minmax(0, 1fr))',
-                gap: isSmallScreen ? '3px' : '6px',
-                width: '100%',
-              }}
-            >
+            <div className="calendar-days-grid">
               {monthCalendarDays.map((cell) => {
                 const cellEvents = (eventsByDate.get(cell.dateStr) || []).filter((e) => showLeaves || e.type !== 'leave')
                 const isSelected = selectedDate === cell.dateStr
@@ -1400,6 +1346,7 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
                 return (
                   <div
                     key={cell.dateStr}
+                    className={`calendar-day-cell ${isSelected ? 'is-selected' : ''} ${cell.isToday ? 'is-today' : ''} ${!cell.isCurrentMonth ? 'is-other-month' : ''}`}
                     onClick={() => {
                       setSelectedDate(cell.dateStr)
                     }}
@@ -1415,9 +1362,6 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
                       }
                     }}
                     style={{
-                      minHeight: isSmallScreen ? '56px' : '92px',
-                      padding: isSmallScreen ? '4px 2px' : '6px',
-                      borderRadius: isSmallScreen ? '8px' : '10px',
                       border: isSelected
                         ? '2px solid var(--teal, #006E6F)'
                         : cell.isToday
@@ -1432,31 +1376,21 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
                         : 'var(--surface-hover, #f8fafc)',
                       opacity: cell.isCurrentMonth ? 1 : 0.45,
                       cursor: 'pointer',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      justifyContent: 'space-between',
                       transition: 'all 0.15s ease',
                       boxShadow: isSelected ? '0 4px 12px rgba(0, 110, 111, 0.14)' : 'none',
-                      boxSizing: 'border-box',
                     }}
                   >
                     {/* Day Number Header */}
-                    <div style={{ display: 'flex', justifyContent: isSmallScreen ? 'center' : 'space-between', alignItems: 'center' }}>
+                    <div className="calendar-day-header-inner">
                       <span
+                        className="calendar-day-number"
                         style={{
-                          fontSize: isSmallScreen ? '11px' : '13px',
                           fontWeight: cell.isToday || isSelected ? 800 : 600,
                           color: cell.isToday
                             ? '#0284c7'
                             : isSelected
                             ? 'var(--teal, #006E6F)'
                             : 'var(--ink, #1e293b)',
-                          width: isSmallScreen ? '22px' : '24px',
-                          height: isSmallScreen ? '22px' : '24px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          borderRadius: '50%',
                           background: cell.isToday ? '#e0f2fe' : isSelected ? '#ccfbf1' : 'transparent',
                         }}
                       >
@@ -1464,103 +1398,102 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
                       </span>
 
                       {/* Small badge count if multiple events on desktop */}
-                      {!isSmallScreen && cellEvents.length > 0 && (
-                        <span
-                          style={{
-                            fontSize: '10px',
-                            fontWeight: 700,
-                            padding: '1px 5px',
-                            borderRadius: '10px',
-                            background: '#f1f5f9',
-                            color: '#475569',
-                          }}
-                        >
-                          {cellEvents.length}
+                      <span
+                        className="calendar-day-count-badge hidden-mobile"
+                        style={{
+                          fontSize: '10px',
+                          fontWeight: 700,
+                          padding: '1px 5px',
+                          borderRadius: '10px',
+                          background: '#f1f5f9',
+                          color: '#475569',
+                          display: cellEvents.length > 0 ? 'inline' : 'none',
+                        }}
+                      >
+                        {cellEvents.length}
+                      </span>
+                    </div>
+
+                    {/* Events display: Mobile dots */}
+                    <div className="calendar-day-dots">
+                      {cellEvents.slice(0, 3).map((ev) => {
+                        const styleInfo = CATEGORY_COLORS[ev.category] || CATEGORY_COLORS['Company Holiday']
+                        return (
+                          <span
+                            key={ev.id}
+                            title={`${ev.title} (${ev.category})`}
+                            style={{
+                              width: '5px',
+                              height: '5px',
+                              borderRadius: '50%',
+                              background: styleInfo.text || '#006E6F',
+                              display: 'inline-block',
+                              flexShrink: 0,
+                            }}
+                          />
+                        )
+                      })}
+                      {cellEvents.length > 3 && (
+                        <span style={{ fontSize: '8px', fontWeight: 800, color: 'var(--teal, #006E6F)', lineHeight: 1 }}>
+                          +{cellEvents.length - 3}
                         </span>
                       )}
                     </div>
 
-                    {/* Events display: Mobile dots vs Desktop pills */}
-                    {isSmallScreen ? (
-                      <div style={{ display: 'flex', gap: '3px', justifyContent: 'center', alignItems: 'center', minHeight: '14px', flexWrap: 'wrap', marginTop: '2px' }}>
-                        {cellEvents.slice(0, 3).map((ev) => {
-                          const styleInfo = CATEGORY_COLORS[ev.category] || CATEGORY_COLORS['Company Holiday']
-                          return (
-                            <span
-                              key={ev.id}
-                              title={`${ev.title} (${ev.category})`}
-                              style={{
-                                width: '6px',
-                                height: '6px',
-                                borderRadius: '50%',
-                                background: styleInfo.text || '#006E6F',
-                                display: 'inline-block',
-                                flexShrink: 0,
-                              }}
-                            />
-                          )
-                        })}
-                        {cellEvents.length > 3 && (
-                          <span style={{ fontSize: '8px', fontWeight: 800, color: 'var(--teal, #006E6F)', lineHeight: 1 }}>
-                            +{cellEvents.length - 3}
-                          </span>
-                        )}
-                      </div>
-                    ) : (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', marginTop: '4px' }}>
-                        {cellEvents.slice(0, maxVisible).map((ev) => {
-                          const styleInfo = CATEGORY_COLORS[ev.category] || CATEGORY_COLORS['Company Holiday']
-                          return (
-                            <div
-                              key={ev.id}
-                              draggable={Boolean(canManage || ev.isOwner)}
-                              onDragStart={(e) => {
-                                e.dataTransfer.setData('text/plain', JSON.stringify({ id: ev.entityId || ev.id, title: ev.title }))
-                              }}
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                setSelectedEvent(ev)
-                                setSelectedDate(cell.dateStr)
-                              }}
-                              title={`${ev.title} (${ev.category})`}
-                              style={{
-                                padding: '2px 5px',
-                                borderRadius: '4px',
-                                fontSize: '10px',
-                                fontWeight: 600,
-                                background: styleInfo.bg,
-                                color: styleInfo.text,
-                                border: `1px solid ${styleInfo.border}`,
-                                whiteSpace: 'nowrap',
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '4px',
-                              }}
-                            >
-                              {(ev.type === 'birthday' || ev.category === 'Birthday' || ev.category === 'Employee Birthday') && <Cake size={10} />}
-                              {(ev.type === 'anniversary' || ev.category === 'Work Anniversary') && <Award size={10} />}
-                              {ev.meetingLink?.url && <Video size={10} color="#059669" />}
-                              <span>{ev.title}</span>
-                            </div>
-                          )
-                        })}
-
-                        {hiddenCount > 0 && (
+                    {/* Events display: Desktop pills */}
+                    <div className="calendar-day-pills">
+                      {cellEvents.slice(0, maxVisible).map((ev) => {
+                        const styleInfo = CATEGORY_COLORS[ev.category] || CATEGORY_COLORS['Company Holiday']
+                        return (
                           <div
+                            key={ev.id}
+                            draggable={Boolean(canManage || ev.isOwner)}
+                            onDragStart={(e) => {
+                              e.dataTransfer.setData('text/plain', JSON.stringify({ id: ev.entityId || ev.id, title: ev.title }))
+                            }}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setSelectedEvent(ev)
+                              setSelectedDate(cell.dateStr)
+                            }}
+                            title={`${ev.title} (${ev.category})`}
                             style={{
+                              padding: '2px 5px',
+                              borderRadius: '4px',
                               fontSize: '10px',
                               fontWeight: 600,
-                              color: 'var(--teal, #006E6F)',
-                              padding: '1px 4px',
+                              background: styleInfo.bg,
+                              color: styleInfo.text,
+                              border: `1px solid ${styleInfo.border}`,
+                              whiteSpace: 'nowrap',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '4px',
                             }}
                           >
-                            +{hiddenCount} more
+                            {(ev.type === 'birthday' || ev.category === 'Birthday' || ev.category === 'Employee Birthday') && <Cake size={10} />}
+                            {(ev.type === 'anniversary' || ev.category === 'Work Anniversary') && <Award size={10} />}
+                            {ev.meetingLink?.url && <Video size={10} color="#059669" />}
+                            <span>{ev.title}</span>
                           </div>
-                        )}
-                      </div>
-                    )}
+                        )
+                      })}
+
+                      {hiddenCount > 0 && (
+                        <div
+                          style={{
+                            fontSize: '10px',
+                            fontWeight: 600,
+                            color: 'var(--teal, #006E6F)',
+                            padding: '1px 4px',
+                          }}
+                        >
+                          +{hiddenCount} more
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )
               })}
@@ -1568,20 +1501,7 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
           </div>
 
           {/* Side / Bottom Panel: Selected Date Agenda */}
-          <div
-            className="panel calendar-agenda-panel"
-            style={{
-              padding: isSmallScreen ? '14px 12px' : '18px',
-              borderRadius: '14px',
-              border: '1px solid var(--border, #e2e8f0)',
-              background: 'var(--card-bg, #ffffff)',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '14px',
-              width: '100%',
-              boxSizing: 'border-box',
-            }}
-          >
+          <div className="panel calendar-agenda-panel">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
                 <span className="eyebrow" style={{ fontSize: '11px', color: 'var(--teal, #006E6F)', fontWeight: 700 }}>
