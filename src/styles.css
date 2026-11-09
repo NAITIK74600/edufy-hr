@@ -6291,3 +6291,83 @@ body {
     z-index: 1050 !important;
   }
 }
+
+/* ============================================================== */
+/* ENTERPRISE CALENDAR RESPONSIVE & MOBILE HARDENING              */
+/* ============================================================== */
+.calendar-grid-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 20px;
+  align-items: start;
+  width: 100%;
+}
+
+@media (max-width: 1024px) {
+  .calendar-grid-layout {
+    grid-template-columns: 1fr !important;
+    gap: 16px !important;
+  }
+}
+
+.hidden-mobile {
+  display: inline;
+}
+
+@media (max-width: 640px) {
+  .hidden-mobile {
+    display: none !important;
+  }
+  .calendar-stats-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 8px !important;
+  }
+  .calendar-control-panel {
+    padding: 12px 10px !important;
+  }
+  .calendar-view-switcher,
+  .calendar-category-pills {
+    width: 100% !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: none !important;
+  }
+  .calendar-view-switcher::-webkit-scrollbar,
+  .calendar-category-pills::-webkit-scrollbar {
+    display: none !important;
+  }
+  .calendar-filter-bar {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 10px !important;
+  }
+  .calendar-search-filters {
+    width: 100% !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+  .calendar-search-filters select,
+  .calendar-search-filters input {
+    width: 100% !important;
+    min-width: 100% !important;
+    box-sizing: border-box !important;
+  }
+  .calendar-month-panel {
+    padding: 10px 6px !important;
+    overflow-x: hidden !important;
+  }
+  .calendar-agenda-panel {
+    padding: 14px 12px !important;
+    width: 100% !important;
+  }
+  .calendar-widgets-container {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+@media (max-width: 400px) {
+  .calendar-stats-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+

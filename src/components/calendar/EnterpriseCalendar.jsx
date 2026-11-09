@@ -90,6 +90,21 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
   const [showLeaves, setShowLeaves] = useState(true)
   const [copiedNotice, setCopiedNotice] = useState(false)
 
+  // Responsive mobile layout detection
+  const [isMobile, setIsMobile] = useState(() => (typeof window !== 'undefined' ? window.innerWidth < 1024 : false))
+  const [isSmallScreen, setIsSmallScreen] = useState(() => (typeof window !== 'undefined' ? window.innerWidth < 640 : false))
+
+  useEffect(() => {
+    const handleResize = () => {
+      if (typeof window === 'undefined') return
+      const w = window.innerWidth
+      setIsMobile(w < 1024)
+      setIsSmallScreen(w < 640)
+    }
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
+
   // Modals state
   const [selectedEvent, setSelectedEvent] = useState(null)
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
@@ -628,8 +643,8 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-          gap: '14px',
+          gridTemplateColumns: isSmallScreen ? 'repeat(2, 1fr)' : isMobile ? 'repeat(auto-fit, minmax(180px, 1fr))' : 'repeat(auto-fit, minmax(220px, 1fr))',
+          gap: isSmallScreen ? '8px' : '14px',
         }}
         className="calendar-stats-grid"
       >
@@ -637,20 +652,20 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
         <div
           className="panel"
           style={{
-            padding: '14px 18px',
+            padding: isSmallScreen ? '10px 12px' : '14px 18px',
             borderRadius: '12px',
             border: '1px solid var(--border, #e2e8f0)',
             background: 'var(--card-bg, #ffffff)',
             display: 'flex',
             alignItems: 'center',
-            gap: '12px',
+            gap: isSmallScreen ? '8px' : '12px',
             boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
           }}
         >
           <div
             style={{
-              width: '42px',
-              height: '42px',
+              width: isSmallScreen ? '32px' : '42px',
+              height: isSmallScreen ? '32px' : '42px',
               borderRadius: '10px',
               background: '#e0f2fe',
               color: '#0284c7',
@@ -660,13 +675,13 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
               flexShrink: 0,
             }}
           >
-            <CalendarRange size={22} />
+            <CalendarRange size={isSmallScreen ? 18 : 22} />
           </div>
           <div>
-            <div style={{ fontSize: '20px', fontWeight: 800, color: 'var(--ink, #0f172a)', lineHeight: 1.1 }}>
+            <div style={{ fontSize: isSmallScreen ? '16px' : '20px', fontWeight: 800, color: 'var(--ink, #0f172a)', lineHeight: 1.1 }}>
               {targetYearHolidays.length} Days
             </div>
-            <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--muted, #64748b)' }}>
+            <div style={{ fontSize: isSmallScreen ? '10px' : '11px', fontWeight: 600, color: 'var(--muted, #64748b)' }}>
               Official Holidays ({currentYear})
             </div>
           </div>
@@ -676,20 +691,20 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
         <div
           className="panel"
           style={{
-            padding: '14px 18px',
+            padding: isSmallScreen ? '10px 12px' : '14px 18px',
             borderRadius: '12px',
             border: '1px solid var(--border, #e2e8f0)',
             background: 'var(--card-bg, #ffffff)',
             display: 'flex',
             alignItems: 'center',
-            gap: '12px',
+            gap: isSmallScreen ? '8px' : '12px',
             boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
           }}
         >
           <div
             style={{
-              width: '42px',
-              height: '42px',
+              width: isSmallScreen ? '32px' : '42px',
+              height: isSmallScreen ? '32px' : '42px',
               borderRadius: '10px',
               background: '#ecfdf5',
               color: '#059669',
@@ -699,31 +714,31 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
               flexShrink: 0,
             }}
           >
-            <Clock size={22} />
+            <Clock size={isSmallScreen ? 18 : 22} />
           </div>
           <div style={{ minWidth: 0, flex: 1 }}>
             {nextUpcomingHoliday ? (
               <>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: '13px', fontWeight: 800, color: 'var(--ink, #0f172a)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  <span style={{ fontSize: isSmallScreen ? '12px' : '13px', fontWeight: 800, color: 'var(--ink, #0f172a)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     {nextUpcomingHoliday.title || nextUpcomingHoliday.name}
                   </span>
                   {(() => {
                     const cd = getDaysUntil(nextUpcomingHoliday.date)
                     return cd ? (
-                      <span style={{ fontSize: '10px', fontWeight: 700, padding: '1px 6px', borderRadius: '10px', background: cd.tone === 'success' ? '#dcfce7' : '#e0f2fe', color: cd.tone === 'success' ? '#166534' : '#0369a1' }}>
+                      <span style={{ fontSize: '9px', fontWeight: 700, padding: '1px 5px', borderRadius: '10px', background: cd.tone === 'success' ? '#dcfce7' : '#e0f2fe', color: cd.tone === 'success' ? '#166534' : '#0369a1' }}>
                         {cd.label}
                       </span>
                     ) : null
                   })()}
                 </div>
-                <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--muted, #64748b)' }}>
+                <div style={{ fontSize: isSmallScreen ? '10px' : '11px', fontWeight: 600, color: 'var(--muted, #64748b)' }}>
                   {nextUpcomingHoliday.date} ({nextUpcomingHoliday.day || 'Day'})
                   {isLongWeekend(nextUpcomingHoliday.date) && ' • 🎉 3-Day Weekend'}
                 </div>
               </>
             ) : (
-              <div style={{ fontSize: '12px', color: 'var(--muted, #64748b)', fontWeight: 600 }}>
+              <div style={{ fontSize: '11px', color: 'var(--muted, #64748b)', fontWeight: 600 }}>
                 No scheduled holidays soon
               </div>
             )}
@@ -734,20 +749,20 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
         <div
           className="panel"
           style={{
-            padding: '14px 18px',
+            padding: isSmallScreen ? '10px 12px' : '14px 18px',
             borderRadius: '12px',
             border: '1px solid var(--border, #e2e8f0)',
             background: 'var(--card-bg, #ffffff)',
             display: 'flex',
             alignItems: 'center',
-            gap: '12px',
+            gap: isSmallScreen ? '8px' : '12px',
             boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
           }}
         >
           <div
             style={{
-              width: '42px',
-              height: '42px',
+              width: isSmallScreen ? '32px' : '42px',
+              height: isSmallScreen ? '32px' : '42px',
               borderRadius: '10px',
               background: '#fdf2f8',
               color: '#db2777',
@@ -757,13 +772,13 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
               flexShrink: 0,
             }}
           >
-            <Sparkles size={22} />
+            <Sparkles size={isSmallScreen ? 18 : 22} />
           </div>
           <div>
-            <div style={{ fontSize: '20px', fontWeight: 800, color: 'var(--ink, #0f172a)', lineHeight: 1.1 }}>
+            <div style={{ fontSize: isSmallScreen ? '16px' : '20px', fontWeight: 800, color: 'var(--ink, #0f172a)', lineHeight: 1.1 }}>
               {monthCelebrationsCount} Celebrations
             </div>
-            <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--muted, #64748b)' }}>
+            <div style={{ fontSize: isSmallScreen ? '10px' : '11px', fontWeight: 600, color: 'var(--muted, #64748b)' }}>
               Birthdays & Milestones in {MONTH_NAMES[currentDate.getMonth()]}
             </div>
           </div>
@@ -775,7 +790,7 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
             className="panel hover-card"
             onClick={() => setViewMode('gallery')}
             style={{
-              padding: '14px 18px',
+              padding: isSmallScreen ? '10px 12px' : '14px 18px',
               borderRadius: '12px',
               border: '1px solid #bae6fd',
               background: 'linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%)',
@@ -787,13 +802,13 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
             }}
             title="View printed official holiday schedule poster"
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <Layers size={22} color="#0284c7" />
+            <div style={{ display: 'flex', alignItems: 'center', gap: isSmallScreen ? '6px' : '10px' }}>
+              <Layers size={isSmallScreen ? 18 : 22} color="#0284c7" />
               <div>
-                <div style={{ fontSize: '13px', fontWeight: 800, color: '#0369a1' }}>
+                <div style={{ fontSize: isSmallScreen ? '12px' : '13px', fontWeight: 800, color: '#0369a1' }}>
                   Official Holiday Flyer
                 </div>
-                <div style={{ fontSize: '11px', color: '#0284c7', fontWeight: 600 }}>
+                <div style={{ fontSize: isSmallScreen ? '10px' : '11px', color: '#0284c7', fontWeight: 600 }}>
                   {flyerImages.length} High-Res Sheet{flyerImages.length > 1 ? 's' : ''} Uploaded
                 </div>
               </div>
@@ -807,7 +822,7 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
               calendarService.downloadExport('ics', currentYear)
             }}
             style={{
-              padding: '14px 18px',
+              padding: isSmallScreen ? '10px 12px' : '14px 18px',
               borderRadius: '12px',
               border: '1px solid var(--border, #e2e8f0)',
               background: 'var(--card-bg, #ffffff)',
@@ -839,78 +854,85 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
       {/* CALENDAR HEADER & CONTROLS TOOLBAR                             */}
       {/* ============================================================== */}
       <div
-        className="panel"
+        className="panel calendar-control-panel"
         style={{
-          padding: '20px',
+          padding: isSmallScreen ? '12px 10px' : '18px 20px',
           display: 'flex',
           flexDirection: 'column',
-          gap: '16px',
+          gap: isSmallScreen ? '12px' : '16px',
           background: 'var(--card-bg, #ffffff)',
           borderRadius: '14px',
           border: '1px solid var(--border, #e2e8f0)',
         }}
       >
         <div
+          className="calendar-header-top"
           style={{
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
             flexWrap: 'wrap',
-            gap: '14px',
+            gap: isSmallScreen ? '10px' : '14px',
           }}
         >
           {/* Month / Year Title & Navigation */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap', width: isSmallScreen ? '100%' : 'auto' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <div
                 style={{
-                  width: '40px',
-                  height: '40px',
+                  width: isSmallScreen ? '34px' : '40px',
+                  height: isSmallScreen ? '34px' : '40px',
                   borderRadius: '10px',
                   background: 'var(--teal-soft, #e6f4f1)',
                   color: 'var(--teal, #006E6F)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
+                  flexShrink: 0,
                 }}
               >
-                <CalendarIcon size={20} />
+                <CalendarIcon size={isSmallScreen ? 18 : 20} />
               </div>
               <div>
-                <h1 style={{ margin: 0, fontSize: '22px', fontWeight: 800, color: 'var(--ink, #0f172a)' }}>
+                <h1 style={{ margin: 0, fontSize: isSmallScreen ? '18px' : '22px', fontWeight: 800, color: 'var(--ink, #0f172a)', lineHeight: 1.2 }}>
                   {viewMode === 'year'
                     ? `${currentYear}`
                     : `${MONTH_NAMES[currentDate.getMonth()]} ${currentYear}`}
                 </h1>
-                <p style={{ margin: 0, fontSize: '12px', color: 'var(--muted, #64748b)' }}>
+                <p style={{ margin: 0, fontSize: isSmallScreen ? '10.5px' : '12px', color: 'var(--muted, #64748b)' }}>
                   Enterprise Holiday & Employee Celebration Schedule
                 </p>
               </div>
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Button variant="ghost" onClick={handlePrev} title="Previous">
-                <ChevronLeft size={18} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginLeft: isSmallScreen ? 'auto' : 0 }}>
+              <Button variant="ghost" onClick={handlePrev} title="Previous" style={{ padding: isSmallScreen ? '4px 6px' : '6px 10px' }}>
+                <ChevronLeft size={isSmallScreen ? 16 : 18} />
               </Button>
-              <Button variant="outline" onClick={handleToday} style={{ fontWeight: 600 }}>
+              <Button variant="outline" onClick={handleToday} style={{ fontWeight: 600, padding: isSmallScreen ? '4px 10px' : '6px 14px', fontSize: isSmallScreen ? '11.5px' : '13px' }}>
                 Today
               </Button>
-              <Button variant="ghost" onClick={handleNext} title="Next">
-                <ChevronRight size={18} />
+              <Button variant="ghost" onClick={handleNext} title="Next" style={{ padding: isSmallScreen ? '4px 6px' : '6px 10px' }}>
+                <ChevronRight size={isSmallScreen ? 16 : 18} />
               </Button>
             </div>
           </div>
 
           {/* View Mode Switcher + Action Buttons */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', width: isSmallScreen ? '100%' : 'auto', justifyContent: isSmallScreen ? 'space-between' : 'flex-end' }}>
             {/* View switcher buttons */}
             <div
+              className="calendar-view-switcher"
               style={{
                 display: 'inline-flex',
                 background: 'var(--surface-hover, #f1f5f9)',
                 padding: '3px',
                 borderRadius: '8px',
                 border: '1px solid var(--border, #e2e8f0)',
+                overflowX: 'auto',
+                maxWidth: '100%',
+                WebkitOverflowScrolling: 'touch',
+                scrollbarWidth: 'none',
               }}
             >
               {[
@@ -930,9 +952,9 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
                     style={{
                       display: 'flex',
                       alignItems: 'center',
-                      gap: '5px',
-                      padding: '6px 12px',
-                      fontSize: '12px',
+                      gap: '4px',
+                      padding: isSmallScreen ? '5px 8px' : '6px 12px',
+                      fontSize: isSmallScreen ? '11px' : '12px',
                       fontWeight: active ? 700 : 500,
                       color: active ? '#ffffff' : 'var(--ink, #334155)',
                       background: active ? 'var(--teal, #006E6F)' : 'transparent',
@@ -940,9 +962,11 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
                       borderRadius: '6px',
                       cursor: 'pointer',
                       transition: 'all 0.15s ease',
+                      whiteSpace: 'nowrap',
+                      flexShrink: 0,
                     }}
                   >
-                    <Icon size={14} />
+                    <Icon size={13} />
                     <span>{v.label}</span>
                   </button>
                 )
@@ -955,18 +979,18 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
                 variant="outline"
                 onClick={() => calendarService.downloadExport('csv', currentYear)}
                 title="Download CSV"
-                style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+                style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: isSmallScreen ? '6px 8px' : '7px 12px' }}
               >
-                <Download size={15} />
+                <Download size={14} />
                 <span className="hidden-mobile">CSV</span>
               </Button>
               <Button
                 variant="outline"
                 onClick={() => calendarService.downloadExport('ics', currentYear)}
                 title="Export to iCalendar / Outlook / Google Calendar"
-                style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+                style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: isSmallScreen ? '6px 8px' : '7px 12px' }}
               >
-                <CalendarRange size={15} />
+                <CalendarRange size={14} />
                 <span className="hidden-mobile">iCal (ICS)</span>
               </Button>
             </div>
@@ -978,18 +1002,18 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
                   variant="outline"
                   onClick={() => setIsImportModalOpen(true)}
                   title="Bulk Import Holidays via CSV"
-                  style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+                  style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: isSmallScreen ? '6px 8px' : '7px 12px' }}
                 >
-                  <Upload size={15} />
+                  <Upload size={14} />
                   <span className="hidden-mobile">Import CSV</span>
                 </Button>
 
                 <Button
                   variant="primary"
                   onClick={() => openAddModal()}
-                  style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+                  style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: isSmallScreen ? '6px 10px' : '7px 14px' }}
                 >
-                  <Plus size={16} />
+                  <Plus size={15} />
                   <span>Add Holiday</span>
                 </Button>
               </div>
@@ -999,19 +1023,34 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
 
         {/* Filter & Search Bar */}
         <div
+          className="calendar-filter-bar"
           style={{
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
             flexWrap: 'wrap',
-            gap: '12px',
+            gap: isSmallScreen ? '10px' : '12px',
             paddingTop: '12px',
             borderTop: '1px solid var(--border, #f1f5f9)',
           }}
         >
           {/* Category Filter Pills */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', overflowX: 'auto', paddingBottom: '4px' }}>
-            <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--muted, #64748b)', marginRight: '4px' }}>
+          <div
+            className="calendar-category-pills"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              overflowX: 'auto',
+              paddingBottom: '4px',
+              maxWidth: '100%',
+              width: isSmallScreen ? '100%' : 'auto',
+              WebkitOverflowScrolling: 'touch',
+              scrollbarWidth: 'none',
+              flexWrap: 'nowrap',
+            }}
+          >
+            <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--muted, #64748b)', marginRight: '4px', flexShrink: 0 }}>
               Filter:
             </span>
             {[
@@ -1028,8 +1067,8 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
                   key={cat.id}
                   onClick={() => setCategoryFilter(cat.id)}
                   style={{
-                    padding: '4px 10px',
-                    fontSize: '12px',
+                    padding: isSmallScreen ? '3px 8px' : '4px 10px',
+                    fontSize: isSmallScreen ? '11px' : '12px',
                     fontWeight: active ? 700 : 500,
                     borderRadius: '20px',
                     border: active ? '1px solid var(--teal, #006E6F)' : '1px solid var(--border, #e2e8f0)',
@@ -1037,6 +1076,7 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
                     color: active ? 'var(--teal, #006E6F)' : 'var(--ink, #475569)',
                     cursor: 'pointer',
                     whiteSpace: 'nowrap',
+                    flexShrink: 0,
                   }}
                 >
                   {cat.label}
@@ -1050,16 +1090,17 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: '5px',
-                padding: '4px 10px',
+                padding: isSmallScreen ? '3px 8px' : '4px 10px',
                 borderRadius: '20px',
                 border: showLeaves ? '1px solid #c4b5fd' : '1px solid var(--border, #e2e8f0)',
                 background: showLeaves ? '#f5f3ff' : 'transparent',
                 color: showLeaves ? '#6d28d9' : 'var(--ink, #475569)',
-                fontSize: '12px',
+                fontSize: isSmallScreen ? '11px' : '12px',
                 fontWeight: showLeaves ? 700 : 500,
                 cursor: 'pointer',
                 whiteSpace: 'nowrap',
                 userSelect: 'none',
+                flexShrink: 0,
               }}
             >
               <input
@@ -1073,17 +1114,28 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
           </div>
 
           {/* Department Filter & Search */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+          <div
+            className="calendar-search-filters"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              flexWrap: 'wrap',
+              width: isSmallScreen ? '100%' : 'auto',
+            }}
+          >
             <select
               value={departmentFilter}
               onChange={(e) => setDepartmentFilter(e.target.value)}
               style={{
-                padding: '6px 12px',
+                padding: '6px 10px',
                 borderRadius: '8px',
                 border: '1px solid var(--border, #cbd5e1)',
                 fontSize: '12px',
                 color: 'var(--ink, #334155)',
                 background: 'var(--card-bg, #ffffff)',
+                flex: isSmallScreen ? '1 1 100%' : '0 0 auto',
+                width: isSmallScreen ? '100%' : 'auto',
               }}
             >
               <option value="all">All Departments</option>
@@ -1096,7 +1148,7 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
               <option value="Operations">Operations</option>
             </select>
 
-            <div style={{ position: 'relative', minWidth: '180px' }}>
+            <div style={{ position: 'relative', minWidth: isSmallScreen ? '100%' : '180px', width: isSmallScreen ? '100%' : 'auto', flex: isSmallScreen ? '1 1 100%' : '1 1 auto' }}>
               <Search
                 size={14}
                 style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--muted, #94a3b8)' }}
@@ -1114,6 +1166,7 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
                   fontSize: '12px',
                   outline: 'none',
                   background: 'var(--card-bg, #ffffff)',
+                  boxSizing: 'border-box',
                 }}
               />
               {searchQuery && (
@@ -1142,41 +1195,53 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
       {/* MAIN VIEWPORT: MONTH / WEEK / DAY / YEAR / FLYERS              */}
       {/* ============================================================== */}
       {viewMode === 'month' && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 320px', gap: '20px', alignItems: 'start' }} className="calendar-grid-layout">
+        <div
+          className="calendar-grid-layout"
+          style={{
+            display: 'grid',
+            gridTemplateColumns: isMobile ? '1fr' : 'minmax(0, 1fr) 320px',
+            gap: isMobile ? '16px' : '20px',
+            alignItems: 'start',
+            width: '100%',
+          }}
+        >
           {/* Calendar Month Grid */}
           <div
-            className="panel"
+            className="panel calendar-month-panel"
             style={{
-              padding: '16px',
+              padding: isSmallScreen ? '10px 6px' : '16px',
               borderRadius: '14px',
               border: '1px solid var(--border, #e2e8f0)',
               background: 'var(--card-bg, #ffffff)',
-              overflowX: 'auto',
+              overflowX: 'hidden',
+              width: '100%',
+              boxSizing: 'border-box',
             }}
           >
             {/* Day Header Row */}
             <div
               style={{
                 display: 'grid',
-                gridTemplateColumns: 'repeat(7, minmax(38px, 1fr))',
-                gap: '4px',
+                gridTemplateColumns: 'repeat(7, minmax(0, 1fr))',
+                gap: isSmallScreen ? '2px' : '4px',
                 textAlign: 'center',
                 marginBottom: '8px',
+                width: '100%',
               }}
             >
               {DAY_NAMES.map((day, idx) => (
                 <div
                   key={day}
                   style={{
-                    padding: '8px 4px',
-                    fontSize: '12px',
+                    padding: isSmallScreen ? '4px 1px' : '8px 4px',
+                    fontSize: isSmallScreen ? '10.5px' : '12px',
                     fontWeight: 700,
                     color: idx === 0 || idx === 6 ? '#ef4444' : 'var(--muted, #64748b)',
                     textTransform: 'uppercase',
-                    letterSpacing: '0.05em',
+                    letterSpacing: isSmallScreen ? '0' : '0.05em',
                   }}
                 >
-                  {day}
+                  {isSmallScreen ? day.slice(0, 3) : day}
                 </div>
               ))}
             </div>
@@ -1185,8 +1250,9 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
             <div
               style={{
                 display: 'grid',
-                gridTemplateColumns: 'repeat(7, minmax(38px, 1fr))',
-                gap: '6px',
+                gridTemplateColumns: 'repeat(7, minmax(0, 1fr))',
+                gap: isSmallScreen ? '3px' : '6px',
+                width: '100%',
               }}
             >
               {monthCalendarDays.map((cell) => {
@@ -1207,9 +1273,9 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
                       }
                     }}
                     style={{
-                      minHeight: '92px',
-                      padding: '6px',
-                      borderRadius: '10px',
+                      minHeight: isSmallScreen ? '56px' : '92px',
+                      padding: isSmallScreen ? '4px 2px' : '6px',
+                      borderRadius: isSmallScreen ? '8px' : '10px',
                       border: isSelected
                         ? '2px solid var(--teal, #006E6F)'
                         : cell.isToday
@@ -1228,34 +1294,35 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
                       flexDirection: 'column',
                       justifyContent: 'space-between',
                       transition: 'all 0.15s ease',
-                      boxShadow: isSelected ? '0 4px 12px rgba(0, 110, 111, 0.12)' : 'none',
+                      boxShadow: isSelected ? '0 4px 12px rgba(0, 110, 111, 0.14)' : 'none',
+                      boxSizing: 'border-box',
                     }}
                   >
                     {/* Day Number Header */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', justifyContent: isSmallScreen ? 'center' : 'space-between', alignItems: 'center' }}>
                       <span
                         style={{
-                          fontSize: '13px',
+                          fontSize: isSmallScreen ? '11px' : '13px',
                           fontWeight: cell.isToday || isSelected ? 800 : 600,
                           color: cell.isToday
                             ? '#0284c7'
                             : isSelected
                             ? 'var(--teal, #006E6F)'
                             : 'var(--ink, #1e293b)',
-                          width: '24px',
-                          height: '24px',
+                          width: isSmallScreen ? '22px' : '24px',
+                          height: isSmallScreen ? '22px' : '24px',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
                           borderRadius: '50%',
-                          background: cell.isToday ? '#e0f2fe' : 'transparent',
+                          background: cell.isToday ? '#e0f2fe' : isSelected ? '#ccfbf1' : 'transparent',
                         }}
                       >
                         {cell.dayNum}
                       </span>
 
-                      {/* Small badge count if multiple events */}
-                      {cellEvents.length > 0 && (
+                      {/* Small badge count if multiple events on desktop */}
+                      {!isSmallScreen && cellEvents.length > 0 && (
                         <span
                           style={{
                             fontSize: '10px',
@@ -1271,72 +1338,101 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
                       )}
                     </div>
 
-                    {/* Event Pill Chips */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', marginTop: '4px' }}>
-                      {cellEvents.slice(0, maxVisible).map((ev) => {
-                        const styleInfo = CATEGORY_COLORS[ev.category] || CATEGORY_COLORS['Company Holiday']
-                        return (
+                    {/* Events display: Mobile dots vs Desktop pills */}
+                    {isSmallScreen ? (
+                      <div style={{ display: 'flex', gap: '3px', justifyContent: 'center', alignItems: 'center', minHeight: '14px', flexWrap: 'wrap', marginTop: '2px' }}>
+                        {cellEvents.slice(0, 3).map((ev) => {
+                          const styleInfo = CATEGORY_COLORS[ev.category] || CATEGORY_COLORS['Company Holiday']
+                          return (
+                            <span
+                              key={ev.id}
+                              title={`${ev.title} (${ev.category})`}
+                              style={{
+                                width: '6px',
+                                height: '6px',
+                                borderRadius: '50%',
+                                background: styleInfo.text || '#006E6F',
+                                display: 'inline-block',
+                                flexShrink: 0,
+                              }}
+                            />
+                          )
+                        })}
+                        {cellEvents.length > 3 && (
+                          <span style={{ fontSize: '8px', fontWeight: 800, color: 'var(--teal, #006E6F)', lineHeight: 1 }}>
+                            +{cellEvents.length - 3}
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', marginTop: '4px' }}>
+                        {cellEvents.slice(0, maxVisible).map((ev) => {
+                          const styleInfo = CATEGORY_COLORS[ev.category] || CATEGORY_COLORS['Company Holiday']
+                          return (
+                            <div
+                              key={ev.id}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setSelectedEvent(ev)
+                                setSelectedDate(cell.dateStr)
+                              }}
+                              title={`${ev.title} (${ev.category})`}
+                              style={{
+                                padding: '2px 5px',
+                                borderRadius: '4px',
+                                fontSize: '10px',
+                                fontWeight: 600,
+                                background: styleInfo.bg,
+                                color: styleInfo.text,
+                                border: `1px solid ${styleInfo.border}`,
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                              }}
+                            >
+                              {ev.type === 'birthday' && <Cake size={10} />}
+                              {ev.type === 'anniversary' && <Award size={10} />}
+                              <span>{ev.title}</span>
+                            </div>
+                          )
+                        })}
+
+                        {hiddenCount > 0 && (
                           <div
-                            key={ev.id}
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              setSelectedEvent(ev)
-                              setSelectedDate(cell.dateStr)
-                            }}
-                            title={`${ev.title} (${ev.category})`}
                             style={{
-                              padding: '2px 5px',
-                              borderRadius: '4px',
                               fontSize: '10px',
                               fontWeight: 600,
-                              background: styleInfo.bg,
-                              color: styleInfo.text,
-                              border: `1px solid ${styleInfo.border}`,
-                              whiteSpace: 'nowrap',
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '4px',
+                              color: 'var(--teal, #006E6F)',
+                              padding: '1px 4px',
                             }}
                           >
-                            {ev.type === 'birthday' && <Cake size={10} />}
-                            {ev.type === 'anniversary' && <Award size={10} />}
-                            <span>{ev.title}</span>
+                            +{hiddenCount} more
                           </div>
-                        )
-                      })}
-
-                      {hiddenCount > 0 && (
-                        <div
-                          style={{
-                            fontSize: '10px',
-                            fontWeight: 600,
-                            color: 'var(--teal, #006E6F)',
-                            padding: '1px 4px',
-                          }}
-                        >
-                          +{hiddenCount} more
-                        </div>
-                      )}
-                    </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )
               })}
             </div>
           </div>
 
-          {/* Side Panel: Selected Date Agenda */}
+          {/* Side / Bottom Panel: Selected Date Agenda */}
           <div
-            className="panel"
+            className="panel calendar-agenda-panel"
             style={{
-              padding: '18px',
+              padding: isSmallScreen ? '14px 12px' : '18px',
               borderRadius: '14px',
               border: '1px solid var(--border, #e2e8f0)',
               background: 'var(--card-bg, #ffffff)',
               display: 'flex',
               flexDirection: 'column',
               gap: '14px',
+              width: '100%',
+              boxSizing: 'border-box',
             }}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -1910,13 +2006,13 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
         <div
           className="panel"
           style={{
-            padding: '24px',
+            padding: isSmallScreen ? '14px 10px' : '24px',
             borderRadius: '14px',
             border: '1px solid var(--border, #e2e8f0)',
             background: 'var(--card-bg, #ffffff)',
           }}
         >
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '20px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: isSmallScreen ? '1fr' : isMobile ? 'repeat(2, 1fr)' : 'repeat(auto-fit, minmax(240px, 1fr))', gap: isSmallScreen ? '12px' : '20px' }}>
             {MONTH_NAMES.map((monthName, mIdx) => {
               const daysInM = new Date(currentYear, mIdx + 1, 0).getDate()
               const firstDay = new Date(currentYear, mIdx, 1).getDay()

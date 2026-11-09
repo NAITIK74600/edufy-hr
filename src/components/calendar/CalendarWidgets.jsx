@@ -33,6 +33,8 @@ export function CalendarWidgets({ user = null }) {
     .sort((a, b) => a.date.localeCompare(b.date))
     .slice(0, 4)
 
+  const nextHoliday = holidays[0]
+
   const daysLeft = nextHoliday?.daysRemaining !== undefined && nextHoliday?.daysRemaining !== null
     ? nextHoliday.daysRemaining
     : (nextHoliday?.date ? Math.ceil((new Date(nextHoliday.date).setHours(0,0,0,0) - new Date().setHours(0,0,0,0)) / (1000 * 60 * 60 * 24)) : null)
