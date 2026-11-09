@@ -2982,11 +2982,19 @@ function EmployeeDetail({ id }) {
   const [employeeToDelete, setEmployeeToDelete] = useState(null)
 
   useEffect(() => {
-    return hrStore.subscribe((state) => {
+    const unsub = hrStore.subscribe((state) => {
       setStoreState(state)
       const found = state.employees.find((e) => e.id === id || e._id === id || e.employeeId === id)
-      setEmployee(found || null)
+      setEmployee((prev) => (prev && (prev.id === id || prev._id === id || prev.employeeId === id) && prev.onboardingDocs ? { ...found, ...prev } : (found || null)))
     })
+    if (id) {
+      apiClient.get(`/employees/${id}`).then((res) => {
+        if (res?.data) {
+          setEmployee((prev) => ({ ...(prev || {}), ...res.data }))
+        }
+      }).catch(() => {})
+    }
+    return unsub
   }, [id])
 
   if (!employee) return <StatePanel title={storeState.dataReady ? 'Employee not found' : 'Loading employee'} message={storeState.dataError || (storeState.dataReady ? 'Return to People and select an existing employee.' : 'Fetching employee record.')} tone={storeState.dataReady ? 'error' : 'loading'} />

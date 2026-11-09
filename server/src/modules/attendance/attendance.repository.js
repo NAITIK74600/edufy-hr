@@ -337,7 +337,7 @@ export function createMongoAttendanceRepository() {
       }
     },
     async findById(id) {
-      const doc = await AttendanceRecord.findById(id).lean()
+      const doc = await AttendanceRecord.findById(id).select('+auditEvents').lean()
       if (!doc) return null
       return {
         id: String(doc._id),
@@ -374,9 +374,18 @@ export function createMongoAttendanceRepository() {
           { userId: { $in: employees.map((employee) => employee._id) } },
         ]
       }
-      const docs = await AttendanceRecord.find(query).populate('userId', 'name displayName employeeId department').sort({ createdAt: -1 }).lean()
+      const docs = await AttendanceRecord.find(query)
+        .select('-auditEvents')
+        .populate('userId', 'name displayName employeeId department')
+        .sort({ createdAt: -1 })
+        .lean()
       const nowMs = Date.now()
       return docs.map((record) => {
+        let cleanNotes = record.notes || ''
+        if (cleanNotes.length > 500) {
+          const parts = [...new Set(cleanNotes.split(/\s*\|\s*/).map((p) => p.trim()).filter(Boolean))]
+          cleanNotes = parts.slice(0, 4).join(' | ').slice(0, 500)
+        }
         // Ensure punchInLocation fallback for legacy records
         const punchInLocation = record.punchInLocation && record.punchInLocation.latitude !== null ? record.punchInLocation : {
           latitude: record.latitude,
@@ -438,6 +447,7 @@ export function createMongoAttendanceRepository() {
 
         return {
           ...record,
+          notes: cleanNotes,
           id: String(record._id),
           totalHours: calculateRecordWorkDuration(record),
           userId: record.userId ? String(record.userId._id ?? record.userId) : null,

@@ -34,6 +34,7 @@ const inFlightGets = new Map()
 async function executeApiRequest(path, options = {}, retries = 3) {
   const activeToken = accessToken || readStoredToken()
   let response
+  const timeoutSignal = typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(15000) : undefined
   try {
     response = await fetch(`${API_BASE_URL}${path}`, {
       headers: {
@@ -42,6 +43,7 @@ async function executeApiRequest(path, options = {}, retries = 3) {
         ...(activeToken ? { Authorization: `Bearer ${activeToken}` } : {}),
         ...options.headers
       },
+      signal: options.signal || timeoutSignal,
       ...options
     })
   } catch (err) {

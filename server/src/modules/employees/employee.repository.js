@@ -16,7 +16,26 @@ export function invalidateEmployeeListCache() {
   }
 }
 
-function toPublicEmployee(employee) {
+function sanitizeDocsForList(docs) {
+  if (!docs || typeof docs !== 'object') return docs
+  const clean = {}
+  for (const [key, val] of Object.entries(docs)) {
+    if (!val || typeof val !== 'object') {
+      clean[key] = val
+      continue
+    }
+    const { url, files, ...meta } = val
+    const hasDataUri = typeof url === 'string' && url.startsWith('data:') && url.length > 1024
+    clean[key] = {
+      ...meta,
+      hasFile: Boolean(url || (Array.isArray(files) && files.length > 0)),
+      url: hasDataUri ? null : url,
+    }
+  }
+  return clean
+}
+
+function toPublicEmployee(employee, { stripDocUrls = false } = {}) {
   if (!employee) return null
   const source = employee.toObject ? employee.toObject() : { ...employee }
   source.id = String(source._id ?? source.id)
@@ -28,11 +47,15 @@ function toPublicEmployee(employee) {
   delete source.passwordHash
   delete source.authVersion
   if (source.documents) source.documents = source.documents.map(({ fileKey, ...document }) => document)
+  if (stripDocUrls) {
+    if (source.onboardingDocs) source.onboardingDocs = sanitizeDocsForList(source.onboardingDocs)
+    if (source.complianceDocs) source.complianceDocs = sanitizeDocsForList(source.complianceDocs)
+  }
   return source
 }
 
-function sanitizeEmployeeForViewer(employee, viewer = null) {
-  const publicData = toPublicEmployee(employee)
+function sanitizeEmployeeForViewer(employee, viewer = null, options = {}) {
+  const publicData = toPublicEmployee(employee, options)
   if (!publicData || !viewer) return publicData
 
   const viewerId = String(viewer.id || viewer._id || '')
@@ -150,8 +173,8 @@ export function createMongoEmployeeRepository() {
             .lean(),
           Employee.countDocuments(query),
         ])
-        await attachOnboardingDocs(records)
-        return { records: records.map(toPublicEmployee), meta: { page: safePage, limit: safeLimit, total } }
+        // Omit attachOnboardingDocs on bulk lists to prevent multi-megabyte base64 blowup
+        return { records: records.map((r) => toPublicEmployee(r, { stripDocUrls: true })), meta: { page: safePage, limit: safeLimit, total } }
       })()
 
       listCache.set(cacheKey, { promise: queryPromise, expires: Date.now() + LIST_TTL_MS })
@@ -165,7 +188,7 @@ export function createMongoEmployeeRepository() {
       ensureConnected()
       let employee = null
       if (mongoose.isValidObjectId(id)) {
-        employee = await Employee.findById(id).select('+passwordHash -documents.fileKey').populate('managerId', 'employeeId name email').lean()
+        employee = await Employee.findById(id).select('+passwordHash +complianceDocs -documents.fileKey').populate('managerId', 'employeeId name email').lean()
       }
       if (!employee && typeof id === 'string') {
         employee = await Employee.findOne({
@@ -173,10 +196,10 @@ export function createMongoEmployeeRepository() {
             { employeeId: id.trim().toUpperCase() },
             { email: id.trim().toLowerCase() },
           ],
-        }).select('+passwordHash -documents.fileKey').populate('managerId', 'employeeId name email').lean()
+        }).select('+passwordHash +complianceDocs -documents.fileKey').populate('managerId', 'employeeId name email').lean()
       }
       if (employee) await attachOnboardingDocs(employee)
-      return toPublicEmployee(employee)
+      return toPublicEmployee(employee, { stripDocUrls: false })
     },
     async findForUpdate(id) {
       ensureConnected()

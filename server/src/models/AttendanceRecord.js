@@ -142,15 +142,19 @@ const attendanceRecordSchema = new mongoose.Schema({
       reason: { type: String },
     },
   ],
-  auditEvents: [
-    {
-      eventType: { type: String, required: true },
-      eventTimestamp: { type: Date, default: Date.now },
-      description: { type: String, default: '' },
-      source: { type: String, default: 'system' }, // 'system' | 'device' | 'hr' | 'scheduler'
-      metadata: { type: mongoose.Schema.Types.Mixed, default: {} },
-    },
-  ],
+  auditEvents: {
+    type: [
+      {
+        eventType: { type: String, required: true },
+        eventTimestamp: { type: Date, default: Date.now },
+        description: { type: String, default: '' },
+        source: { type: String, default: 'system' }, // 'system' | 'device' | 'hr' | 'scheduler'
+        metadata: { type: mongoose.Schema.Types.Mixed, default: {} },
+      },
+    ],
+    default: [],
+    select: false,
+  },
 }, { timestamps: true, strict: true })
 
 attendanceRecordSchema.index({ employeeId: 1, date: 1 }, { unique: true })

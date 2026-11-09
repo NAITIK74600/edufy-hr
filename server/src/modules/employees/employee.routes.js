@@ -247,7 +247,7 @@ export function createEmployeeRouter({ auth, service, userStore, employeeReposit
     try {
       const result = await cachedList(parseListQuery(request.query))
       const sanitized = Array.isArray(result?.records)
-        ? result.records.map((emp) => sanitizeEmployeeForViewer(emp, request.auth.user))
+        ? result.records.map((emp) => sanitizeEmployeeForViewer(emp, request.auth.user, { stripDocUrls: true }))
         : []
       return response.json({ success: true, data: sanitized, meta: result.meta })
     } catch (error) { return next(error) }
@@ -286,7 +286,7 @@ export function createEmployeeRouter({ auth, service, userStore, employeeReposit
         return response.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'You do not have permission to view this employee.' } })
       }
       const employee = await service.get(request.params.id)
-      return response.json({ success: true, data: sanitizeEmployeeForViewer(employee, request.auth.user) })
+      return response.json({ success: true, data: sanitizeEmployeeForViewer(employee, request.auth.user, { stripDocUrls: false }) })
     } catch (error) { return next(error) }
   })
   const VERIFIER_ROLES = ['admin', 'hr', 'director', 'managing_director', 'co_founder', 'hr_executive', 'vertical_head']

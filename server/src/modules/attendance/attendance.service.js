@@ -1477,8 +1477,11 @@ export function createAttendanceService({ repository, companySettings = {}, leav
       }
       const reasonToSet = punchOutReason || defaultReason
 
-      const notesArr = [existing.notes, reasonToSet, checkoutEval.notes].filter(Boolean)
-      const combinedNotes = [...new Set(notesArr)].join(' | ')
+      const rawParts = (existing.notes ? existing.notes.split(/\s*\|\s*/) : [])
+      if (reasonToSet) rawParts.push(reasonToSet)
+      if (checkoutEval?.notes) rawParts.push(checkoutEval.notes)
+      const uniqueParts = [...new Set(rawParts.map((p) => String(p).trim()).filter(Boolean))]
+      const combinedNotes = uniqueParts.slice(0, 4).join(' | ').slice(0, 500)
 
       const updated = {
         ...existing,

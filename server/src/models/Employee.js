@@ -92,7 +92,7 @@ const employeeSchema = new mongoose.Schema({
   onboardingRejectionReason: { type: String, trim: true },
   financeDetails: mongoose.Schema.Types.Mixed,
   policyConsents: mongoose.Schema.Types.Mixed,
-  complianceDocs: mongoose.Schema.Types.Mixed,
+  complianceDocs: { type: mongoose.Schema.Types.Mixed, select: false },
   reportingManager: { type: String, trim: true },
   exitDetails: mongoose.Schema.Types.Mixed,
   employmentType: {

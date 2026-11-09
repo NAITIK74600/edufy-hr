@@ -93,6 +93,18 @@ export function createApp(options = {}) {
           { $or: [{ wifiSSID: { $regex: /airtel|dji|3052/i } }, { wifiSSID: /^edufyi$/i }] },
           { $set: { wifiSSID: 'Edufyi' } }
         )
+        // Clean up any historical bloated repeating notes in attendancerecords
+        try {
+          const bloatedNotesRecords = await AttendanceRecord.find({ notes: { $regex: /Auto Punch Out.*Auto Punch Out/i } }).select('_id notes').lean()
+          if (bloatedNotesRecords.length > 0) {
+            console.log(`[server] Cleaning up ${bloatedNotesRecords.length} bloated attendance notes...`)
+            for (const rec of bloatedNotesRecords) {
+              const parts = [...new Set(rec.notes.split(/\s*\|\s*/).map((p) => p.trim()).filter(Boolean))]
+              const clean = parts.slice(0, 4).join(' | ').slice(0, 500)
+              await AttendanceRecord.updateOne({ _id: rec._id }, { $set: { notes: clean } })
+            }
+          }
+        } catch {}
         // Clean up AttendanceSettings
         const settings = await AttendanceSettings.findOne({ key: 'office' }) || await AttendanceSettings.findOne().sort({ updatedAt: -1 })
         if (settings) {

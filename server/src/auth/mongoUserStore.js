@@ -85,8 +85,7 @@ export function createMongoUserStore({ managementUsers = [] } = {}) {
           { email: { $in: managementUsers.map(({ email }) => email) } },
           { role: { $in: ['admin', 'director', 'managing_director', 'co_founder', 'vertical_head', 'hr', 'manager', 'team_lead', 'team_leader', 'employee'] } },
         ],
-      }).lean()
-      await attachOnboardingDocs(users)
+      }).select('name displayName email role status department permissions mustChangePassword createdAt updatedAt employeeId managerId managerName phone avatarUrl').lean()
       return users.map((user) => toPublicUser(toAuthUser(user)))
     },
     async addUser(userData) {

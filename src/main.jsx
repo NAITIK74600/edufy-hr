@@ -105,7 +105,7 @@ function DataStatus({ children }) {
       setTookLong(false)
       return
     }
-    const timer = setTimeout(() => setTookLong(true), 20000)
+    const timer = setTimeout(() => setTookLong(true), 6000)
     return () => clearTimeout(timer)
   }, [state.dataReady])
 
@@ -186,14 +186,28 @@ function DataStatus({ children }) {
             {tookLong && (
               <div style={{ marginTop: '16px', color: '#586D72', fontSize: '13px' }}>
                 <p>Syncing enterprise database records... Still working.</p>
-                <button
-                  type="button"
-                  className="ui-button secondary"
-                  style={{ marginTop: '8px', padding: '4px 12px', fontSize: '12px' }}
-                  onClick={() => hrStore.perform(() => hrStore.refresh())}
-                >
-                  Retry Sync
-                </button>
+                <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', marginTop: '8px' }}>
+                  <button
+                    type="button"
+                    className="ui-button secondary"
+                    style={{ padding: '6px 14px', fontSize: '12px' }}
+                    onClick={() => hrStore.perform(() => hrStore.refresh())}
+                  >
+                    Retry Sync
+                  </button>
+                  <button
+                    type="button"
+                    className="ui-button primary"
+                    style={{ padding: '6px 14px', fontSize: '12px' }}
+                    onClick={() => {
+                      const s = hrStore.getState()
+                      if (s) s.dataReady = true
+                      setState((prev) => ({ ...prev, dataReady: true }))
+                    }}
+                  >
+                    Continue to Dashboard
+                  </button>
+                </div>
               </div>
             )}
           </div>
