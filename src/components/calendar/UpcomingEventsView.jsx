@@ -18,14 +18,21 @@ export function UpcomingEventsView({
   onSelectEvent,
   categoryStyles = {},
 }) {
-  const todayStr = new Date().toISOString().split('T')[0]
+  const toLocalDateStr = (d = new Date()) => {
+    const y = d.getFullYear()
+    const m = String(d.getMonth() + 1).padStart(2, '0')
+    const dayNum = String(d.getDate()).padStart(2, '0')
+    return `${y}-${m}-${dayNum}`
+  }
+
+  const todayStr = toLocalDateStr(new Date())
   const tomorrow = new Date()
   tomorrow.setDate(tomorrow.getDate() + 1)
-  const tomorrowStr = tomorrow.toISOString().split('T')[0]
+  const tomorrowStr = toLocalDateStr(tomorrow)
 
   const sevenDaysAhead = new Date()
   sevenDaysAhead.setDate(sevenDaysAhead.getDate() + 7)
-  const sevenDaysAheadStr = sevenDaysAhead.toISOString().split('T')[0]
+  const sevenDaysAheadStr = toLocalDateStr(sevenDaysAhead)
 
   // Filter only upcoming / today onwards
   const upcomingList = events

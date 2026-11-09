@@ -22,16 +22,25 @@ export function WeeklyCalendarView({
   const sunday = new Date(curr)
   sunday.setDate(curr.getDate() - day)
 
+  const toLocalDateStr = (d) => {
+    const y = d.getFullYear()
+    const m = String(d.getMonth() + 1).padStart(2, '0')
+    const dayNum = String(d.getDate()).padStart(2, '0')
+    return `${y}-${m}-${dayNum}`
+  }
+
+  const todayStr = toLocalDateStr(new Date())
+
   const weekDays = Array.from({ length: 7 }, (_, i) => {
     const d = new Date(sunday)
     d.setDate(sunday.getDate() + i)
-    const dateStr = d.toISOString().split('T')[0]
+    const dateStr = toLocalDateStr(d)
     return {
       date: d,
       dateStr,
       dayNum: d.getDate(),
       dayName: d.toLocaleDateString('en-US', { weekday: 'short' }),
-      isToday: dateStr === new Date().toISOString().split('T')[0],
+      isToday: dateStr === todayStr,
     }
   })
 

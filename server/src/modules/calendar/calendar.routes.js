@@ -140,7 +140,7 @@ export function createCalendarRouter({ auth, useDatabase = true }) {
       try {
         const employees = await Employee.find({
           status: { $in: ['active', 'onboarding'] },
-        }).select('_id employeeId name displayName department designation avatarUrl dob').lean().catch(() => [])
+        }).select('_id employeeId firstName lastName name displayName department designation avatarUrl dob').lean().catch(() => [])
 
         for (const emp of employees) {
           let dobDate = null
@@ -163,7 +163,7 @@ export function createCalendarRouter({ auth, useDatabase = true }) {
           if (targetMonth && bMonth !== targetMonth) continue
 
           const bdayDate = `${targetYear}-${String(bMonth).padStart(2, '0')}-${bDay}`
-          const displayName = emp.displayName || emp.name
+          const displayName = emp.displayName || ((emp.firstName || '') + ' ' + (emp.lastName || '')).trim() || emp.name || 'Team Member'
 
           if (searchQuery && !displayName.toLowerCase().includes(searchQuery)) {
             continue
@@ -204,7 +204,7 @@ export function createCalendarRouter({ auth, useDatabase = true }) {
         const employees = await Employee.find({
           status: { $in: ['active', 'onboarding'] },
           joiningDate: { $exists: true, $ne: null },
-        }).select('_id employeeId name displayName department designation avatarUrl joiningDate').lean().catch(() => [])
+        }).select('_id employeeId firstName lastName name displayName department designation avatarUrl joiningDate').lean().catch(() => [])
 
         for (const emp of employees) {
           if (!emp.joiningDate) continue
@@ -221,7 +221,7 @@ export function createCalendarRouter({ auth, useDatabase = true }) {
           if (targetMonth && jMonth !== targetMonth) continue
 
           const annivDate = `${targetYear}-${String(jMonth).padStart(2, '0')}-${jDay}`
-          const displayName = emp.displayName || emp.name
+          const displayName = emp.displayName || ((emp.firstName || '') + ' ' + (emp.lastName || '')).trim() || emp.name || 'Team Member'
 
           if (searchQuery && !displayName.toLowerCase().includes(searchQuery)) {
             continue
@@ -1015,7 +1015,7 @@ export function createCalendarRouter({ auth, useDatabase = true }) {
       const birthdaysThisMonth = []
       try {
         const activeEmployees = await Employee.find({ status: { $in: ['active', 'onboarding'] } })
-          .select('name displayName department designation avatarUrl dob employeeId')
+          .select('_id employeeId firstName lastName name displayName department designation avatarUrl dob')
           .lean()
           .catch(() => [])
 
@@ -1037,7 +1037,7 @@ export function createCalendarRouter({ auth, useDatabase = true }) {
             const bDate = `${currentYear}-${String(m).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`
             birthdaysThisMonth.push({
               id: String(emp._id),
-              name: emp.displayName || emp.name,
+              name: emp.displayName || ((emp.firstName || '') + ' ' + (emp.lastName || '')).trim() || emp.name || 'Team Member',
               department: emp.department || 'General',
               designation: emp.designation || 'Team Member',
               avatarUrl: emp.avatarUrl || null,
@@ -1059,7 +1059,7 @@ export function createCalendarRouter({ auth, useDatabase = true }) {
           status: { $in: ['active', 'onboarding'] },
           joiningDate: { $exists: true, $ne: null },
         })
-          .select('name displayName department designation avatarUrl joiningDate')
+          .select('_id employeeId firstName lastName name displayName department designation avatarUrl joiningDate')
           .lean()
           .catch(() => [])
 
@@ -1074,7 +1074,7 @@ export function createCalendarRouter({ auth, useDatabase = true }) {
             const aDate = `${currentYear}-${String(jMonth).padStart(2, '0')}-${String(jDate.getUTCDate()).padStart(2, '0')}`
             anniversariesThisMonth.push({
               id: String(emp._id),
-              name: emp.displayName || emp.name,
+              name: emp.displayName || ((emp.firstName || '') + ' ' + (emp.lastName || '')).trim() || emp.name || 'Team Member',
               department: emp.department || 'General',
               designation: emp.designation || 'Team Member',
               avatarUrl: emp.avatarUrl || null,
@@ -1090,9 +1090,20 @@ export function createCalendarRouter({ auth, useDatabase = true }) {
         console.warn('Widgets anniversary query warning:', err.message)
       }
 
-      // 5. Upcoming Meetings & Events (with Google Meet video conference links)
+      // 5. Scheduled Meetings (with Google Meet video conference links)
       let upcomingMeetings = []
+      let scheduledMeetingsCount = 0
       try {
+        scheduledMeetingsCount = await CalendarEvent.countDocuments({
+          status: { $ne: 'cancelled' },
+          date: { $gte: todayStr },
+          $or: [
+            { category: { $regex: /meeting/i } },
+            { type: 'meeting' },
+            { 'meetingLink.url': { $exists: true, $ne: '' } },
+          ],
+        }).catch(() => 0)
+
         upcomingMeetings = await CalendarEvent.find({
           status: { $ne: 'cancelled' },
           date: { $gte: todayStr },
@@ -1103,7 +1114,32 @@ export function createCalendarRouter({ auth, useDatabase = true }) {
           .catch(() => [])
       } catch {}
 
-      // 6. Pending Leaves / Actions
+      // 6. Upcoming Company Events (deadlines, trainings, reviews)
+      let upcomingCompanyEventsCount = 0
+      try {
+        upcomingCompanyEventsCount = await CalendarEvent.countDocuments({
+          status: { $ne: 'cancelled' },
+          date: { $gte: todayStr },
+          category: { $nin: ['Company Holiday', 'Birthday', 'Employee Birthday', 'Work Anniversary'] },
+        }).catch(() => 0)
+      } catch {}
+
+      // 7. Pending Invitations / Actions
+      let pendingInvitationsCount = 0
+      try {
+        const actorId = String(req.auth.user?.id || req.auth.user?._id || req.auth.user?.employeeId || '')
+        pendingInvitationsCount = await CalendarEvent.countDocuments({
+          status: { $ne: 'cancelled' },
+          date: { $gte: todayStr },
+          participants: {
+            $elemMatch: {
+              $or: [{ employeeId: actorId }, { email: (req.auth.user?.email || '').toLowerCase() }],
+              rsvpStatus: 'pending',
+            },
+          },
+        }).catch(() => 0)
+      } catch {}
+
       let pendingLeavesCount = 0
       try {
         pendingLeavesCount = await LeaveRequest.countDocuments({ status: { $in: ['pending', 'pending_manager', 'pending_hr'] } }).catch(() => 0)
@@ -1119,6 +1155,9 @@ export function createCalendarRouter({ auth, useDatabase = true }) {
           birthdaysThisMonth,
           anniversariesThisMonth,
           upcomingMeetings,
+          scheduledMeetingsCount,
+          upcomingCompanyEventsCount,
+          pendingInvitationsCount: pendingInvitationsCount || pendingLeavesCount,
           pendingActionsCount: pendingLeavesCount,
         },
       })

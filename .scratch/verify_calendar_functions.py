@@ -42,3 +42,4 @@ builtins_methods = {
 
 undeclared_funcs = [f for f in func_calls if f not in decls and f not in builtins_methods]
 print("Potentially undeclared function calls:", sorted(set(undeclared_funcs)))
+

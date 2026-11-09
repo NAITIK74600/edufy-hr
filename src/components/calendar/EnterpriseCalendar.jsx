@@ -97,8 +97,25 @@ const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
 export function EnterpriseCalendar({ canManage = false, user = null, defaultView = 'month' }) {
   const [storeState, setStoreState] = useState(() => hrStore.getState())
+
+  // Safe local date formatting without UTC offset day shifts
+  const getLocalDateStr = (d = new Date()) => {
+    const dateObj = typeof d === 'string' ? new Date(d) : d
+    if (isNaN(dateObj.getTime())) return ''
+    const y = dateObj.getFullYear()
+    const m = String(dateObj.getMonth() + 1).padStart(2, '0')
+    const dayNum = String(dateObj.getDate()).padStart(2, '0')
+    return `${y}-${m}-${dayNum}`
+  }
+
+  const formatDateKey = (y, m1, d) => `${y}-${String(m1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+
   const [currentDate, setCurrentDate] = useState(() => new Date())
-  const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split('T')[0])
+  const [selectedDate, setSelectedDate] = useState(() => {
+    const now = new Date()
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+  })
+  const [widgetsData, setWidgetsData] = useState(null)
   const [viewMode, setViewMode] = useState(defaultView) // 'month', 'agenda', 'week', 'day', 'year', 'gallery'
   const [categoryFilter, setCategoryFilter] = useState('all')
   const [departmentFilter, setDepartmentFilter] = useState('all')
@@ -109,6 +126,24 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
   const [notice, setNotice] = useState('')
   const [showLeaves, setShowLeaves] = useState(true)
   const [copiedNotice, setCopiedNotice] = useState(false)
+
+  // Single authoritative synchronizer ensuring calendar header and agenda never drift apart
+  const syncCalendarDate = (targetYear, targetMonthIndex, preferredDay = null) => {
+    const targetMonth1 = targetMonthIndex + 1
+    const daysInTargetMonth = new Date(targetYear, targetMonth1, 0).getDate()
+    const currentSelectedDay = preferredDay !== null ? preferredDay : (parseInt((selectedDate || '').split('-')[2], 10) || 1)
+    const clampedDay = Math.min(Math.max(1, currentSelectedDay), daysInTargetMonth)
+    const newCurrentDate = new Date(targetYear, targetMonthIndex, clampedDay)
+    const newSelectedDate = formatDateKey(targetYear, targetMonth1, clampedDay)
+    setCurrentDate(newCurrentDate)
+    setSelectedDate(newSelectedDate)
+  }
+
+  useEffect(() => {
+    calendarService.getWidgets().then((res) => {
+      if (res) setWidgetsData(res)
+    }).catch(() => {})
+  }, [currentDate.getFullYear()])
 
   // Responsive mobile layout detection
   const [isMobile, setIsMobile] = useState(() => {
@@ -230,20 +265,22 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
   // Helper: Detect 3-day long weekends (Friday or Monday holiday)
   const isLongWeekend = (dateStr) => {
     if (!dateStr) return false
-    const d = new Date(`${dateStr}T00:00:00Z`)
-    if (isNaN(d.getTime())) return false
-    const day = d.getUTCDay()
+    const [y, m, d] = dateStr.split('-').map(Number)
+    if (!y || !m || !d) return false
+    const dateObj = new Date(y, m - 1, d)
+    const day = dateObj.getDay()
     return day === 1 || day === 5 // Monday or Friday
   }
 
   // Helper: Relative countdown
   const getDaysUntil = (dateStr) => {
     if (!dateStr) return null
+    const [y, m, d] = (dateStr || '').split('-').map(Number)
+    if (!y || !m || !d) return null
     const today = new Date()
     today.setHours(0, 0, 0, 0)
-    const target = new Date(dateStr)
+    const target = new Date(y, m - 1, d)
     target.setHours(0, 0, 0, 0)
-    if (isNaN(target.getTime())) return null
     const diffTime = target.getTime() - today.getTime()
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
     if (diffDays === 0) return { label: 'Today', tone: 'success', days: 0 }
@@ -283,42 +320,41 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
   // Navigation handlers
   const handlePrev = () => {
     if (viewMode === 'year' || viewMode === 'agenda') {
-      setCurrentDate(new Date(currentYear - 1, currentDate.getMonth(), 1))
+      syncCalendarDate(currentYear - 1, currentDate.getMonth())
     } else if (viewMode === 'week') {
       const d = new Date(currentDate)
       d.setDate(d.getDate() - 7)
-      setCurrentDate(d)
+      syncCalendarDate(d.getFullYear(), d.getMonth(), d.getDate())
     } else if (viewMode === 'day') {
       const d = new Date(currentDate)
       d.setDate(d.getDate() - 1)
-      setCurrentDate(d)
-      setSelectedDate(d.toISOString().split('T')[0])
+      syncCalendarDate(d.getFullYear(), d.getMonth(), d.getDate())
     } else {
-      setCurrentDate(new Date(currentYear, currentDate.getMonth() - 1, 1))
+      const d = new Date(currentYear, currentDate.getMonth() - 1, 1)
+      syncCalendarDate(d.getFullYear(), d.getMonth())
     }
   }
 
   const handleNext = () => {
     if (viewMode === 'year' || viewMode === 'agenda') {
-      setCurrentDate(new Date(currentYear + 1, currentDate.getMonth(), 1))
+      syncCalendarDate(currentYear + 1, currentDate.getMonth())
     } else if (viewMode === 'week') {
       const d = new Date(currentDate)
       d.setDate(d.getDate() + 7)
-      setCurrentDate(d)
+      syncCalendarDate(d.getFullYear(), d.getMonth(), d.getDate())
     } else if (viewMode === 'day') {
       const d = new Date(currentDate)
       d.setDate(d.getDate() + 1)
-      setCurrentDate(d)
-      setSelectedDate(d.toISOString().split('T')[0])
+      syncCalendarDate(d.getFullYear(), d.getMonth(), d.getDate())
     } else {
-      setCurrentDate(new Date(currentYear, currentDate.getMonth() + 1, 1))
+      const d = new Date(currentYear, currentDate.getMonth() + 1, 1)
+      syncCalendarDate(d.getFullYear(), d.getMonth())
     }
   }
 
   const handleToday = () => {
     const today = new Date()
-    setCurrentDate(today)
-    setSelectedDate(today.toISOString().split('T')[0])
+    syncCalendarDate(today.getFullYear(), today.getMonth(), today.getDate())
   }
 
   // Flash notice helper
@@ -559,6 +595,7 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
   const monthCalendarDays = useMemo(() => {
     const year = currentYear
     const month = currentDate.getMonth()
+    const todayLocalStr = getLocalDateStr(new Date())
 
     const firstDayIndex = new Date(year, month, 1).getDay()
     const daysInCurrentMonth = new Date(year, month + 1, 0).getDate()
@@ -570,7 +607,7 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
     for (let i = firstDayIndex - 1; i >= 0; i--) {
       const dayNum = daysInPrevMonth - i
       const prevDate = new Date(year, month - 1, dayNum)
-      const dateStr = prevDate.toISOString().split('T')[0]
+      const dateStr = formatDateKey(prevDate.getFullYear(), prevDate.getMonth() + 1, prevDate.getDate())
       days.push({
         dateStr,
         dayNum,
@@ -581,13 +618,12 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
 
     // Current month days
     for (let i = 1; i <= daysInCurrentMonth; i++) {
-      const d = new Date(year, month, i)
-      const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`
+      const dateStr = formatDateKey(year, month + 1, i)
       days.push({
         dateStr,
         dayNum: i,
         isCurrentMonth: true,
-        isToday: dateStr === new Date().toISOString().split('T')[0],
+        isToday: dateStr === todayLocalStr,
       })
     }
 
@@ -595,7 +631,7 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
     const remaining = (7 - (days.length % 7)) % 7
     for (let i = 1; i <= remaining; i++) {
       const nextDate = new Date(year, month + 1, i)
-      const dateStr = nextDate.toISOString().split('T')[0]
+      const dateStr = formatDateKey(nextDate.getFullYear(), nextDate.getMonth() + 1, nextDate.getDate())
       days.push({
         dateStr,
         dayNum: i,
@@ -645,7 +681,7 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
         const start = new Date(ev.date)
         const end = new Date(ev.endDate)
         for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-          const key = d.toISOString().split('T')[0]
+          const key = formatDateKey(d.getFullYear(), d.getMonth() + 1, d.getDate())
           if (!map.has(key)) map.set(key, [])
           map.get(key).push(ev)
         }
@@ -663,24 +699,83 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
     return (eventsByDate.get(selectedDate) || []).filter((e) => showLeaves || e.type !== 'leave')
   }, [eventsByDate, selectedDate, showLeaves])
 
-  // Summary Stats & Metrics
-  const targetYearHolidays = useMemo(() => {
-    return scopedEvents.filter((e) => e.type === 'holiday' || (e.category && !['Birthday', 'Work Anniversary', 'Leave'].includes(e.category)))
+  // Summary Stats & Metrics (6 Real-Data Categories for Enterprise Dashboard)
+  // 1. Holidays
+  const holidaysList = useMemo(() => {
+    return scopedEvents.filter(
+      (e) => e.type === 'holiday' || (e.category && !['Birthday', 'Employee Birthday', 'Work Anniversary', 'Leave'].includes(e.category))
+    )
   }, [scopedEvents])
 
-  const nextUpcomingHoliday = useMemo(() => {
-    const list = targetYearHolidays.filter((h) => (h.date || '') >= selectedDate).sort((a, b) => (a.date || '').localeCompare(b.date || ''))
-    return list.length > 0 ? list[0] : (targetYearHolidays.length > 0 ? targetYearHolidays[0] : null)
-  }, [targetYearHolidays, selectedDate])
+  const upcomingHolidaysList = useMemo(() => {
+    return holidaysList.filter((h) => (h.date || '') >= selectedDate).sort((a, b) => (a.date || '').localeCompare(b.date || ''))
+  }, [holidaysList, selectedDate])
 
-  const monthCelebrationsCount = useMemo(() => {
-    return scopedEvents.filter((e) => {
-      if (!e.isCelebration && !['Birthday', 'Work Anniversary'].includes(e.category)) return false
-      if (!e.date) return false
-      const m = parseInt(e.date.slice(5, 7), 10)
-      return m === currentMonth
+  const nextUpcomingHoliday = upcomingHolidaysList[0] || holidaysList[0] || null
+
+  // 2. Birthdays
+  const birthdaysList = useMemo(() => {
+    return scopedEvents.filter(
+      (e) => e.type === 'birthday' || e.category === 'Birthday' || e.category === 'Employee Birthday'
+    )
+  }, [scopedEvents])
+
+  const upcomingBirthdaysList = useMemo(() => {
+    return birthdaysList.filter((b) => (b.date || '') >= selectedDate).sort((a, b) => (a.date || '').localeCompare(b.date || ''))
+  }, [birthdaysList, selectedDate])
+
+  const nextBirthday = upcomingBirthdaysList[0] || birthdaysList[0] || null
+
+  // 3. Anniversaries
+  const anniversariesList = useMemo(() => {
+    return scopedEvents.filter((e) => e.type === 'anniversary' || e.category === 'Work Anniversary')
+  }, [scopedEvents])
+
+  const upcomingAnniversariesList = useMemo(() => {
+    return anniversariesList.filter((a) => (a.date || '') >= selectedDate).sort((a, b) => (a.date || '').localeCompare(b.date || ''))
+  }, [anniversariesList, selectedDate])
+
+  const nextAnniversary = upcomingAnniversariesList[0] || anniversariesList[0] || null
+
+  // 4. Scheduled Meetings
+  const meetingsList = useMemo(() => {
+    return scopedEvents.filter(
+      (e) => e.type === 'meeting' || (e.category && e.category.toLowerCase().includes('meeting')) || Boolean(e.meetingLink?.url)
+    )
+  }, [scopedEvents])
+
+  const upcomingMeetingsList = useMemo(() => {
+    return meetingsList.filter((m) => (m.date || '') >= selectedDate).sort((a, b) => (a.date || '').localeCompare(b.date || ''))
+  }, [meetingsList, selectedDate])
+
+  const nextMeeting = upcomingMeetingsList[0] || meetingsList[0] || null
+
+  // 5. Company Events
+  const companyEventsList = useMemo(() => {
+    return scopedEvents.filter((e) =>
+      e.type === 'event' ||
+      ['Project Deadline', 'Training', 'Training Session', 'Interview', 'Performance Review', 'Employee Onboarding', 'Office Event', 'Event', 'Custom Event', 'Announcement'].includes(e.category)
+    )
+  }, [scopedEvents])
+
+  const upcomingCompanyEventsList = useMemo(() => {
+    return companyEventsList.filter((ev) => (ev.date || '') >= selectedDate).sort((a, b) => (a.date || '').localeCompare(b.date || ''))
+  }, [companyEventsList, selectedDate])
+
+  const nextCompanyEvent = upcomingCompanyEventsList[0] || companyEventsList[0] || null
+
+  // 6. Pending Invitations / Actions
+  const currentActorId = user?.id || user?._id || user?.employeeId
+  const pendingInvitationsCount = useMemo(() => {
+    const fromEvents = scopedEvents.filter((ev) => {
+      if (Array.isArray(ev.participants)) {
+        const p = ev.participants.find((part) => part.employeeId === currentActorId)
+        if (p && p.rsvpStatus === 'pending') return true
+      }
+      return false
     }).length
-  }, [scopedEvents, currentMonth])
+    return fromEvents || widgetsData?.pendingInvitationsCount || widgetsData?.pendingActionsCount || 0
+  }, [scopedEvents, currentActorId, widgetsData])
 
   // Grouped Agenda Events (chronological by year-month)
   const groupedAgendaEvents = useMemo(() => {
@@ -733,34 +828,45 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
       )}
 
       {/* ============================================================== */}
-      {/* 0. ENTERPRISE INSIGHTS & STATS BAR                             */}
+      {/* 0. ENTERPRISE INSIGHTS & STATS BAR (6 Real-Data Summary Cards) */}
       {/* ============================================================== */}
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: isSmallScreen ? 'repeat(2, 1fr)' : isMobile ? 'repeat(auto-fit, minmax(180px, 1fr))' : 'repeat(auto-fit, minmax(220px, 1fr))',
-          gap: isSmallScreen ? '8px' : '14px',
+          gridTemplateColumns: isSmallScreen
+            ? 'repeat(2, 1fr)'
+            : isMobile
+            ? 'repeat(3, 1fr)'
+            : 'repeat(6, 1fr)',
+          gap: isSmallScreen ? '8px' : '12px',
         }}
         className="calendar-stats-grid"
       >
-        {/* Stat 1: Total Paid Holidays */}
+        {/* Card 1: Upcoming Holidays */}
         <div
-          className="panel"
+          className={`panel hover-card ${categoryFilter === 'Company Holiday' ? 'active-stat-card' : ''}`}
+          onClick={() => {
+            setCategoryFilter(categoryFilter === 'Company Holiday' ? 'all' : 'Company Holiday')
+            setViewMode('month')
+          }}
+          title="Click to view official company holidays"
           style={{
-            padding: isSmallScreen ? '10px 12px' : '14px 18px',
+            padding: isSmallScreen ? '10px 12px' : '14px 16px',
             borderRadius: '12px',
-            border: '1px solid var(--border, #e2e8f0)',
+            border: categoryFilter === 'Company Holiday' ? '2px solid #0284c7' : '1px solid var(--border, #e2e8f0)',
             background: 'var(--card-bg, #ffffff)',
             display: 'flex',
             alignItems: 'center',
             gap: isSmallScreen ? '8px' : '12px',
             boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
+            cursor: 'pointer',
+            transition: 'all 0.15s ease',
           }}
         >
           <div
             style={{
-              width: isSmallScreen ? '32px' : '42px',
-              height: isSmallScreen ? '32px' : '42px',
+              width: isSmallScreen ? '32px' : '40px',
+              height: isSmallScreen ? '32px' : '40px',
               borderRadius: '10px',
               background: '#e0f2fe',
               color: '#0284c7',
@@ -770,94 +876,50 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
               flexShrink: 0,
             }}
           >
-            <CalendarRange size={isSmallScreen ? 18 : 22} />
-          </div>
-          <div>
-            <div style={{ fontSize: isSmallScreen ? '16px' : '20px', fontWeight: 800, color: 'var(--ink, #0f172a)', lineHeight: 1.1 }}>
-              {targetYearHolidays.length} Days
-            </div>
-            <div style={{ fontSize: isSmallScreen ? '10px' : '11px', fontWeight: 600, color: 'var(--muted, #64748b)' }}>
-              Official Holidays ({currentYear})
-            </div>
-          </div>
-        </div>
-
-        {/* Stat 2: Next Upcoming Holiday */}
-        <div
-          className="panel"
-          style={{
-            padding: isSmallScreen ? '10px 12px' : '14px 18px',
-            borderRadius: '12px',
-            border: '1px solid var(--border, #e2e8f0)',
-            background: 'var(--card-bg, #ffffff)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: isSmallScreen ? '8px' : '12px',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
-          }}
-        >
-          <div
-            style={{
-              width: isSmallScreen ? '32px' : '42px',
-              height: isSmallScreen ? '32px' : '42px',
-              borderRadius: '10px',
-              background: '#ecfdf5',
-              color: '#059669',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              flexShrink: 0,
-            }}
-          >
-            <Clock size={isSmallScreen ? 18 : 22} />
+            <CalendarRange size={isSmallScreen ? 18 : 20} />
           </div>
           <div style={{ minWidth: 0, flex: 1 }}>
-            {nextUpcomingHoliday ? (
-              <>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: isSmallScreen ? '12px' : '13px', fontWeight: 800, color: 'var(--ink, #0f172a)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {nextUpcomingHoliday.title || nextUpcomingHoliday.name}
-                  </span>
-                  {(() => {
-                    const cd = getDaysUntil(nextUpcomingHoliday.date)
-                    return cd ? (
-                      <span style={{ fontSize: '9px', fontWeight: 700, padding: '1px 5px', borderRadius: '10px', background: cd.tone === 'success' ? '#dcfce7' : '#e0f2fe', color: cd.tone === 'success' ? '#166534' : '#0369a1' }}>
-                        {cd.label}
-                      </span>
-                    ) : null
-                  })()}
-                </div>
-                <div style={{ fontSize: isSmallScreen ? '10px' : '11px', fontWeight: 600, color: 'var(--muted, #64748b)' }}>
-                  {nextUpcomingHoliday.date} ({nextUpcomingHoliday.day || 'Day'})
-                  {isLongWeekend(nextUpcomingHoliday.date) && ' • 🎉 3-Day Weekend'}
-                </div>
-              </>
-            ) : (
-              <div style={{ fontSize: '11px', color: 'var(--muted, #64748b)', fontWeight: 600 }}>
-                No scheduled holidays soon
-              </div>
-            )}
+            <div style={{ fontSize: isSmallScreen ? '15px' : '18px', fontWeight: 800, color: 'var(--ink, #0f172a)', lineHeight: 1.1 }}>
+              {holidaysList.length} {holidaysList.length === 1 ? 'Day' : 'Days'}
+            </div>
+            <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--ink, #334155)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              Holidays
+            </div>
+            <div style={{ fontSize: '10px', color: 'var(--muted, #64748b)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {nextUpcomingHoliday ? (
+                <>Next: {nextUpcomingHoliday.title || nextUpcomingHoliday.name}</>
+              ) : (
+                'None scheduled'
+              )}
+            </div>
           </div>
         </div>
 
-        {/* Stat 3: Celebrations this Month */}
+        {/* Card 2: Upcoming Birthdays */}
         <div
-          className="panel"
+          className={`panel hover-card ${categoryFilter === 'Employee Birthday' ? 'active-stat-card' : ''}`}
+          onClick={() => {
+            setCategoryFilter(categoryFilter === 'Employee Birthday' ? 'all' : 'Employee Birthday')
+            setViewMode('month')
+          }}
+          title="Click to view employee birthdays"
           style={{
-            padding: isSmallScreen ? '10px 12px' : '14px 18px',
+            padding: isSmallScreen ? '10px 12px' : '14px 16px',
             borderRadius: '12px',
-            border: '1px solid var(--border, #e2e8f0)',
+            border: categoryFilter === 'Employee Birthday' ? '2px solid #db2777' : '1px solid var(--border, #e2e8f0)',
             background: 'var(--card-bg, #ffffff)',
             display: 'flex',
             alignItems: 'center',
             gap: isSmallScreen ? '8px' : '12px',
             boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
+            cursor: 'pointer',
+            transition: 'all 0.15s ease',
           }}
         >
           <div
             style={{
-              width: isSmallScreen ? '32px' : '42px',
-              height: isSmallScreen ? '32px' : '42px',
+              width: isSmallScreen ? '32px' : '40px',
+              height: isSmallScreen ? '32px' : '40px',
               borderRadius: '10px',
               background: '#fdf2f8',
               color: '#db2777',
@@ -867,82 +929,216 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
               flexShrink: 0,
             }}
           >
-            <Sparkles size={isSmallScreen ? 18 : 22} />
+            <Cake size={isSmallScreen ? 18 : 20} />
           </div>
-          <div>
-            <div style={{ fontSize: isSmallScreen ? '16px' : '20px', fontWeight: 800, color: 'var(--ink, #0f172a)', lineHeight: 1.1 }}>
-              {monthCelebrationsCount} Celebrations
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div style={{ fontSize: isSmallScreen ? '15px' : '18px', fontWeight: 800, color: 'var(--ink, #0f172a)', lineHeight: 1.1 }}>
+              {birthdaysList.length}
             </div>
-            <div style={{ fontSize: isSmallScreen ? '10px' : '11px', fontWeight: 600, color: 'var(--muted, #64748b)' }}>
-              Birthdays & Milestones in {MONTH_NAMES[currentDate.getMonth()]}
+            <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--ink, #334155)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              Birthdays 🎂
+            </div>
+            <div style={{ fontSize: '10px', color: 'var(--muted, #64748b)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {nextBirthday ? `Next: ${nextBirthday.name}` : `In ${MONTH_NAMES[currentDate.getMonth()]}`}
             </div>
           </div>
         </div>
 
-        {/* Stat 4: Official Flyers Banner */}
-        {flyerImages.length > 0 ? (
+        {/* Card 3: Upcoming Anniversaries */}
+        <div
+          className={`panel hover-card ${categoryFilter === 'Work Anniversary' ? 'active-stat-card' : ''}`}
+          onClick={() => {
+            setCategoryFilter(categoryFilter === 'Work Anniversary' ? 'all' : 'Work Anniversary')
+            setViewMode('month')
+          }}
+          title="Click to view work anniversaries"
+          style={{
+            padding: isSmallScreen ? '10px 12px' : '14px 16px',
+            borderRadius: '12px',
+            border: categoryFilter === 'Work Anniversary' ? '2px solid #d97706' : '1px solid var(--border, #e2e8f0)',
+            background: 'var(--card-bg, #ffffff)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: isSmallScreen ? '8px' : '12px',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
+            cursor: 'pointer',
+            transition: 'all 0.15s ease',
+          }}
+        >
           <div
-            className="panel hover-card"
-            onClick={() => setViewMode('gallery')}
             style={{
-              padding: isSmallScreen ? '10px 12px' : '14px 18px',
-              borderRadius: '12px',
-              border: '1px solid #bae6fd',
-              background: 'linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%)',
+              width: isSmallScreen ? '32px' : '40px',
+              height: isSmallScreen ? '32px' : '40px',
+              borderRadius: '10px',
+              background: '#fffbeb',
+              color: '#d97706',
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'space-between',
-              cursor: 'pointer',
-              boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
+              justifyContent: 'center',
+              flexShrink: 0,
             }}
-            title="View printed official holiday schedule poster"
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: isSmallScreen ? '6px' : '10px' }}>
-              <Layers size={isSmallScreen ? 18 : 22} color="#0284c7" />
-              <div>
-                <div style={{ fontSize: isSmallScreen ? '12px' : '13px', fontWeight: 800, color: '#0369a1' }}>
-                  Official Holiday Flyer
-                </div>
-                <div style={{ fontSize: isSmallScreen ? '10px' : '11px', color: '#0284c7', fontWeight: 600 }}>
-                  {flyerImages.length} High-Res Sheet{flyerImages.length > 1 ? 's' : ''} Uploaded
-                </div>
-              </div>
-            </div>
-            <Eye size={16} color="#0369a1" />
+            <Award size={isSmallScreen ? 18 : 20} />
           </div>
-        ) : (
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div style={{ fontSize: isSmallScreen ? '15px' : '18px', fontWeight: 800, color: 'var(--ink, #0f172a)', lineHeight: 1.1 }}>
+              {anniversariesList.length}
+            </div>
+            <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--ink, #334155)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              Anniversaries 🎖️
+            </div>
+            <div style={{ fontSize: '10px', color: 'var(--muted, #64748b)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {nextAnniversary ? `Next: ${nextAnniversary.name}` : 'Milestones'}
+            </div>
+          </div>
+        </div>
+
+        {/* Card 4: Scheduled Meetings */}
+        <div
+          className={`panel hover-card ${categoryFilter === 'Company Meeting' ? 'active-stat-card' : ''}`}
+          onClick={() => {
+            setCategoryFilter(categoryFilter === 'Company Meeting' ? 'all' : 'Company Meeting')
+            setViewMode('agenda')
+          }}
+          title="Click to view scheduled meetings"
+          style={{
+            padding: isSmallScreen ? '10px 12px' : '14px 16px',
+            borderRadius: '12px',
+            border: categoryFilter === 'Company Meeting' ? '2px solid #1d4ed8' : '1px solid var(--border, #e2e8f0)',
+            background: 'var(--card-bg, #ffffff)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: isSmallScreen ? '8px' : '12px',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
+            cursor: 'pointer',
+            transition: 'all 0.15s ease',
+          }}
+        >
           <div
-            className="panel hover-card"
-            onClick={() => {
-              calendarService.downloadExport('ics', currentYear)
-            }}
             style={{
-              padding: isSmallScreen ? '10px 12px' : '14px 18px',
-              borderRadius: '12px',
-              border: '1px solid var(--border, #e2e8f0)',
-              background: 'var(--card-bg, #ffffff)',
+              width: isSmallScreen ? '32px' : '40px',
+              height: isSmallScreen ? '32px' : '40px',
+              borderRadius: '10px',
+              background: '#eff6ff',
+              color: '#1d4ed8',
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'space-between',
-              cursor: 'pointer',
-              boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
+              justifyContent: 'center',
+              flexShrink: 0,
             }}
-            title="Download iCalendar format (.ics)"
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <CalendarRange size={22} color="var(--teal, #006E6F)" />
-              <div>
-                <div style={{ fontSize: '13px', fontWeight: 800, color: 'var(--ink, #0f172a)' }}>
-                  Sync Calendar (.ics)
-                </div>
-                <div style={{ fontSize: '11px', color: 'var(--muted, #64748b)', fontWeight: 600 }}>
-                  Works with Google, Outlook & Apple
-                </div>
-              </div>
-            </div>
-            <Download size={16} color="var(--teal, #006E6F)" />
+            <Video size={isSmallScreen ? 18 : 20} />
           </div>
-        )}
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div style={{ fontSize: isSmallScreen ? '15px' : '18px', fontWeight: 800, color: 'var(--ink, #0f172a)', lineHeight: 1.1 }}>
+              {meetingsList.length}
+            </div>
+            <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--ink, #334155)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              Meetings
+            </div>
+            <div style={{ fontSize: '10px', color: 'var(--muted, #64748b)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {nextMeeting ? `${nextMeeting.title}` : 'Google Meet Ready'}
+            </div>
+          </div>
+        </div>
+
+        {/* Card 5: Upcoming Company Events */}
+        <div
+          className={`panel hover-card ${categoryFilter === 'Project Deadline' ? 'active-stat-card' : ''}`}
+          onClick={() => {
+            setCategoryFilter(categoryFilter === 'Project Deadline' ? 'all' : 'Project Deadline')
+            setViewMode('upcoming')
+          }}
+          title="Click to view company events & deadlines"
+          style={{
+            padding: isSmallScreen ? '10px 12px' : '14px 16px',
+            borderRadius: '12px',
+            border: categoryFilter === 'Project Deadline' ? '2px solid #0f766e' : '1px solid var(--border, #e2e8f0)',
+            background: 'var(--card-bg, #ffffff)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: isSmallScreen ? '8px' : '12px',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
+            cursor: 'pointer',
+            transition: 'all 0.15s ease',
+          }}
+        >
+          <div
+            style={{
+              width: isSmallScreen ? '32px' : '40px',
+              height: isSmallScreen ? '32px' : '40px',
+              borderRadius: '10px',
+              background: '#ccfbf1',
+              color: '#0f766e',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+            }}
+          >
+            <Sparkles size={isSmallScreen ? 18 : 20} />
+          </div>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div style={{ fontSize: isSmallScreen ? '15px' : '18px', fontWeight: 800, color: 'var(--ink, #0f172a)', lineHeight: 1.1 }}>
+              {companyEventsList.length}
+            </div>
+            <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--ink, #334155)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              Company Events
+            </div>
+            <div style={{ fontSize: '10px', color: 'var(--muted, #64748b)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {nextCompanyEvent ? `${nextCompanyEvent.title}` : 'Deadlines & Training'}
+            </div>
+          </div>
+        </div>
+
+        {/* Card 6: Pending Invitations */}
+        <div
+          className={`panel hover-card ${scopeFilter === 'my' ? 'active-stat-card' : ''}`}
+          onClick={() => {
+            setScopeFilter(scopeFilter === 'my' ? 'all' : 'my')
+            setViewMode('agenda')
+          }}
+          title="Click to view personal invitations & actions"
+          style={{
+            padding: isSmallScreen ? '10px 12px' : '14px 16px',
+            borderRadius: '12px',
+            border: scopeFilter === 'my' ? '2px solid #7c3aed' : '1px solid var(--border, #e2e8f0)',
+            background: 'var(--card-bg, #ffffff)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: isSmallScreen ? '8px' : '12px',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
+            cursor: 'pointer',
+            transition: 'all 0.15s ease',
+          }}
+        >
+          <div
+            style={{
+              width: isSmallScreen ? '32px' : '40px',
+              height: isSmallScreen ? '32px' : '40px',
+              borderRadius: '10px',
+              background: '#f5f3ff',
+              color: '#7c3aed',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+            }}
+          >
+            <Users size={isSmallScreen ? 18 : 20} />
+          </div>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div style={{ fontSize: isSmallScreen ? '15px' : '18px', fontWeight: 800, color: 'var(--ink, #0f172a)', lineHeight: 1.1 }}>
+              {pendingInvitationsCount}
+            </div>
+            <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--ink, #334155)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              Pending RSVPs
+            </div>
+            <div style={{ fontSize: '10px', color: 'var(--muted, #64748b)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {pendingInvitationsCount > 0 ? `${pendingInvitationsCount} response(s) needed` : 'All responded'}
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* ============================================================== */}
@@ -1018,7 +1214,7 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
                 onChange={(e) => {
                   if (!e.target.value) return
                   const [y, m] = e.target.value.split('-').map(Number)
-                  setCurrentDate(new Date(y, m - 1, 1))
+                  syncCalendarDate(y, m - 1)
                 }}
                 title="Jump to specific month and year"
                 style={{
@@ -1159,6 +1355,17 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
                 <Video size={14} color="#059669" />
                 <span className="hidden-mobile">Google Sync</span>
               </Button>
+              {flyerImages.length > 0 && (
+                <Button
+                  variant="outline"
+                  onClick={() => setViewMode('gallery')}
+                  title="View printed official holiday flyer poster"
+                  style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: isSmallScreen ? '6px 8px' : '7px 12px' }}
+                >
+                  <Layers size={14} color="#0284c7" />
+                  <span className="hidden-mobile">Official Flyer</span>
+                </Button>
+              )}
             </div>
 
             {/* Schedule Event Action (Primary for all users) */}
@@ -1409,6 +1616,10 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
                     className={`calendar-day-cell ${isSelected ? 'is-selected' : ''} ${cell.isToday ? 'is-today' : ''} ${!cell.isCurrentMonth ? 'is-other-month' : ''}`}
                     onClick={() => {
                       setSelectedDate(cell.dateStr)
+                      const [y, m, d] = cell.dateStr.split('-').map(Number)
+                      if (y !== currentYear || m !== currentMonth) {
+                        setCurrentDate(new Date(y, m - 1, d))
+                      }
                     }}
                     onDragOver={(e) => {
                       e.preventDefault()
@@ -1568,13 +1779,17 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
                   Selected Date Agenda
                 </span>
                 <h3 style={{ margin: '2px 0 0', fontSize: '16px', fontWeight: 800, color: 'var(--ink, #0f172a)' }}>
-                  {new Date(`${selectedDate}T00:00:00Z`).toLocaleDateString('en-US', {
-                    weekday: 'short',
-                    month: 'short',
-                    day: 'numeric',
-                    year: 'numeric',
-                    timeZone: 'UTC',
-                  })}
+                  {(() => {
+                    const [y, m, d] = (selectedDate || '').split('-').map(Number)
+                    if (!y || !m || !d) return selectedDate
+                    const dateObj = new Date(y, m - 1, d)
+                    return dateObj.toLocaleDateString('en-US', {
+                      weekday: 'short',
+                      month: 'short',
+                      day: 'numeric',
+                      year: 'numeric',
+                    })
+                  })()}
                 </h3>
               </div>
 

@@ -17,7 +17,14 @@ export function DailyCalendarView({
   onQuickCreate,
   categoryStyles = {},
 }) {
-  const isToday = selectedDate === new Date().toISOString().split('T')[0]
+  const toLocalDateStr = (d = new Date()) => {
+    const y = d.getFullYear()
+    const m = String(d.getMonth() + 1).padStart(2, '0')
+    const dayNum = String(d.getDate()).padStart(2, '0')
+    return `${y}-${m}-${dayNum}`
+  }
+
+  const isToday = selectedDate === toLocalDateStr(new Date())
   const currentHour = new Date().getHours()
 
   // Filter events for this day
@@ -54,7 +61,11 @@ export function DailyCalendarView({
           <CalendarDays size={20} color="var(--teal, #006E6F)" />
           <div>
             <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: 'var(--ink, #0f172a)' }}>
-              {new Date(selectedDate).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
+              {(() => {
+                const [y, m, d] = (selectedDate || '').split('-').map(Number)
+                const dateObj = y && m && d ? new Date(y, m - 1, d) : new Date()
+                return dateObj.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
+              })()}
             </h3>
             <span style={{ fontSize: '12px', color: isToday ? 'var(--teal, #006E6F)' : '#64748b', fontWeight: 600 }}>
               {isToday ? 'Today' : 'Daily Schedule'} • {dayEvents.length} Event(s)

@@ -29,7 +29,13 @@ export function CalendarWidgets({ user = null }) {
 
   // Fallback to hrStore if widget API data not yet ready
   const storeState = hrStore.getState()
-  const todayStr = new Date().toISOString().split('T')[0]
+  const toLocalDateStr = (d = new Date()) => {
+    const y = d.getFullYear()
+    const m = String(d.getMonth() + 1).padStart(2, '0')
+    const dayNum = String(d.getDate()).padStart(2, '0')
+    return `${y}-${m}-${dayNum}`
+  }
+  const todayStr = toLocalDateStr(new Date())
   const currentMonth = new Date().getMonth() + 1
   const currentYear = new Date().getFullYear()
 
