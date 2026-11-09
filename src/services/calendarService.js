@@ -31,14 +31,16 @@ export const calendarService = {
       holidays.forEach((h) => {
         if (!h.date) return
         const hYear = parseInt(h.date.slice(0, 4), 10)
+        const hMonth = parseInt(h.date.slice(5, 7), 10)
         if (!h.isRecurring && hYear !== targetYear) return
+        if (month && hMonth !== parseInt(month, 10)) return
         events.push({
           id: String(h.id || h._id),
           entityId: String(h.id || h._id),
           title: h.name || h.title,
           name: h.name || h.title,
-          date: h.date,
-          endDate: h.endDate || h.date,
+          date: h.isRecurring ? `${targetYear}-${h.date.slice(5)}` : h.date,
+          endDate: h.endDate ? (h.isRecurring ? `${targetYear}-${h.endDate.slice(5)}` : h.endDate) : h.date,
           day: h.day,
           category: h.category || h.type || 'Company Holiday',
           type: 'holiday',
@@ -58,6 +60,7 @@ export const calendarService = {
         if (isNaN(d.getTime())) return
         const m = d.getUTCMonth() + 1
         const day = String(d.getUTCDate()).padStart(2, '0')
+        if (month && m !== parseInt(month, 10)) return
         const bDate = `${targetYear}-${String(m).padStart(2, '0')}-${day}`
         events.push({
           id: `bday-${emp.id || emp._id}`,
@@ -82,6 +85,7 @@ export const calendarService = {
         if (completedYears <= 0) return
         const m = j.getUTCMonth() + 1
         const day = String(j.getUTCDate()).padStart(2, '0')
+        if (month && m !== parseInt(month, 10)) return
         const aDate = `${targetYear}-${String(m).padStart(2, '0')}-${day}`
         events.push({
           id: `anniv-${emp.id || emp._id}`,
@@ -97,9 +101,14 @@ export const calendarService = {
         })
       })
 
-      // Leaves fallback
+      // Leaves fallback (only approved leaves)
       leaves.forEach((l) => {
         if (!l.startDate) return
+        if (l.status && !['approved', 'Approved'].includes(l.status)) return
+        if (month) {
+          const lMonth = parseInt(l.startDate.slice(5, 7), 10)
+          if (lMonth !== parseInt(month, 10)) return
+        }
         events.push({
           id: `leave-${l.id || l._id}`,
           title: `${l.employeeName || 'Employee'} (${l.leaveType || 'Leave'})`,
@@ -113,7 +122,27 @@ export const calendarService = {
         })
       })
 
-      return events
+      // Apply category, department, and search filters to fallback
+      return events.filter((ev) => {
+        if (category && category !== 'all' && (ev.category || '').toLowerCase() !== category.toLowerCase() && (ev.type || '').toLowerCase() !== category.toLowerCase()) {
+          return false
+        }
+        if (department && department !== 'all') {
+          const dept = (ev.department || '').toLowerCase()
+          const appDepts = (ev.applicableDepartments || []).map((d) => d.toLowerCase())
+          if (dept !== department.toLowerCase() && !appDepts.includes('all') && !appDepts.includes(department.toLowerCase())) {
+            return false
+          }
+        }
+        if (search) {
+          const term = search.toLowerCase()
+          const matchTitle = (ev.title || '').toLowerCase().includes(term)
+          const matchName = (ev.name || '').toLowerCase().includes(term)
+          const matchDate = (ev.date || '').includes(term)
+          if (!matchTitle && !matchName && !matchDate) return false
+        }
+        return true
+      })
     }
   },
 
@@ -186,18 +215,95 @@ export const calendarService = {
   },
 
   /**
-   * Download CSV or ICS file.
+   * Download CSV or ICS file with offline/local fallback.
    */
   async downloadExport(format = 'csv', year = new Date().getFullYear()) {
-    const blob = await apiClient.downloadBlob(`/calendar/export?format=${format}&year=${year}`)
-    const url = window.URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `edufyi_holidays_${year}.${format}`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    window.URL.revokeObjectURL(url)
+    try {
+      const blob = await apiClient.downloadBlob(`/calendar/export?format=${format}&year=${year}`)
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `edufyi_holidays_${year}.${format}`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      window.URL.revokeObjectURL(url)
+    } catch (err) {
+      console.warn('API export failed, generating client-side export fallback:', err.message)
+      const state = hrStore.getState()
+      const holidays = (state.holidays || []).filter((h) => {
+        if (!h.date) return false
+        const hYear = parseInt(h.date.slice(0, 4), 10)
+        return h.isRecurring || hYear === parseInt(year, 10)
+      }).sort((a, b) => a.date.localeCompare(b.date))
+
+      if (format === 'ics') {
+        const ics = [
+          'BEGIN:VCALENDAR',
+          'VERSION:2.0',
+          'PRODID:-//Edufyi HR//Official Holiday Calendar//EN',
+          'CALSCALE:GREGORIAN',
+          'METHOD:PUBLISH',
+          `X-WR-CALNAME:Edufyi HR Holidays ${year}`,
+          'X-WR-TIMEZONE:Asia/Kolkata',
+        ]
+        for (const h of holidays) {
+          const dateClean = (h.date || '').replace(/-/g, '')
+          const nextDay = new Date(h.endDate || h.date)
+          nextDay.setDate(nextDay.getDate() + 1)
+          const nextDayClean = nextDay.toISOString().split('T')[0].replace(/-/g, '')
+          ics.push(
+            'BEGIN:VEVENT',
+            `UID:holiday-${h.id || h._id || Math.random().toString(36).slice(2)}@edufyitech.in`,
+            `DTSTAMP:${new Date().toISOString().replace(/[-:]/g, '').split('.')[0]}Z`,
+            `DTSTART;VALUE=DATE:${dateClean}`,
+            `DTEND;VALUE=DATE:${nextDayClean}`,
+            `SUMMARY:${(h.name || h.title || 'Holiday').replace(/,/g, '\\,')}`,
+            `DESCRIPTION:${(h.description || h.category || 'Official Holiday').replace(/,/g, '\\,')}`,
+            `LOCATION:${(h.location || 'All Offices').replace(/,/g, '\\,')}`,
+            'STATUS:CONFIRMED',
+            'TRANSP:TRANSPARENT',
+            'END:VEVENT'
+          )
+        }
+        ics.push('END:VCALENDAR')
+        const blob = new Blob([ics.join('\r\n')], { type: 'text/calendar;charset=utf-8' })
+        const url = window.URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `edufyi_holidays_${year}.ics`
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        window.URL.revokeObjectURL(url)
+      } else {
+        // CSV fallback
+        const headers = ['Holiday Name', 'Date', 'End Date', 'Category', 'Location', 'Departments', 'Paid/Unpaid', 'Description']
+        const csvRows = [headers.join(',')]
+        holidays.forEach((h) => {
+          const row = [
+            `"${(h.name || h.title || '').replace(/"/g, '""')}"`,
+            `"${h.date || ''}"`,
+            `"${h.endDate || h.date || ''}"`,
+            `"${(h.category || h.type || 'Company Holiday').replace(/"/g, '""')}"`,
+            `"${(h.location || 'All Locations').replace(/"/g, '""')}"`,
+            `"${(Array.isArray(h.applicableDepartments) ? h.applicableDepartments.join('; ') : 'All').replace(/"/g, '""')}"`,
+            `"${h.isPaid !== false ? 'Paid' : 'Unpaid'}"`,
+            `"${(h.description || '').replace(/"/g, '""')}"`,
+          ]
+          csvRows.push(row.join(','))
+        })
+        const blob = new Blob([csvRows.join('\n')], { type: 'text/csv;charset=utf-8' })
+        const url = window.URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `edufyi_holidays_${year}.csv`
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        window.URL.revokeObjectURL(url)
+      }
+    }
   },
 
   /**

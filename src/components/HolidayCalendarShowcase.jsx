@@ -5,7 +5,7 @@ import { EnterpriseCalendar } from './calendar/EnterpriseCalendar'
 // Set to true to unlock the new Enterprise Interactive Calendar & Matrix.
 // Set to false (default / LOCKED) to use the classic Holiday Showcase & Gallery.
 // ============================================================================
-export const FEATURE_ENTERPRISE_CALENDAR_UNLOCKED = false
+export const FEATURE_ENTERPRISE_CALENDAR_UNLOCKED = true
 
 import { useState, useEffect, useRef } from 'react'
 import {

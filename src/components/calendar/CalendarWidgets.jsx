@@ -33,7 +33,28 @@ export function CalendarWidgets({ user = null }) {
     .sort((a, b) => a.date.localeCompare(b.date))
     .slice(0, 4)
 
-  const nextHoliday = widgetsData?.nextHoliday || (holidays.length > 0 ? holidays[0] : null)
+  const daysLeft = nextHoliday?.daysRemaining !== undefined && nextHoliday?.daysRemaining !== null
+    ? nextHoliday.daysRemaining
+    : (nextHoliday?.date ? Math.ceil((new Date(nextHoliday.date).setHours(0,0,0,0) - new Date().setHours(0,0,0,0)) / (1000 * 60 * 60 * 24)) : null)
+
+  const isLongWeekend = (dateStr) => {
+    if (!dateStr) return false
+    const d = new Date(`${dateStr}T00:00:00Z`)
+    if (isNaN(d.getTime())) return false
+    const day = d.getUTCDay()
+    return day === 1 || day === 5
+  }
+
+  const getGoogleCalendarUrl = (h) => {
+    if (!h?.date) return '#'
+    const title = encodeURIComponent(h.name || h.title || 'Holiday')
+    const start = (h.date || '').replace(/-/g, '')
+    const d = new Date(h.endDate || h.date)
+    d.setDate(d.getDate() + 1)
+    const end = d.toISOString().split('T')[0].replace(/-/g, '')
+    const desc = encodeURIComponent(`${h.category || 'Official Holiday'} - Edufyi HR Calendar`)
+    return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${start}/${end}&details=${desc}`
+  }
 
   const birthdays = widgetsData?.birthdaysThisMonth || (storeState.employees || [])
     .filter((e) => {
@@ -92,17 +113,24 @@ export function CalendarWidgets({ user = null }) {
 
           {nextHoliday ? (
             <div>
-              <h4 style={{ margin: '0 0 4px', fontSize: '16px', fontWeight: 800, color: 'var(--ink, #0f172a)' }}>
-                {nextHoliday.name || nextHoliday.title}
-              </h4>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '4px' }}>
+                <h4 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: 'var(--ink, #0f172a)' }}>
+                  {nextHoliday.name || nextHoliday.title}
+                </h4>
+                {daysLeft !== null && (
+                  <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 7px', borderRadius: '12px', background: daysLeft <= 2 ? '#dcfce7' : '#e0f2fe', color: daysLeft <= 2 ? '#166534' : '#0369a1' }}>
+                    {daysLeft === 0 ? 'Today' : daysLeft === 1 ? 'Tomorrow' : `In ${daysLeft} days`}
+                  </span>
+                )}
+                {isLongWeekend(nextHoliday.date) && (
+                  <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 7px', borderRadius: '12px', background: '#fef3c7', color: '#b45309' }}>
+                    🎉 3-Day Weekend!
+                  </span>
+                )}
+              </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'var(--muted, #64748b)' }}>
                 <Clock size={13} />
                 <span>{nextHoliday.date} ({nextHoliday.day || 'Day'})</span>
-                {nextHoliday.daysRemaining !== undefined && nextHoliday.daysRemaining !== null && (
-                  <span style={{ fontWeight: 700, color: '#0284c7' }}>
-                    • In {nextHoliday.daysRemaining} days
-                  </span>
-                )}
               </div>
             </div>
           ) : (
@@ -112,21 +140,42 @@ export function CalendarWidgets({ user = null }) {
           )}
         </div>
 
-        <a
-          href={`#/${portal}/holidays`}
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '4px',
-            fontSize: '12px',
-            fontWeight: 700,
-            color: 'var(--teal, #006E6F)',
-            textDecoration: 'none',
-            marginTop: '12px',
-          }}
-        >
-          View Full Calendar <ChevronRight size={14} />
-        </a>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '12px', paddingTop: '10px', borderTop: '1px solid var(--border, #f1f5f9)' }}>
+          <a
+            href={`#/${portal}/holidays`}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '4px',
+              fontSize: '12px',
+              fontWeight: 700,
+              color: 'var(--teal, #006E6F)',
+              textDecoration: 'none',
+            }}
+          >
+            View Full Calendar <ChevronRight size={14} />
+          </a>
+
+          {nextHoliday && (
+            <a
+              href={getGoogleCalendarUrl(nextHoliday)}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                fontSize: '11px',
+                fontWeight: 600,
+                color: '#0284c7',
+                textDecoration: 'none',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '3px',
+              }}
+              title="Add this holiday to Google Calendar"
+            >
+              + G-Cal
+            </a>
+          )}
+        </div>
       </div>
 
       {/* 2. Birthdays This Month */}

@@ -32,6 +32,7 @@ import {
   Grid3X3,
   List,
   Layers,
+  ExternalLink,
 } from 'lucide-react'
 import { Button, StatusBadge, Field } from '../ui'
 import { hrStore } from '../../services/hrStore'
@@ -79,13 +80,15 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
   const [storeState, setStoreState] = useState(() => hrStore.getState())
   const [currentDate, setCurrentDate] = useState(() => new Date())
   const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split('T')[0])
-  const [viewMode, setViewMode] = useState(defaultView) // 'month', 'week', 'day', 'year', 'gallery'
+  const [viewMode, setViewMode] = useState(defaultView) // 'month', 'agenda', 'week', 'day', 'year', 'gallery'
   const [categoryFilter, setCategoryFilter] = useState('all')
   const [departmentFilter, setDepartmentFilter] = useState('all')
   const [searchQuery, setSearchQuery] = useState('')
   const [events, setEvents] = useState([])
   const [isLoading, setIsLoading] = useState(false)
   const [notice, setNotice] = useState('')
+  const [showLeaves, setShowLeaves] = useState(true)
+  const [copiedNotice, setCopiedNotice] = useState(false)
 
   // Modals state
   const [selectedEvent, setSelectedEvent] = useState(null)
@@ -126,6 +129,71 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
     return hrStore.subscribe((state) => setStoreState(state))
   }, [])
 
+  // Visual Flyer pictures from store
+  const flyerImages = storeState.companySettings?.holidayCalendarImages || storeState.holidayCalendarImages || []
+
+  // Reset zoom and bind keyboard navigation for flyer lightbox
+  useEffect(() => {
+    setZoomScale(1)
+  }, [flyerIndex, isFlyerLightbox])
+
+  useEffect(() => {
+    if (!isFlyerLightbox) return
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') setIsFlyerLightbox(false)
+      if (e.key === 'ArrowRight' && flyerImages.length > 1) {
+        setFlyerIndex((prev) => (prev + 1) % flyerImages.length)
+      }
+      if (e.key === 'ArrowLeft' && flyerImages.length > 1) {
+        setFlyerIndex((prev) => (prev - 1 + flyerImages.length) % flyerImages.length)
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [isFlyerLightbox, flyerImages.length])
+
+  // Helper: Generate Add to Google Calendar URL
+  const getGoogleCalendarUrl = (ev) => {
+    if (!ev?.date) return '#'
+    const title = encodeURIComponent(ev.title || ev.name || 'Company Holiday')
+    const start = (ev.date || '').replace(/-/g, '')
+    const endDateObj = new Date(ev.endDate || ev.date)
+    endDateObj.setDate(endDateObj.getDate() + 1)
+    const end = endDateObj.toISOString().split('T')[0].replace(/-/g, '')
+    const details = encodeURIComponent(
+      `${ev.description ? ev.description + '\n\n' : ''}Category: ${ev.category || 'Holiday'}\nLocation: ${ev.location || 'All Offices'}\nEdufyi HR Portal`
+    )
+    const location = encodeURIComponent(ev.location || 'Edufyi Technologies')
+    return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${start}/${end}&details=${details}&location=${location}`
+  }
+
+  // Helper: Detect 3-day long weekends (Friday or Monday holiday)
+  const isLongWeekend = (dateStr) => {
+    if (!dateStr) return false
+    const d = new Date(`${dateStr}T00:00:00Z`)
+    if (isNaN(d.getTime())) return false
+    const day = d.getUTCDay()
+    return day === 1 || day === 5 // Monday or Friday
+  }
+
+  // Helper: Relative countdown
+  const getDaysUntil = (dateStr) => {
+    if (!dateStr) return null
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const target = new Date(dateStr)
+    target.setHours(0, 0, 0, 0)
+    if (isNaN(target.getTime())) return null
+    const diffTime = target.getTime() - today.getTime()
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+    if (diffDays === 0) return { label: 'Today', tone: 'success', days: 0 }
+    if (diffDays === 1) return { label: 'Tomorrow', tone: 'info', days: 1 }
+    if (diffDays > 1 && diffDays <= 7) return { label: `In ${diffDays} days`, tone: 'info', days: diffDays }
+    if (diffDays > 7 && diffDays <= 30) return { label: `In ${diffDays} days`, tone: 'neutral', days: diffDays }
+    if (diffDays > 30) return { label: `In ${diffDays} days`, tone: 'neutral', days: diffDays }
+    return { label: 'Past', tone: 'muted', days: diffDays }
+  }
+
   const currentYear = currentDate.getFullYear()
   const currentMonth = currentDate.getMonth() + 1
 
@@ -135,7 +203,7 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
     try {
       const data = await calendarService.getEvents({
         year: currentYear,
-        month: viewMode === 'year' ? null : currentMonth,
+        month: (viewMode === 'year' || viewMode === 'agenda') ? null : currentMonth,
         category: categoryFilter,
         department: departmentFilter,
         search: searchQuery,
@@ -154,8 +222,8 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
 
   // Navigation handlers
   const handlePrev = () => {
-    if (viewMode === 'year') {
-      setCurrentDate(new Date(currentYear - 1, 0, 1))
+    if (viewMode === 'year' || viewMode === 'agenda') {
+      setCurrentDate(new Date(currentYear - 1, currentDate.getMonth(), 1))
     } else if (viewMode === 'week') {
       const d = new Date(currentDate)
       d.setDate(d.getDate() - 7)
@@ -171,8 +239,8 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
   }
 
   const handleNext = () => {
-    if (viewMode === 'year') {
-      setCurrentDate(new Date(currentYear + 1, 0, 1))
+    if (viewMode === 'year' || viewMode === 'agenda') {
+      setCurrentDate(new Date(currentYear + 1, currentDate.getMonth(), 1))
     } else if (viewMode === 'week') {
       const d = new Date(currentDate)
       d.setDate(d.getDate() + 7)
@@ -480,13 +548,46 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
     return map
   }, [events])
 
-  // Selected date events for side-panel
+  // Selected date events for side-panel (respecting showLeaves toggle)
   const selectedDateEvents = useMemo(() => {
-    return eventsByDate.get(selectedDate) || []
-  }, [eventsByDate, selectedDate])
+    return (eventsByDate.get(selectedDate) || []).filter((e) => showLeaves || e.type !== 'leave')
+  }, [eventsByDate, selectedDate, showLeaves])
 
-  // Visual Flyer pictures from store
-  const flyerImages = storeState.companySettings?.holidayCalendarImages || storeState.holidayCalendarImages || []
+  // Summary Stats & Metrics
+  const targetYearHolidays = useMemo(() => {
+    return events.filter((e) => e.type === 'holiday' || (e.category && !['Birthday', 'Work Anniversary', 'Leave'].includes(e.category)))
+  }, [events])
+
+  const nextUpcomingHoliday = useMemo(() => {
+    const list = targetYearHolidays.filter((h) => (h.date || '') >= selectedDate).sort((a, b) => (a.date || '').localeCompare(b.date || ''))
+    return list.length > 0 ? list[0] : (targetYearHolidays.length > 0 ? targetYearHolidays[0] : null)
+  }, [targetYearHolidays, selectedDate])
+
+  const monthCelebrationsCount = useMemo(() => {
+    return events.filter((e) => {
+      if (!e.isCelebration && !['Birthday', 'Work Anniversary'].includes(e.category)) return false
+      if (!e.date) return false
+      const m = parseInt(e.date.slice(5, 7), 10)
+      return m === currentMonth
+    }).length
+  }, [events, currentMonth])
+
+  // Grouped Agenda Events (chronological by year-month)
+  const groupedAgendaEvents = useMemo(() => {
+    const filtered = events.filter((ev) => {
+      if (!showLeaves && ev.type === 'leave') return false
+      return true
+    }).sort((a, b) => (a.date || '').localeCompare(b.date || ''))
+
+    const groups = {}
+    filtered.forEach((ev) => {
+      if (!ev.date) return
+      const yearMonth = ev.date.slice(0, 7)
+      if (!groups[yearMonth]) groups[yearMonth] = []
+      groups[yearMonth].push(ev)
+    })
+    return groups
+  }, [events, showLeaves])
 
   return (
     <div className="enterprise-calendar-module" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -520,6 +621,219 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
           </button>
         </div>
       )}
+
+      {/* ============================================================== */}
+      {/* 0. ENTERPRISE INSIGHTS & STATS BAR                             */}
+      {/* ============================================================== */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+          gap: '14px',
+        }}
+        className="calendar-stats-grid"
+      >
+        {/* Stat 1: Total Paid Holidays */}
+        <div
+          className="panel"
+          style={{
+            padding: '14px 18px',
+            borderRadius: '12px',
+            border: '1px solid var(--border, #e2e8f0)',
+            background: 'var(--card-bg, #ffffff)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
+          }}
+        >
+          <div
+            style={{
+              width: '42px',
+              height: '42px',
+              borderRadius: '10px',
+              background: '#e0f2fe',
+              color: '#0284c7',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+            }}
+          >
+            <CalendarRange size={22} />
+          </div>
+          <div>
+            <div style={{ fontSize: '20px', fontWeight: 800, color: 'var(--ink, #0f172a)', lineHeight: 1.1 }}>
+              {targetYearHolidays.length} Days
+            </div>
+            <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--muted, #64748b)' }}>
+              Official Holidays ({currentYear})
+            </div>
+          </div>
+        </div>
+
+        {/* Stat 2: Next Upcoming Holiday */}
+        <div
+          className="panel"
+          style={{
+            padding: '14px 18px',
+            borderRadius: '12px',
+            border: '1px solid var(--border, #e2e8f0)',
+            background: 'var(--card-bg, #ffffff)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
+          }}
+        >
+          <div
+            style={{
+              width: '42px',
+              height: '42px',
+              borderRadius: '10px',
+              background: '#ecfdf5',
+              color: '#059669',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+            }}
+          >
+            <Clock size={22} />
+          </div>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            {nextUpcomingHoliday ? (
+              <>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: '13px', fontWeight: 800, color: 'var(--ink, #0f172a)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {nextUpcomingHoliday.title || nextUpcomingHoliday.name}
+                  </span>
+                  {(() => {
+                    const cd = getDaysUntil(nextUpcomingHoliday.date)
+                    return cd ? (
+                      <span style={{ fontSize: '10px', fontWeight: 700, padding: '1px 6px', borderRadius: '10px', background: cd.tone === 'success' ? '#dcfce7' : '#e0f2fe', color: cd.tone === 'success' ? '#166534' : '#0369a1' }}>
+                        {cd.label}
+                      </span>
+                    ) : null
+                  })()}
+                </div>
+                <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--muted, #64748b)' }}>
+                  {nextUpcomingHoliday.date} ({nextUpcomingHoliday.day || 'Day'})
+                  {isLongWeekend(nextUpcomingHoliday.date) && ' • 🎉 3-Day Weekend'}
+                </div>
+              </>
+            ) : (
+              <div style={{ fontSize: '12px', color: 'var(--muted, #64748b)', fontWeight: 600 }}>
+                No scheduled holidays soon
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Stat 3: Celebrations this Month */}
+        <div
+          className="panel"
+          style={{
+            padding: '14px 18px',
+            borderRadius: '12px',
+            border: '1px solid var(--border, #e2e8f0)',
+            background: 'var(--card-bg, #ffffff)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
+          }}
+        >
+          <div
+            style={{
+              width: '42px',
+              height: '42px',
+              borderRadius: '10px',
+              background: '#fdf2f8',
+              color: '#db2777',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+            }}
+          >
+            <Sparkles size={22} />
+          </div>
+          <div>
+            <div style={{ fontSize: '20px', fontWeight: 800, color: 'var(--ink, #0f172a)', lineHeight: 1.1 }}>
+              {monthCelebrationsCount} Celebrations
+            </div>
+            <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--muted, #64748b)' }}>
+              Birthdays & Milestones in {MONTH_NAMES[currentDate.getMonth()]}
+            </div>
+          </div>
+        </div>
+
+        {/* Stat 4: Official Flyers Banner */}
+        {flyerImages.length > 0 ? (
+          <div
+            className="panel hover-card"
+            onClick={() => setViewMode('gallery')}
+            style={{
+              padding: '14px 18px',
+              borderRadius: '12px',
+              border: '1px solid #bae6fd',
+              background: 'linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              cursor: 'pointer',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
+            }}
+            title="View printed official holiday schedule poster"
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <Layers size={22} color="#0284c7" />
+              <div>
+                <div style={{ fontSize: '13px', fontWeight: 800, color: '#0369a1' }}>
+                  Official Holiday Flyer
+                </div>
+                <div style={{ fontSize: '11px', color: '#0284c7', fontWeight: 600 }}>
+                  {flyerImages.length} High-Res Sheet{flyerImages.length > 1 ? 's' : ''} Uploaded
+                </div>
+              </div>
+            </div>
+            <Eye size={16} color="#0369a1" />
+          </div>
+        ) : (
+          <div
+            className="panel hover-card"
+            onClick={() => {
+              calendarService.downloadExport('ics', currentYear)
+            }}
+            style={{
+              padding: '14px 18px',
+              borderRadius: '12px',
+              border: '1px solid var(--border, #e2e8f0)',
+              background: 'var(--card-bg, #ffffff)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              cursor: 'pointer',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
+            }}
+            title="Download iCalendar format (.ics)"
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <CalendarRange size={22} color="var(--teal, #006E6F)" />
+              <div>
+                <div style={{ fontSize: '13px', fontWeight: 800, color: 'var(--ink, #0f172a)' }}>
+                  Sync Calendar (.ics)
+                </div>
+                <div style={{ fontSize: '11px', color: 'var(--muted, #64748b)', fontWeight: 600 }}>
+                  Works with Google, Outlook & Apple
+                </div>
+              </div>
+            </div>
+            <Download size={16} color="var(--teal, #006E6F)" />
+          </div>
+        )}
+      </div>
 
       {/* ============================================================== */}
       {/* CALENDAR HEADER & CONTROLS TOOLBAR                             */}
@@ -601,8 +915,9 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
             >
               {[
                 { id: 'month', label: 'Month', icon: CalendarDays },
-                { id: 'week', label: 'Week', icon: List },
-                { id: 'day', label: 'Day', icon: Clock },
+                { id: 'agenda', label: 'Schedule List', icon: List },
+                { id: 'week', label: 'Week', icon: Clock },
+                { id: 'day', label: 'Day', icon: CalendarIcon },
                 { id: 'year', label: 'Year', icon: Grid3X3 },
                 { id: 'gallery', label: 'Flyers', icon: Layers },
               ].map((v) => {
@@ -728,6 +1043,33 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
                 </button>
               )
             })}
+
+            {/* Leaves Toggle */}
+            <label
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
+                padding: '4px 10px',
+                borderRadius: '20px',
+                border: showLeaves ? '1px solid #c4b5fd' : '1px solid var(--border, #e2e8f0)',
+                background: showLeaves ? '#f5f3ff' : 'transparent',
+                color: showLeaves ? '#6d28d9' : 'var(--ink, #475569)',
+                fontSize: '12px',
+                fontWeight: showLeaves ? 700 : 500,
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+                userSelect: 'none',
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={showLeaves}
+                onChange={(e) => setShowLeaves(e.target.checked)}
+                style={{ cursor: 'pointer', margin: 0 }}
+              />
+              <span>🏖️ Team Leaves</span>
+            </label>
           </div>
 
           {/* Department Filter & Search */}
@@ -848,7 +1190,7 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
               }}
             >
               {monthCalendarDays.map((cell) => {
-                const cellEvents = eventsByDate.get(cell.dateStr) || []
+                const cellEvents = (eventsByDate.get(cell.dateStr) || []).filter((e) => showLeaves || e.type !== 'leave')
                 const isSelected = selectedDate === cell.dateStr
                 const maxVisible = 2
                 const hiddenCount = cellEvents.length - maxVisible
@@ -1072,6 +1414,34 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
                           </span>
                         )}
                       </div>
+
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px', paddingTop: '6px', borderTop: '1px solid rgba(0,0,0,0.06)' }}>
+                        <a
+                          href={getGoogleCalendarUrl(ev)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{
+                            fontSize: '11px',
+                            fontWeight: 700,
+                            color: styleInfo.text,
+                            textDecoration: 'none',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                          }}
+                          onClick={(e) => e.stopPropagation()}
+                          title="Add event to Google Calendar"
+                        >
+                          <ExternalLink size={12} />
+                          <span>Add to G-Cal</span>
+                        </a>
+
+                        {isLongWeekend(ev.date) && (
+                          <span style={{ fontSize: '10px', fontWeight: 800, color: '#b45309' }}>
+                            🎉 3-Day Weekend
+                          </span>
+                        )}
+                      </div>
                     </div>
                   )
                 })}
@@ -1107,6 +1477,255 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* AGENDA / SCHEDULE LIST VIEW                                    */}
+      {/* ============================================================== */}
+      {viewMode === 'agenda' && (
+        <div
+          className="panel"
+          style={{
+            padding: '24px',
+            borderRadius: '14px',
+            border: '1px solid var(--border, #e2e8f0)',
+            background: 'var(--card-bg, #ffffff)',
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
+            <div>
+              <span className="eyebrow" style={{ fontSize: '11px', color: 'var(--teal, #006E6F)', fontWeight: 700 }}>
+                Chronological Schedule & Holidays
+              </span>
+              <h2 style={{ margin: '4px 0 0', fontSize: '20px', fontWeight: 800, color: 'var(--ink, #0f172a)' }}>
+                Upcoming Holidays & Company Events ({Object.values(groupedAgendaEvents).flat().length})
+              </h2>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              {canManage && (
+                <Button variant="primary" onClick={() => openAddModal()}>
+                  <Plus size={16} /> Add Holiday
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {/* Grouped Agenda Months */}
+          {Object.keys(groupedAgendaEvents).length > 0 ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+              {Object.keys(groupedAgendaEvents).sort().map((groupKey) => {
+                const [yStr, mStr] = groupKey.split('-')
+                const monthTitle = `${MONTH_NAMES[parseInt(mStr, 10) - 1]} ${yStr}`
+                const groupItems = groupedAgendaEvents[groupKey]
+
+                return (
+                  <div key={groupKey} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        paddingBottom: '8px',
+                        borderBottom: '2px solid var(--border, #f1f5f9)',
+                      }}
+                    >
+                      <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: 'var(--ink, #1e293b)' }}>
+                        {monthTitle}
+                      </h3>
+                      <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--muted, #64748b)', background: '#f1f5f9', padding: '2px 8px', borderRadius: '12px' }}>
+                        {groupItems.length} Event{groupItems.length > 1 ? 's' : ''}
+                      </span>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      {groupItems.map((ev) => {
+                        const styleInfo = CATEGORY_COLORS[ev.category] || CATEGORY_COLORS['Company Holiday']
+                        const countdown = getDaysUntil(ev.date)
+                        const longWeekend = isLongWeekend(ev.date)
+                        const isPast = countdown?.label === 'Past'
+
+                        return (
+                          <div
+                            key={ev.id}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              padding: '14px 18px',
+                              borderRadius: '12px',
+                              border: `1px solid ${styleInfo.border}`,
+                              background: isPast ? '#fafafa' : styleInfo.bg,
+                              opacity: isPast ? 0.75 : 1,
+                              flexWrap: 'wrap',
+                              gap: '14px',
+                              transition: 'all 0.15s ease',
+                              boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', minWidth: '240px', flex: 1 }}>
+                              {/* Date Block */}
+                              <div
+                                style={{
+                                  minWidth: '58px',
+                                  textAlign: 'center',
+                                  padding: '8px 10px',
+                                  borderRadius: '10px',
+                                  background: '#ffffff',
+                                  border: `1px solid ${styleInfo.border}`,
+                                  boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                                }}
+                              >
+                                <div style={{ fontSize: '10px', fontWeight: 800, color: styleInfo.text, textTransform: 'uppercase' }}>
+                                  {MONTH_NAMES[parseInt(ev.date.slice(5, 7), 10) - 1]?.slice(0, 3)}
+                                </div>
+                                <div style={{ fontSize: '20px', fontWeight: 900, color: 'var(--ink, #0f172a)', lineHeight: 1.1 }}>
+                                  {ev.date.slice(8, 10)}
+                                </div>
+                                <div style={{ fontSize: '10px', fontWeight: 600, color: 'var(--muted, #64748b)' }}>
+                                  {ev.day?.slice(0, 3) || 'Day'}
+                                </div>
+                              </div>
+
+                              {/* Details */}
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                  <span
+                                    style={{
+                                      fontSize: '10px',
+                                      fontWeight: 800,
+                                      textTransform: 'uppercase',
+                                      letterSpacing: '0.04em',
+                                      padding: '2px 8px',
+                                      borderRadius: '6px',
+                                      background: '#ffffff',
+                                      color: styleInfo.text,
+                                      border: `1px solid ${styleInfo.border}`,
+                                    }}
+                                  >
+                                    {ev.category}
+                                  </span>
+
+                                  {countdown && !isPast && (
+                                    <span
+                                      style={{
+                                        fontSize: '10px',
+                                        fontWeight: 700,
+                                        padding: '2px 8px',
+                                        borderRadius: '10px',
+                                        background: countdown.tone === 'success' ? '#dcfce7' : countdown.tone === 'info' ? '#e0f2fe' : '#f1f5f9',
+                                        color: countdown.tone === 'success' ? '#166534' : countdown.tone === 'info' ? '#0369a1' : '#64748b',
+                                      }}
+                                    >
+                                      {countdown.label}
+                                    </span>
+                                  )}
+
+                                  {longWeekend && (
+                                    <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '10px', background: '#fef3c7', color: '#b45309' }}>
+                                      🎉 3-Day Weekend
+                                    </span>
+                                  )}
+
+                                  {ev.isPaid && (
+                                    <span style={{ fontSize: '10px', fontWeight: 600, color: '#059669' }}>
+                                      • Paid Day Off
+                                    </span>
+                                  )}
+                                </div>
+
+                                <h4 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: 'var(--ink, #0f172a)' }}>
+                                  {ev.title}
+                                </h4>
+
+                                {ev.description && (
+                                  <p style={{ margin: '2px 0 0', fontSize: '12px', color: 'var(--muted, #475569)', lineHeight: 1.4 }}>
+                                    {ev.description}
+                                  </p>
+                                )}
+
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '11px', color: 'var(--muted, #64748b)', marginTop: '2px' }}>
+                                  {ev.location && (
+                                    <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                                      <MapPin size={11} /> {ev.location}
+                                    </span>
+                                  )}
+                                  {ev.department && (
+                                    <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                                      <Users size={11} /> {ev.department}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Actions */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <a
+                                href={getGoogleCalendarUrl(ev)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                style={{
+                                  padding: '6px 12px',
+                                  borderRadius: '6px',
+                                  border: '1px solid var(--border, #cbd5e1)',
+                                  background: '#ffffff',
+                                  fontSize: '12px',
+                                  fontWeight: 600,
+                                  color: '#0284c7',
+                                  textDecoration: 'none',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '5px',
+                                }}
+                                title="Add event to Google Calendar"
+                              >
+                                <ExternalLink size={13} />
+                                <span>Add to G-Cal</span>
+                              </a>
+
+                              <Button variant="outline" onClick={() => setSelectedEvent(ev)} style={{ fontSize: '12px', padding: '6px 12px' }}>
+                                Details
+                              </Button>
+
+                              {canManage && ev.type === 'holiday' && (
+                                <>
+                                  <Button variant="ghost" onClick={() => openEditModal(ev)} title="Edit Holiday" style={{ padding: '6px' }}>
+                                    <Edit2 size={14} />
+                                  </Button>
+                                  <Button variant="ghost" onClick={() => openDuplicateModal(ev)} title="Duplicate Holiday" style={{ padding: '6px' }}>
+                                    <Copy size={14} />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    onClick={() => {
+                                      setSelectedEvent(ev)
+                                      setIsDeleteModalOpen(true)
+                                    }}
+                                    title="Delete Holiday"
+                                    style={{ color: '#ef4444', padding: '6px' }}
+                                  >
+                                    <Trash2 size={14} />
+                                  </Button>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          ) : (
+            <div style={{ padding: '40px', textAlign: 'center', color: 'var(--muted, #64748b)' }}>
+              <CalendarDays size={40} style={{ margin: '0 auto 10px', opacity: 0.3 }} />
+              <h4 style={{ margin: '0 0 4px', fontSize: '15px', fontWeight: 700 }}>No holidays or events found</h4>
+              <p style={{ margin: 0, fontSize: '13px' }}>Try clearing your search query or filters.</p>
+            </div>
+          )}
         </div>
       )}
 
@@ -1468,6 +2087,326 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
       )}
 
       {/* ============================================================== */}
+      {/* FULLSCREEN FLYER FIT-SCREEN LIGHTBOX MODAL                     */}
+      {/* ============================================================== */}
+      {isFlyerLightbox && flyerImages[flyerIndex] && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 99999,
+            background: 'rgba(10, 15, 29, 0.95)',
+            backdropFilter: 'blur(10px)',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'space-between',
+            padding: '16px 24px',
+          }}
+          onClick={() => setIsFlyerLightbox(false)}
+        >
+          {/* Lightbox Header Bar */}
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              width: '100%',
+              zIndex: 10,
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <span
+                style={{
+                  background: 'rgba(255, 255, 255, 0.2)',
+                  color: '#ffffff',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  padding: '4px 12px',
+                  borderRadius: '16px',
+                }}
+              >
+                Sheet {flyerIndex + 1} of {flyerImages.length}
+              </span>
+              <span style={{ color: '#ffffff', fontSize: '16px', fontWeight: 700 }}>
+                {flyerImages[flyerIndex].title || `Holiday Calendar Poster ${flyerIndex + 1}`}
+              </span>
+              {flyerImages[flyerIndex].uploadedAt && (
+                <span style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: '12px' }}>
+                  Uploaded {flyerImages[flyerIndex].uploadedAt}
+                </span>
+              )}
+            </div>
+
+            {/* Lightbox Controls */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <button
+                type="button"
+                onClick={() => setZoomScale((s) => Math.max(0.6, s - 0.25))}
+                title="Zoom Out"
+                style={{
+                  background: 'rgba(255, 255, 255, 0.15)',
+                  border: '1px solid rgba(255, 255, 255, 0.2)',
+                  color: '#ffffff',
+                  borderRadius: '6px',
+                  padding: '8px',
+                  cursor: 'pointer',
+                }}
+              >
+                <ZoomOut size={16} />
+              </button>
+              <span style={{ color: '#ffffff', fontSize: '12px', minWidth: '45px', textAlign: 'center', fontWeight: 600 }}>
+                {Math.round(zoomScale * 100)}%
+              </span>
+              <button
+                type="button"
+                onClick={() => setZoomScale((s) => Math.min(3, s + 0.25))}
+                title="Zoom In"
+                style={{
+                  background: 'rgba(255, 255, 255, 0.15)',
+                  border: '1px solid rgba(255, 255, 255, 0.2)',
+                  color: '#ffffff',
+                  borderRadius: '6px',
+                  padding: '8px',
+                  cursor: 'pointer',
+                }}
+              >
+                <ZoomIn size={16} />
+              </button>
+              <button
+                type="button"
+                onClick={() => setZoomScale(1)}
+                title="Reset Zoom"
+                style={{
+                  background: 'rgba(255, 255, 255, 0.15)',
+                  border: '1px solid rgba(255, 255, 255, 0.2)',
+                  color: '#ffffff',
+                  borderRadius: '6px',
+                  padding: '8px 12px',
+                  fontSize: '12px',
+                  cursor: 'pointer',
+                }}
+              >
+                100%
+              </button>
+
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  const img = flyerImages[flyerIndex]
+                  if (!img?.url) return
+                  const a = document.createElement('a')
+                  a.href = img.url
+                  a.download = `${img.title || 'company-holiday-calendar'}.png`
+                  document.body.appendChild(a)
+                  a.click()
+                  document.body.removeChild(a)
+                }}
+                title="Download Original High-Res Image"
+                style={{
+                  background: 'rgba(255, 255, 255, 0.18)',
+                  border: '1px solid rgba(255, 255, 255, 0.25)',
+                  color: '#ffffff',
+                  borderRadius: '6px',
+                  padding: '8px 12px',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                }}
+              >
+                <Download size={14} />
+                <span>Save Poster</span>
+              </button>
+
+              {canManage && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    const img = flyerImages[flyerIndex]
+                    if (window.confirm(`Delete calendar flyer "${img.title || 'Sheet'}"?`)) {
+                      hrStore.deleteHolidayCalendarImage(img.id, user?.name || 'Admin')
+                      showNotice('Calendar flyer removed.')
+                      if (flyerIndex > 0) setFlyerIndex(flyerIndex - 1)
+                      else setIsFlyerLightbox(false)
+                    }
+                  }}
+                  title="Delete this flyer"
+                  style={{
+                    background: 'rgba(239, 68, 68, 0.25)',
+                    border: '1px solid rgba(239, 68, 68, 0.4)',
+                    color: '#fca5a5',
+                    borderRadius: '6px',
+                    padding: '8px 12px',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                  }}
+                >
+                  <Trash2 size={14} />
+                  <span>Delete</span>
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={() => setIsFlyerLightbox(false)}
+                title="Close Fullscreen (Esc)"
+                style={{
+                  background: 'rgba(239, 68, 68, 0.35)',
+                  border: '1px solid rgba(239, 68, 68, 0.5)',
+                  color: '#ffffff',
+                  borderRadius: '6px',
+                  padding: '8px 12px',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  marginLeft: '8px',
+                }}
+              >
+                <X size={16} />
+                <span>Close</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Fullscreen Fit-Screen Ratio Image Viewport */}
+          <div
+            style={{
+              position: 'relative',
+              flex: 1,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              overflow: 'auto',
+              padding: '16px',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <img
+              src={flyerImages[flyerIndex].url}
+              alt={flyerImages[flyerIndex].title || 'Official Holiday Calendar Fullscreen'}
+              style={{
+                maxWidth: '96vw',
+                maxHeight: '84vh',
+                objectFit: 'contain',
+                transform: `scale(${zoomScale})`,
+                transition: 'transform 0.15s ease-out',
+                borderRadius: '8px',
+                boxShadow: '0 20px 40px rgba(0, 0, 0, 0.6)',
+              }}
+            />
+
+            {/* Left / Right Nav in Lightbox */}
+            {flyerImages.length > 1 && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setFlyerIndex((prev) => (prev - 1 + flyerImages.length) % flyerImages.length)}
+                  title="Previous sheet (Left Arrow)"
+                  style={{
+                    position: 'fixed',
+                    left: '24px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    width: '52px',
+                    height: '52px',
+                    borderRadius: '50%',
+                    background: 'rgba(15, 23, 42, 0.85)',
+                    border: '1px solid rgba(255, 255, 255, 0.3)',
+                    color: '#ffffff',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
+                    boxShadow: '0 6px 16px rgba(0,0,0,0.4)',
+                    zIndex: 20,
+                  }}
+                >
+                  <ChevronLeft size={28} />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setFlyerIndex((prev) => (prev + 1) % flyerImages.length)}
+                  title="Next sheet (Right Arrow)"
+                  style={{
+                    position: 'fixed',
+                    right: '24px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    width: '52px',
+                    height: '52px',
+                    borderRadius: '50%',
+                    background: 'rgba(15, 23, 42, 0.85)',
+                    border: '1px solid rgba(255, 255, 255, 0.3)',
+                    color: '#ffffff',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
+                    boxShadow: '0 6px 16px rgba(0,0,0,0.4)',
+                    zIndex: 20,
+                  }}
+                >
+                  <ChevronRight size={28} />
+                </button>
+              </>
+            )}
+          </div>
+
+          {/* Lightbox Footer Thumbnail Strip */}
+          {flyerImages.length > 1 && (
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                gap: '12px',
+                zIndex: 10,
+                padding: '8px 0',
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {flyerImages.map((img, idx) => {
+                const isActive = idx === flyerIndex
+                return (
+                  <button
+                    key={img.id || idx}
+                    type="button"
+                    onClick={() => setFlyerIndex(idx)}
+                    style={{
+                      width: '64px',
+                      height: '42px',
+                      borderRadius: '4px',
+                      overflow: 'hidden',
+                      padding: 0,
+                      border: isActive ? '2px solid #38bdf8' : '1px solid rgba(255, 255, 255, 0.25)',
+                      opacity: isActive ? 1 : 0.6,
+                      cursor: 'pointer',
+                      background: '#0f172a',
+                    }}
+                  >
+                    <img src={img.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  </button>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ============================================================== */}
       {/* EVENT DETAIL MODAL                                             */}
       {/* ============================================================== */}
       {selectedEvent && (
@@ -1524,6 +2463,28 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
                 <X size={20} />
               </button>
             </div>
+
+            {/* Long weekend banner */}
+            {isLongWeekend(selectedEvent.date) && (
+              <div
+                style={{
+                  padding: '10px 14px',
+                  borderRadius: '10px',
+                  background: '#fef3c7',
+                  border: '1px solid #fde68a',
+                  color: '#92400e',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  marginBottom: '14px',
+                }}
+              >
+                <span>🎉</span>
+                <span>3-Day Long Weekend! This holiday connects with Saturday & Sunday.</span>
+              </div>
+            )}
 
             {/* Event celebration card if birthday or anniversary */}
             {selectedEvent.isCelebration && (
@@ -1589,29 +2550,70 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
             </div>
 
             {/* Action buttons */}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-              {canManage && selectedEvent.type === 'holiday' && (
-                <>
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      setIsDeleteModalOpen(true)
-                    }}
-                    style={{ color: '#ef4444' }}
-                  >
-                    <Trash2 size={15} /> Delete
-                  </Button>
-                  <Button variant="outline" onClick={() => openDuplicateModal(selectedEvent)}>
-                    <Copy size={15} /> Duplicate
-                  </Button>
-                  <Button variant="primary" onClick={() => openEditModal(selectedEvent)}>
-                    <Edit2 size={15} /> Edit
-                  </Button>
-                </>
-              )}
-              <Button variant="ghost" onClick={() => setSelectedEvent(null)}>
-                Close
-              </Button>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <a
+                  href={getGoogleCalendarUrl(selectedEvent)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    padding: '8px 14px',
+                    borderRadius: '8px',
+                    border: '1px solid var(--border, #cbd5e1)',
+                    background: '#ffffff',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    color: '#0284c7',
+                    textDecoration: 'none',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                  }}
+                  title="Add to Google Calendar"
+                >
+                  <ExternalLink size={13} />
+                  <span>Add to G-Cal</span>
+                </a>
+
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    const text = `${selectedEvent.title} - ${selectedEvent.date} (${selectedEvent.day || ''})\nCategory: ${selectedEvent.category}\nLocation: ${selectedEvent.location || 'All Offices'}\n${selectedEvent.description || ''}`
+                    navigator.clipboard?.writeText(text)
+                    setCopiedNotice(true)
+                    setTimeout(() => setCopiedNotice(false), 2000)
+                  }}
+                  style={{ fontSize: '12px', padding: '6px 12px' }}
+                >
+                  {copiedNotice ? <Check size={14} color="#059669" /> : <Copy size={14} />}
+                  <span>{copiedNotice ? 'Copied!' : 'Copy Details'}</span>
+                </Button>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                {canManage && selectedEvent.type === 'holiday' && (
+                  <>
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setIsDeleteModalOpen(true)
+                      }}
+                      style={{ color: '#ef4444', fontSize: '12px', padding: '6px 12px' }}
+                    >
+                      <Trash2 size={14} /> Delete
+                    </Button>
+                    <Button variant="outline" onClick={() => openDuplicateModal(selectedEvent)} style={{ fontSize: '12px', padding: '6px 12px' }}>
+                      <Copy size={14} /> Duplicate
+                    </Button>
+                    <Button variant="primary" onClick={() => openEditModal(selectedEvent)} style={{ fontSize: '12px', padding: '6px 12px' }}>
+                      <Edit2 size={14} /> Edit
+                    </Button>
+                  </>
+                )}
+                <Button variant="ghost" onClick={() => setSelectedEvent(null)} style={{ fontSize: '12px', padding: '6px 12px' }}>
+                  Close
+                </Button>
+              </div>
             </div>
           </div>
         </div>
