@@ -95,6 +95,7 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
   const [viewMode, setViewMode] = useState(defaultView) // 'month', 'agenda', 'week', 'day', 'year', 'gallery'
   const [categoryFilter, setCategoryFilter] = useState('all')
   const [departmentFilter, setDepartmentFilter] = useState('all')
+  const [scopeFilter, setScopeFilter] = useState('all') // 'all', 'team', 'my'
   const [searchQuery, setSearchQuery] = useState('')
   const [events, setEvents] = useState([])
   const [isLoading, setIsLoading] = useState(false)
@@ -576,10 +577,39 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
     return days
   }, [currentYear, currentDate])
 
+  // Filter events by scope (Company vs Team vs My Calendar)
+  const scopedEvents = useMemo(() => {
+    if (scopeFilter === 'all') return events
+    const currentUserId = user?.id || user?._id || user?.employeeId
+    const currentUserEmail = (user?.email || '').toLowerCase()
+    const userDept = user?.department || ''
+
+    if (scopeFilter === 'my') {
+      return events.filter((ev) => {
+        if (ev.isOwner) return true
+        if (ev.organizer && (ev.organizer.id === currentUserId || (ev.organizer.email && ev.organizer.email.toLowerCase() === currentUserEmail))) return true
+        if (Array.isArray(ev.participants) && ev.participants.some((p) => p.employeeId === currentUserId || (p.email && p.email.toLowerCase() === currentUserEmail))) return true
+        if (ev.type === 'leave' && (ev.employeeId === currentUserId || (ev.employeeEmail && ev.employeeEmail.toLowerCase() === currentUserEmail))) return true
+        if ((ev.type === 'birthday' || ev.category === 'Birthday' || ev.category === 'Employee Birthday') && (ev.employeeId === currentUserId || (user?.name && ev.title?.toLowerCase().includes(user.name.toLowerCase())))) return true
+        return false
+      })
+    }
+
+    if (scopeFilter === 'team') {
+      return events.filter((ev) => {
+        if (!ev.department || ev.department === 'all' || ev.department === 'Company-wide') return true
+        if (userDept && ev.department.toLowerCase() === userDept.toLowerCase()) return true
+        return false
+      })
+    }
+
+    return events
+  }, [events, scopeFilter, user])
+
   // Events indexed by date for O(1) cell lookup
   const eventsByDate = useMemo(() => {
     const map = new Map()
-    events.forEach((ev) => {
+    scopedEvents.forEach((ev) => {
       // If multi-day event, add to all covered dates
       if (ev.endDate && ev.endDate !== ev.date) {
         const start = new Date(ev.date)
@@ -596,7 +626,7 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
       }
     })
     return map
-  }, [events])
+  }, [scopedEvents])
 
   // Selected date events for side-panel (respecting showLeaves toggle)
   const selectedDateEvents = useMemo(() => {
@@ -605,8 +635,8 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
 
   // Summary Stats & Metrics
   const targetYearHolidays = useMemo(() => {
-    return events.filter((e) => e.type === 'holiday' || (e.category && !['Birthday', 'Work Anniversary', 'Leave'].includes(e.category)))
-  }, [events])
+    return scopedEvents.filter((e) => e.type === 'holiday' || (e.category && !['Birthday', 'Work Anniversary', 'Leave'].includes(e.category)))
+  }, [scopedEvents])
 
   const nextUpcomingHoliday = useMemo(() => {
     const list = targetYearHolidays.filter((h) => (h.date || '') >= selectedDate).sort((a, b) => (a.date || '').localeCompare(b.date || ''))
@@ -614,17 +644,17 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
   }, [targetYearHolidays, selectedDate])
 
   const monthCelebrationsCount = useMemo(() => {
-    return events.filter((e) => {
+    return scopedEvents.filter((e) => {
       if (!e.isCelebration && !['Birthday', 'Work Anniversary'].includes(e.category)) return false
       if (!e.date) return false
       const m = parseInt(e.date.slice(5, 7), 10)
       return m === currentMonth
     }).length
-  }, [events, currentMonth])
+  }, [scopedEvents, currentMonth])
 
   // Grouped Agenda Events (chronological by year-month)
   const groupedAgendaEvents = useMemo(() => {
-    const filtered = events.filter((ev) => {
+    const filtered = scopedEvents.filter((ev) => {
       if (!showLeaves && ev.type === 'leave') return false
       return true
     }).sort((a, b) => (a.date || '').localeCompare(b.date || ''))
@@ -1923,7 +1953,7 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
       {/* ============================================================== */}
       {viewMode === 'upcoming' && (
         <UpcomingEventsView
-          events={events}
+          events={scopedEvents}
           onSelectEvent={setSelectedEvent}
           onCreateEvent={() => {
             setEditingEventData(null)
@@ -1939,7 +1969,7 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
       {viewMode === 'week' && (
         <WeeklyCalendarView
           currentDate={currentDate}
-          events={events}
+          events={scopedEvents}
           onSelectDate={(d) => {
             setSelectedDate(d)
             setViewMode('day')
@@ -1959,7 +1989,7 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
       {viewMode === 'day' && (
         <DailyCalendarView
           selectedDate={selectedDate}
-          events={events}
+          events={scopedEvents}
           onSelectEvent={setSelectedEvent}
           onCreateEvent={(d) => {
             setEditingEventData({ date: d })
