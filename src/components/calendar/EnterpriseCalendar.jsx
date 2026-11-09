@@ -150,6 +150,8 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
   const [isImportModalOpen, setIsImportModalOpen] = useState(false)
   const [isGoogleSyncModalOpen, setIsGoogleSyncModalOpen] = useState(false)
+  const [isEventModalOpen, setIsEventModalOpen] = useState(false)
+  const [editingEventData, setEditingEventData] = useState(null)
   const [googleIntegration, setGoogleIntegration] = useState(null)
 
   useEffect(() => {
@@ -323,6 +325,27 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
   const showNotice = (msg, duration = 4000) => {
     setNotice(msg)
     setTimeout(() => setNotice(''), duration)
+  }
+
+  // Handle Drag-and-drop rescheduling
+  const handleDropOnDate = async (e, targetDate) => {
+    e.preventDefault()
+    try {
+      const dataStr = e.dataTransfer.getData('text/plain')
+      if (!dataStr) return
+      const payload = JSON.parse(dataStr)
+      if (!payload?.id) return
+
+      const res = await calendarService.rescheduleEvent(payload.id, { date: targetDate })
+      if (res?.success) {
+        showNotice(`Rescheduled "${payload.title || 'Event'}" to ${targetDate}`)
+        loadEvents()
+      } else {
+        showNotice(res?.message || 'Failed to reschedule event.')
+      }
+    } catch (err) {
+      console.warn('Drag-and-drop reschedule notice:', err)
+    }
   }
 
   // Open Add modal with prefilled date

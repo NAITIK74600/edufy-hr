@@ -28,3 +28,4 @@ all_needed = jsx_tags | icon_props
 known = imported_names | default_imports | declared
 missing = sorted([n for n in all_needed if n not in known])
 print("MISSING SYMBOLS:", missing)
+
