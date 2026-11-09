@@ -5,7 +5,15 @@ import { Employee } from '../../models/Employee.js'
 import { LeaveRequest } from '../../models/LeaveRequest.js'
 import { CalendarAuditLog } from '../../models/CalendarAuditLog.js'
 import { CalendarEvent } from '../../models/CalendarEvent.js'
+import { CalendarPreference } from '../../models/CalendarPreference.js'
+import { CalendarIntegration } from '../../models/CalendarIntegration.js'
+import { CalendarInvitation } from '../../models/CalendarInvitation.js'
 import { createUnifiedNotification } from '../../services/unifiedNotification.service.js'
+import { calendarService } from './calendar.service.js'
+import { googleMapsService } from './googleMaps.service.js'
+import { googleCalendarService } from './googleCalendar.service.js'
+import { calendarSyncService } from './calendarSync.service.js'
+import { calendarNotificationService } from './calendarNotification.service.js'
 
 const MANAGEMENT_ROLES = new Set(['admin', 'hr', 'hr_executive', 'director', 'managing_director', 'co_founder'])
 const isManagement = (user) => Boolean(user?.role && MANAGEMENT_ROLES.has(user.role.toLowerCase()))
@@ -290,46 +298,30 @@ export function createCalendarRouter({ auth, useDatabase = true }) {
         console.warn('Calendar leave fetch warning:', err.message)
       }
 
-      // 5. Fetch Custom Calendar Events (Meetings, Training, Deadlines)
+      // 5. Fetch Smart Calendar Events (Meetings, Training, Deadlines, Client Visits, Lifecycle Events)
       try {
-        const customEvents = await CalendarEvent.find({ status: { $ne: 'cancelled' } }).lean().catch(() => [])
-        for (const ev of customEvents) {
-          if (!ev.date) continue
-          const eYear = parseInt(ev.date.slice(0, 4), 10)
-          const eMonth = parseInt(ev.date.slice(5, 7), 10)
-
-          if (eYear !== targetYear) continue
-          if (targetMonth && eMonth !== targetMonth) continue
-
-          if (filterDept !== 'all' && ev.department && ev.department !== 'All' && ev.department.toLowerCase() !== filterDept.toLowerCase()) {
-            continue
+        const smartEvents = await calendarService.listEvents({
+          actor,
+          year: targetYear,
+          month: targetMonth,
+          category: filterCategory,
+          department: filterDept,
+          search: searchQuery,
+          scope: req.query.scope || 'all',
+        })
+        for (const ev of smartEvents) {
+          // Avoid duplicate if an automated event was already added
+          const alreadyExists = events.some((existing) =>
+            existing.id === ev.id ||
+            existing.entityId === ev.entityId ||
+            (existing.sourceId && existing.sourceId === ev.sourceId)
+          )
+          if (!alreadyExists) {
+            events.push(ev)
           }
-
-          if (filterCategory !== 'all' && ev.category.toLowerCase() !== filterCategory.toLowerCase()) {
-            continue
-          }
-
-          events.push({
-            id: `event-${ev._id}`,
-            entityId: String(ev._id),
-            title: ev.title,
-            name: ev.title,
-            date: ev.date,
-            endDate: ev.endDate || ev.date,
-            startTime: ev.startTime || null,
-            endTime: ev.endTime || null,
-            day: getWeekday(ev.date),
-            category: ev.category || 'Company',
-            type: 'event',
-            location: ev.location || 'Head Office',
-            department: ev.department || 'All',
-            description: ev.description || '',
-            organizer: ev.organizer || '',
-            canManage,
-          })
         }
       } catch (err) {
-        console.warn('Calendar custom event fetch warning:', err.message)
+        console.warn('Calendar smart event fetch warning:', err.message)
       }
 
       // Sort chronological by date
@@ -1113,6 +1105,377 @@ export function createCalendarRouter({ auth, useDatabase = true }) {
         success: true,
         count: logs.length,
         data: logs,
+      })
+    } catch (error) {
+      next(error)
+    }
+  })
+
+  // =========================================================================
+  // 11. POST /api/v1/calendar/events - Create Smart Calendar Event
+  // =========================================================================
+  router.post('/events', auth.authenticate, async (req, res, next) => {
+    try {
+      const actor = req.auth.user
+      const saved = await calendarService.createEvent({
+        eventData: req.body,
+        actor,
+        ip: req.ip,
+      })
+      res.status(201).json({
+        success: true,
+        message: 'Event created successfully.',
+        data: saved,
+      })
+    } catch (error) {
+      next(error)
+    }
+  })
+
+  // =========================================================================
+  // 12. GET /api/v1/calendar/events/:id - Get Single Event Details
+  // =========================================================================
+  router.get('/events/:id', auth.authenticate, async (req, res, next) => {
+    try {
+      const event = await CalendarEvent.findById(req.params.id).lean()
+      if (!event) {
+        return res.status(404).json({ success: false, code: 'NOT_FOUND', message: 'Event not found.' })
+      }
+      const formatted = calendarService.formatEventPayload(
+        event,
+        String(req.auth.user.id || req.auth.user.employeeId),
+        isManagement(req.auth.user)
+      )
+      res.json({
+        success: true,
+        data: formatted,
+      })
+    } catch (error) {
+      next(error)
+    }
+  })
+
+  // =========================================================================
+  // 13. PUT /api/v1/calendar/events/:id - Update Event
+  // =========================================================================
+  router.put('/events/:id', auth.authenticate, async (req, res, next) => {
+    try {
+      const updated = await calendarService.updateEvent({
+        eventId: req.params.id,
+        updates: req.body,
+        actor: req.auth.user,
+        editScope: req.query.scope || 'this',
+        ip: req.ip,
+      })
+      res.json({
+        success: true,
+        message: 'Event updated successfully.',
+        data: updated,
+      })
+    } catch (error) {
+      next(error)
+    }
+  })
+
+  // =========================================================================
+  // 14. PATCH /api/v1/calendar/events/:id - Drag-and-Drop Reschedule
+  // =========================================================================
+  router.patch('/events/:id', auth.authenticate, async (req, res, next) => {
+    try {
+      const { date, startTime, endTime } = req.body || {}
+      const updated = await calendarService.updateEvent({
+        eventId: req.params.id,
+        updates: { date, startTime, endTime },
+        actor: req.auth.user,
+        editScope: req.query.scope || 'this',
+        ip: req.ip,
+      })
+      res.json({
+        success: true,
+        message: 'Event rescheduled successfully.',
+        data: updated,
+      })
+    } catch (error) {
+      next(error)
+    }
+  })
+
+  // =========================================================================
+  // 15. DELETE /api/v1/calendar/events/:id - Cancel / Soft Delete Event
+  // =========================================================================
+  router.delete('/events/:id', auth.authenticate, async (req, res, next) => {
+    try {
+      const reason = req.body?.reason || req.query?.reason || ''
+      const result = await calendarService.deleteEvent({
+        eventId: req.params.id,
+        actor: req.auth.user,
+        reason,
+      })
+      res.json(result)
+    } catch (error) {
+      next(error)
+    }
+  })
+
+  // =========================================================================
+  // 16. POST /api/v1/calendar/events/:id/respond - RSVP (Accept, Decline, Tentative)
+  // =========================================================================
+  router.post('/events/:id/respond', auth.authenticate, async (req, res, next) => {
+    try {
+      const { status, note } = req.body || {}
+      const result = await calendarService.respondToInvitation({
+        eventId: req.params.id,
+        actor: req.auth.user,
+        status: (status || '').toLowerCase(),
+        responseNote: note || '',
+      })
+      res.json({
+        success: true,
+        message: `RSVP marked as ${status}.`,
+        data: result,
+      })
+    } catch (error) {
+      next(error)
+    }
+  })
+
+  // =========================================================================
+  // 17. POST /api/v1/calendar/events/:id/meet - Generate / Attach Video Meeting
+  // =========================================================================
+  router.post('/events/:id/meet', auth.authenticate, async (req, res, next) => {
+    try {
+      const event = await CalendarEvent.findById(req.params.id)
+      if (!event) return res.status(404).json({ success: false, message: 'Event not found.' })
+
+      const meetDetails = await googleCalendarService.createGoogleMeetEvent({
+        title: event.title,
+        description: event.description,
+        date: event.date,
+        endDate: event.endDate || event.date,
+        startTime: event.startTime,
+        endTime: event.endTime,
+        timezone: event.timezone,
+        participants: event.participants,
+      })
+
+      event.meetingLink = meetDetails
+      await event.save()
+
+      res.json({
+        success: true,
+        message: 'Google Meet link generated.',
+        data: meetDetails,
+      })
+    } catch (error) {
+      next(error)
+    }
+  })
+
+  // =========================================================================
+  // 18. GET /api/v1/calendar/upcoming - Fast Upcoming Agenda
+  // =========================================================================
+  router.get('/upcoming', auth.authenticate, async (req, res, next) => {
+    try {
+      const actor = req.auth.user
+      const limit = Math.min(50, Math.max(1, parseInt(req.query.limit, 10) || 10))
+      const todayStr = new Date().toISOString().slice(0, 10)
+
+      const events = await calendarService.listEvents({
+        actor,
+        search: '',
+        scope: req.query.scope || 'all',
+      })
+
+      const upcoming = events.filter((e) => e.date >= todayStr).slice(0, limit)
+
+      res.json({
+        success: true,
+        count: upcoming.length,
+        data: upcoming,
+      })
+    } catch (error) {
+      next(error)
+    }
+  })
+
+  // =========================================================================
+  // 19. GET /api/v1/calendar/analytics - Scheduling Insights & Metrics
+  // =========================================================================
+  router.get('/analytics', auth.authenticate, async (req, res, next) => {
+    try {
+      const analytics = await calendarService.getAnalytics({ actor: req.auth.user })
+      res.json({
+        success: true,
+        data: analytics,
+      })
+    } catch (error) {
+      next(error)
+    }
+  })
+
+  // =========================================================================
+  // 20. GET & PUT /api/v1/calendar/preferences - User Notification & View Settings
+  // =========================================================================
+  router.get('/preferences', auth.authenticate, async (req, res, next) => {
+    try {
+      const empId = String(req.auth.user.id || req.auth.user.employeeId)
+      let prefs = await CalendarPreference.findOne({ employeeId: empId }).lean()
+      if (!prefs) {
+        prefs = {
+          employeeId: empId,
+          defaultView: 'month',
+          enableInAppReminders: true,
+          enableEmailReminders: true,
+          enableBrowserNotifications: true,
+          dailyDigestEnabled: true,
+          weeklySummaryEnabled: true,
+          birthdayAnnouncements: true,
+          anniversaryAnnouncements: true,
+          reminderMinutesBefore: [15, 60],
+          timeZone: 'Asia/Kolkata',
+        }
+      }
+      res.json({ success: true, data: prefs })
+    } catch (error) {
+      next(error)
+    }
+  })
+
+  router.put('/preferences', auth.authenticate, async (req, res, next) => {
+    try {
+      const empId = String(req.auth.user.id || req.auth.user.employeeId)
+      const allowed = [
+        'defaultView',
+        'enableInAppReminders',
+        'enableEmailReminders',
+        'enableBrowserNotifications',
+        'dailyDigestEnabled',
+        'weeklySummaryEnabled',
+        'birthdayAnnouncements',
+        'anniversaryAnnouncements',
+        'reminderMinutesBefore',
+        'timeZone',
+      ]
+      const updates = {}
+      for (const key of allowed) {
+        if (req.body[key] !== undefined) updates[key] = req.body[key]
+      }
+
+      const updated = await CalendarPreference.findOneAndUpdate(
+        { employeeId: empId },
+        { $set: updates },
+        { upsert: true, returnDocument: 'after' }
+      )
+      res.json({ success: true, message: 'Preferences updated.', data: updated })
+    } catch (error) {
+      next(error)
+    }
+  })
+
+  // =========================================================================
+  // 21. GOOGLE INTEGRATION: Connect, Callback, Disconnect
+  // =========================================================================
+  router.get('/integrations', auth.authenticate, async (req, res, next) => {
+    try {
+      const integration = await CalendarIntegration.findOne({ provider: 'google' }).lean().catch(() => null)
+      res.json({
+        success: true,
+        data: {
+          googleConfigured: googleCalendarService.isConfigured(),
+          isConnected: Boolean(integration?.isConnected),
+          accountEmail: integration?.accountEmail || null,
+          lastSyncAt: integration?.lastSyncAt || null,
+          syncStatus: integration?.syncStatus || 'disconnected',
+        },
+      })
+    } catch (error) {
+      next(error)
+    }
+  })
+
+  router.post('/google/connect', auth.authenticate, async (req, res, next) => {
+    try {
+      if (!isManagement(req.auth.user)) {
+        return res.status(403).json({ success: false, message: 'Only Management or HR can connect Google Workspace.' })
+      }
+      const authUrl = googleCalendarService.getAuthUrl(`actor_${req.auth.user.id}`)
+      if (!authUrl) {
+        return res.status(400).json({
+          success: false,
+          message: 'Google Client ID & Secret not configured in environment variables (GOOGLE_CLIENT_ID).',
+        })
+      }
+      res.json({ success: true, authUrl })
+    } catch (error) {
+      next(error)
+    }
+  })
+
+  router.get('/google/callback', async (req, res, next) => {
+    try {
+      const { code } = req.query
+      if (!code) return res.status(400).send('Missing authorization code.')
+      await googleCalendarService.exchangeCodeForTokens(code)
+      res.send(`
+        <html>
+          <body style="font-family: sans-serif; text-align: center; padding: 50px;">
+            <h2 style="color: #006E6F;">✅ Google Calendar Successfully Connected!</h2>
+            <p>You can close this tab and return to Edufyi HR.</p>
+            <script>window.opener && window.opener.postMessage('google_calendar_connected', '*'); window.close();</script>
+          </body>
+        </html>
+      `)
+    } catch (error) {
+      res.status(500).send(`Google Connection Error: ${error.message}`)
+    }
+  })
+
+  router.post('/google/disconnect', auth.authenticate, async (req, res, next) => {
+    try {
+      if (!isManagement(req.auth.user)) {
+        return res.status(403).json({ success: false, message: 'Permission denied.' })
+      }
+      await CalendarIntegration.findOneAndUpdate(
+        { provider: 'google' },
+        { isConnected: false, accessToken: null, refreshToken: null, syncStatus: 'disconnected' }
+      )
+      res.json({ success: true, message: 'Google integration disconnected.' })
+    } catch (error) {
+      next(error)
+    }
+  })
+
+  // =========================================================================
+  // 22. POST /api/v1/calendar/sync - On-Demand HR Lifecycle Synchronization
+  // =========================================================================
+  router.post('/sync', auth.authenticate, async (req, res, next) => {
+    try {
+      if (!isManagement(req.auth.user)) {
+        return res.status(403).json({ success: false, message: 'Permission denied.' })
+      }
+      const targetYear = parseInt(req.body?.year, 10) || new Date().getFullYear()
+      const summary = await calendarSyncService.syncAllHREvents(targetYear)
+      res.json({
+        success: true,
+        message: 'HR lifecycle events synchronized successfully.',
+        data: summary,
+      })
+    } catch (error) {
+      next(error)
+    }
+  })
+
+  // =========================================================================
+  // 23. GET /api/v1/calendar/maps/autocomplete - Google Places Autocomplete Proxy
+  // =========================================================================
+  router.get('/maps/autocomplete', auth.authenticate, async (req, res, next) => {
+    try {
+      const input = (req.query.input || req.query.q || '').trim()
+      const results = await googleMapsService.autocompletePlaces(input)
+      res.json({
+        success: true,
+        count: results.length,
+        data: results,
       })
     } catch (error) {
       next(error)

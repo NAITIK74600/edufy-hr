@@ -329,5 +329,150 @@ export const calendarService = {
       return []
     }
   },
+
+  // =========================================================================
+  // SMART CALENDAR UPGRADE METHODS
+  // =========================================================================
+
+  /**
+   * Create a new smart calendar event (meetings, interviews, deadlines, training, etc.)
+   */
+  async createEvent(eventData) {
+    const res = await apiClient.post('/calendar/events', eventData)
+    return res.data
+  },
+
+  /**
+   * Update an existing event (scope: 'this' | 'series')
+   */
+  async updateEvent(eventId, updates, scope = 'this') {
+    const res = await apiClient.put(`/calendar/events/${encodeURIComponent(eventId)}?scope=${scope}`, updates)
+    return res.data
+  },
+
+  /**
+   * Drag-and-drop or quick reschedule
+   */
+  async rescheduleEvent(eventId, { date, startTime, endTime }) {
+    const res = await apiClient.patch(`/calendar/events/${encodeURIComponent(eventId)}`, { date, startTime, endTime })
+    return res.data
+  },
+
+  /**
+   * Cancel or soft delete an event
+   */
+  async deleteEvent(eventId, reason = '') {
+    const res = await apiClient.delete(`/calendar/events/${encodeURIComponent(eventId)}`, { data: { reason } })
+    return res
+  },
+
+  /**
+   * Respond to invitation (RSVP: accepted, declined, tentative)
+   */
+  async respondToInvitation(eventId, { status, note = '' }) {
+    const res = await apiClient.post(`/calendar/events/${encodeURIComponent(eventId)}/respond`, { status, note })
+    return res.data
+  },
+
+  /**
+   * Generate or refresh Google Meet link for an event
+   */
+  async generateMeetLink(eventId) {
+    const res = await apiClient.post(`/calendar/events/${encodeURIComponent(eventId)}/meet`)
+    return res.data
+  },
+
+  /**
+   * Fetch upcoming agenda feed
+   */
+  async getUpcomingEvents(limit = 10, scope = 'all') {
+    try {
+      const res = await apiClient.get(`/calendar/upcoming?limit=${limit}&scope=${scope}`)
+      return res.data || []
+    } catch {
+      return []
+    }
+  },
+
+  /**
+   * Fetch calendar scheduling analytics & metrics
+   */
+  async getAnalytics() {
+    try {
+      const res = await apiClient.get('/calendar/analytics')
+      return res.data || null
+    } catch {
+      return null
+    }
+  },
+
+  /**
+   * Fetch user calendar preferences
+   */
+  async getPreferences() {
+    try {
+      const res = await apiClient.get('/calendar/preferences')
+      return res.data || null
+    } catch {
+      return null
+    }
+  },
+
+  /**
+   * Update user calendar preferences
+   */
+  async updatePreferences(prefs) {
+    const res = await apiClient.put('/calendar/preferences', prefs)
+    return res.data
+  },
+
+  /**
+   * Check Google Calendar & Meet integration status
+   */
+  async getIntegrations() {
+    try {
+      const res = await apiClient.get('/calendar/integrations')
+      return res.data || { googleConfigured: false, isConnected: false }
+    } catch {
+      return { googleConfigured: false, isConnected: false }
+    }
+  },
+
+  /**
+   * Connect Google Calendar / Meet
+   */
+  async connectGoogle() {
+    const res = await apiClient.post('/calendar/google/connect')
+    return res
+  },
+
+  /**
+   * Disconnect Google Calendar
+   */
+  async disconnectGoogle() {
+    const res = await apiClient.post('/calendar/google/disconnect')
+    return res
+  },
+
+  /**
+   * Trigger on-demand HR lifecycle sync
+   */
+  async syncHRLifecycle(year) {
+    const res = await apiClient.post('/calendar/sync', { year })
+    return res.data
+  },
+
+  /**
+   * Google Places Autocomplete search
+   */
+  async searchPlaces(input) {
+    if (!input || input.trim().length < 2) return []
+    try {
+      const res = await apiClient.get(`/calendar/maps/autocomplete?input=${encodeURIComponent(input.trim())}`)
+      return res.data || []
+    } catch {
+      return []
+    }
+  },
 }
 

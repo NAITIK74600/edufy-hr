@@ -9,7 +9,7 @@ const notificationSchema = new mongoose.Schema({
   message: { type: String, required: true, trim: true },
   category: {
     type: String,
-    enum: ['gps', 'network', 'attendance', 'hr', 'leave', 'task', 'payroll', 'announcement', 'system'],
+    enum: ['gps', 'network', 'attendance', 'hr', 'leave', 'task', 'payroll', 'announcement', 'calendar', 'system'],
     default: 'system',
     index: true,
   },

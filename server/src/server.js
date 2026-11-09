@@ -156,6 +156,14 @@ const server = app.listen(...listenArgs, () => {
         console.warn('[AutoPunchCutoff Daemon] Notice:', err.message)
       })
     }, 60000)
+
+    // Start Smart Calendar Background Daemon (Reminder dispatcher + HR lifecycle sync)
+    import('./modules/calendar/calendarReminder.job.js').then(({ startCalendarBackgroundDaemon }) => {
+      startCalendarBackgroundDaemon()
+      logStartup('📅 Smart HR Calendar Background Daemon initialized.')
+    }).catch((err) => {
+      console.warn('[Calendar Daemon Startup Notice]:', err.message)
+    })
   }
 })
 

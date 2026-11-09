@@ -900,7 +900,7 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
                     : `${MONTH_NAMES[currentDate.getMonth()]} ${currentYear}`}
                 </h1>
                 <p style={{ margin: 0, fontSize: isSmallScreen ? '10.5px' : '12px', color: 'var(--muted, #64748b)' }}>
-                  Enterprise Holiday & Employee Celebration Schedule
+                  Enterprise Smart Calendar & Workforce Operations
                 </p>
               </div>
             </div>
@@ -915,11 +915,72 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
               <Button variant="ghost" onClick={handleNext} title="Next" style={{ padding: isSmallScreen ? '4px 6px' : '6px 10px' }}>
                 <ChevronRight size={isSmallScreen ? 16 : 18} />
               </Button>
+
+              {/* Direct Month Picker */}
+              <input
+                type="month"
+                value={`${currentYear}-${String(currentMonth).padStart(2, '0')}`}
+                onChange={(e) => {
+                  if (!e.target.value) return
+                  const [y, m] = e.target.value.split('-').map(Number)
+                  setCurrentDate(new Date(y, m - 1, 1))
+                }}
+                title="Jump to specific month and year"
+                style={{
+                  padding: '4px 8px',
+                  borderRadius: '8px',
+                  border: '1px solid var(--border, #cbd5e1)',
+                  fontSize: '11px',
+                  color: 'var(--ink, #334155)',
+                  background: 'var(--card-bg, #ffffff)',
+                  cursor: 'pointer',
+                  marginLeft: '4px',
+                }}
+              />
             </div>
           </div>
 
-          {/* View Mode Switcher + Action Buttons */}
+          {/* View Mode Switcher + Scope + Action Buttons */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', width: isSmallScreen ? '100%' : 'auto', justifyContent: isSmallScreen ? 'space-between' : 'flex-end' }}>
+            {/* Scope Filter Switcher (Company / Team / My Calendar) */}
+            <div
+              style={{
+                display: 'inline-flex',
+                background: 'var(--surface-hover, #f1f5f9)',
+                padding: '3px',
+                borderRadius: '8px',
+                border: '1px solid var(--border, #e2e8f0)',
+              }}
+            >
+              {[
+                { id: 'all', label: 'Company' },
+                { id: 'team', label: 'Team' },
+                { id: 'my', label: 'My Calendar' },
+              ].map((s) => {
+                const active = scopeFilter === s.id
+                return (
+                  <button
+                    key={s.id}
+                    onClick={() => setScopeFilter(s.id)}
+                    style={{
+                      padding: '4px 10px',
+                      fontSize: '11.5px',
+                      fontWeight: active ? 700 : 500,
+                      color: active ? '#ffffff' : 'var(--ink, #475569)',
+                      background: active ? 'var(--teal, #006E6F)' : 'transparent',
+                      border: 'none',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {s.label}
+                  </button>
+                )
+              })}
+            </div>
+
             {/* View switcher buttons */}
             <div
               className="calendar-view-switcher"
@@ -937,9 +998,10 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
             >
               {[
                 { id: 'month', label: 'Month', icon: CalendarDays },
-                { id: 'agenda', label: 'Schedule List', icon: List },
                 { id: 'week', label: 'Week', icon: Clock },
                 { id: 'day', label: 'Day', icon: CalendarIcon },
+                { id: 'agenda', label: 'Schedule', icon: List },
+                { id: 'upcoming', label: 'Upcoming', icon: Target },
                 { id: 'year', label: 'Year', icon: Grid3X3 },
                 { id: 'gallery', label: 'Flyers', icon: Layers },
               ].map((v) => {
@@ -995,6 +1057,19 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
               </Button>
             </div>
 
+            {/* Schedule Event Action (Primary for all users) */}
+            <Button
+              variant="primary"
+              onClick={() => {
+                setEditingEventData(null)
+                setIsEventModalOpen(true)
+              }}
+              style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: isSmallScreen ? '6px 10px' : '7px 14px' }}
+            >
+              <Plus size={15} />
+              <span>Schedule Event</span>
+            </Button>
+
             {/* Admin Management Actions */}
             {canManage && (
               <div style={{ display: 'flex', gap: '6px' }}>
@@ -1005,16 +1080,16 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
                   style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: isSmallScreen ? '6px 8px' : '7px 12px' }}
                 >
                   <Upload size={14} />
-                  <span className="hidden-mobile">Import CSV</span>
+                  <span className="hidden-mobile">Import</span>
                 </Button>
 
                 <Button
-                  variant="primary"
+                  variant="outline"
                   onClick={() => openAddModal()}
-                  style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: isSmallScreen ? '6px 10px' : '7px 14px' }}
+                  style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: isSmallScreen ? '6px 10px' : '7px 12px' }}
                 >
                   <Plus size={15} />
-                  <span>Add Holiday</span>
+                  <span className="hidden-mobile">Holiday</span>
                 </Button>
               </div>
             )}
@@ -1050,16 +1125,18 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
               flexWrap: 'nowrap',
             }}
           >
-            <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--muted, #64748b)', marginRight: '4px', flexShrink: 0 }}>
-              Filter:
+            <span style={{ fontSize: '11px', fontWeight: 800, color: 'var(--muted, #64748b)', textTransform: 'uppercase', marginRight: '4px', flexShrink: 0 }}>
+              Category:
             </span>
             {[
               { id: 'all', label: 'All Events' },
-              { id: 'holiday', label: '🌴 Holidays' },
-              { id: 'birthday', label: '🎂 Birthdays' },
-              { id: 'work anniversary', label: '🎖️ Anniversaries' },
+              { id: 'Company Meeting', label: '💼 Meetings' },
+              { id: 'Company Holiday', label: '🌴 Holidays' },
+              { id: 'Employee Birthday', label: '🎂 Birthdays' },
+              { id: 'Work Anniversary', label: '🎖️ Anniversaries' },
+              { id: 'Project Deadline', label: '🎯 Deadlines' },
+              { id: 'Training Session', label: '🎓 Training' },
               { id: 'leave', label: '🏖️ Leaves' },
-              { id: 'event', label: '📅 Company Events' },
             ].map((cat) => {
               const active = categoryFilter === cat.id
               return (
@@ -1267,9 +1344,15 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
                     onClick={() => {
                       setSelectedDate(cell.dateStr)
                     }}
+                    onDragOver={(e) => {
+                      e.preventDefault()
+                      e.dataTransfer.dropEffect = 'move'
+                    }}
+                    onDrop={(e) => handleDropOnDate(e, cell.dateStr)}
                     onDoubleClick={() => {
-                      if (canManage && cell.isCurrentMonth) {
-                        openAddModal(cell.dateStr)
+                      if (cell.isCurrentMonth) {
+                        setEditingEventData({ date: cell.dateStr })
+                        setIsEventModalOpen(true)
                       }
                     }}
                     style={{
@@ -1371,6 +1454,10 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
                           return (
                             <div
                               key={ev.id}
+                              draggable={Boolean(canManage || ev.isOwner)}
+                              onDragStart={(e) => {
+                                e.dataTransfer.setData('text/plain', JSON.stringify({ id: ev.entityId || ev.id, title: ev.title }))
+                              }}
                               onClick={(e) => {
                                 e.stopPropagation()
                                 setSelectedEvent(ev)
@@ -1826,177 +1913,54 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
       )}
 
       {/* ============================================================== */}
-      {/* WEEK VIEW                                                      */}
+      {/* UPCOMING EVENTS VIEW                                           */}
       {/* ============================================================== */}
-      {viewMode === 'week' && (
-        <div
-          className="panel"
-          style={{
-            padding: '20px',
-            borderRadius: '14px',
-            border: '1px solid var(--border, #e2e8f0)',
-            background: 'var(--card-bg, #ffffff)',
-            overflowX: 'auto',
+      {viewMode === 'upcoming' && (
+        <UpcomingEventsView
+          events={events}
+          onSelectEvent={setSelectedEvent}
+          onCreateEvent={() => {
+            setEditingEventData(null)
+            setIsEventModalOpen(true)
           }}
-        >
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(130px, 1fr))', gap: '10px' }}>
-            {DAY_NAMES.map((name, idx) => {
-              // Calculate date for this day in the current week
-              const curr = new Date(currentDate)
-              const firstDayOfWeek = curr.getDate() - curr.getDay() + idx
-              const weekDate = new Date(curr.setDate(firstDayOfWeek))
-              const dateStr = weekDate.toISOString().split('T')[0]
-              const dayEvents = eventsByDate.get(dateStr) || []
-              const isToday = dateStr === new Date().toISOString().split('T')[0]
-
-              return (
-                <div
-                  key={dateStr}
-                  style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '8px',
-                    padding: '12px',
-                    borderRadius: '10px',
-                    background: isToday ? '#f0f9ff' : 'var(--surface-hover, #f8fafc)',
-                    border: isToday ? '1px solid #7dd3fc' : '1px solid var(--border, #f1f5f9)',
-                    minHeight: '280px',
-                  }}
-                >
-                  <div style={{ textAlign: 'center', borderBottom: '1px solid var(--border, #e2e8f0)', paddingBottom: '6px' }}>
-                    <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--muted, #64748b)' }}>{name}</div>
-                    <div style={{ fontSize: '16px', fontWeight: 800, color: isToday ? '#0284c7' : 'var(--ink, #0f172a)' }}>
-                      {weekDate.getDate()}
-                    </div>
-                  </div>
-
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    {dayEvents.map((ev) => {
-                      const styleInfo = CATEGORY_COLORS[ev.category] || CATEGORY_COLORS['Company Holiday']
-                      return (
-                        <div
-                          key={ev.id}
-                          onClick={() => setSelectedEvent(ev)}
-                          style={{
-                            padding: '8px',
-                            borderRadius: '6px',
-                            background: styleInfo.bg,
-                            color: styleInfo.text,
-                            border: `1px solid ${styleInfo.border}`,
-                            fontSize: '11px',
-                            fontWeight: 600,
-                            cursor: 'pointer',
-                          }}
-                        >
-                          <div style={{ fontWeight: 700, marginBottom: '2px' }}>{ev.title}</div>
-                          <div style={{ fontSize: '10px', opacity: 0.85 }}>{ev.category}</div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </div>
+          canManage={canManage}
+        />
       )}
 
       {/* ============================================================== */}
-      {/* DAY VIEW                                                       */}
+      {/* WEEK VIEW (HOURLY TIMELINE & INTERACTIVE BLOCKS)               */}
+      {/* ============================================================== */}
+      {viewMode === 'week' && (
+        <WeeklyCalendarView
+          currentDate={currentDate}
+          events={events}
+          onSelectDate={(d) => {
+            setSelectedDate(d)
+            setViewMode('day')
+          }}
+          onSelectEvent={setSelectedEvent}
+          onCreateEvent={(d) => {
+            setEditingEventData({ date: d })
+            setIsEventModalOpen(true)
+          }}
+          isSmallScreen={isSmallScreen}
+        />
+      )}
+
+      {/* ============================================================== */}
+      {/* DAY VIEW (HOURLY DETAILED BREAKDOWN)                           */}
       {/* ============================================================== */}
       {viewMode === 'day' && (
-        <div
-          className="panel"
-          style={{
-            padding: '24px',
-            borderRadius: '14px',
-            border: '1px solid var(--border, #e2e8f0)',
-            background: 'var(--card-bg, #ffffff)',
+        <DailyCalendarView
+          selectedDate={selectedDate}
+          events={events}
+          onSelectEvent={setSelectedEvent}
+          onCreateEvent={(d) => {
+            setEditingEventData({ date: d })
+            setIsEventModalOpen(true)
           }}
-        >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-            <div>
-              <span className="eyebrow" style={{ fontSize: '11px', color: 'var(--teal, #006E6F)', fontWeight: 700 }}>
-                Daily Agenda Breakdown
-              </span>
-              <h2 style={{ margin: '4px 0 0', fontSize: '20px', fontWeight: 800, color: 'var(--ink, #0f172a)' }}>
-                {new Date(`${selectedDate}T00:00:00Z`).toLocaleDateString('en-US', {
-                  weekday: 'long',
-                  month: 'long',
-                  day: 'numeric',
-                  year: 'numeric',
-                  timeZone: 'UTC',
-                })}
-              </h2>
-            </div>
-
-            {canManage && (
-              <Button variant="primary" onClick={() => openAddModal(selectedDate)}>
-                <Plus size={16} /> Add Event
-              </Button>
-            )}
-          </div>
-
-          {selectedDateEvents.length > 0 ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              {selectedDateEvents.map((ev) => {
-                const styleInfo = CATEGORY_COLORS[ev.category] || CATEGORY_COLORS['Company Holiday']
-                return (
-                  <div
-                    key={ev.id}
-                    style={{
-                      padding: '16px',
-                      borderRadius: '12px',
-                      border: `1px solid ${styleInfo.border}`,
-                      background: styleInfo.bg,
-                      color: styleInfo.text,
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      flexWrap: 'wrap',
-                      gap: '12px',
-                    }}
-                  >
-                    <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                        <span style={{ fontSize: '11px', fontWeight: 800, textTransform: 'uppercase' }}>
-                          {ev.category}
-                        </span>
-                        {ev.isPaid && (
-                          <span style={{ fontSize: '11px', background: 'rgba(255,255,255,0.7)', padding: '2px 8px', borderRadius: '6px', fontWeight: 700 }}>
-                            Paid Holiday
-                          </span>
-                        )}
-                      </div>
-                      <h4 style={{ margin: '0 0 6px', fontSize: '16px', fontWeight: 800 }}>{ev.title}</h4>
-                      {ev.description && <p style={{ margin: 0, fontSize: '13px', opacity: 0.9 }}>{ev.description}</p>}
-                    </div>
-
-                    <div style={{ display: 'flex', gap: '8px' }}>
-                      <Button variant="outline" onClick={() => setSelectedEvent(ev)}>
-                        View Details
-                      </Button>
-                      {canManage && ev.type === 'holiday' && (
-                        <>
-                          <Button variant="ghost" onClick={() => openEditModal(ev)}>
-                            <Edit2 size={15} />
-                          </Button>
-                          <Button variant="ghost" onClick={() => openDuplicateModal(ev)}>
-                            <Copy size={15} />
-                          </Button>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          ) : (
-            <div style={{ padding: '40px', textAlign: 'center', color: 'var(--muted, #64748b)' }}>
-              <p style={{ fontSize: '14px', fontWeight: 600 }}>No events scheduled for this day.</p>
-            </div>
-          )}
-        </div>
+          canManage={canManage}
+        />
       )}
 
       {/* ============================================================== */}
@@ -2503,217 +2467,64 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
       )}
 
       {/* ============================================================== */}
-      {/* EVENT DETAIL MODAL                                             */}
+      {/* ENTERPRISE EVENT DETAIL MODAL (RSVP, MEET, MAPS, ATTENDEES)    */}
       {/* ============================================================== */}
       {selectedEvent && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            background: 'rgba(15, 23, 42, 0.6)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 1000,
-            padding: '16px',
-            backdropFilter: 'blur(3px)',
+        <EventDetailModal
+          event={selectedEvent}
+          onClose={() => setSelectedEvent(null)}
+          onEdit={(ev) => {
+            if (ev.type === 'holiday') {
+              openEditModal(ev)
+            } else {
+              setEditingEventData(ev)
+              setIsEventModalOpen(true)
+            }
           }}
-          onClick={() => setSelectedEvent(null)}
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              width: '100%',
-              maxWidth: '500px',
-              background: 'var(--card-bg, #ffffff)',
-              borderRadius: '16px',
-              padding: '24px',
-              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.2)',
-              border: '1px solid var(--border, #e2e8f0)',
-            }}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
-              <div>
-                <span
-                  style={{
-                    fontSize: '11px',
-                    fontWeight: 800,
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.05em',
-                    padding: '2px 8px',
-                    borderRadius: '6px',
-                    background: (CATEGORY_COLORS[selectedEvent.category] || CATEGORY_COLORS['Company Holiday']).bg,
-                    color: (CATEGORY_COLORS[selectedEvent.category] || CATEGORY_COLORS['Company Holiday']).text,
-                  }}
-                >
-                  {selectedEvent.category}
-                </span>
-                <h3 style={{ margin: '6px 0 0', fontSize: '18px', fontWeight: 800, color: 'var(--ink, #0f172a)' }}>
-                  {selectedEvent.title}
-                </h3>
-              </div>
-              <button
-                onClick={() => setSelectedEvent(null)}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }}
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            {/* Long weekend banner */}
-            {isLongWeekend(selectedEvent.date) && (
-              <div
-                style={{
-                  padding: '10px 14px',
-                  borderRadius: '10px',
-                  background: '#fef3c7',
-                  border: '1px solid #fde68a',
-                  color: '#92400e',
-                  fontSize: '12px',
-                  fontWeight: 700,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  marginBottom: '14px',
-                }}
-              >
-                <span>🎉</span>
-                <span>3-Day Long Weekend! This holiday connects with Saturday & Sunday.</span>
-              </div>
-            )}
-
-            {/* Event celebration card if birthday or anniversary */}
-            {selectedEvent.isCelebration && (
-              <div
-                style={{
-                  padding: '14px',
-                  borderRadius: '12px',
-                  background: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)',
-                  color: '#92400e',
-                  marginBottom: '16px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '12px',
-                }}
-              >
-                <Sparkles size={24} color="#d97706" />
-                <div>
-                  <div style={{ fontWeight: 800, fontSize: '14px' }}>
-                    {selectedEvent.type === 'birthday' ? 'Birthday Celebration!' : 'Happy Work Anniversary!'}
-                  </div>
-                  <div style={{ fontSize: '12px' }}>
-                    Congratulate {selectedEvent.name} on this special milestone!
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '13px', color: 'var(--ink, #334155)', marginBottom: '20px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <CalendarDays size={16} color="var(--teal, #006E6F)" />
-                <span>
-                  <strong>Date:</strong> {selectedEvent.date}{' '}
-                  {selectedEvent.endDate && selectedEvent.endDate !== selectedEvent.date ? `to ${selectedEvent.endDate}` : ''} ({selectedEvent.day || 'Day'})
-                </span>
-              </div>
-
-              {selectedEvent.location && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <MapPin size={16} color="var(--teal, #006E6F)" />
-                  <span><strong>Location:</strong> {selectedEvent.location}</span>
-                </div>
-              )}
-
-              {selectedEvent.department && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <Users size={16} color="var(--teal, #006E6F)" />
-                  <span><strong>Department:</strong> {selectedEvent.department}</span>
-                </div>
-              )}
-
-              {selectedEvent.isPaid !== undefined && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <CheckCircle2 size={16} color="#059669" />
-                  <span><strong>Classification:</strong> {selectedEvent.isPaid ? 'Paid Official Holiday' : 'Unpaid Leave'}</span>
-                </div>
-              )}
-
-              {selectedEvent.description && (
-                <div style={{ marginTop: '8px', padding: '10px', background: '#f8fafc', borderRadius: '8px', lineHeight: 1.5 }}>
-                  {selectedEvent.description}
-                </div>
-              )}
-            </div>
-
-            {/* Action buttons */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <a
-                  href={getGoogleCalendarUrl(selectedEvent)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{
-                    padding: '8px 14px',
-                    borderRadius: '8px',
-                    border: '1px solid var(--border, #cbd5e1)',
-                    background: '#ffffff',
-                    fontSize: '12px',
-                    fontWeight: 600,
-                    color: '#0284c7',
-                    textDecoration: 'none',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '5px',
-                  }}
-                  title="Add to Google Calendar"
-                >
-                  <ExternalLink size={13} />
-                  <span>Add to G-Cal</span>
-                </a>
-
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    const text = `${selectedEvent.title} - ${selectedEvent.date} (${selectedEvent.day || ''})\nCategory: ${selectedEvent.category}\nLocation: ${selectedEvent.location || 'All Offices'}\n${selectedEvent.description || ''}`
-                    navigator.clipboard?.writeText(text)
-                    setCopiedNotice(true)
-                    setTimeout(() => setCopiedNotice(false), 2000)
-                  }}
-                  style={{ fontSize: '12px', padding: '6px 12px' }}
-                >
-                  {copiedNotice ? <Check size={14} color="#059669" /> : <Copy size={14} />}
-                  <span>{copiedNotice ? 'Copied!' : 'Copy Details'}</span>
-                </Button>
-              </div>
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                {canManage && selectedEvent.type === 'holiday' && (
-                  <>
-                    <Button
-                      variant="outline"
-                      onClick={() => {
-                        setIsDeleteModalOpen(true)
-                      }}
-                      style={{ color: '#ef4444', fontSize: '12px', padding: '6px 12px' }}
-                    >
-                      <Trash2 size={14} /> Delete
-                    </Button>
-                    <Button variant="outline" onClick={() => openDuplicateModal(selectedEvent)} style={{ fontSize: '12px', padding: '6px 12px' }}>
-                      <Copy size={14} /> Duplicate
-                    </Button>
-                    <Button variant="primary" onClick={() => openEditModal(selectedEvent)} style={{ fontSize: '12px', padding: '6px 12px' }}>
-                      <Edit2 size={14} /> Edit
-                    </Button>
-                  </>
-                )}
-                <Button variant="ghost" onClick={() => setSelectedEvent(null)} style={{ fontSize: '12px', padding: '6px 12px' }}>
-                  Close
-                </Button>
-              </div>
-            </div>
-          </div>
-        </div>
+          onDeleted={() => {
+            loadEvents()
+            setSelectedEvent(null)
+          }}
+          onRsvpUpdated={() => {
+            loadEvents()
+          }}
+          user={user}
+          canManage={canManage}
+          categoryStyles={CATEGORY_COLORS}
+        />
       )}
+
+      {/* ============================================================== */}
+      {/* SMART EVENT CREATION & EDIT MODAL (PHASES 3, 4, 5, 7, 9)        */}
+      {/* ============================================================== */}
+      <EventFormModal
+        isOpen={isEventModalOpen}
+        onClose={() => {
+          setIsEventModalOpen(false)
+          setEditingEventData(null)
+        }}
+        onSaved={() => {
+          loadEvents()
+          setIsEventModalOpen(false)
+          setEditingEventData(null)
+        }}
+        initialEvent={editingEventData}
+        employees={(storeState?.employees || []).map((emp) => ({
+          id: emp.id || emp.employeeId || emp._id,
+          name: emp.name || `${emp.firstName || ''} ${emp.lastName || ''}`.trim() || emp.workEmail || 'Staff',
+          email: emp.email || emp.workEmail || '',
+          department: emp.department || '',
+          role: emp.role || emp.designation || '',
+          avatar: emp.avatar || null,
+        }))}
+        departments={
+          Array.isArray(storeState?.departments)
+            ? storeState.departments.map((d) => (typeof d === 'string' ? d : d.name))
+            : ['All', 'Engineering', 'Human Resources', 'Design', 'Marketing', 'Sales', 'Operations', 'Finance']
+        }
+        user={user}
+        defaultDate={editingEventData?.date || selectedDate}
+      />
 
       {/* ============================================================== */}
       {/* ADD / EDIT HOLIDAY MODAL                                       */}

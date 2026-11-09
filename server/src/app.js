@@ -376,7 +376,9 @@ export function createApp(options = {}) {
   app.use('/api/v1/hierarchy', createHierarchyRouter({ auth, repository: employeeRepository }))
   app.use('/api/v1/mail', createMailRouter({ auth }))
   app.use('/api/v1/notifications', createNotificationRouter({ auth }))
-  app.use('/api/v1/calendar', createCalendarRouter({ auth, useDatabase }))
+  const calendarRouter = createCalendarRouter({ auth, useDatabase })
+  app.use('/api/v1/calendar', calendarRouter)
+  app.use('/api/calendar', calendarRouter)
   app.use('/api/v1', createAccessRouter(auth))
   const isCacheableStatic = (filePath) => {
     return /\.(woff2|woff|ttf|eot|png|jpe?g|gif|webp|svg|ico)$/i.test(filePath)
