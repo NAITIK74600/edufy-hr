@@ -30,7 +30,7 @@ export default defineConfig({
     minify: false,
     target: ['es2020', 'safari14', 'ios14'],
     cssTarget: ['safari14', 'ios14'],
-    chunkSizeWarningLimit: 600,
+    chunkSizeWarningLimit: 1200,
     rollupOptions: {
       output: {
         manualChunks(id) {

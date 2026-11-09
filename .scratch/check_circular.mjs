@@ -58,3 +58,4 @@ for (const file of imports.keys()) {
 
 console.log('Total cycles found:', cycles.length);
 cycles.slice(0, 10).forEach(c => console.log('Cycle:', c.map(p => path.relative('.', p)).join(' -> ')));
+

@@ -2,6 +2,7 @@ import { CalendarEvent } from '../../models/CalendarEvent.js'
 import { Employee } from '../../models/Employee.js'
 import { LeaveRequest } from '../../models/LeaveRequest.js'
 import { workspaceModels } from '../../models/Workspace.js'
+import { extractEmployeeDob } from './dobHelper.js'
 
 /**
  * Intelligent HR Automation & Calendar Sync Engine
@@ -37,39 +38,37 @@ export const calendarSyncService = {
         const empName = emp.displayName || emp.name || 'Employee'
         const dept = emp.department || 'General'
 
-        // A. Birthday
-        if (emp.dob) {
-          const dobDate = new Date(emp.dob)
-          if (!isNaN(dobDate.getTime())) {
-            const bMonth = String(dobDate.getUTCMonth() + 1).padStart(2, '0')
-            const bDay = String(dobDate.getUTCDate()).padStart(2, '0')
-            const bdayDate = `${targetYear}-${bMonth}-${bDay}`
-            const sourceId = `bday_${empId}_${targetYear}`
+        // A. Birthday (Dynamic calculation from MongoDB employee records)
+        const dobInfo = extractEmployeeDob(emp)
+        if (dobInfo) {
+          const bMonth = String(dobInfo.month).padStart(2, '0')
+          const bDay = dobInfo.day
+          const bdayDate = `${targetYear}-${bMonth}-${bDay}`
+          const sourceId = `bday_${empId}_${targetYear}`
 
-            await CalendarEvent.findOneAndUpdate(
-              { sourceType: 'employee_birthday', sourceId },
-              {
-                title: `${empName}'s Birthday`,
-                description: `Wish ${empName} a very Happy Birthday! Department: ${dept}.`,
-                category: 'Employee Birthday',
-                date: bdayDate,
-                startDate: bdayDate,
-                endDate: bdayDate,
-                allDay: true,
-                department: dept,
-                applicableDepartments: ['All'],
-                organizer: { employeeId: 'SYSTEM', name: 'HR Automations' },
-                priority: 'normal',
-                visibility: 'public',
-                status: 'confirmed',
-                sourceType: 'employee_birthday',
-                sourceId,
-                sourceData: { employeeId: empId, name: empName, department: dept },
-              },
-              { upsert: true }
-            )
-            summary.birthdays++
-          }
+          await CalendarEvent.findOneAndUpdate(
+            { sourceType: 'employee_birthday', sourceId },
+            {
+              title: `${empName}'s Birthday`,
+              description: `Wish ${empName} a very Happy Birthday! Department: ${dept}.`,
+              category: 'Employee Birthday',
+              date: bdayDate,
+              startDate: bdayDate,
+              endDate: bdayDate,
+              allDay: true,
+              department: dept,
+              applicableDepartments: ['All'],
+              organizer: { employeeId: 'SYSTEM', name: 'HR Automations' },
+              priority: 'normal',
+              visibility: 'public',
+              status: 'confirmed',
+              sourceType: 'employee_birthday',
+              sourceId,
+              sourceData: { employeeId: empId, name: empName, department: dept },
+            },
+            { upsert: true }
+          )
+          summary.birthdays++
         }
 
         // B. Work Anniversary & Joining

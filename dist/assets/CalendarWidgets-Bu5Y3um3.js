@@ -1,10 +1,51 @@
 import { n as __toESM } from "./rolldown-runtime-CO0Nlsmt.js";
 import { $t as Calendar, Bt as Clock, _n as require_react, fn as Award, qt as ChevronRight, rn as Cake, u as Video } from "./icons-vendor-CNlTUIuG.js";
 import { a as require_jsx_runtime } from "./motion-vendor-3i60tGNx.js";
-import { T as hrStore } from "./index-CAEauPo_.js";
-import { n as calendarService } from "./HolidayCalendarShowcase-C47bq5Nx.js";
-// src/components/calendar/CalendarWidgets.jsx
+import { T as hrStore } from "./index-DPfPlI3e.js";
+import { n as calendarService } from "./HolidayCalendarShowcase-BqNjKE64.js";
+// src/utils/dobHelper.js
 var import_react = /* @__PURE__ */ __toESM(require_react(), 1);
+/**
+* Frontend DOB parsing and extraction utility for Edufyi HR Calendar & Celebration widgets.
+*/
+function parseDobToMonthDay(rawDob) {
+	if (!rawDob) return null;
+	if (rawDob instanceof Date && !isNaN(rawDob.getTime())) return {
+		month: rawDob.getUTCMonth() + 1,
+		day: String(rawDob.getUTCDate()).padStart(2, "0")
+	};
+	const str = String(rawDob).trim();
+	if (!str) return null;
+	const ymdMatch = str.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/);
+	if (ymdMatch) {
+		const month = parseInt(ymdMatch[2], 10);
+		const day = String(parseInt(ymdMatch[3], 10)).padStart(2, "0");
+		if (month >= 1 && month <= 12 && parseInt(day, 10) >= 1 && parseInt(day, 10) <= 31) return {
+			month,
+			day
+		};
+	}
+	const dmyMatch = str.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})/);
+	if (dmyMatch) {
+		const day = String(parseInt(dmyMatch[1], 10)).padStart(2, "0");
+		const month = parseInt(dmyMatch[2], 10);
+		if (month >= 1 && month <= 12 && parseInt(day, 10) >= 1 && parseInt(day, 10) <= 31) return {
+			month,
+			day
+		};
+	}
+	const d = new Date(str);
+	if (!isNaN(d.getTime())) return {
+		month: d.getUTCMonth() + 1,
+		day: String(d.getUTCDate()).padStart(2, "0")
+	};
+	return null;
+}
+function extractEmployeeDob(emp) {
+	if (!emp || typeof emp !== "object") return null;
+	return parseDobToMonthDay(emp.dob || emp.identity?.dob || emp.dateOfBirth || emp.birthDate || emp.personalDetails?.dob || emp.personalDetails?.dateOfBirth);
+}
+// src/components/calendar/CalendarWidgets.jsx
 var import_jsx_runtime = require_jsx_runtime();
 function CalendarWidgets({ user = null }) {
 	const [widgetsData, setWidgetsData] = (0, import_react.useState)(null);
@@ -48,24 +89,16 @@ function CalendarWidgets({ user = null }) {
 		d.setDate(d.getDate() + 1);
 		return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${start}/${d.toISOString().split("T")[0].replace(/-/g, "")}&details=${encodeURIComponent(`${h.category || "Official Holiday"} - Edufyi HR Calendar`)}`;
 	};
-	const birthdays = widgetsData?.birthdaysThisMonth || (storeState.employees || []).filter((e) => {
-		const rawDob = e.dob || e.identity?.dob;
-		if (!rawDob) return false;
-		const d = new Date(rawDob);
-		if (isNaN(d.getTime())) return false;
-		return new Date(d.getTime() + 198e5).getUTCMonth() + 1 === currentMonth;
-	}).map((e) => {
-		const rawDob = e.dob || e.identity?.dob;
-		const d = new Date(rawDob);
-		const istDate = new Date(d.getTime() + 198e5);
-		const day = String(istDate.getUTCDate()).padStart(2, "0");
+	const birthdays = widgetsData?.birthdaysThisMonth || (storeState.employees || []).map((e) => {
+		const dobInfo = extractEmployeeDob(e);
+		if (!dobInfo || dobInfo.month !== currentMonth) return null;
 		return {
 			id: e.id || e._id,
 			name: e.displayName || e.name,
 			department: e.department || "General",
-			date: `${currentYear}-${String(currentMonth).padStart(2, "0")}-${day}`
+			date: `${currentYear}-${String(currentMonth).padStart(2, "0")}-${dobInfo.day}`
 		};
-	});
+	}).filter(Boolean);
 	const anniversaries = widgetsData?.anniversariesThisMonth || (storeState.employees || []).filter((e) => {
 		if (!e.joiningDate) return false;
 		const d = new Date(e.joiningDate);

@@ -105,7 +105,7 @@ function DataStatus({ children }) {
       setTookLong(false)
       return
     }
-    const timer = setTimeout(() => setTookLong(true), 6000)
+    const timer = setTimeout(() => setTookLong(true), 2500)
     return () => clearTimeout(timer)
   }, [state.dataReady])
 

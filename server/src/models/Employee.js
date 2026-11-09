@@ -76,7 +76,16 @@ const employeeSchema = new mongoose.Schema({
   },
   emergencyContact: { name: String, relationship: String, phone: String },
   parentsContact: { fatherName: String, motherName: String, phone: String, parentPhone: String, address: String },
-  identity: { aadharNumber: String, panNumber: String, passportNumber: String, uanNumber: String, hasExistingUan: Boolean },
+  identity: {
+    aadharNumber: String,
+    panNumber: String,
+    passportNumber: String,
+    uanNumber: String,
+    hasExistingUan: Boolean,
+    dob: Date,
+    gender: String,
+    bloodGroup: String,
+  },
   onboardingDocs: { type: mongoose.Schema.Types.Mixed, select: false },
   onboardingStatus: {
     type: String,
@@ -130,6 +139,15 @@ const employeeSchema = new mongoose.Schema({
   offboardingChecklist: { type: [checklistItemSchema], default: [] },
   employmentHistory: { type: [employmentHistorySchema], default: [] },
 }, { timestamps: true, strict: true })
+
+employeeSchema.pre('save', function () {
+  if (this.identity?.dob && !this.dob) {
+    this.dob = this.identity.dob
+  }
+  if (this.dob && this.identity && !this.identity.dob) {
+    this.identity.dob = this.dob
+  }
+})
 
 employeeSchema.index({ department: 1, status: 1 })
 employeeSchema.index({ managerId: 1, status: 1 })

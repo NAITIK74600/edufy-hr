@@ -31,10 +31,10 @@ export class ApiError extends Error {
 
 const inFlightGets = new Map()
 
-async function executeApiRequest(path, options = {}, retries = 3) {
+async function executeApiRequest(path, options = {}, retries = 1) {
   const activeToken = accessToken || readStoredToken()
   let response
-  const timeoutSignal = typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(15000) : undefined
+  const timeoutSignal = typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(10000) : undefined
   try {
     response = await fetch(`${API_BASE_URL}${path}`, {
       headers: {
@@ -85,9 +85,9 @@ async function executeApiRequest(path, options = {}, retries = 3) {
   return body ?? { success: true }
 }
 
-export async function apiRequest(path, options = {}, retries = 3) {
+export async function apiRequest(path, options = {}, retries = 1) {
   const isGet = !options.method || options.method === 'GET'
-  if (isGet && retries === 3) {
+  if (isGet && retries === 1) {
     const cacheKey = `${path}::${accessToken || ''}`
     if (inFlightGets.has(cacheKey)) {
       return inFlightGets.get(cacheKey)

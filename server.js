@@ -5,6 +5,9 @@ import { fileURLToPath } from 'node:url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
+// Set production environment by default
+process.env.NODE_ENV = process.env.NODE_ENV || 'production'
+
 // Ensure process working directory is ALWAYS this folder
 try { process.chdir(__dirname) } catch {}
 

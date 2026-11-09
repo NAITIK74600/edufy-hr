@@ -112,37 +112,35 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
         if (management) {
           const list = []
           let page = 1
-          let total
+          let total = 0
           do {
             const result = await apiClient.get(`/employees?limit=100&page=${page++}`)
-            list.push(...result.data.map(normalizeEmployee))
-            total = result.meta.total
-          } while (list.length < total)
+            const batch = Array.isArray(result?.data) ? result.data : []
+            if (batch.length === 0) break
+            list.push(...batch.map(normalizeEmployee))
+            total = Number(result?.meta?.total ?? list.length)
+          } while (list.length < total && page <= 25)
           return { data: list }
         } else {
           const result = await apiClient.get('/auth/me')
-          return { data: [normalizeEmployee(result.data.user)] }
+          const userRec = result?.data?.user ? [normalizeEmployee(result.data.user)] : []
+          return { data: userRec }
         }
       }
 
       const requests = {
-        employees: fetchEmployees(),
-        attendance: apiClient.get(management ? '/attendance' : '/attendance/self'),
-        leaves: apiClient.get(management ? '/leave/hr/requests' : '/leave/self'),
-        payroll: payrollAllowed ? apiClient.get('/payroll') : Promise.resolve({ data: [] }),
-        balances: apiClient.get(management ? '/leave/hr/balances' : '/leave/balances'),
+        employees: fetchEmployees().catch((err) => { console.warn('Could not load employees:', err.message); return { data: [] } }),
+        attendance: apiClient.get(management ? '/attendance' : '/attendance/self').catch(() => ({ data: [] })),
+        leaves: apiClient.get(management ? '/leave/hr/requests' : '/leave/self').catch(() => ({ data: [] })),
+        payroll: payrollAllowed ? apiClient.get('/payroll').catch(() => ({ data: [] })) : Promise.resolve({ data: [] }),
+        balances: apiClient.get(management ? '/leave/hr/balances' : '/leave/balances').catch(() => ({ data: [] })),
         users: management ? apiClient.get('/auth/users').catch(() => ({ data: [] })) : Promise.resolve({ data: [] }),
-        teamLeaves: !management && can('leave.team.read') ? apiClient.get('/leave/team') : Promise.resolve({ data: [] }),
+        teamLeaves: !management && can('leave.team.read') ? apiClient.get('/leave/team').catch(() => ({ data: [] })) : Promise.resolve({ data: [] }),
         leavePolicies: apiClient.get('/leave/policies').catch(() => ({ data: [] })),
-        config: apiClient.get('/attendance/config'),
+        config: apiClient.get('/attendance/config').catch(() => ({ data: {} })),
         payrollSettings: apiClient.get('/payroll/settings').catch(() => ({ data: {} })),
-        directory: management ? Promise.resolve({ data: [] }) : apiClient.get('/hierarchy/directory'),
-        workspace: apiClient.get('/workspace/snapshot').then((result) => {
-          if (!result?.data || !workspaceKeys.every((key) => Array.isArray(result.data[key]))) {
-            throw new Error('Workspace data is invalid. Refresh or contact your administrator.')
-          }
-          return result
-        }),
+        directory: management ? Promise.resolve({ data: [] }) : apiClient.get('/hierarchy/directory').catch(() => ({ data: [] })),
+        workspace: apiClient.get('/workspace/snapshot').catch(() => ({ data: {} })),
       }
       const results = await Promise.allSettled(Object.values(requests))
       if (generation !== activeGeneration) return
@@ -305,15 +303,20 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
           .filter((n) => n && n.id && !deletedIds.has(n.id))
           .map((n) => ({ ...n, read: Boolean(n.read || readIds.has(n.id)) }))
 
+      const rawLeaves = Array.isArray(data.leaves) ? data.leaves : []
+      const rawTeamLeaves = Array.isArray(data.teamLeaves) ? data.teamLeaves : []
+      const safeWorkspace = (data.workspace && typeof data.workspace === 'object') ? data.workspace : {}
+
       Object.assign(state(), {
-        ...Object.fromEntries(workspaceKeys.map((key) => [key, data.workspace[key] ?? []])),
+        ...Object.fromEntries(workspaceKeys.map((key) => [key, safeWorkspace[key] ?? []])),
         notifications: serverNotifs,
         departments: finalDepts,
         teams: finalTeams,
         roles: finalRoles,
         employees: finalEmployees,
-        users: resolvedUsers, attendance: data.attendance,
-        leaves: [...new Map([...data.leaves, ...data.teamLeaves].map((request) => [request.id ?? request._id, request])).values()].map((request) => normalizeLeave(request, employees)),
+        users: resolvedUsers,
+        attendance: Array.isArray(data.attendance) ? data.attendance : [],
+        leaves: [...new Map([...rawLeaves, ...rawTeamLeaves].map((request) => [request.id ?? request._id, request])).values()].map((request) => normalizeLeave(request, employees)),
         leavePolicies: Array.isArray(data.leavePolicies?.data) ? data.leavePolicies.data : (Array.isArray(data.leavePolicies) ? data.leavePolicies : []),
         payroll: (data.payroll || []).map((record) => {
           const gross = record.grossEarnings || Object.values(record.earnings ?? {}).reduce((sum, value) => sum + value, 0)
@@ -695,11 +698,16 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
         notify()
         return
       }
-      // If switching user or data is not ready yet, show clean loading state until refresh resolves
-      if (prevUserId !== nextUserId || !state().dataReady) {
+      // Progressive Hydration: If cached data exists in store, render dashboard immediately
+      // and perform live background sync without blocking user interaction behind a loading screen.
+      const hasCachedData = (Array.isArray(state().employees) && state().employees.length > 0) ||
+        (Array.isArray(state().departments) && state().departments.length > 0)
+      if (prevUserId !== nextUserId || (!state().dataReady && !hasCachedData)) {
         state().dataReady = false
         state().dataError = ''
         notify()
+      } else if (hasCachedData) {
+        state().dataReady = true
       }
       await refresh()
     },

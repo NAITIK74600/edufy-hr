@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/LoginPage-OzqxQ-0J.js","assets/rolldown-runtime-CO0Nlsmt.js","assets/icons-vendor-CNlTUIuG.js","assets/motion-vendor-3i60tGNx.js","assets/ModulePlaceholder-CumDJsLS.js","assets/EmployeeDashboardPage-fJ7PzVVh.js","assets/currency-oCUzM0NR.js","assets/HolidayCalendarShowcase-C47bq5Nx.js","assets/CompanyDocumentsView-DizsWukz.js","assets/companyDocumentsConstants-DUkgikMQ.js","assets/PayslipPreviewModal-wDXijvhr.js","assets/react-vendor-B_MMQ54z.js","assets/pdf-vendor-BkGpxo0p.js","assets/payrollMatcher-DYZYv1X2.js","assets/OnboardingDossierView-BtziiQJ1.js","assets/AdminDashboardPage-IQBxeAs5.js","assets/CalendarWidgets-NiXR8G4v.js","assets/EmployeesPage--7W-c4HM.js","assets/EmployeeComplianceStatusCard-CzHqxu6K.js","assets/OverviewPage-DuSGR9CS.js","assets/LeaveManagementPage-DEOhnAW6.js","assets/WorkspaceModulePage-Qcdi1776.js","assets/OrgHierarchyPage-A-pHxltI.js","assets/PayrollPage-BRlMquTW.js","assets/EmployeeProfilePage-U7vk8T-O.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/LoginPage-qiXLOBb3.js","assets/rolldown-runtime-CO0Nlsmt.js","assets/icons-vendor-CNlTUIuG.js","assets/motion-vendor-3i60tGNx.js","assets/ModulePlaceholder-CeqaKPIB.js","assets/EmployeeDashboardPage-BY4UMeOX.js","assets/currency-oCUzM0NR.js","assets/HolidayCalendarShowcase-BqNjKE64.js","assets/CompanyDocumentsView-BehYmZF-.js","assets/companyDocumentsConstants-DUkgikMQ.js","assets/PayslipPreviewModal-DYE53Gio.js","assets/react-vendor-B_MMQ54z.js","assets/pdf-vendor-BkGpxo0p.js","assets/payrollMatcher-DYZYv1X2.js","assets/OnboardingDossierView-Cbmslv9U.js","assets/AdminDashboardPage-BZTLEO4o.js","assets/CalendarWidgets-Bu5Y3um3.js","assets/EmployeesPage-BF4xSBnt.js","assets/EmployeeComplianceStatusCard-D12PscHm.js","assets/OverviewPage-2PWVxTOj.js","assets/LeaveManagementPage-DC5IOguE.js","assets/WorkspaceModulePage-DGHDrXlJ.js","assets/OrgHierarchyPage-BQzV-dNQ.js","assets/PayrollPage-gH42hw-e.js","assets/EmployeeProfilePage-BwE4T1U1.js"])))=>i.map(i=>d[i]);
 import { n as __toESM } from "./rolldown-runtime-CO0Nlsmt.js";
 import { $ as Network, A as ShieldCheck, D as Smartphone, Dt as FileText, E as Sparkles, Et as FingerprintPattern, Ft as Download, Gt as CircleAlert, I as Send, K as Plus, M as Share, Mt as Eye, Nt as EyeOff, P as Settings2, Qt as Camera, Tt as FolderOpen, Ut as CircleQuestionMark, Vt as Clock3, Wt as CircleCheck, Yt as ChevronDown, _n as require_react, an as Building, at as MapPin, b as Ticket, c as VolumeX, cn as Bot, ct as Lock, d as Users, dn as Bell, dt as LoaderCircle, f as User, gt as Laptop, h as UserCheck, i as X, jt as FileChartColumnIncreasing, l as Volume2, ln as BookOpen, m as UserPlus, mt as LayoutDashboard, nt as Menu, rt as Megaphone, s as WalletCards, sn as BriefcaseBusiness, st as LogOut, tn as CalendarDays, vt as KeyRound, w as SquarePlus, x as Target, y as Trash, yt as House } from "./icons-vendor-CNlTUIuG.js";
 import { n as require_client, r as require_react_dom } from "./react-vendor-B_MMQ54z.js";
@@ -110,10 +110,10 @@ var ApiError = class extends Error {
 	}
 };
 var inFlightGets = /* @__PURE__ */ new Map();
-async function executeApiRequest(path, options = {}, retries = 3) {
+async function executeApiRequest(path, options = {}, retries = 1) {
 	const activeToken = accessToken || readStoredToken$1();
 	let response;
-	const timeoutSignal = typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function" ? AbortSignal.timeout(15e3) : void 0;
+	const timeoutSignal = typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function" ? AbortSignal.timeout(1e4) : void 0;
 	try {
 		response = await fetch(`${API_BASE_URL$1}${path}`, {
 			headers: {
@@ -166,8 +166,8 @@ async function executeApiRequest(path, options = {}, retries = 3) {
 	}
 	return body ?? { success: true };
 }
-async function apiRequest(path, options = {}, retries = 3) {
-	if ((!options.method || options.method === "GET") && retries === 3) {
+async function apiRequest(path, options = {}, retries = 1) {
+	if ((!options.method || options.method === "GET") && retries === 1) {
 		const cacheKey = `${path}::${accessToken || ""}`;
 		if (inFlightGets.has(cacheKey)) return inFlightGets.get(cacheKey);
 		const promise = executeApiRequest(path, options, retries).finally(() => {
@@ -744,31 +744,36 @@ function createConnectedStore(store, notify, rawLocal = {}) {
 				if (management) {
 					const list = [];
 					let page = 1;
-					let total;
+					let total = 0;
 					do {
 						const result = await apiClient.get(`/employees?limit=100&page=${page++}`);
-						list.push(...result.data.map(normalizeEmployee));
-						total = result.meta.total;
-					} while (list.length < total);
+						const batch = Array.isArray(result?.data) ? result.data : [];
+						if (batch.length === 0) break;
+						list.push(...batch.map(normalizeEmployee));
+						total = Number(result?.meta?.total ?? list.length);
+					} while (list.length < total && page <= 25);
 					return { data: list };
-				} else return { data: [normalizeEmployee((await apiClient.get("/auth/me")).data.user)] };
+				} else {
+					const result = await apiClient.get("/auth/me");
+					return { data: result?.data?.user ? [normalizeEmployee(result.data.user)] : [] };
+				}
 			}
 			const requests = {
-				employees: fetchEmployees(),
-				attendance: apiClient.get(management ? "/attendance" : "/attendance/self"),
-				leaves: apiClient.get(management ? "/leave/hr/requests" : "/leave/self"),
-				payroll: payrollAllowed ? apiClient.get("/payroll") : Promise.resolve({ data: [] }),
-				balances: apiClient.get(management ? "/leave/hr/balances" : "/leave/balances"),
+				employees: fetchEmployees().catch((err) => {
+					console.warn("Could not load employees:", err.message);
+					return { data: [] };
+				}),
+				attendance: apiClient.get(management ? "/attendance" : "/attendance/self").catch(() => ({ data: [] })),
+				leaves: apiClient.get(management ? "/leave/hr/requests" : "/leave/self").catch(() => ({ data: [] })),
+				payroll: payrollAllowed ? apiClient.get("/payroll").catch(() => ({ data: [] })) : Promise.resolve({ data: [] }),
+				balances: apiClient.get(management ? "/leave/hr/balances" : "/leave/balances").catch(() => ({ data: [] })),
 				users: management ? apiClient.get("/auth/users").catch(() => ({ data: [] })) : Promise.resolve({ data: [] }),
-				teamLeaves: !management && can("leave.team.read") ? apiClient.get("/leave/team") : Promise.resolve({ data: [] }),
+				teamLeaves: !management && can("leave.team.read") ? apiClient.get("/leave/team").catch(() => ({ data: [] })) : Promise.resolve({ data: [] }),
 				leavePolicies: apiClient.get("/leave/policies").catch(() => ({ data: [] })),
-				config: apiClient.get("/attendance/config"),
+				config: apiClient.get("/attendance/config").catch(() => ({ data: {} })),
 				payrollSettings: apiClient.get("/payroll/settings").catch(() => ({ data: {} })),
-				directory: management ? Promise.resolve({ data: [] }) : apiClient.get("/hierarchy/directory"),
-				workspace: apiClient.get("/workspace/snapshot").then((result) => {
-					if (!result?.data || !workspaceKeys.every((key) => Array.isArray(result.data[key]))) throw new Error("Workspace data is invalid. Refresh or contact your administrator.");
-					return result;
-				})
+				directory: management ? Promise.resolve({ data: [] }) : apiClient.get("/hierarchy/directory").catch(() => ({ data: [] })),
+				workspace: apiClient.get("/workspace/snapshot").catch(() => ({ data: {} }))
 			};
 			const results = await Promise.allSettled(Object.values(requests));
 			if (generation !== activeGeneration) return;
@@ -912,16 +917,19 @@ function createConnectedStore(store, notify, rawLocal = {}) {
 				...n,
 				read: Boolean(n.read || readIds.has(n.id))
 			}));
+			const rawLeaves = Array.isArray(data.leaves) ? data.leaves : [];
+			const rawTeamLeaves = Array.isArray(data.teamLeaves) ? data.teamLeaves : [];
+			const safeWorkspace = data.workspace && typeof data.workspace === "object" ? data.workspace : {};
 			Object.assign(state(), {
-				...Object.fromEntries(workspaceKeys.map((key) => [key, data.workspace[key] ?? []])),
+				...Object.fromEntries(workspaceKeys.map((key) => [key, safeWorkspace[key] ?? []])),
 				notifications: serverNotifs,
 				departments: finalDepts,
 				teams: finalTeams,
 				roles: finalRoles,
 				employees: finalEmployees,
 				users: resolvedUsers,
-				attendance: data.attendance,
-				leaves: [...new Map([...data.leaves, ...data.teamLeaves].map((request) => [request.id ?? request._id, request])).values()].map((request) => normalizeLeave(request, employees)),
+				attendance: Array.isArray(data.attendance) ? data.attendance : [],
+				leaves: [...new Map([...rawLeaves, ...rawTeamLeaves].map((request) => [request.id ?? request._id, request])).values()].map((request) => normalizeLeave(request, employees)),
 				leavePolicies: Array.isArray(data.leavePolicies?.data) ? data.leavePolicies.data : Array.isArray(data.leavePolicies) ? data.leavePolicies : [],
 				payroll: (data.payroll || []).map((record) => {
 					const gross = record.grossEarnings || Object.values(record.earnings ?? {}).reduce((sum, value) => sum + value, 0);
@@ -1340,11 +1348,12 @@ function createConnectedStore(store, notify, rawLocal = {}) {
 				notify();
 				return;
 			}
-			if (prevUserId !== nextUserId || !state().dataReady) {
+			const hasCachedData = Array.isArray(state().employees) && state().employees.length > 0 || Array.isArray(state().departments) && state().departments.length > 0;
+			if (prevUserId !== nextUserId || !state().dataReady && !hasCachedData) {
 				state().dataReady = false;
 				state().dataError = "";
 				notify();
-			}
+			} else if (hasCachedData) state().dataReady = true;
 			await refresh();
 		},
 		refresh,
@@ -17214,19 +17223,19 @@ function ConfirmationDialog({ open, title, message, confirmLabel = "Confirm", on
 	}), document.body);
 }
 // src/main.jsx
-var LoginPage = (0, import_react.lazy)(() => __vitePreload(() => import("./LoginPage-OzqxQ-0J.js").then((m) => ({ default: m.LoginPage })), __vite__mapDeps([0,1,2,3])));
-var NotFoundPage = (0, import_react.lazy)(() => __vitePreload(() => import("./ModulePlaceholder-CumDJsLS.js").then((m) => ({ default: m.NotFoundPage })), __vite__mapDeps([4,2,1,3])));
-var EmployeeDashboardPage = (0, import_react.lazy)(() => __vitePreload(() => import("./EmployeeDashboardPage-fJ7PzVVh.js").then((m) => ({ default: m.EmployeeDashboardPage })), __vite__mapDeps([5,1,2,3,6,7,8,9,10,11,12,13,14])));
-var AccessDeniedPage = (0, import_react.lazy)(() => __vitePreload(() => import("./EmployeeDashboardPage-fJ7PzVVh.js").then((m) => ({ default: m.AccessDeniedPage })), __vite__mapDeps([5,1,2,3,6,7,8,9,10,11,12,13,14])));
-var AdminDashboardPage = (0, import_react.lazy)(() => __vitePreload(() => import("./AdminDashboardPage-IQBxeAs5.js").then((m) => ({ default: m.AdminDashboardPage })), __vite__mapDeps([15,1,2,11,3,6,7,16])));
-var AdminUsersModule = (0, import_react.lazy)(() => __vitePreload(() => import("./AdminDashboardPage-IQBxeAs5.js").then((m) => ({ default: m.AdminUsersModule })), __vite__mapDeps([15,1,2,11,3,6,7,16])));
-var EmployeesPage = (0, import_react.lazy)(() => __vitePreload(() => import("./EmployeesPage--7W-c4HM.js").then((m) => ({ default: m.EmployeesPage })), __vite__mapDeps([17,1,2,3,6,14,11,13,18,9])));
-var OverviewPage = (0, import_react.lazy)(() => __vitePreload(() => import("./OverviewPage-DuSGR9CS.js").then((m) => ({ default: m.OverviewPage })), __vite__mapDeps([19,1,2,3,7,16])));
-var LeaveManagementPage = (0, import_react.lazy)(() => __vitePreload(() => import("./LeaveManagementPage-DEOhnAW6.js").then((m) => ({ default: m.LeaveManagementPage })), __vite__mapDeps([20,1,2,11,3])));
-var WorkspaceModulePage = (0, import_react.lazy)(() => __vitePreload(() => import("./WorkspaceModulePage-Qcdi1776.js").then((m) => ({ default: m.WorkspaceModulePage })), __vite__mapDeps([21,1,2,11,3,6,7,15,16,8,9])));
-var OrgHierarchyPage = (0, import_react.lazy)(() => __vitePreload(() => import("./OrgHierarchyPage-A-pHxltI.js").then((m) => ({ default: m.OrgHierarchyPage })), __vite__mapDeps([22,1,2,3])));
-var PayrollPage = (0, import_react.lazy)(() => __vitePreload(() => import("./PayrollPage-BRlMquTW.js").then((m) => ({ default: m.PayrollPage })), __vite__mapDeps([23,1,2,3,10,11,12,13])));
-var EmployeeProfilePage = (0, import_react.lazy)(() => __vitePreload(() => import("./EmployeeProfilePage-U7vk8T-O.js").then((m) => ({ default: m.EmployeeProfilePage })), __vite__mapDeps([24,1,2,3,6,14,11,13,18,9])));
+var LoginPage = (0, import_react.lazy)(() => __vitePreload(() => import("./LoginPage-qiXLOBb3.js").then((m) => ({ default: m.LoginPage })), __vite__mapDeps([0,1,2,3])));
+var NotFoundPage = (0, import_react.lazy)(() => __vitePreload(() => import("./ModulePlaceholder-CeqaKPIB.js").then((m) => ({ default: m.NotFoundPage })), __vite__mapDeps([4,2,1,3])));
+var EmployeeDashboardPage = (0, import_react.lazy)(() => __vitePreload(() => import("./EmployeeDashboardPage-BY4UMeOX.js").then((m) => ({ default: m.EmployeeDashboardPage })), __vite__mapDeps([5,1,2,3,6,7,8,9,10,11,12,13,14])));
+var AccessDeniedPage = (0, import_react.lazy)(() => __vitePreload(() => import("./EmployeeDashboardPage-BY4UMeOX.js").then((m) => ({ default: m.AccessDeniedPage })), __vite__mapDeps([5,1,2,3,6,7,8,9,10,11,12,13,14])));
+var AdminDashboardPage = (0, import_react.lazy)(() => __vitePreload(() => import("./AdminDashboardPage-BZTLEO4o.js").then((m) => ({ default: m.AdminDashboardPage })), __vite__mapDeps([15,1,2,11,3,6,7,16])));
+var AdminUsersModule = (0, import_react.lazy)(() => __vitePreload(() => import("./AdminDashboardPage-BZTLEO4o.js").then((m) => ({ default: m.AdminUsersModule })), __vite__mapDeps([15,1,2,11,3,6,7,16])));
+var EmployeesPage = (0, import_react.lazy)(() => __vitePreload(() => import("./EmployeesPage-BF4xSBnt.js").then((m) => ({ default: m.EmployeesPage })), __vite__mapDeps([17,1,2,3,6,14,11,13,18,9])));
+var OverviewPage = (0, import_react.lazy)(() => __vitePreload(() => import("./OverviewPage-2PWVxTOj.js").then((m) => ({ default: m.OverviewPage })), __vite__mapDeps([19,1,2,3,7,16])));
+var LeaveManagementPage = (0, import_react.lazy)(() => __vitePreload(() => import("./LeaveManagementPage-DC5IOguE.js").then((m) => ({ default: m.LeaveManagementPage })), __vite__mapDeps([20,1,2,11,3])));
+var WorkspaceModulePage = (0, import_react.lazy)(() => __vitePreload(() => import("./WorkspaceModulePage-DGHDrXlJ.js").then((m) => ({ default: m.WorkspaceModulePage })), __vite__mapDeps([21,1,2,11,3,6,7,15,16,8,9])));
+var OrgHierarchyPage = (0, import_react.lazy)(() => __vitePreload(() => import("./OrgHierarchyPage-BQzV-dNQ.js").then((m) => ({ default: m.OrgHierarchyPage })), __vite__mapDeps([22,1,2,3])));
+var PayrollPage = (0, import_react.lazy)(() => __vitePreload(() => import("./PayrollPage-gH42hw-e.js").then((m) => ({ default: m.PayrollPage })), __vite__mapDeps([23,1,2,3,10,11,12,13])));
+var EmployeeProfilePage = (0, import_react.lazy)(() => __vitePreload(() => import("./EmployeeProfilePage-BwE4T1U1.js").then((m) => ({ default: m.EmployeeProfilePage })), __vite__mapDeps([24,1,2,3,6,14,11,13,18,9])));
 var ErrorBoundary = class extends import_react.Component {
 	constructor(props) {
 		super(props);
@@ -17326,7 +17335,7 @@ function DataStatus({ children }) {
 			setTookLong(false);
 			return;
 		}
-		const timer = setTimeout(() => setTookLong(true), 6e3);
+		const timer = setTimeout(() => setTookLong(true), 2500);
 		return () => clearTimeout(timer);
 	}, [state.dataReady]);
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [state.dataError && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {

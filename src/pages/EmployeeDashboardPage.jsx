@@ -3511,7 +3511,7 @@ function ESSProfileView({ user }) {
             </div>
             <div className="profile-detail-row">
               <span>Date of Birth</span>
-              <strong>{employee?.dob ? new Date(employee.dob).toLocaleDateString('en-GB') : (identity.dob ? new Date(identity.dob).toLocaleDateString('en-GB') : '14 August 1994')}</strong>
+              <strong>{employee?.dob ? new Date(employee.dob).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : (identity.dob ? new Date(identity.dob).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Not provided')}</strong>
             </div>
             <div className="profile-detail-row">
               <span>Residential Address</span>

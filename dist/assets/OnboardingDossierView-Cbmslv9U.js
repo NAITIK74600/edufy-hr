@@ -2,7 +2,7 @@ import { n as __toESM } from "./rolldown-runtime-CO0Nlsmt.js";
 import { A as ShieldCheck, At as FileCheckCorner, Bt as Clock, Dt as FileText, Ft as Download, Gt as CircleAlert, I as Send, Lt as CreditCard, Mt as Eye, Qt as Camera, Wt as CircleCheck, Xt as Check, Y as Pen, _n as require_react, ct as Lock, d as Users, g as Upload, ht as Layers, i as X, lt as LockOpen, on as Briefcase, v as TrendingUp, z as RotateCcw } from "./icons-vendor-CNlTUIuG.js";
 import { r as require_react_dom } from "./react-vendor-B_MMQ54z.js";
 import { a as require_jsx_runtime } from "./motion-vendor-3i60tGNx.js";
-import { I as apiClient, T as hrStore, x as useAuth } from "./index-CAEauPo_.js";
+import { I as apiClient, T as hrStore, x as useAuth } from "./index-DPfPlI3e.js";
 import { r as unmaskBankAccount } from "./payrollMatcher-DYZYv1X2.js";
 // src/constants/verificationConstants.js
 var import_react = /* @__PURE__ */ __toESM(require_react(), 1);
@@ -339,8 +339,10 @@ function OnboardingDossierView({ employee, canEdit = false, canVerify = false, o
 			panNumber: identity.panNumber || "",
 			passportNumber: identity.passportNumber || "",
 			uanNumber: identity.uanNumber || "",
-			hasExistingUan: identity.hasExistingUan ?? Boolean(identity.uanNumber)
+			hasExistingUan: identity.hasExistingUan ?? Boolean(identity.uanNumber),
+			dob: employee?.dob ? String(employee.dob).slice(0, 10) : identity.dob ? String(identity.dob).slice(0, 10) : ""
 		},
+		dob: employee?.dob ? String(employee.dob).slice(0, 10) : identity.dob ? String(identity.dob).slice(0, 10) : "",
 		parentsContact: {
 			fatherName: parents.fatherName || "",
 			motherName: parents.motherName || "",
@@ -367,8 +369,10 @@ function OnboardingDossierView({ employee, canEdit = false, canVerify = false, o
 				panNumber: employee.identity?.panNumber || prev.identity?.panNumber || "",
 				passportNumber: employee.identity?.passportNumber || prev.identity?.passportNumber || "",
 				uanNumber: employee.identity?.uanNumber || prev.identity?.uanNumber || "",
-				hasExistingUan: employee.identity?.hasExistingUan ?? Boolean(employee.identity?.uanNumber || prev.identity?.uanNumber)
+				hasExistingUan: employee.identity?.hasExistingUan ?? Boolean(employee.identity?.uanNumber || prev.identity?.uanNumber),
+				dob: employee?.dob ? String(employee.dob).slice(0, 10) : employee.identity?.dob ? String(employee.identity.dob).slice(0, 10) : prev.identity?.dob || ""
 			},
+			dob: employee?.dob ? String(employee.dob).slice(0, 10) : employee.identity?.dob ? String(employee.identity.dob).slice(0, 10) : prev.dob || "",
 			parentsContact: {
 				fatherName: employee.parentsContact?.fatherName || prev.parentsContact?.fatherName || "",
 				motherName: employee.parentsContact?.motherName || prev.parentsContact?.motherName || "",
@@ -3449,6 +3453,28 @@ function OnboardingDossierView({ employee, canEdit = false, canVerify = false, o
 													}),
 													placeholder: "12-digit EPFO UAN",
 													maxLength: 16
+												})]
+											}),
+											/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", {
+												style: {
+													display: "grid",
+													gap: "5px",
+													fontSize: "12px",
+													fontWeight: 600,
+													color: "#334155"
+												},
+												children: ["Date of Birth (DOB)", /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+													type: "date",
+													className: "ui-input",
+													value: editData.dob || editData.identity?.dob || "",
+													onChange: (e) => setEditData({
+														...editData,
+														dob: e.target.value,
+														identity: {
+															...editData.identity,
+															dob: e.target.value
+														}
+													})
 												})]
 											})
 										]

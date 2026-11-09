@@ -77,9 +77,15 @@ export function createEmployeeRouter({ auth, service, userStore, employeeReposit
       const currentEmployee = (await service.get(targetId).catch(() => null)) ||
         (request.auth.user.employeeId ? await service.get(request.auth.user.employeeId).catch(() => null) : null)
       const payload = {}
-      const allowed = ['identity', 'parentsContact', 'emergencyContact', 'bankDetails', 'onboardingDocs', 'phone', 'financeDetails', 'complianceDocs', 'policyConsents', 'avatarUrl']
+      const allowed = ['identity', 'parentsContact', 'emergencyContact', 'bankDetails', 'onboardingDocs', 'phone', 'financeDetails', 'complianceDocs', 'policyConsents', 'avatarUrl', 'dob']
       for (const key of allowed) {
         if (request.body && request.body[key] !== undefined) payload[key] = request.body[key]
+      }
+      if (payload.identity && typeof payload.identity === 'object' && payload.identity.dob && !payload.dob) {
+        payload.dob = payload.identity.dob
+      }
+      if (payload.dob && payload.identity && typeof payload.identity === 'object') {
+        payload.identity.dob = payload.dob
       }
       // If passportPhoto is uploaded, sync to avatarUrl automatically
       if (!payload.avatarUrl && payload.onboardingDocs?.passportPhoto?.url) {
@@ -346,9 +352,15 @@ export function createEmployeeRouter({ auth, service, userStore, employeeReposit
           else if (st === 'approved') updateBody.onboardingStatus = 'verified'
         }
       }
+      if (updateBody.identity && typeof updateBody.identity === 'object' && updateBody.identity.dob && !updateBody.dob) {
+        updateBody.dob = updateBody.identity.dob
+      }
+      if (updateBody.dob && updateBody.identity && typeof updateBody.identity === 'object') {
+        updateBody.identity.dob = updateBody.dob
+      }
       if (isSelf) {
         if (!hasPermission(request.auth.user, PERMISSIONS.EMPLOYEES_WRITE)) {
-          const allowedSelfFields = ['identity', 'parentsContact', 'emergencyContact', 'bankDetails', 'onboardingDocs', 'phone', 'financeDetails', 'complianceDocs', 'policyConsents', 'avatarUrl', 'onboardingStatus', 'onboardingSubmittedAt', 'onboardingNotes']
+          const allowedSelfFields = ['identity', 'parentsContact', 'emergencyContact', 'bankDetails', 'onboardingDocs', 'phone', 'financeDetails', 'complianceDocs', 'policyConsents', 'avatarUrl', 'onboardingStatus', 'onboardingSubmittedAt', 'onboardingNotes', 'dob']
           updateBody = Object.fromEntries(Object.entries(updateBody).filter(([key]) => allowedSelfFields.includes(key)))
         }
         // Self-updates can NEVER set onboardingStatus to verified or self-verify documents, regardless of role!

@@ -239,34 +239,6 @@ export function createApp(options = {}) {
       } catch (err) {
         console.warn('Attendance restore notice:', err.message)
       }
-
-      // Auto-migrate missing DOB on startup so all employees have real persistent DOBs in MongoDB
-      try {
-        const { Employee } = await import('./models/Employee.js')
-        const dataPath = new URL('./modules/employees/employeeDobData.json', import.meta.url)
-        if (fs.existsSync(dataPath)) {
-          const raw = fs.readFileSync(dataPath, 'utf8')
-          const employeeDobData = JSON.parse(raw)
-          const missingDobEmployees = await Employee.find({ $or: [{ dob: null }, { dob: { $exists: false } }] }).select('_id email employeeId dob')
-          if (missingDobEmployees.length > 0) {
-            console.log(`[server] Synchronizing DOB for ${missingDobEmployees.length} employees...`)
-            for (const emp of missingDobEmployees) {
-              const emailKey = String(emp.email || '').trim().toLowerCase()
-              const codeKey = String(emp.employeeId || '').trim().toUpperCase()
-              const dobStr = employeeDobData[emailKey] || employeeDobData[codeKey]
-              if (dobStr) {
-                const d = new Date(dobStr)
-                if (!isNaN(d.getTime())) {
-                  await Employee.updateOne({ _id: emp._id }, { $set: { dob: d } })
-                }
-              }
-            }
-            console.log('[server] Employee DOB synchronization completed successfully.')
-          }
-        }
-      } catch (dobMigrateErr) {
-        console.warn('[server] DOB auto-migration warning:', dobMigrateErr.message)
-      }
     }
   }
   const userStore = options.userStore ?? {

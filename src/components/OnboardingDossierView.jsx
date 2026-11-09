@@ -269,7 +269,9 @@ export function OnboardingDossierView({ employee, canEdit = false, canVerify = f
       passportNumber: identity.passportNumber || '',
       uanNumber: identity.uanNumber || '',
       hasExistingUan: identity.hasExistingUan ?? Boolean(identity.uanNumber),
+      dob: employee?.dob ? String(employee.dob).slice(0, 10) : (identity.dob ? String(identity.dob).slice(0, 10) : ''),
     },
+    dob: employee?.dob ? String(employee.dob).slice(0, 10) : (identity.dob ? String(identity.dob).slice(0, 10) : ''),
     parentsContact: {
       fatherName: parents.fatherName || '',
       motherName: parents.motherName || '',
@@ -300,7 +302,9 @@ export function OnboardingDossierView({ employee, canEdit = false, canVerify = f
           passportNumber: employee.identity?.passportNumber || prev.identity?.passportNumber || '',
           uanNumber: employee.identity?.uanNumber || prev.identity?.uanNumber || '',
           hasExistingUan: employee.identity?.hasExistingUan ?? Boolean(employee.identity?.uanNumber || prev.identity?.uanNumber),
+          dob: employee?.dob ? String(employee.dob).slice(0, 10) : (employee.identity?.dob ? String(employee.identity.dob).slice(0, 10) : (prev.identity?.dob || '')),
         },
+        dob: employee?.dob ? String(employee.dob).slice(0, 10) : (employee.identity?.dob ? String(employee.identity.dob).slice(0, 10) : (prev.dob || '')),
         parentsContact: {
           fatherName: employee.parentsContact?.fatherName || prev.parentsContact?.fatherName || '',
           motherName: employee.parentsContact?.motherName || prev.parentsContact?.motherName || '',
@@ -2397,6 +2401,19 @@ export function OnboardingDossierView({ employee, canEdit = false, canVerify = f
                       onChange={(e) => setEditData({ ...editData, identity: { ...editData.identity, uanNumber: e.target.value } })}
                       placeholder="12-digit EPFO UAN"
                       maxLength={16}
+                    />
+                  </label>
+                  <label style={{ display: 'grid', gap: '5px', fontSize: '12px', fontWeight: 600, color: '#334155' }}>
+                    Date of Birth (DOB)
+                    <input
+                      type="date"
+                      className="ui-input"
+                      value={editData.dob || editData.identity?.dob || ''}
+                      onChange={(e) => setEditData({
+                        ...editData,
+                        dob: e.target.value,
+                        identity: { ...editData.identity, dob: e.target.value }
+                      })}
                     />
                   </label>
                 </div>

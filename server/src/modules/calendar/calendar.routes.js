@@ -14,6 +14,7 @@ import { googleMapsService } from './googleMaps.service.js'
 import { googleCalendarService } from './googleCalendar.service.js'
 import { calendarSyncService } from './calendarSync.service.js'
 import { calendarNotificationService } from './calendarNotification.service.js'
+import { extractEmployeeDob } from './dobHelper.js'
 
 const MANAGEMENT_ROLES = new Set(['admin', 'hr', 'hr_executive', 'director', 'managing_director', 'co_founder'])
 const isManagement = (user) => Boolean(user?.role && MANAGEMENT_ROLES.has(user.role.toLowerCase()))
@@ -140,30 +141,17 @@ export function createCalendarRouter({ auth, useDatabase = true }) {
       try {
         const employees = await Employee.find({
           status: { $in: ['active', 'onboarding', 'notice', 'probation', 'Active', 'ONBOARDING'] },
-        }).select('_id employeeId firstName lastName name displayName department designation avatarUrl dob identity').lean().catch((err) => {
+        }).select('_id employeeId firstName lastName name displayName department designation avatarUrl dob identity dateOfBirth birthDate personalDetails').lean().catch((err) => {
           console.warn('[Calendar Birthday Query Error]:', err.message)
           return []
         })
 
         for (const emp of employees) {
-          const rawDob = emp.dob || emp.identity?.dob
-          let bMonth = null
-          let bDay = null
+          const dobInfo = extractEmployeeDob(emp)
+          if (!dobInfo) continue
 
-          if (rawDob) {
-            const d = new Date(rawDob)
-            if (!isNaN(d.getTime())) {
-              // Standardize to IST (UTC + 5:30) to eliminate any server/UTC timezone date shifts
-              const istDate = new Date(d.getTime() + (5.5 * 60 * 60 * 1000))
-              bMonth = istDate.getUTCMonth() + 1
-              bDay = String(istDate.getUTCDate()).padStart(2, '0')
-            }
-          }
-
-          // Require valid employee date of birth from MongoDB record
-          if (!bMonth || !bDay) {
-            continue
-          }
+          const bMonth = dobInfo.month
+          const bDay = dobInfo.day
 
           if (targetMonth && bMonth !== targetMonth) continue
 
@@ -1027,27 +1015,16 @@ export function createCalendarRouter({ auth, useDatabase = true }) {
         const activeEmployees = await Employee.find({
           status: { $in: ['active', 'onboarding', 'notice', 'probation', 'Active', 'ONBOARDING'] },
         })
-          .select('_id employeeId firstName lastName name displayName department designation avatarUrl dob identity')
+          .select('_id employeeId firstName lastName name displayName department designation avatarUrl dob identity dateOfBirth birthDate personalDetails')
           .lean()
           .catch(() => [])
 
         for (const emp of activeEmployees) {
-          const rawDob = emp.dob || emp.identity?.dob
-          let bMonth = null
-          let bDay = null
+          const dobInfo = extractEmployeeDob(emp)
+          if (!dobInfo) continue
 
-          if (rawDob) {
-            const d = new Date(rawDob)
-            if (!isNaN(d.getTime())) {
-              const istDate = new Date(d.getTime() + (5.5 * 60 * 60 * 1000))
-              bMonth = istDate.getUTCMonth() + 1
-              bDay = String(istDate.getUTCDate()).padStart(2, '0')
-            }
-          }
-
-          if (!bMonth || !bDay) {
-            continue
-          }
+          const bMonth = dobInfo.month
+          const bDay = dobInfo.day
 
           if (bMonth === currentMonth) {
             const bDate = `${currentYear}-${String(bMonth).padStart(2, '0')}-${bDay}`

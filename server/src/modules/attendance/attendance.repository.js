@@ -374,10 +374,17 @@ export function createMongoAttendanceRepository() {
           { userId: { $in: employees.map((employee) => employee._id) } },
         ]
       }
+      // When no specific date/month filter is provided (e.g. initial dashboard telemetry sync),
+      // query the most recent 60 days to prevent multi-megabyte payload bloat and database locks.
+      if (!filters.date && !filters.month && !filters.search && !filters.employeeId) {
+        const recentCutoff = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+        query.date = { $gte: recentCutoff }
+      }
       const docs = await AttendanceRecord.find(query)
         .select('-auditEvents')
         .populate('userId', 'name displayName employeeId department')
-        .sort({ createdAt: -1 })
+        .sort({ date: -1, createdAt: -1 })
+        .limit(filters.date ? 200 : 800)
         .lean()
       const nowMs = Date.now()
       return docs.map((record) => {
