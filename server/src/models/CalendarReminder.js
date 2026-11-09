@@ -24,3 +24,4 @@ const calendarReminderSchema = new mongoose.Schema({
 calendarReminderSchema.index({ status: 1, scheduledFor: 1 })
 
 export const CalendarReminder = mongoose.models.CalendarReminder ?? mongoose.model('CalendarReminder', calendarReminderSchema)
+

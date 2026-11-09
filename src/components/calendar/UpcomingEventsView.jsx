@@ -185,3 +185,4 @@ export function UpcomingEventsView({
     </div>
   )
 }
+

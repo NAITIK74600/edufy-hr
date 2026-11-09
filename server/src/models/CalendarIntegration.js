@@ -23,3 +23,4 @@ const calendarIntegrationSchema = new mongoose.Schema({
 }, { timestamps: true })
 
 export const CalendarIntegration = mongoose.models.CalendarIntegration ?? mongoose.model('CalendarIntegration', calendarIntegrationSchema)
+

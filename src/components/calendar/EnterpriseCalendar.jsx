@@ -91,18 +91,35 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
   const [copiedNotice, setCopiedNotice] = useState(false)
 
   // Responsive mobile layout detection
-  const [isMobile, setIsMobile] = useState(() => (typeof window !== 'undefined' ? window.innerWidth < 1024 : false))
-  const [isSmallScreen, setIsSmallScreen] = useState(() => (typeof window !== 'undefined' ? window.innerWidth < 640 : false))
+  const [isMobile, setIsMobile] = useState(() => {
+    if (typeof window === 'undefined') return false
+    const w = window.innerWidth || (window.screen ? window.screen.width : 0)
+    const isTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0)
+    return w < 1024 || (isTouch && w < 1200) || (window.matchMedia && window.matchMedia('(max-width: 1024px)').matches)
+  })
+  const [isSmallScreen, setIsSmallScreen] = useState(() => {
+    if (typeof window === 'undefined') return false
+    const w = window.innerWidth || (window.screen ? window.screen.width : 0)
+    return w < 640 || (window.matchMedia && window.matchMedia('(max-width: 640px)').matches)
+  })
 
   useEffect(() => {
     const handleResize = () => {
       if (typeof window === 'undefined') return
-      const w = window.innerWidth
-      setIsMobile(w < 1024)
-      setIsSmallScreen(w < 640)
+      const w = window.innerWidth || (window.screen ? window.screen.width : 0)
+      const isTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0)
+      const mobileQuery = window.matchMedia ? window.matchMedia('(max-width: 1024px)').matches : false
+      const smallQuery = window.matchMedia ? window.matchMedia('(max-width: 640px)').matches : false
+      setIsMobile(w < 1024 || (isTouch && w < 1200) || mobileQuery)
+      setIsSmallScreen(w < 640 || smallQuery)
     }
+    handleResize()
     window.addEventListener('resize', handleResize)
-    return () => window.removeEventListener('resize', handleResize)
+    window.addEventListener('orientationchange', handleResize)
+    return () => {
+      window.removeEventListener('resize', handleResize)
+      window.removeEventListener('orientationchange', handleResize)
+    }
   }, [])
 
   // Modals state
@@ -1273,14 +1290,27 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
       {/* ============================================================== */}
       {viewMode === 'month' && (
         <div
-          className="calendar-grid-layout"
-          style={{
-            display: 'grid',
-            gridTemplateColumns: isMobile ? '1fr' : 'minmax(0, 1fr) 320px',
-            gap: isMobile ? '16px' : '20px',
-            alignItems: 'start',
-            width: '100%',
-          }}
+          className={`calendar-grid-layout ${isMobile ? 'is-mobile-layout' : ''}`}
+          style={
+            isMobile
+              ? {
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '16px',
+                  width: '100%',
+                  maxWidth: '100%',
+                  boxSizing: 'border-box',
+                }
+              : {
+                  display: 'grid',
+                  gridTemplateColumns: 'minmax(0, 1fr) 340px',
+                  gap: '20px',
+                  alignItems: 'start',
+                  width: '100%',
+                  maxWidth: '100%',
+                  boxSizing: 'border-box',
+                }
+          }
         >
           {/* Calendar Month Grid */}
           <div
@@ -1290,8 +1320,10 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
               borderRadius: '14px',
               border: '1px solid var(--border, #e2e8f0)',
               background: 'var(--card-bg, #ffffff)',
-              overflowX: 'hidden',
+              overflowX: 'auto',
+              WebkitOverflowScrolling: 'touch',
               width: '100%',
+              maxWidth: '100%',
               boxSizing: 'border-box',
             }}
           >

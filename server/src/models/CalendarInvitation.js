@@ -25,3 +25,4 @@ const calendarInvitationSchema = new mongoose.Schema({
 calendarInvitationSchema.index({ eventId: 1, employeeId: 1 }, { unique: true })
 
 export const CalendarInvitation = mongoose.models.CalendarInvitation ?? mongoose.model('CalendarInvitation', calendarInvitationSchema)
+

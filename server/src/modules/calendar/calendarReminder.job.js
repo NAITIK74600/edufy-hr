@@ -50,3 +50,4 @@ export function stopCalendarBackgroundDaemon() {
     reminderIntervalHandle = null
   }
 }
+

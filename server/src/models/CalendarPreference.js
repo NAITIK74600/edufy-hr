@@ -17,3 +17,4 @@ const calendarPreferenceSchema = new mongoose.Schema({
 }, { timestamps: true })
 
 export const CalendarPreference = mongoose.models.CalendarPreference ?? mongoose.model('CalendarPreference', calendarPreferenceSchema)
+
