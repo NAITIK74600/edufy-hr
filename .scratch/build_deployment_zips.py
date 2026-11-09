@@ -17,6 +17,7 @@ INCLUDE_DIRS = [
     "server",
     "public",
     "src",
+    "tmp",
 ]
 
 INCLUDE_FILES = [
@@ -26,6 +27,7 @@ INCLUDE_FILES = [
     "package-lock.json",
     "index.html",
     "vite.config.js",
+    ".env",
     ".env.example",
 ]
 
