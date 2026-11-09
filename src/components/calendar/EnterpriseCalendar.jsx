@@ -33,10 +33,17 @@ import {
   List,
   Layers,
   ExternalLink,
+  Target,
+  Video,
 } from 'lucide-react'
 import { Button, StatusBadge, Field } from '../ui'
 import { hrStore } from '../../services/hrStore'
 import { calendarService } from '../../services/calendarService'
+import { EventDetailModal } from './EventDetailModal'
+import { EventFormModal } from './EventFormModal'
+import { UpcomingEventsView } from './UpcomingEventsView'
+import { WeeklyCalendarView } from './WeeklyCalendarView'
+import { DailyCalendarView } from './DailyCalendarView'
 
 const CATEGORY_COLORS = {
   'National Holiday': { bg: '#e0f2fe', text: '#0369a1', border: '#bae6fd', badge: 'info' },
