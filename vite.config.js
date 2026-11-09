@@ -27,6 +27,7 @@ export default defineConfig({
     },
   },
   build: {
+    minify: false,
     target: ['es2020', 'safari14', 'ios14'],
     cssTarget: ['safari14', 'ios14'],
     chunkSizeWarningLimit: 600,
