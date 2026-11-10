@@ -20,6 +20,9 @@ _webuzo_build/
 
 # Sensitive env (use .env.example as template)
 .env
+*.runtime.json
+*credentials*.json
+google.runtime.json
 
 # Unnecessary root files
 clean_store_teams.cjs

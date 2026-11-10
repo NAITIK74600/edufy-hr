@@ -1,3 +1,5 @@
+import fs from 'node:fs'
+import path from 'node:path'
 import crypto from 'node:crypto'
 import { CalendarIntegration } from '../../models/CalendarIntegration.js'
 import { GoogleIntegration } from '../../models/GoogleIntegration.js'
@@ -11,6 +13,62 @@ import { encryptToken, decryptToken } from '../../utils/encryption.js'
  * - Verified Google Meet conferenceData generation (ZERO fake links)
  * - Synchronizes creations, updates, and cancellations
  */
+
+let envLoadAttempted = false
+function ensureEnvLoaded() {
+  if (envLoadAttempted && process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+    return
+  }
+  envLoadAttempted = true
+
+  const candidatePaths = [
+    path.resolve(process.cwd(), '.env'),
+    path.resolve(process.cwd(), '..', '.env'),
+    path.resolve(process.cwd(), '..', '..', '.env'),
+    '/home/admin_edufytech/EDUFYIONE/.env',
+    path.resolve(process.cwd(), 'google.runtime.json'),
+    path.resolve(process.cwd(), '..', 'google.runtime.json'),
+    path.resolve(process.cwd(), '..', '..', 'google.runtime.json'),
+    '/home/admin_edufytech/EDUFYIONE/google.runtime.json',
+  ]
+
+  for (const envPath of candidatePaths) {
+    try {
+      if (fs.existsSync(envPath)) {
+        if (envPath.endsWith('.json')) {
+          const json = JSON.parse(fs.readFileSync(envPath, 'utf8'))
+          const target = json.web || json
+          if (target.client_id && !process.env.GOOGLE_CLIENT_ID) {
+            process.env.GOOGLE_CLIENT_ID = target.client_id.trim()
+          }
+          if (target.client_secret && !process.env.GOOGLE_CLIENT_SECRET) {
+            process.env.GOOGLE_CLIENT_SECRET = target.client_secret.trim()
+          }
+          if (target.project_id && !process.env.GOOGLE_PROJECT_ID) {
+            process.env.GOOGLE_PROJECT_ID = target.project_id.trim()
+          }
+          if (Array.isArray(target.redirect_uris) && target.redirect_uris[0] && !process.env.GOOGLE_REDIRECT_URI) {
+            process.env.GOOGLE_REDIRECT_URI = target.redirect_uris[0].trim()
+          }
+        } else {
+          const raw = fs.readFileSync(envPath, 'utf8')
+          for (const rawLine of raw.split('\n')) {
+            const line = rawLine.trim()
+            if (line && !line.startsWith('#') && line.includes('=')) {
+              const idx = line.indexOf('=')
+              const k = line.slice(0, idx).trim()
+              const v = line.slice(idx + 1).trim()
+              if (k && !process.env[k]) {
+                process.env[k] = v
+              }
+            }
+          }
+        }
+        if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) break
+      }
+    } catch {}
+  }
+}
 
 /**
  * Helper: Run an async fetch with exponential backoff retry for transient network/quota errors (429, 503)
@@ -48,10 +106,16 @@ export const googleCalendarService = {
    * Get server-side Google OAuth client configuration
    */
   getClientConfig() {
+    ensureEnvLoaded()
+
+    const rawClientId = process.env.GOOGLE_CLIENT_ID?.trim()
+    const rawClientSecret = process.env.GOOGLE_CLIENT_SECRET?.trim()
+    const rawRedirectUri = process.env.GOOGLE_REDIRECT_URI?.trim()
+
     return {
-      clientId: process.env.GOOGLE_CLIENT_ID || '',
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
-      redirectUri: process.env.GOOGLE_REDIRECT_URI || 'https://edufyione.edufyitech.in',
+      clientId: rawClientId || '',
+      clientSecret: rawClientSecret || '',
+      redirectUri: (rawRedirectUri || 'https://edufyione.edufyitech.in').replace(/\/+$/, ''),
       apiKey: process.env.GOOGLE_CALENDAR_API_KEY || '',
       projectId: process.env.GOOGLE_PROJECT_ID || 'hr-ed-514310',
     }
@@ -95,12 +159,10 @@ export const googleCalendarService = {
    * Exchange Google authorization code for access and refresh tokens
    */
   async exchangeCodeForTokens(code, actor = null) {
-    const { clientId, redirectUri } = this.getClientConfig()
-    const primarySecret = process.env.GOOGLE_CLIENT_SECRET || ''
+    const { clientId, clientSecret, redirectUri } = this.getClientConfig()
+    const primarySecret = clientSecret || process.env.GOOGLE_CLIENT_SECRET || ''
     const candidateSecrets = Array.from(new Set([
       primarySecret,
-      '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',
-      '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',
     ].filter(Boolean)))
 
     if (!clientId || candidateSecrets.length === 0) {
@@ -253,12 +315,10 @@ export const googleCalendarService = {
       return null
     }
 
-    const { clientId } = this.getClientConfig()
-    const primarySecret = process.env.GOOGLE_CLIENT_SECRET || ''
+    const { clientId, clientSecret } = this.getClientConfig()
+    const primarySecret = clientSecret || process.env.GOOGLE_CLIENT_SECRET || ''
     const candidateSecrets = Array.from(new Set([
       primarySecret,
-      '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',
-      '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',
     ].filter(Boolean)))
 
     if (!clientId || candidateSecrets.length === 0) return decryptToken(integration.encryptedAccessToken)
