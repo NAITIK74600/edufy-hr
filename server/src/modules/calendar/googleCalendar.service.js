@@ -12,7 +12,7 @@ export const googleCalendarService = {
     return {
       clientId: process.env.GOOGLE_CLIENT_ID || '',
       clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
-      redirectUri: process.env.GOOGLE_REDIRECT_URI || 'https://edufyione.edufyitech.in/api/v1/calendar/google/callback',
+      redirectUri: process.env.GOOGLE_REDIRECT_URI || 'https://edufyione.edufyitech.in',
       apiKey: process.env.GOOGLE_CALENDAR_API_KEY || '',
     }
   },

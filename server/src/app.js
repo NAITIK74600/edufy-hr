@@ -41,6 +41,7 @@ import { createHierarchyRouter } from './modules/hierarchy/hierarchy.routes.js'
 import { createMailRouter } from './modules/mail/mail.routes.js'
 import { createNotificationRouter } from './modules/notifications/notification.routes.js'
 import { createCalendarRouter } from './modules/calendar/calendar.routes.js'
+import { googleCalendarService } from './modules/calendar/googleCalendar.service.js'
 import { createMongoAttendanceRepository } from './modules/attendance/attendance.repository.js'
 import { createMemoryAttendanceRepository } from './modules/attendance/memoryAttendanceRepository.js'
 import { createAttendanceService } from './modules/attendance/attendance.service.js'
@@ -468,8 +469,31 @@ export function createApp(options = {}) {
         }
       },
     }))
-    app.use((request, response, next) => {
+    app.use(async (request, response, next) => {
       if (request.method !== 'GET') return next()
+      if (request.query?.code && (request.query.scope?.includes('calendar') || request.query.scope?.includes('google') || request.query.state?.includes('actor_') || request.query.state === 'edufyi_google_oauth')) {
+        try {
+          await googleCalendarService.exchangeCodeForTokens(request.query.code)
+          return response.send(`
+            <html>
+              <body style="font-family: sans-serif; text-align: center; padding: 50px;">
+                <h2 style="color: #006E6F;">✅ Google Calendar Successfully Connected!</h2>
+                <p>You can close this window and return to Edufyi HR.</p>
+                <script>
+                  if (window.opener) {
+                    window.opener.postMessage('google_calendar_connected', '*');
+                    window.close();
+                  } else {
+                    window.location.href = '/#/admin/holidays';
+                  }
+                </script>
+              </body>
+            </html>
+          `)
+        } catch (err) {
+          return response.status(500).send(`Google Connection Error: ${err.message}`)
+        }
+      }
       if (request.path.startsWith('/api') || request.path.startsWith('/verification-forms') || request.path.startsWith('/company-policies')) {
         return next()
       }
