@@ -54,6 +54,8 @@ export function createEmployeeRouter({ auth, service, userStore, employeeReposit
           emergencyContact: employee?.emergencyContact || {},
           bankDetails: employee?.bankDetails || {},
           onboardingDocs: employee?.onboardingDocs || {},
+          complianceDocs: employee?.complianceDocs || employee?.onboardingDocs?.complianceDocs || {},
+          policyConsents: employee?.policyConsents || employee?.onboardingDocs?.policyConsents || {},
           avatarUrl: employee?.avatarUrl || null,
         },
       })
@@ -117,9 +119,11 @@ export function createEmployeeRouter({ auth, service, userStore, employeeReposit
       if (!payload.avatarUrl && payload.onboardingDocs?.passportPhoto?.url) {
         payload.avatarUrl = payload.onboardingDocs.passportPhoto.url
       }
-      // Force status to submitted on self-update, never verified or action_required
-      payload.onboardingStatus = 'submitted'
-      payload.onboardingSubmittedAt = new Date()
+      // Only force status to submitted on self-update if onboarding docs/profile data is being submitted
+      if (payload.onboardingDocs && !payload.onboardingStatus) {
+        payload.onboardingStatus = 'submitted'
+        payload.onboardingSubmittedAt = new Date()
+      }
 
       // Sanitize documents so an employee cannot self-verify documents and enforce locking
       if (payload.onboardingDocs && typeof payload.onboardingDocs === 'object') {

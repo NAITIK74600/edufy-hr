@@ -175,7 +175,10 @@ function ModalDocInput({ doc, currentDoc, onSelect }) {
             accept="*/*"
             multiple={Boolean(doc.multiple)}
             style={{ display: 'none' }}
-            onChange={(e) => onSelect(doc.key, e)}
+            onChange={(e) => {
+              onSelect(doc.key, e)
+              try { e.target.value = '' } catch (_) {}
+            }}
           />
         </label>
       </div>
@@ -442,6 +445,9 @@ export function OnboardingDossierView({ employee, canEdit = false, canVerify = f
   async function handleFileSelect(docKey, e) {
     const rawFiles = Array.from(e.target.files || [])
     if (rawFiles.length === 0) return
+    try {
+      e.target.value = ''
+    } catch (_) {}
     const readFiles = await Promise.all(rawFiles.map((file) => processFileForUpload(file)))
 
     setEditData((prev) => {

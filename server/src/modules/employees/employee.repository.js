@@ -165,7 +165,7 @@ export function createMongoEmployeeRepository() {
       const queryPromise = (async () => {
         const [records, total] = await Promise.all([
           Employee.find(query)
-            .select('+passwordHash')
+            .select('+passwordHash +complianceDocs')
             .populate('managerId', 'employeeId name email')
             .sort({ [sortField]: sortOrder })
             .skip((safePage - 1) * safeLimit)
@@ -206,7 +206,7 @@ export function createMongoEmployeeRepository() {
       if (!id) return null
       let employee = null
       if (mongoose.isValidObjectId(id)) {
-        employee = await Employee.findById(id).select('+authVersion +onboardingDocs')
+        employee = await Employee.findById(id).select('+authVersion +onboardingDocs +complianceDocs +policyConsents')
       }
       if (!employee && typeof id === 'string') {
         employee = await Employee.findOne({
@@ -214,7 +214,7 @@ export function createMongoEmployeeRepository() {
             { employeeId: id.trim().toUpperCase() },
             { email: id.trim().toLowerCase() },
           ],
-        }).select('+authVersion +onboardingDocs')
+        }).select('+authVersion +onboardingDocs +complianceDocs +policyConsents')
       }
       return employee
     },
@@ -276,6 +276,16 @@ export function createMongoEmployeeRepository() {
     async save(employee) {
       ensureConnected()
       clearCache()
+      if (typeof employee.markModified === 'function') {
+        employee.markModified('complianceDocs')
+        employee.markModified('onboardingDocs')
+        employee.markModified('policyConsents')
+        employee.markModified('financeDetails')
+        employee.markModified('bankDetails')
+        employee.markModified('identity')
+        employee.markModified('parentsContact')
+        employee.markModified('emergencyContact')
+      }
       await employee.save()
       return toPublicEmployee(employee)
     },

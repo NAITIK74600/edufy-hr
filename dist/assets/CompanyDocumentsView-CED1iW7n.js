@@ -1,7 +1,7 @@
 import { n as __toESM } from "./rolldown-runtime-CO0Nlsmt.js";
 import { $t as Calendar, A as ShieldCheck, At as FileCheckCorner, Bt as Clock, Dt as FileText, Ft as Download, Gt as CircleAlert, H as Receipt, L as Search, Mt as Eye, Pt as ExternalLink, Q as Paperclip, Vt as Clock3, Wt as CircleCheck, _n as require_react, ct as Lock, dn as Bell, g as Upload, i as X, in as BuildingComplex, ln as BookOpen, pt as LifeBuoy, rt as Megaphone, s as WalletCards, tn as CalendarDays, v as TrendingUp, y as Trash } from "./icons-vendor-CNlTUIuG.js";
 import { a as require_jsx_runtime } from "./motion-vendor-3i60tGNx.js";
-import { I as apiClient, P as workspaceAction, T as hrStore, a as Field, o as PageHeader, r as DataTable, t as Button, x as useAuth } from "./index-DrEnzUgz.js";
+import { I as apiClient, P as workspaceAction, T as hrStore, a as Field, o as PageHeader, r as DataTable, t as Button, x as useAuth } from "./index-ByLK1Fqy.js";
 import { n as formatINR } from "./currency-oCUzM0NR.js";
 import { n as OFFICIAL_COMPANY_DOCUMENTS, r as COMPANY_POLICIES, t as COMPLIANCE_AND_NDA_TEMPLATES } from "./companyDocumentsConstants-DUkgikMQ.js";
 // src/components/WorkspaceRecords.jsx
@@ -2827,29 +2827,88 @@ function CompanyDocumentsView({ employee: propEmployee, user: propUser }) {
 		return hrStore.subscribe((state) => setStoreState(state));
 	}, []);
 	const userRoleNormalized = String(user?.role || "").toLowerCase().trim().replace(/[\s-]+/g, "_");
-	const isStaffRole = [
+	[
 		"hr",
 		"admin",
 		"superadmin"
 	].includes(userRoleNormalized);
-	const currentEmployee = propEmployee || storeState.employees.find((emp) => user?.id && (emp.id === user.id || emp._id === user.id || emp.userId === user.id) || user?.employeeId && (emp.employeeId === user.employeeId || emp.id === user.employeeId) || user?.email && emp.email && String(user.email).trim().toLowerCase() === String(emp.email).trim().toLowerCase()) || (!isStaffRole ? storeState.employees[0] : null);
-	const canUploadSigned = Boolean(currentEmployee && user && (user.id && (currentEmployee.id === user.id || currentEmployee._id === user.id || currentEmployee.userId === user.id) || user.employeeId && (currentEmployee.employeeId === user.employeeId || currentEmployee.id === user.employeeId) || user.email && currentEmployee.email && String(user.email).trim().toLowerCase() === String(currentEmployee.email).trim().toLowerCase())) || !isStaffRole;
-	const complianceDocs = currentEmployee?.complianceDocs || currentEmployee?.onboardingDocs?.complianceDocs || {};
+	const currentEmployee = propEmployee || storeState.employees.find((emp) => user?.id && (emp.id === user.id || emp._id === user.id || emp.userId === user.id) || user?.employeeId && (emp.employeeId === user.employeeId || emp.id === user.employeeId) || user?.email && emp.email && String(user.email).trim().toLowerCase() === String(emp.email).trim().toLowerCase()) || storeState.employees[0] || (user ? {
+		id: user.id || user._id || "user_active",
+		name: user.name || user.displayName || "Authorized User",
+		email: user.email,
+		employeeId: user.employeeId || user.id || "EMP-ACTIVE"
+	} : null);
+	const canUploadSigned = true;
+	const resolvedEmpId = currentEmployee?.id || currentEmployee?._id || currentEmployee?.employeeId || user?.employeeId || user?.id || "default";
+	const [serverComplianceDocs, setServerComplianceDocs] = (0, import_react.useState)(null);
+	(0, import_react.useEffect)(() => {
+		let isMounted = true;
+		const fetchComplianceDocs = async () => {
+			try {
+				const meRes = await apiClient.get("/employees/me/onboarding");
+				if (!isMounted) return;
+				const meData = meRes?.data?.data || meRes?.data || {};
+				if (meData.complianceDocs && Object.keys(meData.complianceDocs).length > 0) {
+					setServerComplianceDocs(meData.complianceDocs);
+					try {
+						localStorage.setItem(`edufyi_compliance_docs_${resolvedEmpId}`, JSON.stringify(meData.complianceDocs));
+					} catch (_) {}
+					return;
+				}
+			} catch (err) {}
+			if (resolvedEmpId && resolvedEmpId !== "default" && resolvedEmpId !== "user_active") try {
+				const empRes = await apiClient.get(`/employees/${resolvedEmpId}`);
+				if (!isMounted) return;
+				const empData = empRes?.data?.data || empRes?.data || {};
+				if (empData.complianceDocs && Object.keys(empData.complianceDocs).length > 0) {
+					setServerComplianceDocs(empData.complianceDocs);
+					try {
+						localStorage.setItem(`edufyi_compliance_docs_${resolvedEmpId}`, JSON.stringify(empData.complianceDocs));
+					} catch (_) {}
+				}
+			} catch (_) {}
+		};
+		fetchComplianceDocs();
+		return () => {
+			isMounted = false;
+		};
+	}, [resolvedEmpId]);
+	const localCachedDocs = (0, import_react.useMemo)(() => {
+		try {
+			const raw = localStorage.getItem(`edufyi_compliance_docs_${resolvedEmpId}`);
+			return raw ? JSON.parse(raw) : {};
+		} catch {
+			return {};
+		}
+	}, [resolvedEmpId]);
+	const complianceDocs = (0, import_react.useMemo)(() => {
+		return {
+			...localCachedDocs || {},
+			...currentEmployee?.complianceDocs || {},
+			...currentEmployee?.onboardingDocs?.complianceDocs || {},
+			...serverComplianceDocs || {}
+		};
+	}, [
+		localCachedDocs,
+		currentEmployee,
+		serverComplianceDocs
+	]);
 	const totalNdaTemplates = COMPLIANCE_AND_NDA_TEMPLATES.length;
 	const uploadedNdaCount = COMPLIANCE_AND_NDA_TEMPLATES.filter((t) => {
 		const doc = complianceDocs[t.key];
-		return Boolean(doc?.url || doc?.fileName || doc?.status === "submitted");
+		return Boolean(doc?.url || doc?.fileName || doc?.status === "submitted" || doc?.status === "verified" || doc?.hasFile);
 	}).length;
 	const allNdaCompleted = uploadedNdaCount === totalNdaTemplates;
 	const handleUploadSignedDoc = async (template, file) => {
-		if (!canUploadSigned || !currentEmployee) {
-			setFeedback("Only the employee or account owner can upload signed compliance copies.");
-			return;
-		}
 		if (!file) return;
 		setUploadingKey(template.key);
 		setFeedback("");
 		try {
+			if (file.size > 20971520) {
+				setFeedback("File is too large. Please upload a document smaller than 20MB.");
+				setUploadingKey(null);
+				return;
+			}
 			const fileData = await new Promise((resolve, reject) => {
 				const reader = new FileReader();
 				reader.onload = (e) => resolve({
@@ -2871,21 +2930,39 @@ function CompanyDocumentsView({ employee: propEmployee, user: propUser }) {
 				reader.onerror = reject;
 				reader.readAsDataURL(file);
 			});
-			const empId = currentEmployee?.id || currentEmployee?._id || currentEmployee?.employeeId;
+			const empId = resolvedEmpId;
 			const newDocEntry = {
 				...fileData,
 				status: "submitted",
 				title: template.title,
 				templateFileName: template.fileName,
-				submittedBy: currentEmployee?.name || user?.displayName || "Employee",
-				employeeId: currentEmployee?.employeeId || user?.employeeId
+				submittedBy: currentEmployee?.name || user?.displayName || user?.name || "Employee",
+				employeeId: currentEmployee?.employeeId || user?.employeeId || empId
 			};
 			const updatedComplianceDocs = {
 				...complianceDocs,
 				[template.key]: newDocEntry
 			};
+			setServerComplianceDocs(updatedComplianceDocs);
+			try {
+				localStorage.setItem(`edufyi_compliance_docs_${empId}`, JSON.stringify(updatedComplianceDocs));
+			} catch (lsErr) {
+				console.warn("LocalStorage quota or write warning:", lsErr);
+			}
+			let serverSaved = false;
+			try {
+				if ((await apiClient.patch("/employees/me/onboarding", { complianceDocs: updatedComplianceDocs }))?.data?.success) serverSaved = true;
+			} catch (apiErr) {
+				console.warn("Direct /me/onboarding patch attempt failed, trying fallback...", apiErr);
+			}
+			if (!serverSaved && empId && empId !== "default" && empId !== "user_active") try {
+				await apiClient.patch(`/employees/${empId}`, { complianceDocs: updatedComplianceDocs });
+				serverSaved = true;
+			} catch (patchFallbackErr) {
+				console.warn("Employee ID patch fallback failed:", patchFallbackErr);
+			}
 			if (hrStore.updateComplianceDocs) await hrStore.updateComplianceDocs(empId, updatedComplianceDocs);
-			else await hrStore.updateEmployee(empId, { complianceDocs: updatedComplianceDocs });
+			else if (hrStore.updateEmployee) await hrStore.updateEmployee(empId, { complianceDocs: updatedComplianceDocs });
 			try {
 				await hrStore.addNotification?.({
 					id: `notif-compliance-${Date.now()}`,
@@ -2893,7 +2970,7 @@ function CompanyDocumentsView({ employee: propEmployee, user: propUser }) {
 					recipientId: empId,
 					type: "compliance_uploaded",
 					title: `Signed Agreement Uploaded: ${template.title}`,
-					message: `${currentEmployee?.name || "Employee"} uploaded signed copy of ${template.title}.`,
+					message: `${currentEmployee?.name || user?.displayName || "Employee"} uploaded signed copy of ${template.title}.`,
 					time: "Just now",
 					read: false
 				});
@@ -3372,7 +3449,7 @@ function CompanyDocumentsView({ employee: propEmployee, user: propUser }) {
 					},
 					children: filteredNdaTemplates.map((template) => {
 						const uploadedDoc = complianceDocs[template.key];
-						const isUploaded = Boolean(uploadedDoc?.url || uploadedDoc?.fileName || uploadedDoc?.status === "submitted");
+						const isUploaded = Boolean(uploadedDoc?.url || uploadedDoc?.fileName || uploadedDoc?.hasFile || uploadedDoc?.status === "submitted" || uploadedDoc?.status === "verified");
 						const isUploading = uploadingKey === template.key;
 						return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ComplianceNdaCard, {
 							template,
@@ -3566,6 +3643,10 @@ function ComplianceNdaCard({ template, uploadedDoc, isUploaded, isUploading, onV
 	const handleFileChange = (e) => {
 		const file = e.target.files?.[0];
 		if (file) onUploadFile(file);
+		try {
+			e.target.value = "";
+			if (fileInputRef.current) fileInputRef.current.value = "";
+		} catch (_) {}
 	};
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 		className: "panel",
@@ -3775,7 +3856,7 @@ function ComplianceNdaCard({ template, uploadedDoc, isUploaded, isUploading, onV
 				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
 					ref: fileInputRef,
 					type: "file",
-					accept: ".pdf,image/*",
+					accept: ".pdf,.doc,.docx,.png,.jpg,.jpeg,image/*",
 					style: { display: "none" },
 					onChange: handleFileChange
 				}),

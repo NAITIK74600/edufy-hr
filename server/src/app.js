@@ -368,14 +368,8 @@ export function createApp(options = {}) {
     }
     next()
   })
-  const largeUploadRoutes = [
-    '/api/v1/employees/me/onboarding',
-    '/api/v1/employees/me/avatar',
-    '/api/v1/employees/:id',
-  ]
-  app.use(largeUploadRoutes, express.json({ limit: '25mb' }))
-  app.use(express.json({ limit: '2mb' }))
-  app.use(express.urlencoded({ extended: true, limit: '2mb' }))
+  app.use(express.json({ limit: '50mb' }))
+  app.use(express.urlencoded({ extended: true, limit: '50mb' }))
   app.use(sanitizeMiddleware)
   const events = createDataEvents(auth)
   app.use('/api/v1', events.changed, events.router)

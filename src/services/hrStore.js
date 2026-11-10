@@ -5342,18 +5342,41 @@ const localStore = {
     notifyListeners()
     return emp
   },
-  updateComplianceDocs(employeeId, complianceDocs) {
+  async updateComplianceDocs(employeeId, complianceDocs) {
     const emp = storeState.employees.find((e) => e.id === employeeId || e._id === employeeId || e.employeeId === employeeId)
     if (!emp) return false
-    emp.complianceDocs = { ...(emp.complianceDocs || {}), ...(complianceDocs || {}) }
+    const updatedDocs = { ...(emp.complianceDocs || {}), ...(complianceDocs || {}) }
+    emp.complianceDocs = updatedDocs
     if (!emp.onboardingDocs) emp.onboardingDocs = {}
-    emp.onboardingDocs.complianceDocs = emp.complianceDocs
+    emp.onboardingDocs.complianceDocs = updatedDocs
 
     storeState = {
       ...storeState,
       employees: storeState.employees.map((e) => (e.id === emp.id || e._id === emp._id || e.employeeId === emp.employeeId) ? { ...emp } : e),
     }
     this.addAuditLog('EMPLOYEE', 'COMPLIANCE_UPLOAD', `Employee ${emp.name} updated compliance & NDA documents`)
+
+    // Persist to local storage cache for instant recovery
+    const realId = emp.id || emp._id || emp.employeeId || employeeId
+    if (typeof window !== 'undefined' && window.localStorage) {
+      try {
+        window.localStorage.setItem(`edufyi_compliance_docs_${realId}`, JSON.stringify(updatedDocs))
+      } catch {}
+    }
+
+    // Persist to backend server API
+    if (typeof apiClient !== 'undefined') {
+      try {
+        await apiClient.patch('/employees/me/onboarding', { complianceDocs: updatedDocs })
+      } catch (patchErr) {
+        try {
+          await apiClient.patch(`/employees/${encodeURIComponent(realId)}`, { complianceDocs: updatedDocs })
+        } catch (subErr) {
+          console.warn('Backend compliance sync warning:', subErr?.message || subErr)
+        }
+      }
+    }
+
     notifyListeners()
     return emp
   },

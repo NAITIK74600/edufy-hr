@@ -414,7 +414,12 @@ export function createEmployeeService({ repository }) {
       if (values.email) values.email = String(values.email).trim().toLowerCase()
       if (values.name) values.name = String(values.name).trim()
       const changedFields = Object.keys(values)
-      for (const [field, value] of Object.entries(values)) employee[field] = value
+      for (const [field, value] of Object.entries(values)) {
+        employee[field] = value
+        if (typeof employee.markModified === 'function') {
+          employee.markModified(field)
+        }
+      }
       await repository.save(employee)
       await repository.addAudit(auditEvent(actor, 'employee.updated', employee.id ?? employee._id, changedFields))
       const lookupId = employee.id ?? employee._id ?? id
