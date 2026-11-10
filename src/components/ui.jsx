@@ -76,7 +76,7 @@ export function ConfirmationDialog({ open, title, message, confirmLabel = 'Confi
     }
   }, [open, onCancel])
 
-  if (!open || typeof document === 'undefined') return null
+  if (!open || typeof document === 'undefined' || !document?.body) return null
 
   return createPortal(
     <div 

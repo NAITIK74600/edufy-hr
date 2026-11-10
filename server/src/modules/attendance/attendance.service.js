@@ -2171,7 +2171,7 @@ export function createAttendanceService({ repository, companySettings = {}, leav
                   continue // Overnight shifts cross midnight, exempt from standard evening cutoff
                 }
                 // 2. Evening shifts ending after cut-off time:
-                if (!options.forceToday && workDate === todayDate && shiftDef.endMinutes && cutOffMinutes >= (shiftDef.startMinutes || 0) && shiftDef.endMinutes > cutOffMinutes) {
+                if (!options.forceToday && workDate === todayDate && shiftDef.endMinutes && shiftDef.endMinutes > cutOffMinutes) {
                   continue // Shift ends after cut-off time, ongoing session
                 }
                 // 3. Minimum duration safeguard (checked in less than 60 mins ago):

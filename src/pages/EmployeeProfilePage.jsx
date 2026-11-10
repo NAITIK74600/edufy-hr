@@ -158,6 +158,7 @@ export function EmployeeProfilePage() {
         }}>
           <div><span style={{ color: 'var(--text-secondary)' }}>Official Email:</span> <strong>{employee.email}</strong></div>
           <div><span style={{ color: 'var(--text-secondary)' }}>Phone Number:</span> <strong>{employee.phone || 'Not configured'}</strong></div>
+          <div><span style={{ color: 'var(--text-secondary)' }}>Date of Birth:</span> <strong>{employee.dob ? new Date(employee.dob).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : (employee.identity?.dob ? new Date(employee.identity.dob).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Not provided')}</strong></div>
           <div><span style={{ color: 'var(--text-secondary)' }}>Joining Date:</span> <strong>{employee.joiningDate}</strong></div>
           <div><span style={{ color: 'var(--text-secondary)' }}>Reporting Manager:</span> <strong>{employee.managerName || 'Company Executive'}</strong></div>
           <div><span style={{ color: 'var(--text-secondary)' }}>Employment Type:</span> <strong style={{ textTransform: 'capitalize' }}>{employee.employmentType?.replace('_', ' ') || 'Full time'}</strong></div>

@@ -1935,7 +1935,7 @@ function EmployeeDirectory({ route } = {}) {
                           onChange={(e) => setNewEmpForm({ ...newEmpForm, joiningDate: e.target.value })}
                         />
                       </Field>
-                      <Field label="Date of Birth (DOB)" hint="For HR Calendar celebrations.">
+                      <Field label="Date of Birth (DOB)" hint="Statutory identification record (as per official identity documents).">
                         <input
                           type="date"
                           value={newEmpForm.dob || ''}
@@ -2545,7 +2545,7 @@ function EmployeeDirectory({ route } = {}) {
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginTop: '12px' }}>
-                  <Field label="Date of Birth (DOB)" hint="For HR Calendar celebrations.">
+                  <Field label="Date of Birth (DOB)" hint="Statutory identification record (as per official identity documents).">
                     <input
                       type="date"
                       value={editingEmployee.dob ? String(editingEmployee.dob).slice(0, 10) : ''}
@@ -3294,7 +3294,7 @@ function EmployeeDetail({ id }) {
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginTop: '12px' }}>
-                  <Field label="Date of Birth (DOB)" hint="For HR Calendar celebrations.">
+                  <Field label="Date of Birth (DOB)" hint="Statutory identification record (as per official identity documents).">
                     <input
                       type="date"
                       value={editingEmployee.dob ? String(editingEmployee.dob).slice(0, 10) : ''}
@@ -3614,7 +3614,7 @@ function EmployeeForm({ id }) {
             />
           </Field>
 
-          <Field label="Date of Birth (DOB)" hint="For HR Calendar celebrations.">
+          <Field label="Date of Birth (DOB)" hint="Statutory identification record (as per official identity documents).">
             <input
               type="date"
               value={form.dob || ''}

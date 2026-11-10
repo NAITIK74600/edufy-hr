@@ -173,6 +173,7 @@ export function createCalendarRouter({ auth, useDatabase = true }) {
             events.push({
               id: `bday-${emp._id}-${targetYear}`,
               entityId: String(emp._id),
+              employeeId: String(emp.employeeId || emp._id),
               title: `${displayName}'s Birthday`,
               name: displayName,
               date: bdayDate,
@@ -1009,8 +1010,9 @@ export function createCalendarRouter({ auth, useDatabase = true }) {
 
       const nextHoliday = upcomingHolidays.length > 0 ? upcomingHolidays[0] : null
 
-      // 3. Birthdays This Month
+      // 3. Birthdays This Month & Upcoming Birthdays
       const birthdaysThisMonth = []
+      const upcomingBirthdays = []
       try {
         const activeEmployees = await Employee.find({
           status: { $in: ['active', 'onboarding', 'notice', 'probation', 'Active', 'ONBOARDING'] },
@@ -1019,28 +1021,45 @@ export function createCalendarRouter({ auth, useDatabase = true }) {
           .lean()
           .catch(() => [])
 
+        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+        const todayDateObj = new Date()
+        todayDateObj.setHours(0, 0, 0, 0)
+
+        const allMappedBirthdays = []
         for (const emp of activeEmployees) {
           const dobInfo = extractEmployeeDob(emp)
           if (!dobInfo) continue
 
           const bMonth = dobInfo.month
-          const bDay = dobInfo.day
+          const bDay = parseInt(dobInfo.day, 10)
+          let nextYear = currentYear
+          const thisYearDate = new Date(currentYear, bMonth - 1, bDay)
+          if (thisYearDate < todayDateObj) nextYear = currentYear + 1
+          const nextDate = new Date(nextYear, bMonth - 1, bDay)
+          const daysRemaining = Math.max(0, Math.ceil((nextDate - todayDateObj) / (1000 * 60 * 60 * 24)))
 
+          const bDate = `${nextYear}-${String(bMonth).padStart(2, '0')}-${String(bDay).padStart(2, '0')}`
+          const bdayItem = {
+            id: String(emp._id),
+            employeeId: emp.employeeId,
+            name: emp.displayName || ((emp.firstName || '') + ' ' + (emp.lastName || '')).trim() || emp.name || 'Team Member',
+            department: emp.department || 'General',
+            designation: emp.designation || 'Team Member',
+            avatarUrl: emp.avatarUrl || null,
+            date: bDate,
+            month: bMonth,
+            day: bDay,
+            formattedDate: `${bDay} ${monthNames[bMonth - 1]}`,
+            daysRemaining,
+          }
+          allMappedBirthdays.push(bdayItem)
           if (bMonth === currentMonth) {
-            const bDate = `${currentYear}-${String(bMonth).padStart(2, '0')}-${bDay}`
-            birthdaysThisMonth.push({
-              id: String(emp._id),
-              name: emp.displayName || ((emp.firstName || '') + ' ' + (emp.lastName || '')).trim() || emp.name || 'Team Member',
-              department: emp.department || 'General',
-              designation: emp.designation || 'Team Member',
-              avatarUrl: emp.avatarUrl || null,
-              date: bDate,
-              day: parseInt(bDay, 10),
-              daysRemaining: calculateDaysUntil(bDate),
-            })
+            birthdaysThisMonth.push(bdayItem)
           }
         }
+        allMappedBirthdays.sort((a, b) => a.daysRemaining - b.daysRemaining)
         birthdaysThisMonth.sort((a, b) => a.day - b.day)
+        upcomingBirthdays.push(...allMappedBirthdays.slice(0, 5))
       } catch (err) {
         console.warn('Widgets birthday query warning:', err.message)
       }
@@ -1146,6 +1165,8 @@ export function createCalendarRouter({ auth, useDatabase = true }) {
           nextHoliday,
           upcomingHolidays: upcomingHolidays.slice(0, 5),
           birthdaysThisMonth,
+          upcomingBirthdays,
+          nextBirthday: upcomingBirthdays[0] || null,
           anniversariesThisMonth,
           upcomingMeetings,
           scheduledMeetingsCount,

@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/LoginPage-TYXWG-ch.js","assets/rolldown-runtime-CO0Nlsmt.js","assets/icons-vendor-CNlTUIuG.js","assets/motion-vendor-3i60tGNx.js","assets/ModulePlaceholder-Btf9vnt2.js","assets/EmployeeDashboardPage-t_QcpNlA.js","assets/currency-oCUzM0NR.js","assets/CalendarWidgets-COCKtmZW.js","assets/CompanyDocumentsView-C2RlL8al.js","assets/companyDocumentsConstants-DUkgikMQ.js","assets/PayslipPreviewModal-B7-_XyZA.js","assets/react-vendor-B_MMQ54z.js","assets/pdf-vendor-BkGpxo0p.js","assets/payrollMatcher-DYZYv1X2.js","assets/OnboardingDossierView-CZnVwrzf.js","assets/AdminDashboardPage-BRitNGxR.js","assets/EmployeesPage-CW7OjV_h.js","assets/EmployeeComplianceStatusCard-CcYdazN1.js","assets/OverviewPage-9I0YRdPH.js","assets/LeaveManagementPage-Z4N7DDn6.js","assets/WorkspaceModulePage-DCD7t3ln.js","assets/OrgHierarchyPage-CN63076Q.js","assets/PayrollPage-OMaV-3Ew.js","assets/EmployeeProfilePage-DawQwWdO.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/LoginPage-BvV7uSEN.js","assets/rolldown-runtime-CO0Nlsmt.js","assets/icons-vendor-CNlTUIuG.js","assets/motion-vendor-3i60tGNx.js","assets/ModulePlaceholder-BJpi0ElY.js","assets/EmployeeDashboardPage-eKiciHG8.js","assets/currency-oCUzM0NR.js","assets/CalendarWidgets-BLnW1YCM.js","assets/CompanyDocumentsView-C_agWF7g.js","assets/companyDocumentsConstants-DUkgikMQ.js","assets/PayslipPreviewModal-BGw7UiYW.js","assets/react-vendor-B_MMQ54z.js","assets/pdf-vendor-BkGpxo0p.js","assets/payrollMatcher-DYZYv1X2.js","assets/OnboardingDossierView-LdD97OHo.js","assets/AdminDashboardPage-lMMaYwS_.js","assets/EmployeesPage-CitUXpBa.js","assets/EmployeeComplianceStatusCard-C-oScoaG.js","assets/OverviewPage-C2x1G5bf.js","assets/LeaveManagementPage-Bcavn1K4.js","assets/WorkspaceModulePage-qPOF7LZf.js","assets/OrgHierarchyPage-O6kFANsu.js","assets/PayrollPage-CzUhHA39.js","assets/EmployeeProfilePage-B0suUNxq.js"])))=>i.map(i=>d[i]);
 import { n as __toESM } from "./rolldown-runtime-CO0Nlsmt.js";
 import { $ as Network, A as ShieldCheck, D as Smartphone, Dt as FileText, E as Sparkles, Et as FingerprintPattern, Ft as Download, Gt as CircleAlert, I as Send, K as Plus, M as Share, Mt as Eye, Nt as EyeOff, P as Settings2, Qt as Camera, Tt as FolderOpen, Ut as CircleQuestionMark, Vt as Clock3, Wt as CircleCheck, Yt as ChevronDown, _n as require_react, an as Building, at as MapPin, b as Ticket, c as VolumeX, cn as Bot, ct as Lock, d as Users, dn as Bell, dt as LoaderCircle, f as User, gt as Laptop, h as UserCheck, i as X, jt as FileChartColumnIncreasing, l as Volume2, ln as BookOpen, m as UserPlus, mt as LayoutDashboard, nt as Menu, rt as Megaphone, s as WalletCards, sn as BriefcaseBusiness, st as LogOut, tn as CalendarDays, vt as KeyRound, w as SquarePlus, x as Target, y as Trash, yt as House } from "./icons-vendor-CNlTUIuG.js";
 import { n as require_client, r as require_react_dom } from "./react-vendor-B_MMQ54z.js";
@@ -659,6 +659,8 @@ function normalizeEmployee(employee) {
 	const teamId = employee?.teamId || employee?.squadId || "";
 	const squad = employee?.squad || employee?.team || "";
 	const squadId = employee?.squadId || employee?.teamId || "";
+	const rawDob = employee?.dob || employee?.identity?.dob || employee?.dateOfBirth || employee?.birthDate || "";
+	const cleanDob = typeof rawDob === "string" ? rawDob.slice(0, 10) : rawDob instanceof Date ? rawDob.toISOString().slice(0, 10) : "";
 	return {
 		...employee,
 		id: String(employee?.id ?? employee?._id),
@@ -670,6 +672,11 @@ function normalizeEmployee(employee) {
 		squadId,
 		teamLeadId: employee?.teamLeadId || "",
 		teamLeadName: employee?.teamLeadName || "",
+		dob: cleanDob,
+		identity: {
+			...employee?.identity || {},
+			dob: cleanDob || employee?.identity?.dob
+		},
 		joiningDate: employee.joiningDate?.slice(0, 10) ?? "",
 		employmentEndDate: employee.employmentEndDate?.slice(0, 10) ?? "",
 		exitDetails: employee.exitDetails ? {
@@ -1001,6 +1008,9 @@ function createConnectedStore(store, notify, rawLocal = {}) {
 			"campus",
 			"employmentType",
 			"joiningDate",
+			"dob",
+			"dateOfBirth",
+			"birthDate",
 			"employmentEndDate",
 			"onboardingChecklist",
 			"offboardingChecklist",
@@ -1021,6 +1031,7 @@ function createConnectedStore(store, notify, rawLocal = {}) {
 			"onboardingNotes",
 			"onboardingRejectionReason",
 			"onboardingUnlockedAt",
+			"bankDetails",
 			"financeDetails",
 			"reportingManager",
 			"policyConsents",
@@ -1036,6 +1047,21 @@ function createConnectedStore(store, notify, rawLocal = {}) {
 		if (payload.password === "" || payload.password === null) delete payload.password;
 		if (payload.employeeId !== void 0 && !String(payload.employeeId).trim()) delete payload.employeeId;
 		if (payload.joiningDate !== void 0 && !payload.joiningDate) delete payload.joiningDate;
+		if (data.dob || data.dateOfBirth || data.birthDate) {
+			const cleanDob = String(data.dob || data.dateOfBirth || data.birthDate).trim();
+			payload.dob = cleanDob;
+			payload.identity = {
+				...payload.identity || data.identity || {},
+				dob: cleanDob
+			};
+		} else if (data.identity?.dob) {
+			const cleanDob = String(data.identity.dob).trim();
+			payload.dob = cleanDob;
+			payload.identity = {
+				...payload.identity || data.identity || {},
+				dob: cleanDob
+			};
+		}
 		if (payload.onboardingStatus) {
 			const ost = String(payload.onboardingStatus).trim().toLowerCase();
 			if (ost === "pending") payload.onboardingStatus = "submitted";
@@ -17143,7 +17169,7 @@ function ConfirmationDialog({ open, title, message, confirmLabel = "Confirm", on
 			window.removeEventListener("keydown", handleKeyDown);
 		};
 	}, [open, onCancel]);
-	if (!open || typeof document === "undefined") return null;
+	if (!open || typeof document === "undefined" || !document?.body) return null;
 	return (0, import_react_dom.createPortal)(/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
 		className: "dialog-backdrop",
 		role: "presentation",
@@ -17226,19 +17252,19 @@ function ConfirmationDialog({ open, title, message, confirmLabel = "Confirm", on
 	}), document.body);
 }
 // src/main.jsx
-var LoginPage = (0, import_react.lazy)(() => __vitePreload(() => import("./LoginPage-TYXWG-ch.js").then((m) => ({ default: m.LoginPage })), __vite__mapDeps([0,1,2,3])));
-var NotFoundPage = (0, import_react.lazy)(() => __vitePreload(() => import("./ModulePlaceholder-Btf9vnt2.js").then((m) => ({ default: m.NotFoundPage })), __vite__mapDeps([4,2,1,3])));
-var EmployeeDashboardPage = (0, import_react.lazy)(() => __vitePreload(() => import("./EmployeeDashboardPage-t_QcpNlA.js").then((m) => ({ default: m.EmployeeDashboardPage })), __vite__mapDeps([5,1,2,3,6,7,8,9,10,11,12,13,14])));
-var AccessDeniedPage = (0, import_react.lazy)(() => __vitePreload(() => import("./EmployeeDashboardPage-t_QcpNlA.js").then((m) => ({ default: m.AccessDeniedPage })), __vite__mapDeps([5,1,2,3,6,7,8,9,10,11,12,13,14])));
-var AdminDashboardPage = (0, import_react.lazy)(() => __vitePreload(() => import("./AdminDashboardPage-BRitNGxR.js").then((m) => ({ default: m.AdminDashboardPage })), __vite__mapDeps([15,1,2,11,3,6,7])));
-var AdminUsersModule = (0, import_react.lazy)(() => __vitePreload(() => import("./AdminDashboardPage-BRitNGxR.js").then((m) => ({ default: m.AdminUsersModule })), __vite__mapDeps([15,1,2,11,3,6,7])));
-var EmployeesPage = (0, import_react.lazy)(() => __vitePreload(() => import("./EmployeesPage-CW7OjV_h.js").then((m) => ({ default: m.EmployeesPage })), __vite__mapDeps([16,1,2,3,6,14,11,13,17,9])));
-var OverviewPage = (0, import_react.lazy)(() => __vitePreload(() => import("./OverviewPage-9I0YRdPH.js").then((m) => ({ default: m.OverviewPage })), __vite__mapDeps([18,1,2,3,7])));
-var LeaveManagementPage = (0, import_react.lazy)(() => __vitePreload(() => import("./LeaveManagementPage-Z4N7DDn6.js").then((m) => ({ default: m.LeaveManagementPage })), __vite__mapDeps([19,1,2,11,3])));
-var WorkspaceModulePage = (0, import_react.lazy)(() => __vitePreload(() => import("./WorkspaceModulePage-DCD7t3ln.js").then((m) => ({ default: m.WorkspaceModulePage })), __vite__mapDeps([20,1,2,11,3,6,7,15,8,9])));
-var OrgHierarchyPage = (0, import_react.lazy)(() => __vitePreload(() => import("./OrgHierarchyPage-CN63076Q.js").then((m) => ({ default: m.OrgHierarchyPage })), __vite__mapDeps([21,1,2,3])));
-var PayrollPage = (0, import_react.lazy)(() => __vitePreload(() => import("./PayrollPage-OMaV-3Ew.js").then((m) => ({ default: m.PayrollPage })), __vite__mapDeps([22,1,2,3,10,11,12,13])));
-var EmployeeProfilePage = (0, import_react.lazy)(() => __vitePreload(() => import("./EmployeeProfilePage-DawQwWdO.js").then((m) => ({ default: m.EmployeeProfilePage })), __vite__mapDeps([23,1,2,3,6,14,11,13,17,9])));
+var LoginPage = (0, import_react.lazy)(() => __vitePreload(() => import("./LoginPage-BvV7uSEN.js").then((m) => ({ default: m.LoginPage })), __vite__mapDeps([0,1,2,3])));
+var NotFoundPage = (0, import_react.lazy)(() => __vitePreload(() => import("./ModulePlaceholder-BJpi0ElY.js").then((m) => ({ default: m.NotFoundPage })), __vite__mapDeps([4,2,1,3])));
+var EmployeeDashboardPage = (0, import_react.lazy)(() => __vitePreload(() => import("./EmployeeDashboardPage-eKiciHG8.js").then((m) => ({ default: m.EmployeeDashboardPage })), __vite__mapDeps([5,1,2,3,6,7,8,9,10,11,12,13,14])));
+var AccessDeniedPage = (0, import_react.lazy)(() => __vitePreload(() => import("./EmployeeDashboardPage-eKiciHG8.js").then((m) => ({ default: m.AccessDeniedPage })), __vite__mapDeps([5,1,2,3,6,7,8,9,10,11,12,13,14])));
+var AdminDashboardPage = (0, import_react.lazy)(() => __vitePreload(() => import("./AdminDashboardPage-lMMaYwS_.js").then((m) => ({ default: m.AdminDashboardPage })), __vite__mapDeps([15,1,2,11,3,6,7])));
+var AdminUsersModule = (0, import_react.lazy)(() => __vitePreload(() => import("./AdminDashboardPage-lMMaYwS_.js").then((m) => ({ default: m.AdminUsersModule })), __vite__mapDeps([15,1,2,11,3,6,7])));
+var EmployeesPage = (0, import_react.lazy)(() => __vitePreload(() => import("./EmployeesPage-CitUXpBa.js").then((m) => ({ default: m.EmployeesPage })), __vite__mapDeps([16,1,2,3,6,14,11,13,17,9])));
+var OverviewPage = (0, import_react.lazy)(() => __vitePreload(() => import("./OverviewPage-C2x1G5bf.js").then((m) => ({ default: m.OverviewPage })), __vite__mapDeps([18,1,2,3,7])));
+var LeaveManagementPage = (0, import_react.lazy)(() => __vitePreload(() => import("./LeaveManagementPage-Bcavn1K4.js").then((m) => ({ default: m.LeaveManagementPage })), __vite__mapDeps([19,1,2,11,3])));
+var WorkspaceModulePage = (0, import_react.lazy)(() => __vitePreload(() => import("./WorkspaceModulePage-qPOF7LZf.js").then((m) => ({ default: m.WorkspaceModulePage })), __vite__mapDeps([20,1,2,11,3,6,7,15,8,9])));
+var OrgHierarchyPage = (0, import_react.lazy)(() => __vitePreload(() => import("./OrgHierarchyPage-O6kFANsu.js").then((m) => ({ default: m.OrgHierarchyPage })), __vite__mapDeps([21,1,2,3])));
+var PayrollPage = (0, import_react.lazy)(() => __vitePreload(() => import("./PayrollPage-CzUhHA39.js").then((m) => ({ default: m.PayrollPage })), __vite__mapDeps([22,1,2,3,10,11,12,13])));
+var EmployeeProfilePage = (0, import_react.lazy)(() => __vitePreload(() => import("./EmployeeProfilePage-B0suUNxq.js").then((m) => ({ default: m.EmployeeProfilePage })), __vite__mapDeps([23,1,2,3,6,14,11,13,17,9])));
 var ErrorBoundary = class extends import_react.Component {
 	constructor(props) {
 		super(props);
@@ -17331,16 +17357,7 @@ var ErrorBoundary = class extends import_react.Component {
 };
 function DataStatus({ children }) {
 	const [state, setState] = (0, import_react.useState)(() => hrStore.getState());
-	const [isInitialLoading, setIsInitialLoading] = (0, import_react.useState)(() => !hrStore.getState()?.dataReady && (!hrStore.getState()?.employees || hrStore.getState().employees.length === 0));
 	(0, import_react.useEffect)(() => hrStore.subscribe(setState), []);
-	(0, import_react.useEffect)(() => {
-		if (state.dataReady) {
-			setIsInitialLoading(false);
-			return;
-		}
-		const timer = setTimeout(() => setIsInitialLoading(false), 1200);
-		return () => clearTimeout(timer);
-	}, [state.dataReady]);
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
 		state.dataError && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 			role: "alert",
@@ -17417,13 +17434,7 @@ function DataStatus({ children }) {
 			borderRadius: "2px",
 			marginBottom: "10px"
 		} }),
-		isInitialLoading ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-			style: {
-				textAlign: "center",
-				padding: "60px 20px"
-			},
-			children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(LoadingState, {})
-		}) : children
+		children
 	] });
 }
 function useRoute() {

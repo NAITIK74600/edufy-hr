@@ -76,21 +76,53 @@ export function CalendarWidgets({ user = null }) {
     return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${start}/${end}&details=${desc}`
   }
 
-  // 2. Birthdays (Dynamic calculation from MongoDB employee records)
-  const birthdays =
-    widgetsData?.birthdaysThisMonth ||
-    (storeState.employees || [])
+  // 2. Birthdays (Dynamic loop-engineered calculation from MongoDB employee records)
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+  const todayDateObj = new Date()
+  todayDateObj.setHours(0, 0, 0, 0)
+
+  const allBirthdays = useMemo(() => {
+    return (storeState.employees || [])
       .map((e) => {
         const dobInfo = extractEmployeeDob(e)
-        if (!dobInfo || dobInfo.month !== currentMonth) return null
+        if (!dobInfo) return null
+        const m = dobInfo.month
+        const d = parseInt(dobInfo.day, 10)
+        let nextYear = currentYear
+        const thisYearBday = new Date(currentYear, m - 1, d)
+        if (thisYearBday < todayDateObj) {
+          nextYear = currentYear + 1
+        }
+        const nextDate = new Date(nextYear, m - 1, d)
+        const daysRemaining = Math.max(0, Math.ceil((nextDate - todayDateObj) / (1000 * 60 * 60 * 24)))
         return {
           id: e.id || e._id,
-          name: e.displayName || e.name,
+          employeeId: e.employeeId,
+          name: e.displayName || e.name || 'Team Member',
           department: e.department || 'General',
-          date: `${currentYear}-${String(currentMonth).padStart(2, '0')}-${dobInfo.day}`,
+          designation: e.designation || 'Team Member',
+          avatarUrl: e.avatarUrl || null,
+          month: m,
+          day: d,
+          formattedDate: `${d} ${monthNames[m - 1]}`,
+          date: `${nextYear}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`,
+          daysRemaining,
+          isThisMonth: m === currentMonth,
         }
       })
       .filter(Boolean)
+      .sort((a, b) => a.daysRemaining - b.daysRemaining)
+  }, [storeState.employees, currentYear, currentMonth, todayDateObj])
+
+  const birthdaysThisMonth = widgetsData?.birthdaysThisMonth?.length
+    ? widgetsData.birthdaysThisMonth
+    : allBirthdays.filter((b) => b.isThisMonth)
+
+  const upcomingBirthdays = widgetsData?.upcomingBirthdays?.length
+    ? widgetsData.upcomingBirthdays
+    : allBirthdays
+
+  const nextUpcomingBirthday = upcomingBirthdays[0] || allBirthdays[0] || null
 
   // 3. Anniversaries
   const anniversaries =
@@ -225,7 +257,7 @@ export function CalendarWidgets({ user = null }) {
         </div>
       </div>
 
-      {/* 2. Birthdays This Month */}
+      {/* 2. Birthdays Card (Enterprise dynamic display: Month celebrations or Next Upcoming) */}
       <div
         className="panel hover-card"
         style={{
@@ -241,27 +273,44 @@ export function CalendarWidgets({ user = null }) {
         <div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
             <span style={{ fontSize: '11px', fontWeight: 700, color: '#db2777', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <Cake size={13} /> Birthdays This Month
+              <Cake size={13} /> {birthdaysThisMonth.length > 0 ? 'Birthdays This Month' : 'Upcoming Birthdays'}
             </span>
             <span style={{ fontSize: '11px', background: '#fdf2f8', color: '#db2777', padding: '2px 8px', borderRadius: '12px', fontWeight: 700 }}>
-              {birthdays.length} Celebrations
+              {birthdaysThisMonth.length > 0
+                ? `${birthdaysThisMonth.length} Celebrations`
+                : (nextUpcomingBirthday ? `Next: ${nextUpcomingBirthday.formattedDate || nextUpcomingBirthday.date?.slice(5)}` : '0 on record')}
             </span>
           </div>
 
-          {birthdays.length > 0 ? (
+          {birthdaysThisMonth.length > 0 ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              {birthdays.slice(0, 3).map((b) => (
+              {birthdaysThisMonth.slice(0, 3).map((b) => (
                 <div key={b.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px' }}>
                   <span style={{ fontWeight: 700, color: 'var(--ink, #1e293b)' }}>🎂 {b.name}</span>
                   <span style={{ color: 'var(--muted, #64748b)', fontSize: '11px' }}>
-                    {b.date ? b.date.slice(5) : ''} ({b.department})
+                    {b.formattedDate || (b.date ? b.date.slice(5) : '')} ({b.department})
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : upcomingBirthdays.length > 0 && nextUpcomingBirthday ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <p style={{ margin: '0 0 2px', fontSize: '11.5px', color: 'var(--muted, #64748b)' }}>
+                Next up: <strong style={{ color: '#db2777' }}>{nextUpcomingBirthday.name}</strong> ({nextUpcomingBirthday.formattedDate || nextUpcomingBirthday.date?.slice(5)})
+                {nextUpcomingBirthday.daysRemaining === 0 ? ' — Today! 🎂' : ` in ${nextUpcomingBirthday.daysRemaining} days`}
+              </p>
+              {upcomingBirthdays.slice(0, 2).map((b) => (
+                <div key={b.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px' }}>
+                  <span style={{ fontWeight: 600, color: 'var(--ink, #1e293b)' }}>🎂 {b.name}</span>
+                  <span style={{ color: 'var(--muted, #64748b)', fontSize: '11px' }}>
+                    {b.formattedDate || (b.date ? b.date.slice(5) : '')} ({b.department})
                   </span>
                 </div>
               ))}
             </div>
           ) : (
-            <p style={{ margin: 0, fontSize: '12.5px', color: 'var(--muted, #64748b)' }}>
-              No employee birthdays this month.
+            <p style={{ margin: 0, fontSize: '12px', color: 'var(--muted, #64748b)' }}>
+              No dates of birth on record. Add statutory birth dates in Employee Directory.
             </p>
           )}
         </div>
@@ -279,7 +328,7 @@ export function CalendarWidgets({ user = null }) {
               textDecoration: 'none',
             }}
           >
-            Celebrations Board <ChevronRight size={14} />
+            Corporate Calendar <ChevronRight size={14} />
           </a>
         </div>
       </div>

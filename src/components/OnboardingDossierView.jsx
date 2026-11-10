@@ -1901,7 +1901,7 @@ export function OnboardingDossierView({ employee, canEdit = false, canVerify = f
       )}
 
       {/* Document Full View Modal */}
-      {viewingDoc && typeof document !== "undefined" && createPortal(
+      {viewingDoc && typeof document !== "undefined" && document?.body && createPortal(
         <div
           style={{
             position: 'fixed',
@@ -2252,7 +2252,7 @@ export function OnboardingDossierView({ employee, canEdit = false, canVerify = f
       )}
 
       {/* Edit Onboarding Details Modal */}
-      {isEditing && typeof document !== 'undefined' && createPortal(
+      {isEditing && typeof document !== 'undefined' && document?.body && createPortal(
         <div
           style={{
             position: 'fixed',
@@ -2741,7 +2741,7 @@ export function OnboardingDossierView({ employee, canEdit = false, canVerify = f
         document.body
       )}
       {/* Rejection with Reason Modal */}
-      {rejectModal && typeof document !== "undefined" && createPortal(
+      {rejectModal && typeof document !== "undefined" && document?.body && createPortal(
         <div
           style={{
             position: 'fixed',
@@ -2841,7 +2841,7 @@ export function OnboardingDossierView({ employee, canEdit = false, canVerify = f
       )}
 
       {/* Employee Revision Request Modal */}
-      {employeeRevisionModal && typeof document !== "undefined" && createPortal(
+      {employeeRevisionModal && typeof document !== "undefined" && document?.body && createPortal(
         <div
           style={{
             position: 'fixed',

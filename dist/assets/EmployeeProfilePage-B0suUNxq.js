@@ -1,10 +1,10 @@
 import { n as __toESM } from "./rolldown-runtime-CO0Nlsmt.js";
 import { A as ShieldCheck, Et as FingerprintPattern, Qt as Camera, Xt as Check, _n as require_react, vt as KeyRound } from "./icons-vendor-CNlTUIuG.js";
 import { a as require_jsx_runtime } from "./motion-vendor-3i60tGNx.js";
-import { I as apiClient, T as hrStore, l as compressImageFile, m as ChangePasswordModal, o as PageHeader, u as PasskeyModal, x as useAuth } from "./index-BlmAerQ0.js";
+import { I as apiClient, T as hrStore, l as compressImageFile, m as ChangePasswordModal, o as PageHeader, u as PasskeyModal, x as useAuth } from "./index-D_n2wRA2.js";
 import { n as formatINR } from "./currency-oCUzM0NR.js";
-import { t as OnboardingDossierView } from "./OnboardingDossierView-CZnVwrzf.js";
-import { t as EmployeeComplianceStatusCard } from "./EmployeeComplianceStatusCard-CcYdazN1.js";
+import { t as OnboardingDossierView } from "./OnboardingDossierView-LdD97OHo.js";
+import { t as EmployeeComplianceStatusCard } from "./EmployeeComplianceStatusCard-C-oScoaG.js";
 // src/pages/EmployeeProfilePage.jsx
 var import_react = /* @__PURE__ */ __toESM(require_react(), 1);
 var import_jsx_runtime = require_jsx_runtime();
@@ -246,6 +246,22 @@ function EmployeeProfilePage() {
 							}),
 							" ",
 							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: employee.phone || "Not configured" })
+						] }),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+								style: { color: "var(--text-secondary)" },
+								children: "Date of Birth:"
+							}),
+							" ",
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: employee.dob ? new Date(employee.dob).toLocaleDateString("en-GB", {
+								day: "numeric",
+								month: "short",
+								year: "numeric"
+							}) : employee.identity?.dob ? new Date(employee.identity.dob).toLocaleDateString("en-GB", {
+								day: "numeric",
+								month: "short",
+								year: "numeric"
+							}) : "Not provided" })
 						] }),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
 							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {

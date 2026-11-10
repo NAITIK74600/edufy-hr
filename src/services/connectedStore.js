@@ -21,6 +21,9 @@ export function normalizeEmployee(employee) {
   const squad = employee?.squad || employee?.team || ''
   const squadId = employee?.squadId || employee?.teamId || ''
 
+  const rawDob = employee?.dob || employee?.identity?.dob || employee?.dateOfBirth || employee?.birthDate || ''
+  const cleanDob = typeof rawDob === 'string' ? rawDob.slice(0, 10) : (rawDob instanceof Date ? rawDob.toISOString().slice(0, 10) : '')
+
   return {
     ...employee,
     id: String(employee?.id ?? employee?._id),
@@ -32,6 +35,8 @@ export function normalizeEmployee(employee) {
     squadId,
     teamLeadId: employee?.teamLeadId || '',
     teamLeadName: employee?.teamLeadName || '',
+    dob: cleanDob,
+    identity: { ...(employee?.identity || {}), dob: cleanDob || employee?.identity?.dob },
     joiningDate: employee.joiningDate?.slice(0, 10) ?? '',
     employmentEndDate: employee.employmentEndDate?.slice(0, 10) ?? '',
     exitDetails: employee.exitDetails
@@ -369,7 +374,7 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
     return pending
   }
   function employeePayload(data) {
-    const allowed = ['employeeId', 'name', 'displayName', 'email', 'password', 'phone', 'department', 'team', 'teamId', 'squad', 'squadId', 'teamLeadId', 'teamLeadName', 'managerId', 'managerName', 'designation', 'location', 'campus', 'employmentType', 'joiningDate', 'employmentEndDate', 'onboardingChecklist', 'offboardingChecklist', 'exitDetails', 'emergencyContact', 'role', 'status', 'salary', 'salaryStructure', 'parentsContact', 'onboardingDocs', 'documents', 'identity', 'onboardingStatus', 'onboardingSubmittedAt', 'onboardingVerifiedAt', 'onboardingVerifiedBy', 'onboardingNotes', 'onboardingRejectionReason', 'onboardingUnlockedAt', 'financeDetails', 'reportingManager', 'policyConsents', 'complianceDocs', 'avatarUrl']
+    const allowed = ['employeeId', 'name', 'displayName', 'email', 'password', 'phone', 'department', 'team', 'teamId', 'squad', 'squadId', 'teamLeadId', 'teamLeadName', 'managerId', 'managerName', 'designation', 'location', 'campus', 'employmentType', 'joiningDate', 'dob', 'dateOfBirth', 'birthDate', 'employmentEndDate', 'onboardingChecklist', 'offboardingChecklist', 'exitDetails', 'emergencyContact', 'role', 'status', 'salary', 'salaryStructure', 'parentsContact', 'onboardingDocs', 'documents', 'identity', 'onboardingStatus', 'onboardingSubmittedAt', 'onboardingVerifiedAt', 'onboardingVerifiedBy', 'onboardingNotes', 'onboardingRejectionReason', 'onboardingUnlockedAt', 'bankDetails', 'financeDetails', 'reportingManager', 'policyConsents', 'complianceDocs', 'avatarUrl']
     const payload = Object.fromEntries(allowed.filter((key) => data[key] !== undefined).map((key) => [key, data[key]]))
     delete payload.permissions
     delete payload.authVersion
@@ -380,6 +385,15 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
     if (payload.password === '' || payload.password === null) delete payload.password
     if (payload.employeeId !== undefined && !String(payload.employeeId).trim()) delete payload.employeeId
     if (payload.joiningDate !== undefined && !payload.joiningDate) delete payload.joiningDate
+    if (data.dob || data.dateOfBirth || data.birthDate) {
+      const cleanDob = String(data.dob || data.dateOfBirth || data.birthDate).trim()
+      payload.dob = cleanDob
+      payload.identity = { ...(payload.identity || data.identity || {}), dob: cleanDob }
+    } else if (data.identity?.dob) {
+      const cleanDob = String(data.identity.dob).trim()
+      payload.dob = cleanDob
+      payload.identity = { ...(payload.identity || data.identity || {}), dob: cleanDob }
+    }
     if (payload.onboardingStatus) {
       const ost = String(payload.onboardingStatus).trim().toLowerCase()
       if (ost === 'pending') payload.onboardingStatus = 'submitted'

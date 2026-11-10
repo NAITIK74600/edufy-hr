@@ -1,7 +1,7 @@
 import { n as __toESM } from "./rolldown-runtime-CO0Nlsmt.js";
 import { $t as Calendar, A as ShieldCheck, Bt as Clock, Dt as FileText, Gt as CircleAlert, Mt as Eye, Wt as CircleCheck, _n as require_react, f as User, i as X } from "./icons-vendor-CNlTUIuG.js";
 import { a as require_jsx_runtime } from "./motion-vendor-3i60tGNx.js";
-import { n as VERIFICATION_TEMPLATES } from "./OnboardingDossierView-CZnVwrzf.js";
+import { n as VERIFICATION_TEMPLATES } from "./OnboardingDossierView-LdD97OHo.js";
 import { r as COMPANY_POLICIES, t as COMPLIANCE_AND_NDA_TEMPLATES } from "./companyDocumentsConstants-DUkgikMQ.js";
 // src/components/EmployeeComplianceStatusCard.jsx
 var import_react = /* @__PURE__ */ __toESM(require_react(), 1);

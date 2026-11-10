@@ -44,6 +44,8 @@ const DEFAULT_SEED_DATA = [
     designation: 'System Administrator',
     status: 'active',
     salary: 0,
+    dob: '1995-09-20',
+    identity: { dob: '1995-09-20' },
     permissions: ['*'],
   },
   // 2. Default HR Operations
@@ -72,6 +74,8 @@ const DEFAULT_SEED_DATA = [
     designation: 'Managing Director',
     status: 'active',
     salary: 4500000,
+    dob: '1995-09-20',
+    identity: { dob: '1995-09-20' },
     permissions: ['*'],
   },
 ]
@@ -131,6 +135,11 @@ export async function seedAllEmployees() {
       updateDoc.passwordHash = hashPassword(envPass)
     }
     updateDoc.authVersion = (existing?.authVersion ?? 0) + 1
+
+    if (emp.dob && !existing?.dob) {
+      updateDoc.dob = new Date(emp.dob)
+      updateDoc['identity.dob'] = new Date(emp.dob)
+    }
 
     if (existing) {
       if (existing.avatarUrl) {

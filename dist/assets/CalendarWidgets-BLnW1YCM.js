@@ -1,7 +1,7 @@
 import { n as __toESM } from "./rolldown-runtime-CO0Nlsmt.js";
 import { $t as Calendar, B as Repeat, Bt as Clock, E as Sparkles, Ft as Download, Gt as CircleAlert, Ht as CircleX, Jt as ChevronLeft, K as Plus, L as Search, Ot as FileSpreadsheet, Pt as ExternalLink, Rt as Copy, Ut as CircleQuestionMark, Wt as CircleCheck, Xt as Check, Y as Pen, _n as require_react, at as MapPin, d as Users, dn as Bell, en as CalendarRange, fn as Award, ft as List, g as Upload, ht as Layers, i as X, n as ZoomIn, qt as ChevronRight, rn as Cake, t as ZoomOut, tn as CalendarDays, u as Video, x as Target, xt as Grid3x3, y as Trash } from "./icons-vendor-CNlTUIuG.js";
 import { a as require_jsx_runtime } from "./motion-vendor-3i60tGNx.js";
-import { I as apiClient, T as hrStore, a as Field, t as Button } from "./index-BlmAerQ0.js";
+import { I as apiClient, T as hrStore, a as Field, t as Button } from "./index-D_n2wRA2.js";
 // src/utils/dobHelper.js
 var import_react = /* @__PURE__ */ __toESM(require_react(), 1);
 /**
@@ -7658,16 +7658,56 @@ function CalendarWidgets({ user = null }) {
 		d.setDate(d.getDate() + 1);
 		return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${start}/${d.toISOString().split("T")[0].replace(/-/g, "")}&details=${encodeURIComponent(`${h.category || "Official Holiday"} - Edufyi HR Calendar`)}`;
 	};
-	const birthdays = widgetsData?.birthdaysThisMonth || (storeState.employees || []).map((e) => {
-		const dobInfo = extractEmployeeDob(e);
-		if (!dobInfo || dobInfo.month !== currentMonth) return null;
-		return {
-			id: e.id || e._id,
-			name: e.displayName || e.name,
-			department: e.department || "General",
-			date: `${currentYear}-${String(currentMonth).padStart(2, "0")}-${dobInfo.day}`
-		};
-	}).filter(Boolean);
+	const monthNames = [
+		"Jan",
+		"Feb",
+		"Mar",
+		"Apr",
+		"May",
+		"Jun",
+		"Jul",
+		"Aug",
+		"Sep",
+		"Oct",
+		"Nov",
+		"Dec"
+	];
+	const todayDateObj = /* @__PURE__ */ new Date();
+	todayDateObj.setHours(0, 0, 0, 0);
+	const allBirthdays = useMemo(() => {
+		return (storeState.employees || []).map((e) => {
+			const dobInfo = extractEmployeeDob(e);
+			if (!dobInfo) return null;
+			const m = dobInfo.month;
+			const d = parseInt(dobInfo.day, 10);
+			let nextYear = currentYear;
+			if (new Date(currentYear, m - 1, d) < todayDateObj) nextYear = currentYear + 1;
+			const nextDate = new Date(nextYear, m - 1, d);
+			const daysRemaining = Math.max(0, Math.ceil((nextDate - todayDateObj) / 864e5));
+			return {
+				id: e.id || e._id,
+				employeeId: e.employeeId,
+				name: e.displayName || e.name || "Team Member",
+				department: e.department || "General",
+				designation: e.designation || "Team Member",
+				avatarUrl: e.avatarUrl || null,
+				month: m,
+				day: d,
+				formattedDate: `${d} ${monthNames[m - 1]}`,
+				date: `${nextYear}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`,
+				daysRemaining,
+				isThisMonth: m === currentMonth
+			};
+		}).filter(Boolean).sort((a, b) => a.daysRemaining - b.daysRemaining);
+	}, [
+		storeState.employees,
+		currentYear,
+		currentMonth,
+		todayDateObj
+	]);
+	const birthdaysThisMonth = widgetsData?.birthdaysThisMonth?.length ? widgetsData.birthdaysThisMonth : allBirthdays.filter((b) => b.isThisMonth);
+	const upcomingBirthdays = widgetsData?.upcomingBirthdays?.length ? widgetsData.upcomingBirthdays : allBirthdays;
+	const nextUpcomingBirthday = upcomingBirthdays[0] || allBirthdays[0] || null;
 	const anniversaries = widgetsData?.anniversariesThisMonth || (storeState.employees || []).filter((e) => {
 		if (!e.joiningDate) return false;
 		const d = new Date(e.joiningDate);
@@ -7862,8 +7902,12 @@ function CalendarWidgets({ user = null }) {
 							alignItems: "center",
 							gap: "4px"
 						},
-						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Cake, { size: 13 }), " Birthdays This Month"]
-					}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
+						children: [
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Cake, { size: 13 }),
+							" ",
+							birthdaysThisMonth.length > 0 ? "Birthdays This Month" : "Upcoming Birthdays"
+						]
+					}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
 						style: {
 							fontSize: "11px",
 							background: "#fdf2f8",
@@ -7872,15 +7916,15 @@ function CalendarWidgets({ user = null }) {
 							borderRadius: "12px",
 							fontWeight: 700
 						},
-						children: [birthdays.length, " Celebrations"]
+						children: birthdaysThisMonth.length > 0 ? `${birthdaysThisMonth.length} Celebrations` : nextUpcomingBirthday ? `Next: ${nextUpcomingBirthday.formattedDate || nextUpcomingBirthday.date?.slice(5)}` : "0 on record"
 					})]
-				}), birthdays.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+				}), birthdaysThisMonth.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
 					style: {
 						display: "flex",
 						flexDirection: "column",
 						gap: "6px"
 					},
-					children: birthdays.slice(0, 3).map((b) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+					children: birthdaysThisMonth.slice(0, 3).map((b) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 						style: {
 							display: "flex",
 							justifyContent: "space-between",
@@ -7899,20 +7943,69 @@ function CalendarWidgets({ user = null }) {
 								fontSize: "11px"
 							},
 							children: [
-								b.date ? b.date.slice(5) : "",
+								b.formattedDate || (b.date ? b.date.slice(5) : ""),
 								" (",
 								b.department,
 								")"
 							]
 						})]
 					}, b.id))
+				}) : upcomingBirthdays.length > 0 && nextUpcomingBirthday ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+					style: {
+						display: "flex",
+						flexDirection: "column",
+						gap: "6px"
+					},
+					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
+						style: {
+							margin: "0 0 2px",
+							fontSize: "11.5px",
+							color: "var(--muted, #64748b)"
+						},
+						children: [
+							"Next up: ",
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", {
+								style: { color: "#db2777" },
+								children: nextUpcomingBirthday.name
+							}),
+							" (",
+							nextUpcomingBirthday.formattedDate || nextUpcomingBirthday.date?.slice(5),
+							")",
+							nextUpcomingBirthday.daysRemaining === 0 ? " — Today! 🎂" : ` in ${nextUpcomingBirthday.daysRemaining} days`
+						]
+					}), upcomingBirthdays.slice(0, 2).map((b) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+						style: {
+							display: "flex",
+							justifyContent: "space-between",
+							alignItems: "center",
+							fontSize: "12px"
+						},
+						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
+							style: {
+								fontWeight: 600,
+								color: "var(--ink, #1e293b)"
+							},
+							children: ["🎂 ", b.name]
+						}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
+							style: {
+								color: "var(--muted, #64748b)",
+								fontSize: "11px"
+							},
+							children: [
+								b.formattedDate || (b.date ? b.date.slice(5) : ""),
+								" (",
+								b.department,
+								")"
+							]
+						})]
+					}, b.id))]
 				}) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 					style: {
 						margin: 0,
-						fontSize: "12.5px",
+						fontSize: "12px",
 						color: "var(--muted, #64748b)"
 					},
-					children: "No employee birthdays this month."
+					children: "No dates of birth on record. Add statutory birth dates in Employee Directory."
 				})] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
 					style: {
 						marginTop: "12px",
@@ -7930,7 +8023,7 @@ function CalendarWidgets({ user = null }) {
 							color: "#db2777",
 							textDecoration: "none"
 						},
-						children: ["Celebrations Board ", /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ChevronRight, { size: 14 })]
+						children: ["Corporate Calendar ", /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ChevronRight, { size: 14 })]
 					})
 				})]
 			}),

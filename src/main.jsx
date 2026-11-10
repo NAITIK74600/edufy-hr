@@ -96,19 +96,8 @@ class ErrorBoundary extends Component {
 
 function DataStatus({ children }) {
   const [state, setState] = useState(() => hrStore.getState())
-  const [isInitialLoading, setIsInitialLoading] = useState(() => !hrStore.getState()?.dataReady && (!hrStore.getState()?.employees || hrStore.getState().employees.length === 0))
 
   useEffect(() => hrStore.subscribe(setState), [])
-
-  useEffect(() => {
-    if (state.dataReady) {
-      setIsInitialLoading(false)
-      return
-    }
-    // Never trap the user in a loading spinner: wait at most 1.2s on cold launch, then show UI smoothly
-    const timer = setTimeout(() => setIsInitialLoading(false), 1200)
-    return () => clearTimeout(timer)
-  }, [state.dataReady])
 
   return (
     <>
@@ -183,13 +172,7 @@ function DataStatus({ children }) {
         />
       )}
 
-      {isInitialLoading ? (
-        <div style={{ textAlign: 'center', padding: '60px 20px' }}>
-          <LoadingState />
-        </div>
-      ) : (
-        children
-      )}
+      {children}
     </>
   )
 }

@@ -3157,7 +3157,7 @@ export function LeaveManagementPage({ mode = 'self', route, query: propQuery }) 
       />
 
       {/* REJECT LEAVE MODAL WITH DECISION NOTES */}
-      {rejectingLeave && typeof document !== 'undefined' && createPortal(
+      {rejectingLeave && typeof document !== 'undefined' && document?.body && createPortal(
         <div 
           className="reject-modal-backdrop" 
           onClick={() => setRejectingLeave(null)}
