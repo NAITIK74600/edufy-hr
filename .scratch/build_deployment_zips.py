@@ -1,6 +1,7 @@
 import os
 import zipfile
 import shutil
+import time
 
 ROOT_DIR = "e:/hr dashbord"
 os.chdir(ROOT_DIR)
@@ -22,7 +23,7 @@ def build_code_update_zip(zip_name="edufyi-hr-code-update.zip"):
     # Ensure tmp/restart.txt exists
     os.makedirs(os.path.join(ROOT_DIR, "tmp"), exist_ok=True)
     with open(os.path.join(ROOT_DIR, "tmp", "restart.txt"), "w") as f:
-        f.write("restart\n")
+        f.write(f"restart-{time.time()}\n")
 
     files_added = []
     with zipfile.ZipFile(zip_name, "w", zipfile.ZIP_DEFLATED) as zf:

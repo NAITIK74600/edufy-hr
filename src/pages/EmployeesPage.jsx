@@ -283,6 +283,12 @@ function EmployeeDirectory({ route } = {}) {
     return hrStore.subscribe((state) => setStoreState(state))
   }, [])
 
+  useEffect(() => {
+    if (!storeState.employees || storeState.employees.length === 0) {
+      hrStore.refresh().catch(() => {})
+    }
+  }, [])
+
   function showFeedback(msg) {
     setFeedbackMessage(msg)
     setTimeout(() => setFeedbackMessage(''), 4500)
@@ -832,7 +838,18 @@ function EmployeeDirectory({ route } = {}) {
                 <p className="section-kicker">Roster</p>
                 <h2>{filteredEmployees.length} Registered Employees</h2>
               </div>
-              <StatusBadge tone="info">Live Synced ({allEmployees.length} total)</StatusBadge>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <button
+                  type="button"
+                  className="ui-button secondary"
+                  style={{ padding: '4px 10px', fontSize: '11.5px', height: '28px', display: 'flex', alignItems: 'center', gap: '5px' }}
+                  onClick={() => hrStore.perform(() => hrStore.refresh())}
+                  title="Reload employee roster from database"
+                >
+                  <RefreshCw size={12} /> Sync Roster
+                </button>
+                <StatusBadge tone="info">Live Synced ({allEmployees.length} total)</StatusBadge>
+              </div>
             </div>
 
             {/* Mobile Card Grid (Visible on smaller screens) */}
@@ -1196,7 +1213,7 @@ function EmployeeDirectory({ route } = {}) {
                   },
                 ]}
                 rows={filteredEmployees}
-                emptyMessage="No employees match these filters."
+                emptyMessage={allEmployees.length === 0 ? 'Syncing employees from database... If not loaded, click Sync Roster above.' : 'No employees match these filters.'}
               />
             </div>
           </section>

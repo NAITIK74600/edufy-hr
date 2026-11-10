@@ -1,10 +1,10 @@
 import { n as __toESM } from "./rolldown-runtime-CO0Nlsmt.js";
 import { A as ShieldCheck, Bt as Clock, Dt as FileText, G as Power, K as Plus, L as Search, Pt as ExternalLink, Rt as Copy, V as RefreshCw, Wt as CircleCheck, X as PenLine, Xt as Check, _ as TriangleAlert, _n as require_react, d as Users, h as UserCheck, hn as ArrowLeft, kt as FileCheck, m as UserPlus, nn as Calculator, ot as Mail, p as UserX, rn as Cake, y as Trash } from "./icons-vendor-CNlTUIuG.js";
 import { a as require_jsx_runtime } from "./motion-vendor-3i60tGNx.js";
-import { A as copyTextToClipboard, C as INITIAL_ROLES, D as storeAction, I as apiClient, M as generateAutoPassword, N as generateNextEmployeeCode, T as hrStore, a as Field, b as hasPermission, c as StatusBadge, h as getRoleBadgeLabel, i as EmptyState, j as formatCredentialsShareText, n as ConfirmationDialog, o as PageHeader, r as DataTable, s as StatePanel, t as Button, w as getRecommendedRoleConfig, x as useAuth } from "./index-BjuHexXj.js";
+import { A as copyTextToClipboard, C as INITIAL_ROLES, D as storeAction, I as apiClient, M as generateAutoPassword, N as generateNextEmployeeCode, T as hrStore, a as Field, b as hasPermission, c as StatusBadge, h as getRoleBadgeLabel, i as EmptyState, j as formatCredentialsShareText, n as ConfirmationDialog, o as PageHeader, r as DataTable, s as StatePanel, t as Button, w as getRecommendedRoleConfig, x as useAuth } from "./index-BlmAerQ0.js";
 import { n as formatINR } from "./currency-oCUzM0NR.js";
-import { t as OnboardingDossierView } from "./OnboardingDossierView-Dqr5z72T.js";
-import { t as EmployeeComplianceStatusCard } from "./EmployeeComplianceStatusCard-DQBqnPfE.js";
+import { t as OnboardingDossierView } from "./OnboardingDossierView-CZnVwrzf.js";
+import { t as EmployeeComplianceStatusCard } from "./EmployeeComplianceStatusCard-CcYdazN1.js";
 // src/utils/salaryCalculator.js
 var import_react = /* @__PURE__ */ __toESM(require_react(), 1);
 /**
@@ -775,6 +775,9 @@ function EmployeeDirectory({ route } = {}) {
 	(0, import_react.useEffect)(() => {
 		return hrStore.subscribe((state) => setStoreState(state));
 	}, []);
+	(0, import_react.useEffect)(() => {
+		if (!storeState.employees || storeState.employees.length === 0) hrStore.refresh().catch(() => {});
+	}, []);
 	function showFeedback(msg) {
 		setFeedbackMessage(msg);
 		setTimeout(() => setFeedbackMessage(""), 4500);
@@ -1345,13 +1348,34 @@ function EmployeeDirectory({ route } = {}) {
 					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 						className: "section-kicker",
 						children: "Roster"
-					}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("h2", { children: [filteredEmployees.length, " Registered Employees"] })] }), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(StatusBadge, {
-						tone: "info",
-						children: [
-							"Live Synced (",
-							allEmployees.length,
-							" total)"
-						]
+					}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("h2", { children: [filteredEmployees.length, " Registered Employees"] })] }), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+						style: {
+							display: "flex",
+							alignItems: "center",
+							gap: "8px"
+						},
+						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
+							type: "button",
+							className: "ui-button secondary",
+							style: {
+								padding: "4px 10px",
+								fontSize: "11.5px",
+								height: "28px",
+								display: "flex",
+								alignItems: "center",
+								gap: "5px"
+							},
+							onClick: () => hrStore.perform(() => hrStore.refresh()),
+							title: "Reload employee roster from database",
+							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(RefreshCw, { size: 12 }), " Sync Roster"]
+						}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(StatusBadge, {
+							tone: "info",
+							children: [
+								"Live Synced (",
+								allEmployees.length,
+								" total)"
+							]
+						})]
 					})]
 				}),
 				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
@@ -1756,7 +1780,7 @@ function EmployeeDirectory({ route } = {}) {
 							}
 						],
 						rows: filteredEmployees,
-						emptyMessage: "No employees match these filters."
+						emptyMessage: allEmployees.length === 0 ? "Syncing employees from database... If not loaded, click Sync Roster above." : "No employees match these filters."
 					})
 				})
 			]
