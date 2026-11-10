@@ -1,7 +1,7 @@
 import { n as __toESM } from "./rolldown-runtime-CO0Nlsmt.js";
 import { E as Sparkles, Et as FingerprintPattern, Gt as CircleAlert, K as Plus, Mt as Eye, Nt as EyeOff, _n as require_react, _t as Key, ct as Lock, k as Shield, mn as ArrowRight, ot as Mail } from "./icons-vendor-CNlTUIuG.js";
 import { a as require_jsx_runtime } from "./motion-vendor-3i60tGNx.js";
-import { d as isPasskeySupported, f as loginWithPasskey, p as registerPasskey, u as PasskeyModal, x as useAuth } from "./index-CdIjzjfh.js";
+import { d as isPasskeySupported, f as loginWithPasskey, p as registerPasskey, u as PasskeyModal, x as useAuth } from "./index-BEHsMyE1.js";
 // src/pages/LoginPage.jsx
 var import_react = /* @__PURE__ */ __toESM(require_react(), 1);
 var import_jsx_runtime = require_jsx_runtime();

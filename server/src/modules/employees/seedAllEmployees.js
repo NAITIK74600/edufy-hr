@@ -44,8 +44,6 @@ const DEFAULT_SEED_DATA = [
     designation: 'System Administrator',
     status: 'active',
     salary: 0,
-    dob: '1995-09-20',
-    identity: { dob: '1995-09-20' },
     permissions: ['*'],
   },
   // 2. Default HR Operations
@@ -74,8 +72,6 @@ const DEFAULT_SEED_DATA = [
     designation: 'Managing Director',
     status: 'active',
     salary: 4500000,
-    dob: '1995-09-20',
-    identity: { dob: '1995-09-20' },
     permissions: ['*'],
   },
 ]
@@ -183,6 +179,36 @@ export async function seedAllEmployees() {
         { email: { $in: ['admin@edufyi.in', 'hr@edufyi.in'] } },
       ],
     })
+
+    // 1b. Purge legacy dummy/fake birthdays (1995-09-20, 1999-02-24) from seeded or test accounts
+    const dummyDobs = [
+      new Date('1995-09-20T00:00:00.000Z'),
+      new Date('1995-09-19T18:30:00.000Z'),
+      '1995-09-20',
+      '1999-02-24',
+      new Date('1999-02-24T00:00:00.000Z'),
+    ]
+    await Employee.updateMany(
+      {
+        $or: [
+          { dob: { $in: dummyDobs } },
+          { 'identity.dob': { $in: dummyDobs } },
+        ],
+        employeeId: { $in: ['EDU-ADM-001', 'EDU-DIR-001'] }
+      },
+      {
+        $unset: { dob: 1, 'identity.dob': 1 }
+      }
+    )
+
+    const calendarEventsCol = db.collection('calendarevents')
+    await calendarEventsCol.deleteMany({
+      sourceType: 'employee_birthday',
+      $or: [
+        { sourceId: { $regex: /bday_(EDU-ADM-001|EDU-DIR-001)/ } },
+        { 'sourceData.employeeId': { $in: ['EDU-ADM-001', 'EDU-DIR-001'] } }
+      ]
+    }).catch(() => {})
 
     // 2. Fetch current employees to map hierarchy
     const allEmps = await Employee.find({}).lean()

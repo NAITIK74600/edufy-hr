@@ -1,10 +1,10 @@
 import { n as __toESM } from "./rolldown-runtime-CO0Nlsmt.js";
-import { A as ShieldCheck, Et as FingerprintPattern, Qt as Camera, Xt as Check, _n as require_react, vt as KeyRound } from "./icons-vendor-CNlTUIuG.js";
+import { A as ShieldCheck, Et as FingerprintPattern, Qt as Camera, Xt as Check, _n as require_react, rn as Cake, vt as KeyRound } from "./icons-vendor-CNlTUIuG.js";
 import { a as require_jsx_runtime } from "./motion-vendor-3i60tGNx.js";
-import { I as apiClient, T as hrStore, l as compressImageFile, m as ChangePasswordModal, o as PageHeader, u as PasskeyModal, x as useAuth } from "./index-CdIjzjfh.js";
+import { I as apiClient, T as hrStore, l as compressImageFile, m as ChangePasswordModal, o as PageHeader, u as PasskeyModal, x as useAuth } from "./index-BEHsMyE1.js";
 import { n as formatINR } from "./currency-oCUzM0NR.js";
-import { t as OnboardingDossierView } from "./OnboardingDossierView-CJ0ZbiOC.js";
-import { t as EmployeeComplianceStatusCard } from "./EmployeeComplianceStatusCard-rLXeojxp.js";
+import { t as OnboardingDossierView } from "./OnboardingDossierView-BZDjyUsW.js";
+import { t as EmployeeComplianceStatusCard } from "./EmployeeComplianceStatusCard-6rWezbm7.js";
 // src/pages/EmployeeProfilePage.jsx
 var import_react = /* @__PURE__ */ __toESM(require_react(), 1);
 var import_jsx_runtime = require_jsx_runtime();
@@ -15,6 +15,11 @@ function EmployeeProfilePage() {
 	const [uploadingPhoto, setUploadingPhoto] = (0, import_react.useState)(false);
 	const [passwordModalOpen, setPasswordModalOpen] = (0, import_react.useState)(false);
 	const [passkeyModalOpen, setPasskeyModalOpen] = (0, import_react.useState)(false);
+	const [dobModalOpen, setDobModalOpen] = (0, import_react.useState)(false);
+	const [dobInput, setDobInput] = (0, import_react.useState)("");
+	const [savingDob, setSavingDob] = (0, import_react.useState)(false);
+	const [dobError, setDobError] = (0, import_react.useState)("");
+	const [dobSuccessNotice, setDobSuccessNotice] = (0, import_react.useState)("");
 	const fileInputRef = (0, import_react.useRef)(null);
 	(0, import_react.useEffect)(() => hrStore.subscribe(setState), []);
 	const employee = state.employees.find((record) => record.id === user?.id || record.employeeId === user?.employeeId) || state.employees[0];
@@ -22,6 +27,48 @@ function EmployeeProfilePage() {
 		role: "alert",
 		children: "Your employee record is unavailable. Contact HR."
 	});
+	const rawDob = employee.dob || employee.identity?.dob;
+	let formattedDobInput = "";
+	if (rawDob) try {
+		const d = new Date(rawDob);
+		if (!isNaN(d.getTime())) formattedDobInput = d.toISOString().split("T")[0];
+	} catch {}
+	async function handleSaveDob() {
+		if (!dobInput) {
+			setDobError("Please select a valid date of birth.");
+			return;
+		}
+		setSavingDob(true);
+		setDobError("");
+		try {
+			if (hrStore.updateMyDob) await hrStore.updateMyDob(dobInput);
+			else await apiClient.patch("/employees/me/dob", { dob: dobInput });
+			setDobModalOpen(false);
+			setDobSuccessNotice("Date of birth updated successfully! 🎂");
+			setTimeout(() => setDobSuccessNotice(""), 4500);
+		} catch (err) {
+			setDobError(err.response?.data?.error?.message || err.message || "Failed to save date of birth.");
+		} finally {
+			setSavingDob(false);
+		}
+	}
+	async function handleClearDob() {
+		if (!confirm("Are you sure you want to remove your date of birth?")) return;
+		setSavingDob(true);
+		setDobError("");
+		try {
+			if (hrStore.updateMyDob) await hrStore.updateMyDob(null);
+			else await apiClient.patch("/employees/me/dob", { dob: null });
+			setDobInput("");
+			setDobModalOpen(false);
+			setDobSuccessNotice("Date of birth removed.");
+			setTimeout(() => setDobSuccessNotice(""), 4500);
+		} catch (err) {
+			setDobError(err.response?.data?.error?.message || err.message || "Failed to clear date of birth.");
+		} finally {
+			setSavingDob(false);
+		}
+	}
 	const avatarUrl = user?.avatarUrl || employee?.avatarUrl || employee?.onboardingDocs?.passportPhoto?.url;
 	async function handlePhotoUpload(e) {
 		const file = e.target.files?.[0];
@@ -69,6 +116,21 @@ function EmployeeProfilePage() {
 					gap: "8px"
 				},
 				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Check, { size: 16 }), "Profile picture updated and saved successfully!"]
+			}),
+			dobSuccessNotice && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+				style: {
+					padding: "10px 16px",
+					background: "#fdf2f8",
+					border: "1px solid #fbcfe8",
+					borderRadius: "8px",
+					color: "#db2777",
+					fontSize: "13px",
+					fontWeight: 600,
+					display: "flex",
+					alignItems: "center",
+					gap: "8px"
+				},
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Cake, { size: 16 }), dobSuccessNotice]
 			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
 				className: "panel",
@@ -253,15 +315,50 @@ function EmployeeProfilePage() {
 								children: "Date of Birth:"
 							}),
 							" ",
-							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: employee.dob ? new Date(employee.dob).toLocaleDateString("en-GB", {
-								day: "numeric",
-								month: "short",
-								year: "numeric"
-							}) : employee.identity?.dob ? new Date(employee.identity.dob).toLocaleDateString("en-GB", {
-								day: "numeric",
-								month: "short",
-								year: "numeric"
-							}) : "Not provided" })
+							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+								style: {
+									display: "inline-flex",
+									alignItems: "center",
+									gap: "6px",
+									flexWrap: "wrap",
+									marginTop: "2px"
+								},
+								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: employee.dob ? new Date(employee.dob).toLocaleDateString("en-GB", {
+									day: "numeric",
+									month: "short",
+									year: "numeric"
+								}) : employee.identity?.dob ? new Date(employee.identity.dob).toLocaleDateString("en-GB", {
+									day: "numeric",
+									month: "short",
+									year: "numeric"
+								}) : "Not provided" }), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
+									type: "button",
+									onClick: () => {
+										setDobInput(formattedDobInput);
+										setDobError("");
+										setDobModalOpen(true);
+									},
+									title: "Fill or update your date of birth at any time (no HR verification required)",
+									style: {
+										padding: "2px 8px",
+										fontSize: "11px",
+										fontWeight: 600,
+										borderRadius: "6px",
+										border: "1px solid #fbcfe8",
+										background: "#fdf2f8",
+										color: "#db2777",
+										cursor: "pointer",
+										display: "inline-flex",
+										alignItems: "center",
+										gap: "4px"
+									},
+									children: [
+										/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Cake, { size: 12 }),
+										" ",
+										rawDob ? "Edit" : "Fill Birthday"
+									]
+								})]
+							})
 						] }),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
 							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
@@ -395,6 +492,186 @@ function EmployeeProfilePage() {
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(PasskeyModal, {
 				isOpen: passkeyModalOpen,
 				onClose: () => setPasskeyModalOpen(false)
+			}),
+			dobModalOpen && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+				role: "dialog",
+				"aria-modal": "true",
+				"aria-labelledby": "dob-modal-title",
+				style: {
+					position: "fixed",
+					inset: 0,
+					background: "rgba(15, 23, 42, 0.65)",
+					backdropFilter: "blur(3px)",
+					zIndex: 1100,
+					display: "grid",
+					placeItems: "center",
+					padding: "16px"
+				},
+				onClick: (e) => {
+					if (e.target === e.currentTarget && !savingDob) setDobModalOpen(false);
+				},
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+					className: "panel",
+					style: {
+						maxWidth: "430px",
+						width: "100%",
+						padding: "24px",
+						borderRadius: "14px",
+						boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.25)",
+						position: "relative",
+						background: "var(--card-bg, #ffffff)"
+					},
+					children: [
+						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+							style: {
+								display: "flex",
+								justifyContent: "space-between",
+								alignItems: "center",
+								marginBottom: "14px"
+							},
+							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("h3", {
+								id: "dob-modal-title",
+								style: {
+									margin: 0,
+									fontSize: "17px",
+									fontWeight: 700,
+									display: "flex",
+									alignItems: "center",
+									gap: "8px"
+								},
+								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Cake, {
+									size: 20,
+									style: { color: "#db2777" }
+								}), " My Date of Birth"]
+							}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+								type: "button",
+								disabled: savingDob,
+								onClick: () => setDobModalOpen(false),
+								style: {
+									background: "none",
+									border: "none",
+									cursor: "pointer",
+									fontSize: "20px",
+									color: "var(--muted, #64748b)",
+									lineHeight: 1,
+									padding: "4px"
+								},
+								children: "✕"
+							})]
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
+							style: {
+								fontSize: "12.5px",
+								color: "var(--text-secondary)",
+								margin: "0 0 16px",
+								lineHeight: 1.5
+							},
+							children: [
+								"Fill or update your birth date at any time. It automatically reflects on team celebrations, calendar widgets, and your official profile — ",
+								/* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: "no HR verification or approval needed" }),
+								"."
+							]
+						}),
+						dobError && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+							style: {
+								padding: "9px 12px",
+								background: "#fee2e2",
+								color: "#b91c1c",
+								border: "1px solid #fca5a5",
+								borderRadius: "7px",
+								fontSize: "12px",
+								marginBottom: "14px",
+								fontWeight: 500
+							},
+							children: dobError
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+							style: {
+								display: "grid",
+								gap: "6px",
+								marginBottom: "22px"
+							},
+							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("label", {
+								style: {
+									fontSize: "12px",
+									fontWeight: 600,
+									color: "var(--text-secondary)"
+								},
+								children: "Date of Birth"
+							}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+								type: "date",
+								max: (/* @__PURE__ */ new Date()).toISOString().split("T")[0],
+								value: dobInput,
+								onChange: (e) => setDobInput(e.target.value),
+								style: {
+									padding: "10px 12px",
+									borderRadius: "8px",
+									border: "1px solid var(--border-color, #cbd5e1)",
+									fontSize: "14px",
+									outline: "none",
+									width: "100%",
+									boxSizing: "border-box"
+								}
+							})]
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+							style: {
+								display: "flex",
+								justifyContent: "space-between",
+								alignItems: "center",
+								gap: "10px",
+								flexWrap: "wrap"
+							},
+							children: [rawDob ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+								type: "button",
+								disabled: savingDob,
+								onClick: handleClearDob,
+								style: {
+									padding: "8px 12px",
+									fontSize: "12px",
+									fontWeight: 600,
+									borderRadius: "6px",
+									border: "1px solid #fecaca",
+									background: "#fff",
+									color: "#dc2626",
+									cursor: "pointer"
+								},
+								children: "Clear Birthday"
+							}) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+								style: {
+									display: "flex",
+									gap: "8px"
+								},
+								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+									type: "button",
+									disabled: savingDob,
+									onClick: () => setDobModalOpen(false),
+									className: "ui-button secondary",
+									style: { fontSize: "12px" },
+									children: "Cancel"
+								}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
+									type: "button",
+									disabled: savingDob || !dobInput,
+									onClick: handleSaveDob,
+									className: "ui-button primary",
+									style: {
+										fontSize: "12px",
+										display: "flex",
+										alignItems: "center",
+										gap: "6px",
+										background: "#db2777",
+										borderColor: "#db2777"
+									},
+									children: [
+										/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Cake, { size: 13 }),
+										" ",
+										savingDob ? "Saving..." : "Save Birthday"
+									]
+								})]
+							})]
+						})
+					]
+				})
 			})
 		]
 	});

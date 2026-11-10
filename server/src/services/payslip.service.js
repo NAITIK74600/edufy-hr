@@ -68,12 +68,12 @@ export function normalizePayrollData(record = {}, employee = {}, settings = DEFA
   const maskedBankAccount = safeSettings.maskBankAccount ? maskAccount(rawAccount) : (rawAccount || 'N/A')
   const bankName = safeRecord.bankName || emp.bankDetails?.bankName || emp.bankName || 'HDFC BANK LIMITED'
 
-  const joinDate = emp.joiningDate ? new Date(emp.joiningDate).toLocaleDateString('en-GB') : '01/04/2022'
-  const dob = emp.dob ? new Date(emp.dob).toLocaleDateString('en-GB') : (emp.identity?.dob ? new Date(emp.identity.dob).toLocaleDateString('en-GB') : '24/02/1999')
-  const gender = emp.gender || (emp.identity?.gender || 'M')
-  const pan = record.panTaxId || emp.identity?.panNumber || emp.bankDetails?.panTaxId || emp.panTaxId || 'BROPJ5764Q'
-  const pfNo = emp.identity?.pfNumber || emp.pfNumber || 'PYKRP00531710000019308'
-  const uan = record.uanNumber || emp.identity?.uanNumber || emp.bankDetails?.uanNumber || emp.uanNumber || '101595355837'
+  const joinDate = emp.joiningDate ? new Date(emp.joiningDate).toLocaleDateString('en-GB') : '-'
+  const dob = emp.dob ? new Date(emp.dob).toLocaleDateString('en-GB') : (emp.identity?.dob ? new Date(emp.identity.dob).toLocaleDateString('en-GB') : '-')
+  const gender = emp.gender || (emp.identity?.gender || '-')
+  const pan = record.panTaxId || emp.identity?.panNumber || emp.bankDetails?.panTaxId || emp.panTaxId || '-'
+  const pfNo = emp.identity?.pfNumber || emp.pfNumber || '-'
+  const uan = record.uanNumber || emp.identity?.uanNumber || emp.bankDetails?.uanNumber || emp.uanNumber || '-'
 
   // Attendance
   const standardDays = record.standardDays ?? record.workingDays ?? 31

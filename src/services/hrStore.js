@@ -5535,6 +5535,29 @@ const localStore = {
     notifyListeners()
     return newStatus
   },
+  async updateMyDob(dob) {
+    try {
+      const res = await apiClient.patch('/employees/me/dob', { dob })
+      const updated = res.data?.data || res.data
+      if (updated) {
+        storeState.employees = (storeState.employees || []).map((emp) => {
+          if (String(emp.id || emp._id) === String(updated._id || updated.id) || emp.employeeId === updated.employeeId) {
+            return {
+              ...emp,
+              dob: updated.dob,
+              identity: { ...(emp.identity || {}), dob: updated.dob },
+            }
+          }
+          return emp
+        })
+        notifyListeners()
+      }
+      return updated
+    } catch (err) {
+      console.error('Failed to update DOB via hrStore:', err)
+      throw err
+    }
+  },
   toggleOnboardingItem(employeeId, itemKey) {
     storeState.employees = storeState.employees.map((emp) => {
       if (emp.id === employeeId || emp._id === employeeId) {

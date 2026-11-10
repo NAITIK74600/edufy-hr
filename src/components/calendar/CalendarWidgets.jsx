@@ -311,9 +311,25 @@ export function CalendarWidgets({ user = null }) {
               ))}
             </div>
           ) : (
-            <p style={{ margin: 0, fontSize: '12px', color: 'var(--muted, #64748b)' }}>
-              No dates of birth on record. Add statutory birth dates in Employee Directory.
-            </p>
+            <div style={{ fontSize: '12px', color: 'var(--muted, #64748b)' }}>
+              <p style={{ margin: 0 }}>No dates of birth on record.</p>
+              <div style={{ marginTop: '6px' }}>
+                <a
+                  href={`#/${portal}/profile`}
+                  style={{
+                    color: '#db2777',
+                    fontWeight: 600,
+                    textDecoration: 'none',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    fontSize: '11.5px',
+                  }}
+                >
+                  <Cake size={12} /> Fill your birthday in profile →
+                </a>
+              </div>
+            </div>
           )}
         </div>
 

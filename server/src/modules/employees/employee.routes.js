@@ -2,6 +2,8 @@ import express from 'express'
 import mongoose from 'mongoose'
 import { PERMISSIONS, hasPermission } from '../../auth/permissions.js'
 import { Employee } from '../../models/Employee.js'
+import { CalendarEvent } from '../../models/CalendarEvent.js'
+import { extractEmployeeDob } from '../calendar/dobHelper.js'
 import { toPublicEmployee, sanitizeEmployeeForViewer } from './employee.repository.js'
 
 function parseListQuery(query) {
@@ -276,6 +278,119 @@ export function createEmployeeRouter({ auth, service, userStore, employeeReposit
 
       const publicEmp = toPublicEmployee ? toPublicEmployee(updatedEmployee) : updatedEmployee
       return response.json({ success: true, data: publicEmp })
+    } catch (error) { return next(error) }
+  })
+
+  router.patch(['/me/dob', '/me/birthday'], auth.authenticate, async (request, response, next) => {
+    try {
+      const user = request.auth.user
+      const rawDob = request.body?.dob ?? request.body?.dateOfBirth ?? request.body?.birthday
+
+      const query = []
+      if (user.id && mongoose.isValidObjectId(user.id)) query.push({ _id: user.id })
+      if (user._id && mongoose.isValidObjectId(user._id)) query.push({ _id: user._id })
+      if (user.employeeId) query.push({ employeeId: String(user.employeeId).toUpperCase() })
+      if (user.email) query.push({ email: String(user.email).toLowerCase() })
+
+      const filter = query.length === 1 ? query[0] : { $or: query }
+
+      let dobDate = null
+      if (rawDob !== null && rawDob !== undefined && String(rawDob).trim() !== '') {
+        const cleanStr = String(rawDob).trim()
+        const parsed = new Date(cleanStr)
+        if (isNaN(parsed.getTime())) {
+          return response.status(400).json({
+            success: false,
+            error: { code: 'INVALID_DOB', message: 'Invalid Date of Birth format. Please provide a valid date (YYYY-MM-DD).' },
+          })
+        }
+        if (parsed > new Date()) {
+          return response.status(400).json({
+            success: false,
+            error: { code: 'FUTURE_DOB', message: 'Date of Birth cannot be in the future.' },
+          })
+        }
+        dobDate = parsed
+      }
+
+      const updateOp = dobDate
+        ? { $set: { dob: dobDate, 'identity.dob': dobDate } }
+        : { $unset: { dob: 1, 'identity.dob': 1 } }
+
+      let updatedEmployee = null
+      if (mongoose.connection?.readyState === 1) {
+        const updateRes = await Employee.updateOne(filter, updateOp)
+        if (updateRes.matchedCount === 0) {
+          return response.status(404).json({ success: false, error: { code: 'EMPLOYEE_NOT_FOUND', message: 'Employee record not found.' } })
+        }
+        updatedEmployee = await Employee.findOne(filter).select('-onboardingDocs -complianceDocs').lean()
+
+        // Sync or remove CalendarEvent dynamically
+        const empId = String(updatedEmployee?.employeeId || updatedEmployee?._id || user.id || user.employeeId)
+        const empName = updatedEmployee?.displayName || updatedEmployee?.name || user.name || 'Employee'
+        const currentYear = new Date().getFullYear()
+
+        if (dobDate) {
+          const dobInfo = extractEmployeeDob(updatedEmployee)
+          if (dobInfo) {
+            const bMonth = String(dobInfo.month).padStart(2, '0')
+            const bDay = dobInfo.day
+            const bdayDate = `${currentYear}-${bMonth}-${bDay}`
+            const sourceId = `bday_${empId}_${currentYear}`
+            await CalendarEvent.findOneAndUpdate(
+              { sourceType: 'employee_birthday', sourceId },
+              {
+                title: `${empName}'s Birthday`,
+                description: `Wish ${empName} a very Happy Birthday!`,
+                category: 'Employee Birthday',
+                date: bdayDate,
+                startDate: bdayDate,
+                endDate: bdayDate,
+                allDay: true,
+                department: updatedEmployee?.department || 'General',
+                applicableDepartments: ['All'],
+                organizer: { employeeId: 'SYSTEM', name: 'HR Automations' },
+                priority: 'normal',
+                visibility: 'public',
+                status: 'confirmed',
+                sourceType: 'employee_birthday',
+                sourceId,
+                sourceData: { employeeId: empId, name: empName, department: updatedEmployee?.department || 'General' },
+              },
+              { upsert: true }
+            ).catch((err) => console.warn('CalendarEvent sync warning on dob update:', err.message))
+          }
+        } else {
+          // Cleared/removed birthday
+          await CalendarEvent.deleteMany({
+            sourceType: 'employee_birthday',
+            $or: [
+              { sourceId: new RegExp(`^bday_${empId}`) },
+              { 'sourceData.employeeId': empId },
+            ],
+          }).catch((err) => console.warn('CalendarEvent cleanup warning:', err.message))
+        }
+      } else {
+        const empId = user.id || user._id || user.employeeId
+        updatedEmployee = await service.update(empId, { dob: dobDate, 'identity.dob': dobDate }, request.auth.user)
+      }
+
+      // Invalidate memory caches
+      const finalId = updatedEmployee?._id || updatedEmployee?.id || user.id || user._id
+      auth.clearUserCache?.(finalId)
+      auth.clearUserCache?.(user.id || user._id)
+      userStore?.clearUserCache?.(finalId)
+      userStore?.clearUserCache?.(user.email)
+      listCache.clear()
+      service?.repository?.clearCache?.()
+      employeeRepository?.clearCache?.()
+
+      const publicEmp = toPublicEmployee ? toPublicEmployee(updatedEmployee) : updatedEmployee
+      return response.json({
+        success: true,
+        message: dobDate ? 'Date of birth updated successfully.' : 'Date of birth cleared successfully.',
+        data: publicEmp,
+      })
     } catch (error) { return next(error) }
   })
 

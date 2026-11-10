@@ -70,6 +70,15 @@ export const calendarSyncService = {
             { upsert: true }
           )
           summary.birthdays++
+        } else {
+          // Employee has no DOB on record: eliminate any fake or stale birthday events
+          await CalendarEvent.deleteMany({
+            sourceType: 'employee_birthday',
+            $or: [
+              { sourceId: new RegExp(`^bday_${empId}_`) },
+              { 'sourceData.employeeId': empId },
+            ],
+          }).catch(() => {})
         }
 
         // B. Work Anniversary & Joining
@@ -298,6 +307,13 @@ export const calendarSyncService = {
         )
         summary.holidays++
       }
+
+      // Clean up orphaned birthday events for inactive or deleted employees
+      const validEmpIds = employees.map((e) => String(e.employeeId || e._id))
+      await CalendarEvent.deleteMany({
+        sourceType: 'employee_birthday',
+        'sourceData.employeeId': { $nin: validEmpIds },
+      }).catch(() => {})
 
       summary.totalSynced =
         summary.birthdays +
