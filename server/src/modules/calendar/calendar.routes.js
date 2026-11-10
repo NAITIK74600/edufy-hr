@@ -120,6 +120,8 @@ export function createCalendarRouter({ auth, useDatabase = true }) {
         events.push({
           id: String(h._id),
           entityId: String(h._id),
+          sourceType: 'company_holiday',
+          sourceId: `holiday_${h._id}`,
           title: h.name || h.title,
           name: h.name || h.title,
           date: effectiveDate,
@@ -176,6 +178,8 @@ export function createCalendarRouter({ auth, useDatabase = true }) {
               id: `bday-${emp._id}-${targetYear}`,
               entityId: String(emp._id),
               employeeId: String(emp.employeeId || emp._id),
+              sourceType: 'employee_birthday',
+              sourceId: `bday_${emp.employeeId || emp._id}_${targetYear}`,
               title: `${displayName}'s Birthday`,
               name: displayName,
               date: bdayDate,
@@ -235,6 +239,9 @@ export function createCalendarRouter({ auth, useDatabase = true }) {
             events.push({
               id: `anniv-${emp._id}-${targetYear}`,
               entityId: String(emp._id),
+              employeeId: String(emp.employeeId || emp._id),
+              sourceType: 'employee_anniversary',
+              sourceId: `anniv_${emp.employeeId || emp._id}_${targetYear}`,
               title: `${displayName} (${completedYears} Year${completedYears > 1 ? 's' : ''} at Edufyi)`,
               name: displayName,
               date: annivDate,
@@ -294,6 +301,8 @@ export function createCalendarRouter({ auth, useDatabase = true }) {
           events.push({
             id: `leave-${l._id}`,
             entityId: String(l._id),
+            sourceType: 'leave_approved',
+            sourceId: `leave_${l._id}`,
             title: `${l.employeeName || 'Employee'} (${l.leaveType || 'Leave'})`,
             name: l.employeeName,
             leaveType: l.leaveType,
@@ -325,13 +334,68 @@ export function createCalendarRouter({ auth, useDatabase = true }) {
           scope: req.query.scope || 'all',
         })
         for (const ev of smartEvents) {
-          // Avoid duplicate if an automated event was already added
-          const alreadyExists = events.some((existing) =>
-            existing.id === ev.id ||
-            existing.entityId === ev.entityId ||
-            (existing.sourceId && existing.sourceId === ev.sourceId)
-          )
-          if (!alreadyExists) {
+          const evCat = (ev.category || ev.type || '').toLowerCase()
+          const evSourceType = ev.sourceType || ''
+          const evEmpId = String(ev.sourceData?.employeeId || ev.employeeId || '')
+
+          const existingIdx = events.findIndex((existing) => {
+            if (existing.id === ev.id || existing.entityId === ev.entityId) return true
+            if (existing.sourceId && ev.sourceId && existing.sourceId === ev.sourceId) return true
+
+            const exCat = (existing.category || existing.type || '').toLowerCase()
+
+            // Match Work Anniversaries on same date for same employee or title
+            if ((exCat.includes('anniversary') || existing.type === 'anniversary') &&
+                (evCat.includes('anniversary') || evSourceType === 'employee_anniversary')) {
+              if (existing.date === ev.date) {
+                if (evEmpId && (existing.employeeId === evEmpId || existing.entityId === evEmpId)) return true
+                const cleanExName = (existing.name || existing.title || '').replace(/\s*\(.*\)/, '').replace(/\s*·.*/, '').trim().toLowerCase()
+                const cleanEvName = (ev.name || ev.title || '').replace(/\s*\(.*\)/, '').replace(/\s*·.*/, '').trim().toLowerCase()
+                if (cleanExName && cleanEvName && cleanExName === cleanEvName) return true
+              }
+            }
+
+            // Match Birthdays on same date for same employee or title
+            if ((exCat.includes('birthday') || existing.type === 'birthday') &&
+                (evCat.includes('birthday') || evSourceType === 'employee_birthday')) {
+              if (existing.date === ev.date) {
+                if (evEmpId && (existing.employeeId === evEmpId || existing.entityId === evEmpId)) return true
+                const cleanExName = (existing.name || existing.title || '').replace(/'s birthday.*/i, '').trim().toLowerCase()
+                const cleanEvName = (ev.name || ev.title || '').replace(/'s birthday.*/i, '').trim().toLowerCase()
+                if (cleanExName && cleanEvName && cleanExName === cleanEvName) return true
+              }
+            }
+
+            // Match Holidays on same date
+            if ((exCat.includes('holiday') || existing.type === 'holiday') &&
+                (evCat.includes('holiday') || evSourceType === 'company_holiday')) {
+              if (existing.date === ev.date) {
+                const exName = (existing.name || existing.title || '').trim().toLowerCase()
+                const evName = (ev.name || ev.title || '').trim().toLowerCase()
+                if (exName && evName && exName === evName) return true
+              }
+            }
+
+            // Match Leaves on same date
+            if ((exCat.includes('leave') || existing.type === 'leave') &&
+                (evCat.includes('leave') || evSourceType === 'leave_approved')) {
+              if (existing.date === ev.date) {
+                if (existing.entityId && ev.sourceData?.leaveRequestId && existing.entityId === String(ev.sourceData.leaveRequestId)) return true
+              }
+            }
+
+            return false
+          })
+
+          if (existingIdx !== -1) {
+            // Already exists: enrich existing with description/location from smartEvents if missing
+            if (ev.description && !events[existingIdx].description) {
+              events[existingIdx].description = ev.description
+            }
+            if (ev.location && !events[existingIdx].location) {
+              events[existingIdx].location = ev.location
+            }
+          } else {
             events.push(ev)
           }
         }
@@ -339,8 +403,36 @@ export function createCalendarRouter({ auth, useDatabase = true }) {
         console.warn('Calendar smart event fetch warning:', err.message)
       }
 
+      // Final bulletproof deduplication pass by semantic key (strictly 1 card per milestone/celebration)
+      const seenSemanticKeys = new Set()
+      const uniqueEvents = []
+      for (const e of events) {
+        const cat = (e.category || e.type || '').toLowerCase()
+        let key
+        if (cat.includes('anniversary') || e.type === 'anniversary') {
+          const cleanName = (e.name || e.title || '').replace(/\s*\(.*\)/, '').replace(/\s*·.*/, '').trim().toLowerCase()
+          key = `anniv:${cleanName}:${e.date}`
+        } else if (cat.includes('birthday') || e.type === 'birthday') {
+          const cleanName = (e.name || e.title || '').replace(/'s birthday.*/i, '').trim().toLowerCase()
+          key = `bday:${cleanName}:${e.date}`
+        } else if (e.sourceId) {
+          key = `source:${e.sourceId}`
+        } else if (cat.includes('holiday') || e.type === 'holiday') {
+          const cleanName = (e.name || e.title || '').trim().toLowerCase()
+          key = `holiday:${cleanName}:${e.date}`
+        } else {
+          key = `event:${e.id || e.entityId || e.title}:${e.date}`
+        }
+
+        if (seenSemanticKeys.has(key)) continue
+        seenSemanticKeys.add(key)
+        uniqueEvents.push(e)
+      }
+      events.length = 0
+      events.push(...uniqueEvents)
+
       // Sort chronological by date
-      events.sort((a, b) => a.date.localeCompare(b.date))
+      events.sort((a, b) => a.date.localeCompare(b.date) || (a.startTime || '').localeCompare(b.startTime || ''))
 
       const typeCounts = {}
       events.forEach(e => { typeCounts[e.type || e.category] = (typeCounts[e.type || e.category] || 0) + 1 })

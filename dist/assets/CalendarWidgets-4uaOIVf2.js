@@ -1,7 +1,7 @@
 import { n as __toESM } from "./rolldown-runtime-CO0Nlsmt.js";
 import { $t as Calendar, B as Repeat, Bt as Clock, E as Sparkles, Ft as Download, Gt as CircleAlert, Ht as CircleX, Jt as ChevronLeft, K as Plus, L as Search, Ot as FileSpreadsheet, Pt as ExternalLink, Rt as Copy, Ut as CircleQuestionMark, Wt as CircleCheck, Xt as Check, Y as Pen, _n as require_react, at as MapPin, d as Users, dn as Bell, en as CalendarRange, fn as Award, ft as List, g as Upload, ht as Layers, i as X, n as ZoomIn, qt as ChevronRight, rn as Cake, t as ZoomOut, tn as CalendarDays, u as Video, x as Target, xt as Grid3x3, y as Trash } from "./icons-vendor-CNlTUIuG.js";
 import { a as require_jsx_runtime } from "./motion-vendor-3i60tGNx.js";
-import { I as apiClient, T as hrStore, a as Field, t as Button } from "./index-BEHsMyE1.js";
+import { I as apiClient, T as hrStore, a as Field, t as Button } from "./index-Dt67Jwkc.js";
 // src/utils/dobHelper.js
 var import_react = /* @__PURE__ */ __toESM(require_react(), 1);
 /**
@@ -103,7 +103,20 @@ var calendarService = {
 		if (department && department !== "all") params.set("department", department);
 		if (search) params.set("search", search);
 		try {
-			return (await apiClient.get(`/calendar/events?${params.toString()}`)).data || [];
+			const res = await apiClient.get(`/calendar/events?${params.toString()}`);
+			const rawList = Array.isArray(res.data) ? res.data : Array.isArray(res.data?.data) ? res.data.data : [];
+			const seen = /* @__PURE__ */ new Set();
+			return rawList.filter((ev) => {
+				const cat = (ev.category || ev.type || "").toLowerCase();
+				let key;
+				if (cat.includes("anniversary") || ev.type === "anniversary") key = `anniv:${(ev.name || ev.title || "").replace(/\s*\(.*\)/, "").replace(/\s*·.*/, "").trim().toLowerCase()}:${ev.date}`;
+				else if (cat.includes("birthday") || ev.type === "birthday") key = `bday:${(ev.name || ev.title || "").replace(/'s birthday.*/i, "").trim().toLowerCase()}:${ev.date}`;
+				else if (cat.includes("holiday") || ev.type === "holiday") key = `holiday:${(ev.name || ev.title || "").trim().toLowerCase()}:${ev.date}`;
+				else key = ev.id || `${ev.title}:${ev.date}`;
+				if (seen.has(key)) return false;
+				seen.add(key);
+				return true;
+			});
 		} catch (err) {
 			console.warn("Backend calendar events failed, falling back to local store:", err.message);
 			const state = hrStore.getState();
@@ -2481,7 +2494,18 @@ function UpcomingEventsView({ events = [], onSelectEvent, categoryStyles = {}, c
 	const sevenDaysAhead = /* @__PURE__ */ new Date();
 	sevenDaysAhead.setDate(sevenDaysAhead.getDate() + 7);
 	const sevenDaysAheadStr = toLocalDateStr(sevenDaysAhead);
-	const upcomingList = events.filter((e) => e.date >= todayStr && e.status !== "cancelled").sort((a, b) => a.date.localeCompare(b.date) || (a.startTime || "").localeCompare(b.startTime || ""));
+	const seenUpcoming = /* @__PURE__ */ new Set();
+	const upcomingList = events.filter((e) => e.date >= todayStr && e.status !== "cancelled").filter((ev) => {
+		const cat = (ev.category || ev.type || "").toLowerCase();
+		let key;
+		if (cat.includes("anniversary") || ev.type === "anniversary") key = `anniv:${(ev.name || ev.title || "").replace(/\s*\(.*\)/, "").replace(/\s*·.*/, "").trim().toLowerCase()}:${ev.date}`;
+		else if (cat.includes("birthday") || ev.type === "birthday") key = `bday:${(ev.name || ev.title || "").replace(/'s birthday.*/i, "").trim().toLowerCase()}:${ev.date}`;
+		else if (cat.includes("holiday") || ev.type === "holiday") key = `holiday:${(ev.name || ev.title || "").trim().toLowerCase()}:${ev.date}`;
+		else key = ev.id || `${ev.title}:${ev.date}`;
+		if (seenUpcoming.has(key)) return false;
+		seenUpcoming.add(key);
+		return true;
+	}).sort((a, b) => a.date.localeCompare(b.date) || (a.startTime || "").localeCompare(b.startTime || ""));
 	const todayEvents = upcomingList.filter((e) => e.date === todayStr);
 	const tomorrowEvents = upcomingList.filter((e) => e.date === tomorrowStr);
 	const thisWeekEvents = upcomingList.filter((e) => e.date > tomorrowStr && e.date <= sevenDaysAheadStr);
@@ -3666,7 +3690,19 @@ function EnterpriseCalendar({ canManage = false, user = null, defaultView = "mon
 				department: departmentFilter,
 				search: searchQuery
 			});
-			setEvents(data);
+			const seen = /* @__PURE__ */ new Set();
+			const dedupedData = (data || []).filter((ev) => {
+				const cat = (ev.category || ev.type || "").toLowerCase();
+				let key;
+				if (cat.includes("anniversary") || ev.type === "anniversary") key = `anniv:${(ev.name || ev.title || "").replace(/\s*\(.*\)/, "").replace(/\s*·.*/, "").trim().toLowerCase()}:${ev.date}`;
+				else if (cat.includes("birthday") || ev.type === "birthday") key = `bday:${(ev.name || ev.title || "").replace(/'s birthday.*/i, "").trim().toLowerCase()}:${ev.date}`;
+				else if (cat.includes("holiday") || ev.type === "holiday") key = `holiday:${(ev.name || ev.title || "").trim().toLowerCase()}:${ev.date}`;
+				else key = ev.id || `${ev.title}:${ev.date}`;
+				if (seen.has(key)) return false;
+				seen.add(key);
+				return true;
+			});
+			setEvents(dedupedData);
 		} catch (err) {
 			console.warn("Failed loading events:", err.message);
 		} finally {
@@ -7773,7 +7809,7 @@ function CalendarWidgets({ user = null }) {
 	const birthdaysThisMonth = widgetsData?.birthdaysThisMonth?.length ? widgetsData.birthdaysThisMonth : allBirthdays.filter((b) => b.isThisMonth);
 	const upcomingBirthdays = widgetsData?.upcomingBirthdays?.length ? widgetsData.upcomingBirthdays : allBirthdays;
 	const nextUpcomingBirthday = upcomingBirthdays[0] || allBirthdays[0] || null;
-	const anniversaries = widgetsData?.anniversariesThisMonth || (storeState.employees || []).filter((e) => {
+	const rawAnniversaries = widgetsData?.anniversariesThisMonth || (storeState.employees || []).filter((e) => {
 		if (!e.joiningDate) return false;
 		const d = new Date(e.joiningDate);
 		return !isNaN(d.getTime()) && d.getUTCMonth() + 1 === currentMonth && currentYear - d.getUTCFullYear() > 0;
@@ -7786,6 +7822,13 @@ function CalendarWidgets({ user = null }) {
 			completedYears: currentYear - d.getUTCFullYear(),
 			date: `${currentYear}-${String(currentMonth).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`
 		};
+	});
+	const seenAnnivWidget = /* @__PURE__ */ new Set();
+	const anniversaries = rawAnniversaries.filter((a) => {
+		const key = `${(a.name || "").trim().toLowerCase()}:${a.date || a.day || a.id}`;
+		if (seenAnnivWidget.has(key)) return false;
+		seenAnnivWidget.add(key);
+		return true;
 	});
 	const upcomingMeetings = widgetsData?.upcomingMeetings || [];
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {

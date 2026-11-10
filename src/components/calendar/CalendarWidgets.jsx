@@ -126,8 +126,8 @@ export function CalendarWidgets({ user = null }) {
 
   const nextUpcomingBirthday = upcomingBirthdays[0] || allBirthdays[0] || null
 
-  // 3. Anniversaries
-  const anniversaries =
+  // 3. Anniversaries (Deduplicated strictly to 1 entry per employee)
+  const rawAnniversaries =
     widgetsData?.anniversariesThisMonth ||
     (storeState.employees || [])
       .filter((e) => {
@@ -145,6 +145,15 @@ export function CalendarWidgets({ user = null }) {
           date: `${currentYear}-${String(currentMonth).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`,
         }
       })
+
+  const seenAnnivWidget = new Set()
+  const anniversaries = rawAnniversaries.filter((a) => {
+    const cleanName = (a.name || '').trim().toLowerCase()
+    const key = `${cleanName}:${a.date || a.day || a.id}`
+    if (seenAnnivWidget.has(key)) return false
+    seenAnnivWidget.add(key)
+    return true
+  })
 
   // 4. Upcoming Meetings & Google Meet Video Calls
   const upcomingMeetings = widgetsData?.upcomingMeetings || []

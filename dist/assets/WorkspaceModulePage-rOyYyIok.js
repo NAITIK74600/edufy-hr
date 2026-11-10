@@ -2,11 +2,11 @@ import { n as __toESM } from "./rolldown-runtime-CO0Nlsmt.js";
 import { Dt as FileText, Ft as Download, Gt as CircleAlert, I as Send, K as Plus, L as Search, P as Settings2, Rt as Copy, U as Radio, V as RefreshCw, Vt as Clock3, W as Printer, Wt as CircleCheck, X as PenLine, Xt as Check, Zt as ChartColumn, _n as require_react, a as Wifi, at as MapPin, b as Ticket, bt as Heart, d as Users, hn as ArrowLeft, i as X, nn as Calculator, ot as Mail, rt as Megaphone, s as WalletCards, y as Trash } from "./icons-vendor-CNlTUIuG.js";
 import { r as require_react_dom } from "./react-vendor-B_MMQ54z.js";
 import { a as require_jsx_runtime } from "./motion-vendor-3i60tGNx.js";
-import { D as storeAction, P as workspaceAction, T as hrStore, a as Field, c as StatusBadge, i as EmptyState, k as todayKey, n as ConfirmationDialog, o as PageHeader, r as DataTable, t as Button, x as useAuth } from "./index-BEHsMyE1.js";
+import { D as storeAction, P as workspaceAction, T as hrStore, a as Field, c as StatusBadge, i as EmptyState, k as todayKey, n as ConfirmationDialog, o as PageHeader, r as DataTable, t as Button, x as useAuth } from "./index-Dt67Jwkc.js";
 import { n as formatINR, t as amountInWordsINR } from "./currency-oCUzM0NR.js";
-import { n as HolidayCalendarShowcase } from "./CalendarWidgets-CrA62VFV.js";
-import { AdminUsersModule } from "./AdminDashboardPage-CnDCCjjX.js";
-import { a as PerformanceWorkspace, i as CompanyPoliciesView, n as getDailyAttendanceStatus, o as WorkspaceNotifications, r as getLateCountInfo, s as WorkspaceReports, t as CompanyDocumentsView } from "./CompanyDocumentsView-BPhGs4ud.js";
+import { n as HolidayCalendarShowcase } from "./CalendarWidgets-4uaOIVf2.js";
+import { AdminUsersModule } from "./AdminDashboardPage-Bk27TpLL.js";
+import { a as PerformanceWorkspace, i as CompanyPoliciesView, n as getDailyAttendanceStatus, o as WorkspaceNotifications, r as getLateCountInfo, s as WorkspaceReports, t as CompanyDocumentsView } from "./CompanyDocumentsView-BzhbsM9c.js";
 // src/utils/attendancePresence.js
 var import_react = /* @__PURE__ */ __toESM(require_react(), 1);
 var import_react_dom = require_react_dom();

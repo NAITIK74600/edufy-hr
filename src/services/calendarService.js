@@ -16,7 +16,27 @@ export const calendarService = {
 
     try {
       const res = await apiClient.get(`/calendar/events?${params.toString()}`)
-      return res.data || []
+      const rawList = Array.isArray(res.data) ? res.data : (Array.isArray(res.data?.data) ? res.data.data : [])
+      const seen = new Set()
+      return rawList.filter((ev) => {
+        const cat = (ev.category || ev.type || '').toLowerCase()
+        let key
+        if (cat.includes('anniversary') || ev.type === 'anniversary') {
+          const cleanName = (ev.name || ev.title || '').replace(/\s*\(.*\)/, '').replace(/\s*·.*/, '').trim().toLowerCase()
+          key = `anniv:${cleanName}:${ev.date}`
+        } else if (cat.includes('birthday') || ev.type === 'birthday') {
+          const cleanName = (ev.name || ev.title || '').replace(/'s birthday.*/i, '').trim().toLowerCase()
+          key = `bday:${cleanName}:${ev.date}`
+        } else if (cat.includes('holiday') || ev.type === 'holiday') {
+          const cleanName = (ev.name || ev.title || '').trim().toLowerCase()
+          key = `holiday:${cleanName}:${ev.date}`
+        } else {
+          key = ev.id || `${ev.title}:${ev.date}`
+        }
+        if (seen.has(key)) return false
+        seen.add(key)
+        return true
+      })
     } catch (err) {
       console.warn('Backend calendar events failed, falling back to local store:', err.message)
       // Fallback to local hrStore state

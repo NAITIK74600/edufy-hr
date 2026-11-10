@@ -315,7 +315,28 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
         department: departmentFilter,
         search: searchQuery,
       })
-      setEvents(data)
+      // Deduplicate before setting events (strictly 1 card per milestone/celebration)
+      const seen = new Set()
+      const dedupedData = (data || []).filter((ev) => {
+        const cat = (ev.category || ev.type || '').toLowerCase()
+        let key
+        if (cat.includes('anniversary') || ev.type === 'anniversary') {
+          const cleanName = (ev.name || ev.title || '').replace(/\s*\(.*\)/, '').replace(/\s*·.*/, '').trim().toLowerCase()
+          key = `anniv:${cleanName}:${ev.date}`
+        } else if (cat.includes('birthday') || ev.type === 'birthday') {
+          const cleanName = (ev.name || ev.title || '').replace(/'s birthday.*/i, '').trim().toLowerCase()
+          key = `bday:${cleanName}:${ev.date}`
+        } else if (cat.includes('holiday') || ev.type === 'holiday') {
+          const cleanName = (ev.name || ev.title || '').trim().toLowerCase()
+          key = `holiday:${cleanName}:${ev.date}`
+        } else {
+          key = ev.id || `${ev.title}:${ev.date}`
+        }
+        if (seen.has(key)) return false
+        seen.add(key)
+        return true
+      })
+      setEvents(dedupedData)
     } catch (err) {
       console.warn('Failed loading events:', err.message)
     } finally {

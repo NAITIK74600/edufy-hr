@@ -35,9 +35,29 @@ export function UpcomingEventsView({
   sevenDaysAhead.setDate(sevenDaysAhead.getDate() + 7)
   const sevenDaysAheadStr = toLocalDateStr(sevenDaysAhead)
 
-  // Filter only upcoming / today onwards
+  // Filter only upcoming / today onwards and deduplicate (strictly 1 card per employee milestone)
+  const seenUpcoming = new Set()
   const upcomingList = events
     .filter((e) => e.date >= todayStr && e.status !== 'cancelled')
+    .filter((ev) => {
+      const cat = (ev.category || ev.type || '').toLowerCase()
+      let key
+      if (cat.includes('anniversary') || ev.type === 'anniversary') {
+        const cleanName = (ev.name || ev.title || '').replace(/\s*\(.*\)/, '').replace(/\s*·.*/, '').trim().toLowerCase()
+        key = `anniv:${cleanName}:${ev.date}`
+      } else if (cat.includes('birthday') || ev.type === 'birthday') {
+        const cleanName = (ev.name || ev.title || '').replace(/'s birthday.*/i, '').trim().toLowerCase()
+        key = `bday:${cleanName}:${ev.date}`
+      } else if (cat.includes('holiday') || ev.type === 'holiday') {
+        const cleanName = (ev.name || ev.title || '').trim().toLowerCase()
+        key = `holiday:${cleanName}:${ev.date}`
+      } else {
+        key = ev.id || `${ev.title}:${ev.date}`
+      }
+      if (seenUpcoming.has(key)) return false
+      seenUpcoming.add(key)
+      return true
+    })
     .sort((a, b) => a.date.localeCompare(b.date) || (a.startTime || '').localeCompare(b.startTime || ''))
 
   // Groups
