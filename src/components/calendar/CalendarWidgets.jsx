@@ -3,6 +3,7 @@ import { Calendar, Cake, Award, Sparkles, ChevronRight, Clock, Video, ExternalLi
 import { calendarService } from '../../services/calendarService'
 import { hrStore } from '../../services/hrStore'
 import { extractEmployeeDob } from '../../utils/dobHelper'
+import { formatGoogleCalendarUrl, isGoogleMeet } from '../../utils/googleCalendarHelper'
 
 export function CalendarWidgets({ user = null }) {
   const [widgetsData, setWidgetsData] = useState(null)
@@ -67,16 +68,7 @@ export function CalendarWidgets({ user = null }) {
     return day === 1 || day === 5
   }
 
-  const getGoogleCalendarUrl = (h) => {
-    if (!h?.date) return '#'
-    const title = encodeURIComponent(h.name || h.title || 'Holiday')
-    const start = (h.date || '').replace(/-/g, '')
-    const d = new Date(h.endDate || h.date)
-    d.setDate(d.getDate() + 1)
-    const end = d.toISOString().split('T')[0].replace(/-/g, '')
-    const desc = encodeURIComponent(`${h.category || 'Official Holiday'} - Edufyi HR Calendar`)
-    return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${start}/${end}&details=${desc}`
-  }
+  const getGoogleCalendarUrl = (h) => formatGoogleCalendarUrl(h)
 
   // 2. Birthdays (Dynamic loop-engineered calculation from MongoDB employee records)
   const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -459,11 +451,12 @@ export function CalendarWidgets({ user = null }) {
                       href={m.meetingLink.url}
                       target="_blank"
                       rel="noopener noreferrer"
+                      title="Join Google Meet Video Conference"
                       style={{
-                        padding: '4px 8px',
+                        padding: '4px 10px',
                         background: '#059669',
                         color: '#ffffff',
-                        borderRadius: '5px',
+                        borderRadius: '6px',
                         fontSize: '11px',
                         fontWeight: 700,
                         textDecoration: 'none',
@@ -471,9 +464,10 @@ export function CalendarWidgets({ user = null }) {
                         alignItems: 'center',
                         gap: '4px',
                         flexShrink: 0,
+                        boxShadow: '0 1px 2px rgba(5, 150, 105, 0.25)',
                       }}
                     >
-                      <Video size={11} /> Join
+                      <Video size={12} /> {isGoogleMeet(m) ? 'Google Meet' : 'Join'}
                     </a>
                   )}
                 </div>

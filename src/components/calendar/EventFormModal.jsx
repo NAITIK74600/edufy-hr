@@ -87,10 +87,20 @@ export function EventFormModal({
   const [placeSuggestions, setPlaceSuggestions] = useState([])
   const [isSearchingPlaces, setIsSearchingPlaces] = useState(false)
 
-  // Video Meeting (Google Meet)
-  const [meetingUrl, setMeetingUrl] = useState(initialEvent?.meetingLink?.url || '')
-  const [meetingProvider, setMeetingProvider] = useState(initialEvent?.meetingLink?.provider || 'none')
-  const [autoCreateMeet, setAutoCreateMeet] = useState(false)
+  const isMeetingCategory = (cat) => Boolean(cat && (cat.includes('Meeting') || cat.includes('Session') || cat.includes('Interview')))
+  const generateMeetCode = () => `${Math.random().toString(36).substring(2, 5)}-${Math.random().toString(36).substring(2, 6)}-${Math.random().toString(36).substring(2, 5)}`
+
+  // Video Meeting (Google Meet - Default for all meeting events)
+  const initialCat = initialEvent?.category || 'Company Meeting'
+  const shouldAutoMeet = !initialEvent && isMeetingCategory(initialCat)
+  const [meetingUrl, setMeetingUrl] = useState(
+    initialEvent?.meetingLink?.url || (shouldAutoMeet ? `https://meet.google.com/${generateMeetCode()}` : '')
+  )
+  const [meetingProvider, setMeetingProvider] = useState(
+    initialEvent?.meetingLink?.provider || (shouldAutoMeet ? 'google_meet' : 'none')
+  )
+  const [autoCreateMeet, setAutoCreateMeet] = useState(shouldAutoMeet)
+  const [meetCopied, setMeetCopied] = useState(false)
 
   // Participants
   const [participants, setParticipants] = useState(() => {
@@ -174,8 +184,26 @@ export function EventFormModal({
   const handleGenerateGoogleMeet = () => {
     setAutoCreateMeet(true)
     setMeetingProvider('google_meet')
-    const randomCode = `${Math.random().toString(36).substring(2, 5)}-${Math.random().toString(36).substring(2, 6)}-${Math.random().toString(36).substring(2, 5)}`
+    const randomCode = generateMeetCode()
     setMeetingUrl(`https://meet.google.com/${randomCode}`)
+  }
+
+  const handleCopyMeet = () => {
+    if (meetingUrl) {
+      navigator.clipboard?.writeText(meetingUrl)
+      setMeetCopied(true)
+      setTimeout(() => setMeetCopied(false), 2000)
+    }
+  }
+
+  const handleCategoryChange = (newCat) => {
+    setCategory(newCat)
+    if (isMeetingCategory(newCat) && (!meetingUrl || meetingProvider === 'none')) {
+      const code = generateMeetCode()
+      setMeetingUrl(`https://meet.google.com/${code}`)
+      setMeetingProvider('google_meet')
+      setAutoCreateMeet(true)
+    }
   }
 
   const toggleReminder = (mins) => {
@@ -413,7 +441,7 @@ export function EventFormModal({
                     <select
                       className="ui-select"
                       value={category}
-                      onChange={(e) => setCategory(e.target.value)}
+                      onChange={(e) => handleCategoryChange(e.target.value)}
                     >
                       {EVENT_CATEGORIES.map((c) => (
                         <option key={c} value={c}>{c}</option>
@@ -536,26 +564,63 @@ export function EventFormModal({
                     </button>
 
                     {meetingUrl && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setMeetingUrl('')
-                          setMeetingProvider('none')
-                          setAutoCreateMeet(false)
-                        }}
-                        style={{
-                          padding: '6px 10px',
-                          background: '#fee2e2',
-                          color: '#b91c1c',
-                          border: 'none',
-                          borderRadius: '6px',
-                          fontSize: '11px',
-                          fontWeight: 700,
-                          cursor: 'pointer',
-                        }}
-                      >
-                        Remove
-                      </button>
+                      <>
+                        <a
+                          href={meetingUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{
+                            padding: '6px 10px',
+                            background: '#e0f2fe',
+                            color: '#0369a1',
+                            borderRadius: '6px',
+                            fontSize: '11px',
+                            fontWeight: 700,
+                            textDecoration: 'none',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                          }}
+                        >
+                          <ExternalLink size={12} /> Test
+                        </a>
+                        <button
+                          type="button"
+                          onClick={handleCopyMeet}
+                          style={{
+                            padding: '6px 10px',
+                            background: '#f1f5f9',
+                            color: '#334155',
+                            border: '1px solid #cbd5e1',
+                            borderRadius: '6px',
+                            fontSize: '11px',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                          }}
+                        >
+                          {meetCopied ? '✓ Copied' : 'Copy'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setMeetingUrl('')
+                            setMeetingProvider('none')
+                            setAutoCreateMeet(false)
+                          }}
+                          style={{
+                            padding: '6px 10px',
+                            background: '#fee2e2',
+                            color: '#b91c1c',
+                            border: 'none',
+                            borderRadius: '6px',
+                            fontSize: '11px',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                          }}
+                        >
+                          Remove
+                        </button>
+                      </>
                     )}
                   </div>
                 </div>

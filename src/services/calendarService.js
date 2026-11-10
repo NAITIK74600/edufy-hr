@@ -405,6 +405,14 @@ export const calendarService = {
   },
 
   /**
+   * Synchronize an event with Google Calendar API and Google Meet
+   */
+  async syncGoogleCalendarEvent(eventId) {
+    const res = await apiClient.post(`/calendar/events/${encodeURIComponent(eventId)}/google-sync`)
+    return res.data
+  },
+
+  /**
    * Fetch upcoming agenda feed
    */
   async getUpcomingEvents(limit = 10, scope = 'all') {

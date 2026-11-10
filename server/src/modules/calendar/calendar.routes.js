@@ -1455,10 +1455,61 @@ export function createCalendarRouter({ auth, useDatabase = true }) {
       event.meetingLink = meetDetails
       await event.save()
 
+      const googleCalendarUrl = googleCalendarService.generateGoogleCalendarUrl(event)
+
       res.json({
         success: true,
         message: 'Google Meet link generated.',
-        data: meetDetails,
+        data: {
+          ...meetDetails,
+          googleCalendarUrl,
+        },
+      })
+    } catch (error) {
+      next(error)
+    }
+  })
+
+  // =========================================================================
+  // 17b. POST /api/v1/calendar/events/:id/google-sync - Direct Google Calendar Sync
+  // =========================================================================
+  router.post('/events/:id/google-sync', auth.authenticate, async (req, res, next) => {
+    try {
+      const event = await CalendarEvent.findById(req.params.id)
+      if (!event) return res.status(404).json({ success: false, message: 'Event not found.' })
+
+      let meetDetails = null
+      if (event.meetingLink?.googleEventId && !event.meetingLink.googleEventId.startsWith('sim_')) {
+        meetDetails = await googleCalendarService.updateGoogleEvent(event.meetingLink.googleEventId, event)
+      } else {
+        meetDetails = await googleCalendarService.createGoogleMeetEvent({
+          title: event.title,
+          description: event.description,
+          date: event.date,
+          endDate: event.endDate || event.date,
+          startTime: event.startTime,
+          endTime: event.endTime,
+          allDay: event.allDay,
+          timezone: event.timezone,
+          participants: event.participants,
+          location: event.location,
+        })
+        if (meetDetails) {
+          event.meetingLink = { ...(event.meetingLink || {}), ...meetDetails }
+          await event.save()
+        }
+      }
+
+      const googleCalendarUrl = googleCalendarService.generateGoogleCalendarUrl(event)
+
+      res.json({
+        success: true,
+        message: 'Synchronized with Google Calendar & Google Meet.',
+        data: {
+          meetingLink: event.meetingLink,
+          googleCalendarUrl,
+          htmlLink: event.meetingLink?.htmlLink || null,
+        },
       })
     } catch (error) {
       next(error)

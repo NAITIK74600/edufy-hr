@@ -18,9 +18,10 @@ import {
 } from 'lucide-react'
 import { Button } from '../ui'
 import { calendarService } from '../../services/calendarService'
+import { formatGoogleCalendarUrl, isGoogleMeet, getMeetCode } from '../../utils/googleCalendarHelper'
 
 export function EventDetailModal({
-  event,
+  event: initialEvent,
   onClose,
   onEdit,
   onDeleted,
@@ -29,9 +30,13 @@ export function EventDetailModal({
   canManage = false,
   categoryStyles = {},
 }) {
-  if (!event) return null
+  if (!initialEvent) return null
 
+  const [event, setEvent] = useState(initialEvent)
   const [isCopied, setIsCopied] = useState(false)
+  const [isMeetCopied, setIsMeetCopied] = useState(false)
+  const [isGeneratingMeet, setIsGeneratingMeet] = useState(false)
+  const [isGoogleSyncing, setIsGoogleSyncing] = useState(false)
   const [isRsvping, setIsRsvping] = useState(false)
   const [rsvpFeedback, setRsvpFeedback] = useState('')
   const [showCancelPrompt, setShowCancelPrompt] = useState(false)
@@ -65,6 +70,51 @@ export function EventDetailModal({
     }
   }
 
+  const handleGenerateMeet = async () => {
+    setIsGeneratingMeet(true)
+    try {
+      const res = await calendarService.generateMeetLink(event.entityId || event.id)
+      if (res?.data) {
+        setEvent((prev) => ({ ...prev, meetingLink: res.data }))
+        setRsvpFeedback('✅ Google Meet link generated and attached!')
+        onRsvpUpdated?.()
+        setTimeout(() => setRsvpFeedback(''), 3000)
+      }
+    } catch (err) {
+      alert('Could not generate Google Meet: ' + err.message)
+    } finally {
+      setIsGeneratingMeet(false)
+    }
+  }
+
+  const handleCopyMeetLink = () => {
+    const url = event.meetingLink?.url
+    if (url) {
+      navigator.clipboard?.writeText(url)
+      setIsMeetCopied(true)
+      setTimeout(() => setIsMeetCopied(false), 2000)
+    }
+  }
+
+  const handleGoogleSync = async () => {
+    setIsGoogleSyncing(true)
+    try {
+      const res = await calendarService.syncGoogleCalendarEvent(event.entityId || event.id)
+      if (res?.data) {
+        if (res.data.meetingLink) {
+          setEvent((prev) => ({ ...prev, meetingLink: res.data.meetingLink }))
+        }
+        setRsvpFeedback('✅ Synchronized with Google Calendar & Google Meet!')
+        onRsvpUpdated?.()
+        setTimeout(() => setRsvpFeedback(''), 3000)
+      }
+    } catch (err) {
+      alert('Google Calendar sync notice: ' + err.message)
+    } finally {
+      setIsGoogleSyncing(false)
+    }
+  }
+
   const handleConfirmCancel = async () => {
     try {
       await calendarService.deleteEvent(event.entityId || event.id, cancelReason)
@@ -76,7 +126,7 @@ export function EventDetailModal({
   }
 
   const handleCopyDetails = () => {
-    const meetStr = event.meetingLink?.url ? `\nMeeting Link: ${event.meetingLink.url}` : ''
+    const meetStr = event.meetingLink?.url ? `\nGoogle Meet: ${event.meetingLink.url}` : ''
     const locStr = event.location?.name ? `\nLocation: ${event.location.name} (${event.location.address || ''})` : ''
     const text = `${event.title}\nDate: ${event.date} (${event.startTime || 'All Day'})\nCategory: ${event.category}${locStr}${meetStr}\n\n${event.description || ''}`
     navigator.clipboard?.writeText(text)
@@ -84,17 +134,9 @@ export function EventDetailModal({
     setTimeout(() => setIsCopied(false), 2000)
   }
 
-  const getGCalUrl = () => {
-    if (!event.date) return '#'
-    const title = encodeURIComponent(event.title || 'Event')
-    const start = (event.date || '').replace(/-/g, '')
-    const d = new Date(event.endDate || event.date)
-    d.setDate(d.getDate() + 1)
-    const end = d.toISOString().split('T')[0].replace(/-/g, '')
-    const desc = encodeURIComponent(`${event.description || ''}\n${event.meetingLink?.url ? 'Join Video Call: ' + event.meetingLink.url : ''}`)
-    const loc = encodeURIComponent(event.location?.formattedAddress || event.location?.name || '')
-    return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${start}/${end}&details=${desc}&location=${loc}`
-  }
+  const gCalUrl = formatGoogleCalendarUrl(event)
+  const isMeet = isGoogleMeet(event)
+  const meetCode = event.meetingLink?.meetCode || getMeetCode(event.meetingLink?.url)
 
   return (
     <div
@@ -215,13 +257,13 @@ export function EventDetailModal({
         </div>
 
         {/* Video Call (Google Meet) Action Card */}
-        {event.meetingLink?.url && (
+        {event.meetingLink?.url ? (
           <div
             style={{
               padding: '14px 16px',
               borderRadius: '12px',
               background: '#f0fdf4',
-              border: '1px solid #bbf7d0',
+              border: '1.5px solid #86efac',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
@@ -230,41 +272,128 @@ export function EventDetailModal({
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <div style={{ width: '36px', height: '36px', borderRadius: '8px', background: '#059669', color: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Video size={18} />
+              <div
+                style={{
+                  width: '38px',
+                  height: '38px',
+                  borderRadius: '10px',
+                  background: '#059669',
+                  color: '#ffffff',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  boxShadow: '0 2px 4px rgba(5, 150, 105, 0.25)',
+                }}
+              >
+                <Video size={20} />
               </div>
               <div>
-                <div style={{ fontSize: '13px', fontWeight: 800, color: '#065f46' }}>
-                  {event.meetingLink.provider === 'google_meet' ? 'Google Meet Video Call' : 'Online Video Conference'}
+                <div style={{ fontSize: '13px', fontWeight: 800, color: '#065f46', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span>{isMeet ? 'Google Meet Video Call' : 'Online Video Conference'}</span>
+                  {event.meetingLink.googleEventId && !event.meetingLink.googleEventId.startsWith('sim_') && (
+                    <span style={{ fontSize: '10px', fontWeight: 700, padding: '1px 6px', borderRadius: '4px', background: '#dcfce7', color: '#15803d' }}>
+                      Synced to Google
+                    </span>
+                  )}
                 </div>
-                <div style={{ fontSize: '11px', color: '#047857' }}>
-                  {event.meetingLink.meetCode ? `Code: ${event.meetingLink.meetCode}` : 'Ready to connect'}
+                <div style={{ fontSize: '11px', color: '#047857', marginTop: '2px' }}>
+                  {meetCode ? `Room Code: ${meetCode}` : 'Ready for participants to join'}
                 </div>
               </div>
             </div>
 
-            <a
-              href={event.meetingLink.url}
-              target="_blank"
-              rel="noopener noreferrer"
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <button
+                type="button"
+                onClick={handleCopyMeetLink}
+                style={{
+                  padding: '7px 10px',
+                  borderRadius: '6px',
+                  border: '1px solid #a7f3d0',
+                  background: '#ffffff',
+                  color: '#065f46',
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                }}
+              >
+                {isMeetCopied ? <Check size={12} color="#059669" /> : <Copy size={12} />}
+                <span>{isMeetCopied ? 'Copied' : 'Copy'}</span>
+              </button>
+
+              <a
+                href={event.meetingLink.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: '8px',
+                  background: '#059669',
+                  color: '#ffffff',
+                  textDecoration: 'none',
+                  fontSize: '12px',
+                  fontWeight: 800,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  boxShadow: '0 2px 6px rgba(5, 150, 105, 0.3)',
+                }}
+              >
+                <Video size={13} />
+                <span>Join with Google Meet</span>
+                <ExternalLink size={12} />
+              </a>
+            </div>
+          </div>
+        ) : (
+          (event.category?.includes('Meeting') || event.category?.includes('Session') || event.category?.includes('Interview')) && (
+            <div
               style={{
-                padding: '8px 16px',
-                borderRadius: '8px',
-                background: '#059669',
-                color: '#ffffff',
-                textDecoration: 'none',
-                fontSize: '12px',
-                fontWeight: 700,
-                display: 'inline-flex',
+                padding: '12px 14px',
+                borderRadius: '10px',
+                background: '#f8fafc',
+                border: '1px dashed #cbd5e1',
+                display: 'flex',
                 alignItems: 'center',
-                gap: '6px',
-                boxShadow: '0 2px 4px rgba(5, 150, 105, 0.2)',
+                justifyContent: 'space-between',
+                gap: '10px',
+                flexWrap: 'wrap',
               }}
             >
-              <span>Join Call</span>
-              <ExternalLink size={12} />
-            </a>
-          </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Video size={16} color="#64748b" />
+                <span style={{ fontSize: '12px', color: '#475569' }}>
+                  No video meeting attached yet.
+                </span>
+              </div>
+              {hasEditRights && (
+                <button
+                  type="button"
+                  onClick={handleGenerateMeet}
+                  disabled={isGeneratingMeet}
+                  style={{
+                    padding: '5px 12px',
+                    borderRadius: '6px',
+                    background: '#059669',
+                    color: '#ffffff',
+                    border: 'none',
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                  }}
+                >
+                  <Sparkles size={11} />
+                  <span>{isGeneratingMeet ? 'Generating...' : '+ Generate Google Meet'}</span>
+                </button>
+              )}
+            </div>
+          )
         )}
 
         {/* Physical Location Card & Google Maps */}
@@ -450,35 +579,61 @@ export function EventDetailModal({
         )}
 
         {/* Footer Actions */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px', borderTop: '1px solid var(--border, #e2e8f0)', paddingTop: '12px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px', borderTop: '1px solid var(--border, #e2e8f0)', paddingTop: '14px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
             <a
-              href={getGCalUrl()}
+              href={gCalUrl}
               target="_blank"
               rel="noopener noreferrer"
               style={{
-                padding: '6px 12px',
-                borderRadius: '6px',
-                border: '1px solid #cbd5e1',
-                background: '#ffffff',
-                fontSize: '11px',
-                fontWeight: 600,
+                padding: '7px 12px',
+                borderRadius: '8px',
+                border: '1.5px solid #0284c7',
+                background: '#eff6ff',
+                fontSize: '11.5px',
+                fontWeight: 700,
                 color: '#0284c7',
                 textDecoration: 'none',
                 display: 'inline-flex',
                 alignItems: 'center',
-                gap: '4px',
+                gap: '5px',
+                boxShadow: '0 1px 2px rgba(2, 132, 199, 0.08)',
               }}
             >
-              <ExternalLink size={12} /> Add to G-Cal
+              <CalendarDays size={13} color="#0284c7" />
+              <span>+ Add to Google Calendar</span>
             </a>
+
+            {hasEditRights && (
+              <button
+                type="button"
+                onClick={handleGoogleSync}
+                disabled={isGoogleSyncing}
+                style={{
+                  padding: '7px 10px',
+                  borderRadius: '8px',
+                  border: '1px solid #cbd5e1',
+                  background: '#ffffff',
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  color: '#475569',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                }}
+              >
+                <Sparkles size={12} color="#0284c7" />
+                <span>{isGoogleSyncing ? 'Syncing...' : 'Sync with Google'}</span>
+              </button>
+            )}
 
             <button
               type="button"
               onClick={handleCopyDetails}
               style={{
-                padding: '6px 12px',
-                borderRadius: '6px',
+                padding: '7px 10px',
+                borderRadius: '8px',
                 border: '1px solid #cbd5e1',
                 background: '#ffffff',
                 fontSize: '11px',

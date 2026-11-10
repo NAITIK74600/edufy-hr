@@ -1,7 +1,7 @@
 import { n as __toESM } from "./rolldown-runtime-CO0Nlsmt.js";
 import { $t as Calendar, B as Repeat, Bt as Clock, E as Sparkles, Ft as Download, Gt as CircleAlert, Ht as CircleX, Jt as ChevronLeft, K as Plus, L as Search, Ot as FileSpreadsheet, Pt as ExternalLink, Rt as Copy, Ut as CircleQuestionMark, Wt as CircleCheck, Xt as Check, Y as Pen, _n as require_react, at as MapPin, d as Users, dn as Bell, en as CalendarRange, fn as Award, ft as List, g as Upload, ht as Layers, i as X, n as ZoomIn, qt as ChevronRight, rn as Cake, t as ZoomOut, tn as CalendarDays, u as Video, x as Target, xt as Grid3x3, y as Trash } from "./icons-vendor-CNlTUIuG.js";
 import { a as require_jsx_runtime } from "./motion-vendor-3i60tGNx.js";
-import { I as apiClient, T as hrStore, a as Field, t as Button } from "./index-Dt67Jwkc.js";
+import { I as apiClient, T as hrStore, a as Field, t as Button } from "./index-CH5N69zy.js";
 // src/utils/dobHelper.js
 var import_react = /* @__PURE__ */ __toESM(require_react(), 1);
 /**
@@ -441,6 +441,12 @@ var calendarService = {
 		return (await apiClient.post(`/calendar/events/${encodeURIComponent(eventId)}/meet`)).data;
 	},
 	/**
+	* Synchronize an event with Google Calendar API and Google Meet
+	*/
+	async syncGoogleCalendarEvent(eventId) {
+		return (await apiClient.post(`/calendar/events/${encodeURIComponent(eventId)}/google-sync`)).data;
+	},
+	/**
 	* Fetch upcoming agenda feed
 	*/
 	async getUpcomingEvents(limit = 10, scope = "all") {
@@ -522,11 +528,78 @@ var calendarService = {
 		}
 	}
 };
+// src/utils/googleCalendarHelper.js
+/**
+* Google Calendar & Google Meet Integration Utilities
+* Generates standards-compliant Google Calendar 1-click template URLs,
+* parses Google Meet links, and handles timed and all-day occurrences.
+*/
+/**
+* Format an event into a 1-click Google Calendar web link (calendar.google.com/calendar/render)
+* @param {Object} event Calendar event object
+* @returns {string} Google Calendar Add URL
+*/
+function formatGoogleCalendarUrl(event) {
+	if (!event || !event.date && !event.startDate) return "https://calendar.google.com";
+	const startDateStr = event.date || event.startDate || "";
+	const endDateStr = event.endDate || startDateStr;
+	const title = encodeURIComponent(event.title || event.name || "Edufyi HR Event");
+	let datesParam = "";
+	if (Boolean(event.allDay || !event.startTime && !event.endTime)) {
+		const startClean = startDateStr.replace(/-/g, "");
+		const endObj = new Date(endDateStr);
+		if (!isNaN(endObj.getTime())) {
+			endObj.setDate(endObj.getDate() + 1);
+			datesParam = `${startClean}/${endObj.toISOString().slice(0, 10).replace(/-/g, "")}`;
+		} else datesParam = `${startClean}/${startClean}`;
+	} else {
+		const sDateClean = startDateStr.replace(/-/g, "");
+		const eDateClean = endDateStr.replace(/-/g, "");
+		datesParam = `${sDateClean}T${(event.startTime || "10:00").replace(/:/g, "").slice(0, 4) + "00"}/${eDateClean}T${(event.endTime || "11:00").replace(/:/g, "").slice(0, 4) + "00"}`;
+	}
+	const meetUrl = event.meetingLink?.url || (typeof event.meetingLink === "string" ? event.meetingLink : "");
+	const physicalLoc = event.location?.formattedAddress || event.location?.name || (typeof event.location === "string" ? event.location : "");
+	const location = encodeURIComponent(meetUrl || physicalLoc || "Edufyi Technologies");
+	const detailsParts = [];
+	if (event.description) detailsParts.push(event.description.trim());
+	if (meetUrl) detailsParts.push(`🎥 Google Meet Video Call: ${meetUrl}`);
+	if (physicalLoc && physicalLoc !== meetUrl) detailsParts.push(`📍 Venue: ${physicalLoc}`);
+	if (event.organizer?.name) detailsParts.push(`👤 Organizer: ${event.organizer.name}`);
+	detailsParts.push("— Scheduled via Edufyi HR Portal");
+	const details = encodeURIComponent(detailsParts.join("\n\n"));
+	let url = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${datesParam}&details=${details}&location=${location}&ctz=Asia/Kolkata`;
+	if (Array.isArray(event.participants) && event.participants.length > 0) {
+		const emails = event.participants.map((p) => p.email).filter((e) => e && e.includes("@"));
+		if (emails.length > 0) url += `&add=${encodeURIComponent(emails.join(","))}`;
+	}
+	return url;
+}
+/**
+* Check if a URL or event is associated with Google Meet
+*/
+function isGoogleMeet(eventOrUrl) {
+	if (!eventOrUrl) return false;
+	if (typeof eventOrUrl === "string") return eventOrUrl.includes("meet.google.com");
+	const url = eventOrUrl.meetingLink?.url || eventOrUrl.meetingUrl || "";
+	return Boolean(url.includes("meet.google.com") || eventOrUrl.meetingLink?.provider === "google_meet");
+}
+/**
+* Extract meet code from URL (e.g. "abc-defg-hij")
+*/
+function getMeetCode(url) {
+	if (!url || typeof url !== "string") return "";
+	const match = url.match(/meet\.google\.com\/([a-z0-9-]+)/i);
+	return match ? match[1] : "";
+}
 // src/components/calendar/EventDetailModal.jsx
 var import_jsx_runtime = require_jsx_runtime();
-function EventDetailModal({ event, onClose, onEdit, onDeleted, onRsvpUpdated, user = null, canManage = false, categoryStyles = {} }) {
-	if (!event) return null;
+function EventDetailModal({ event: initialEvent, onClose, onEdit, onDeleted, onRsvpUpdated, user = null, canManage = false, categoryStyles = {} }) {
+	if (!initialEvent) return null;
+	const [event, setEvent] = (0, import_react.useState)(initialEvent);
 	const [isCopied, setIsCopied] = (0, import_react.useState)(false);
+	const [isMeetCopied, setIsMeetCopied] = (0, import_react.useState)(false);
+	const [isGeneratingMeet, setIsGeneratingMeet] = (0, import_react.useState)(false);
+	const [isGoogleSyncing, setIsGoogleSyncing] = (0, import_react.useState)(false);
 	const [isRsvping, setIsRsvping] = (0, import_react.useState)(false);
 	const [rsvpFeedback, setRsvpFeedback] = (0, import_react.useState)("");
 	const [showCancelPrompt, setShowCancelPrompt] = (0, import_react.useState)(false);
@@ -555,6 +628,52 @@ function EventDetailModal({ event, onClose, onEdit, onDeleted, onRsvpUpdated, us
 			setIsRsvping(false);
 		}
 	};
+	const handleGenerateMeet = async () => {
+		setIsGeneratingMeet(true);
+		try {
+			const res = await calendarService.generateMeetLink(event.entityId || event.id);
+			if (res?.data) {
+				setEvent((prev) => ({
+					...prev,
+					meetingLink: res.data
+				}));
+				setRsvpFeedback("✅ Google Meet link generated and attached!");
+				onRsvpUpdated?.();
+				setTimeout(() => setRsvpFeedback(""), 3e3);
+			}
+		} catch (err) {
+			alert("Could not generate Google Meet: " + err.message);
+		} finally {
+			setIsGeneratingMeet(false);
+		}
+	};
+	const handleCopyMeetLink = () => {
+		const url = event.meetingLink?.url;
+		if (url) {
+			navigator.clipboard?.writeText(url);
+			setIsMeetCopied(true);
+			setTimeout(() => setIsMeetCopied(false), 2e3);
+		}
+	};
+	const handleGoogleSync = async () => {
+		setIsGoogleSyncing(true);
+		try {
+			const res = await calendarService.syncGoogleCalendarEvent(event.entityId || event.id);
+			if (res?.data) {
+				if (res.data.meetingLink) setEvent((prev) => ({
+					...prev,
+					meetingLink: res.data.meetingLink
+				}));
+				setRsvpFeedback("✅ Synchronized with Google Calendar & Google Meet!");
+				onRsvpUpdated?.();
+				setTimeout(() => setRsvpFeedback(""), 3e3);
+			}
+		} catch (err) {
+			alert("Google Calendar sync notice: " + err.message);
+		} finally {
+			setIsGoogleSyncing(false);
+		}
+	};
 	const handleConfirmCancel = async () => {
 		try {
 			await calendarService.deleteEvent(event.entityId || event.id, cancelReason);
@@ -565,21 +684,16 @@ function EventDetailModal({ event, onClose, onEdit, onDeleted, onRsvpUpdated, us
 		}
 	};
 	const handleCopyDetails = () => {
-		const meetStr = event.meetingLink?.url ? `\nMeeting Link: ${event.meetingLink.url}` : "";
+		const meetStr = event.meetingLink?.url ? `\nGoogle Meet: ${event.meetingLink.url}` : "";
 		const locStr = event.location?.name ? `\nLocation: ${event.location.name} (${event.location.address || ""})` : "";
 		const text = `${event.title}\nDate: ${event.date} (${event.startTime || "All Day"})\nCategory: ${event.category}${locStr}${meetStr}\n\n${event.description || ""}`;
 		navigator.clipboard?.writeText(text);
 		setIsCopied(true);
 		setTimeout(() => setIsCopied(false), 2e3);
 	};
-	const getGCalUrl = () => {
-		if (!event.date) return "#";
-		const title = encodeURIComponent(event.title || "Event");
-		const start = (event.date || "").replace(/-/g, "");
-		const d = new Date(event.endDate || event.date);
-		d.setDate(d.getDate() + 1);
-		return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${start}/${d.toISOString().split("T")[0].replace(/-/g, "")}&details=${encodeURIComponent(`${event.description || ""}\n${event.meetingLink?.url ? "Join Video Call: " + event.meetingLink.url : ""}`)}&location=${encodeURIComponent(event.location?.formattedAddress || event.location?.name || "")}`;
-	};
+	const gCalUrl = formatGoogleCalendarUrl(event);
+	const isMeet = isGoogleMeet(event);
+	const meetCode = event.meetingLink?.meetCode || getMeetCode(event.meetingLink?.url);
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
 		style: {
 			position: "fixed",
@@ -758,12 +872,12 @@ function EventDetailModal({ event, onClose, onEdit, onDeleted, onRsvpUpdated, us
 						})
 					]
 				}),
-				event.meetingLink?.url && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+				event.meetingLink?.url ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 					style: {
 						padding: "14px 16px",
 						borderRadius: "12px",
 						background: "#f0fdf4",
-						border: "1px solid #bbf7d0",
+						border: "1.5px solid #86efac",
 						display: "flex",
 						alignItems: "center",
 						justifyContent: "space-between",
@@ -778,48 +892,141 @@ function EventDetailModal({ event, onClose, onEdit, onDeleted, onRsvpUpdated, us
 						},
 						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
 							style: {
-								width: "36px",
-								height: "36px",
-								borderRadius: "8px",
+								width: "38px",
+								height: "38px",
+								borderRadius: "10px",
 								background: "#059669",
 								color: "#ffffff",
 								display: "flex",
 								alignItems: "center",
-								justifyContent: "center"
+								justifyContent: "center",
+								boxShadow: "0 2px 4px rgba(5, 150, 105, 0.25)"
 							},
-							children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Video, { size: 18 })
-						}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+							children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Video, { size: 20 })
+						}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 							style: {
 								fontSize: "13px",
 								fontWeight: 800,
-								color: "#065f46"
+								color: "#065f46",
+								display: "flex",
+								alignItems: "center",
+								gap: "6px"
 							},
-							children: event.meetingLink.provider === "google_meet" ? "Google Meet Video Call" : "Online Video Conference"
+							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: isMeet ? "Google Meet Video Call" : "Online Video Conference" }), event.meetingLink.googleEventId && !event.meetingLink.googleEventId.startsWith("sim_") && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+								style: {
+									fontSize: "10px",
+									fontWeight: 700,
+									padding: "1px 6px",
+									borderRadius: "4px",
+									background: "#dcfce7",
+									color: "#15803d"
+								},
+								children: "Synced to Google"
+							})]
 						}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
 							style: {
 								fontSize: "11px",
-								color: "#047857"
+								color: "#047857",
+								marginTop: "2px"
 							},
-							children: event.meetingLink.meetCode ? `Code: ${event.meetingLink.meetCode}` : "Ready to connect"
+							children: meetCode ? `Room Code: ${meetCode}` : "Ready for participants to join"
 						})] })]
-					}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("a", {
-						href: event.meetingLink.url,
-						target: "_blank",
-						rel: "noopener noreferrer",
+					}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 						style: {
-							padding: "8px 16px",
-							borderRadius: "8px",
+							display: "flex",
+							alignItems: "center",
+							gap: "8px"
+						},
+						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
+							type: "button",
+							onClick: handleCopyMeetLink,
+							style: {
+								padding: "7px 10px",
+								borderRadius: "6px",
+								border: "1px solid #a7f3d0",
+								background: "#ffffff",
+								color: "#065f46",
+								fontSize: "11px",
+								fontWeight: 700,
+								cursor: "pointer",
+								display: "inline-flex",
+								alignItems: "center",
+								gap: "4px"
+							},
+							children: [isMeetCopied ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Check, {
+								size: 12,
+								color: "#059669"
+							}) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Copy, { size: 12 }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: isMeetCopied ? "Copied" : "Copy" })]
+						}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("a", {
+							href: event.meetingLink.url,
+							target: "_blank",
+							rel: "noopener noreferrer",
+							style: {
+								padding: "8px 16px",
+								borderRadius: "8px",
+								background: "#059669",
+								color: "#ffffff",
+								textDecoration: "none",
+								fontSize: "12px",
+								fontWeight: 800,
+								display: "inline-flex",
+								alignItems: "center",
+								gap: "6px",
+								boxShadow: "0 2px 6px rgba(5, 150, 105, 0.3)"
+							},
+							children: [
+								/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Video, { size: 13 }),
+								/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Join with Google Meet" }),
+								/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ExternalLink, { size: 12 })
+							]
+						})]
+					})]
+				}) : (event.category?.includes("Meeting") || event.category?.includes("Session") || event.category?.includes("Interview")) && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+					style: {
+						padding: "12px 14px",
+						borderRadius: "10px",
+						background: "#f8fafc",
+						border: "1px dashed #cbd5e1",
+						display: "flex",
+						alignItems: "center",
+						justifyContent: "space-between",
+						gap: "10px",
+						flexWrap: "wrap"
+					},
+					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+						style: {
+							display: "flex",
+							alignItems: "center",
+							gap: "8px"
+						},
+						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Video, {
+							size: 16,
+							color: "#64748b"
+						}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+							style: {
+								fontSize: "12px",
+								color: "#475569"
+							},
+							children: "No video meeting attached yet."
+						})]
+					}), hasEditRights && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
+						type: "button",
+						onClick: handleGenerateMeet,
+						disabled: isGeneratingMeet,
+						style: {
+							padding: "5px 12px",
+							borderRadius: "6px",
 							background: "#059669",
 							color: "#ffffff",
-							textDecoration: "none",
-							fontSize: "12px",
+							border: "none",
+							fontSize: "11px",
 							fontWeight: 700,
+							cursor: "pointer",
 							display: "inline-flex",
 							alignItems: "center",
-							gap: "6px",
-							boxShadow: "0 2px 4px rgba(5, 150, 105, 0.2)"
+							gap: "4px"
 						},
-						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Join Call" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ExternalLink, { size: 12 })]
+						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Sparkles, { size: 11 }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: isGeneratingMeet ? "Generating..." : "+ Generate Google Meet" })]
 					})]
 				}),
 				event.location?.name && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
@@ -1113,53 +1320,83 @@ function EventDetailModal({ event, onClose, onEdit, onDeleted, onRsvpUpdated, us
 						flexWrap: "wrap",
 						gap: "8px",
 						borderTop: "1px solid var(--border, #e2e8f0)",
-						paddingTop: "12px"
+						paddingTop: "14px"
 					},
 					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 						style: {
 							display: "flex",
 							alignItems: "center",
-							gap: "8px"
+							gap: "8px",
+							flexWrap: "wrap"
 						},
-						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("a", {
-							href: getGCalUrl(),
-							target: "_blank",
-							rel: "noopener noreferrer",
-							style: {
-								padding: "6px 12px",
-								borderRadius: "6px",
-								border: "1px solid #cbd5e1",
-								background: "#ffffff",
-								fontSize: "11px",
-								fontWeight: 600,
-								color: "#0284c7",
-								textDecoration: "none",
-								display: "inline-flex",
-								alignItems: "center",
-								gap: "4px"
-							},
-							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ExternalLink, { size: 12 }), " Add to G-Cal"]
-						}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
-							type: "button",
-							onClick: handleCopyDetails,
-							style: {
-								padding: "6px 12px",
-								borderRadius: "6px",
-								border: "1px solid #cbd5e1",
-								background: "#ffffff",
-								fontSize: "11px",
-								fontWeight: 600,
-								color: "#475569",
-								cursor: "pointer",
-								display: "inline-flex",
-								alignItems: "center",
-								gap: "4px"
-							},
-							children: [isCopied ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Check, {
-								size: 12,
-								color: "#059669"
-							}) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Copy, { size: 12 }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: isCopied ? "Copied" : "Copy" })]
-						})]
+						children: [
+							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("a", {
+								href: gCalUrl,
+								target: "_blank",
+								rel: "noopener noreferrer",
+								style: {
+									padding: "7px 12px",
+									borderRadius: "8px",
+									border: "1.5px solid #0284c7",
+									background: "#eff6ff",
+									fontSize: "11.5px",
+									fontWeight: 700,
+									color: "#0284c7",
+									textDecoration: "none",
+									display: "inline-flex",
+									alignItems: "center",
+									gap: "5px",
+									boxShadow: "0 1px 2px rgba(2, 132, 199, 0.08)"
+								},
+								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(CalendarDays, {
+									size: 13,
+									color: "#0284c7"
+								}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "+ Add to Google Calendar" })]
+							}),
+							hasEditRights && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
+								type: "button",
+								onClick: handleGoogleSync,
+								disabled: isGoogleSyncing,
+								style: {
+									padding: "7px 10px",
+									borderRadius: "8px",
+									border: "1px solid #cbd5e1",
+									background: "#ffffff",
+									fontSize: "11px",
+									fontWeight: 600,
+									color: "#475569",
+									cursor: "pointer",
+									display: "inline-flex",
+									alignItems: "center",
+									gap: "4px"
+								},
+								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Sparkles, {
+									size: 12,
+									color: "#0284c7"
+								}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: isGoogleSyncing ? "Syncing..." : "Sync with Google" })]
+							}),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
+								type: "button",
+								onClick: handleCopyDetails,
+								style: {
+									padding: "7px 10px",
+									borderRadius: "8px",
+									border: "1px solid #cbd5e1",
+									background: "#ffffff",
+									fontSize: "11px",
+									fontWeight: 600,
+									color: "#475569",
+									cursor: "pointer",
+									display: "inline-flex",
+									alignItems: "center",
+									gap: "4px"
+								},
+								children: [isCopied ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Check, {
+									size: 12,
+									color: "#059669"
+								}) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Copy, { size: 12 }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: isCopied ? "Copied" : "Copy" })]
+							})
+						]
 					}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 						style: {
 							display: "flex",
@@ -1250,9 +1487,14 @@ function EventFormModal({ isOpen, onClose, onSaved, initialEvent = null, employe
 	const [placeQuery, setPlaceQuery] = (0, import_react.useState)("");
 	const [placeSuggestions, setPlaceSuggestions] = (0, import_react.useState)([]);
 	const [isSearchingPlaces, setIsSearchingPlaces] = (0, import_react.useState)(false);
-	const [meetingUrl, setMeetingUrl] = (0, import_react.useState)(initialEvent?.meetingLink?.url || "");
-	const [meetingProvider, setMeetingProvider] = (0, import_react.useState)(initialEvent?.meetingLink?.provider || "none");
-	const [autoCreateMeet, setAutoCreateMeet] = (0, import_react.useState)(false);
+	const isMeetingCategory = (cat) => Boolean(cat && (cat.includes("Meeting") || cat.includes("Session") || cat.includes("Interview")));
+	const generateMeetCode = () => `${Math.random().toString(36).substring(2, 5)}-${Math.random().toString(36).substring(2, 6)}-${Math.random().toString(36).substring(2, 5)}`;
+	const initialCat = initialEvent?.category || "Company Meeting";
+	const shouldAutoMeet = !initialEvent && isMeetingCategory(initialCat);
+	const [meetingUrl, setMeetingUrl] = (0, import_react.useState)(initialEvent?.meetingLink?.url || (shouldAutoMeet ? `https://meet.google.com/${generateMeetCode()}` : ""));
+	const [meetingProvider, setMeetingProvider] = (0, import_react.useState)(initialEvent?.meetingLink?.provider || (shouldAutoMeet ? "google_meet" : "none"));
+	const [autoCreateMeet, setAutoCreateMeet] = (0, import_react.useState)(shouldAutoMeet);
+	const [meetCopied, setMeetCopied] = (0, import_react.useState)(false);
 	const [participants, setParticipants] = (0, import_react.useState)(() => {
 		if (Array.isArray(initialEvent?.participants) && initialEvent.participants.length > 0) return initialEvent.participants;
 		return [];
@@ -1319,8 +1561,24 @@ function EventFormModal({ isOpen, onClose, onSaved, initialEvent = null, employe
 	const handleGenerateGoogleMeet = () => {
 		setAutoCreateMeet(true);
 		setMeetingProvider("google_meet");
-		const randomCode = `${Math.random().toString(36).substring(2, 5)}-${Math.random().toString(36).substring(2, 6)}-${Math.random().toString(36).substring(2, 5)}`;
+		const randomCode = generateMeetCode();
 		setMeetingUrl(`https://meet.google.com/${randomCode}`);
+	};
+	const handleCopyMeet = () => {
+		if (meetingUrl) {
+			navigator.clipboard?.writeText(meetingUrl);
+			setMeetCopied(true);
+			setTimeout(() => setMeetCopied(false), 2e3);
+		}
+	};
+	const handleCategoryChange = (newCat) => {
+		setCategory(newCat);
+		if (isMeetingCategory(newCat) && (!meetingUrl || meetingProvider === "none")) {
+			const code = generateMeetCode();
+			setMeetingUrl(`https://meet.google.com/${code}`);
+			setMeetingProvider("google_meet");
+			setAutoCreateMeet(true);
+		}
 	};
 	const toggleReminder = (mins) => {
 		if (selectedReminders.includes(mins)) setSelectedReminders(selectedReminders.filter((m) => m !== mins));
@@ -1580,7 +1838,7 @@ function EventFormModal({ isOpen, onClose, onSaved, initialEvent = null, employe
 											children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("select", {
 												className: "ui-select",
 												value: category,
-												onChange: (e) => setCategory(e.target.value),
+												onChange: (e) => handleCategoryChange(e.target.value),
 												children: EVENT_CATEGORIES.map((c) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", {
 													value: c,
 													children: c
@@ -1738,25 +1996,60 @@ function EventFormModal({ isOpen, onClose, onSaved, initialEvent = null, employe
 													gap: "6px"
 												},
 												children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Sparkles, { size: 13 }), meetingUrl ? "Regenerate Meet" : "Add Google Meet"]
-											}), meetingUrl && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-												type: "button",
-												onClick: () => {
-													setMeetingUrl("");
-													setMeetingProvider("none");
-													setAutoCreateMeet(false);
-												},
-												style: {
-													padding: "6px 10px",
-													background: "#fee2e2",
-													color: "#b91c1c",
-													border: "none",
-													borderRadius: "6px",
-													fontSize: "11px",
-													fontWeight: 700,
-													cursor: "pointer"
-												},
-												children: "Remove"
-											})]
+											}), meetingUrl && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+												/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("a", {
+													href: meetingUrl,
+													target: "_blank",
+													rel: "noopener noreferrer",
+													style: {
+														padding: "6px 10px",
+														background: "#e0f2fe",
+														color: "#0369a1",
+														borderRadius: "6px",
+														fontSize: "11px",
+														fontWeight: 700,
+														textDecoration: "none",
+														display: "inline-flex",
+														alignItems: "center",
+														gap: "4px"
+													},
+													children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ExternalLink, { size: 12 }), " Test"]
+												}),
+												/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+													type: "button",
+													onClick: handleCopyMeet,
+													style: {
+														padding: "6px 10px",
+														background: "#f1f5f9",
+														color: "#334155",
+														border: "1px solid #cbd5e1",
+														borderRadius: "6px",
+														fontSize: "11px",
+														fontWeight: 700,
+														cursor: "pointer"
+													},
+													children: meetCopied ? "✓ Copied" : "Copy"
+												}),
+												/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+													type: "button",
+													onClick: () => {
+														setMeetingUrl("");
+														setMeetingProvider("none");
+														setAutoCreateMeet(false);
+													},
+													style: {
+														padding: "6px 10px",
+														background: "#fee2e2",
+														color: "#b91c1c",
+														border: "none",
+														borderRadius: "6px",
+														fontSize: "11px",
+														fontWeight: 700,
+														cursor: "pointer"
+													},
+													children: "Remove"
+												})
+											] })]
 										})]
 									})
 								]
@@ -2635,30 +2928,66 @@ function UpcomingEventsView({ events = [], onSelectEvent, categoryStyles = {}, c
 						style: {
 							display: "flex",
 							alignItems: "center",
-							gap: "8px"
+							gap: "6px",
+							flexWrap: "wrap"
 						},
-						children: [ev.meetingLink?.url && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
-							style: {
-								color: "#059669",
-								fontWeight: 700,
-								display: "inline-flex",
-								alignItems: "center",
-								gap: "3px"
-							},
-							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Video, { size: 13 }), " Video Call"]
-						}), ev.location?.name && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
-							style: {
-								color: "#0284c7",
-								display: "inline-flex",
-								alignItems: "center",
-								gap: "3px"
-							},
-							children: [
-								/* @__PURE__ */ (0, import_jsx_runtime.jsx)(MapPin, { size: 13 }),
-								" ",
-								ev.location.name
-							]
-						})]
+						children: [
+							ev.meetingLink?.url && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("a", {
+								href: ev.meetingLink.url,
+								target: "_blank",
+								rel: "noopener noreferrer",
+								onClick: (e) => e.stopPropagation(),
+								title: "Join Google Meet Video Conference",
+								style: {
+									padding: "3px 8px",
+									borderRadius: "6px",
+									background: "#059669",
+									color: "#ffffff",
+									fontWeight: 700,
+									fontSize: "11px",
+									textDecoration: "none",
+									display: "inline-flex",
+									alignItems: "center",
+									gap: "4px",
+									boxShadow: "0 1px 2px rgba(5, 150, 105, 0.2)"
+								},
+								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Video, { size: 12 }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: isGoogleMeet(ev) ? "Join Meet" : "Join Call" })]
+							}),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("a", {
+								href: formatGoogleCalendarUrl(ev),
+								target: "_blank",
+								rel: "noopener noreferrer",
+								onClick: (e) => e.stopPropagation(),
+								title: "Add event to your personal or work Google Calendar",
+								style: {
+									padding: "3px 7px",
+									borderRadius: "6px",
+									border: "1px solid #cbd5e1",
+									background: "#ffffff",
+									color: "#0284c7",
+									fontSize: "11px",
+									fontWeight: 600,
+									textDecoration: "none",
+									display: "inline-flex",
+									alignItems: "center",
+									gap: "3px"
+								},
+								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ExternalLink, { size: 11 }), " + G-Cal"]
+							}),
+							ev.location?.name && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
+								style: {
+									color: "#0284c7",
+									display: "inline-flex",
+									alignItems: "center",
+									gap: "3px"
+								},
+								children: [
+									/* @__PURE__ */ (0, import_jsx_runtime.jsx)(MapPin, { size: 13 }),
+									" ",
+									ev.location.name
+								]
+							})
+						]
 					})]
 				})
 			]
@@ -3503,6 +3832,20 @@ var DAY_NAMES = [
 	"Sat"
 ];
 function EnterpriseCalendar({ canManage = false, user = null, defaultView = "month" }) {
+	const userRoleNormalized = String(user?.role || "").toLowerCase().trim().replace(/[\s-]+/g, "_");
+	const isEmployeeOrIntern = userRoleNormalized === "employee" || userRoleNormalized === "intern";
+	const isManagerialRole = [
+		"admin",
+		"hr",
+		"hr_executive",
+		"director",
+		"managing_director",
+		"co_founder",
+		"manager",
+		"lead",
+		"operations_executive"
+	].includes(userRoleNormalized);
+	canManage = Boolean(canManage && isManagerialRole && !isEmployeeOrIntern);
 	const [storeState, setStoreState] = (0, import_react.useState)(() => hrStore.getState());
 	const getLocalDateStr = (d = /* @__PURE__ */ new Date()) => {
 		const dateObj = typeof d === "string" ? new Date(d) : d;
@@ -3620,16 +3963,7 @@ function EnterpriseCalendar({ canManage = false, user = null, defaultView = "mon
 		window.addEventListener("keydown", handleKeyDown);
 		return () => window.removeEventListener("keydown", handleKeyDown);
 	}, [isFlyerLightbox, flyerImages.length]);
-	const getGoogleCalendarUrl = (ev) => {
-		if (!ev?.date) return "#";
-		const title = encodeURIComponent(ev.title || ev.name || "Company Holiday");
-		const start = (ev.date || "").replace(/-/g, "");
-		const endDateObj = new Date(ev.endDate || ev.date);
-		endDateObj.setDate(endDateObj.getDate() + 1);
-		const end = endDateObj.toISOString().split("T")[0].replace(/-/g, "");
-		const locText = formatLocation(ev.location) || "All Offices";
-		return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${start}/${end}&details=${encodeURIComponent(`${ev.description ? ev.description + "\n\n" : ""}Category: ${ev.category || "Holiday"}\nLocation: ${locText}\nEdufyi HR Portal`)}&location=${encodeURIComponent(locText || "Edufyi Technologies")}`;
-	};
+	const getGoogleCalendarUrl = (ev) => formatGoogleCalendarUrl(ev);
 	const isLongWeekend = (dateStr) => {
 		if (!dateStr) return false;
 		const [y, m, d] = dateStr.split("-").map(Number);
@@ -5555,7 +5889,7 @@ function EnterpriseCalendar({ canManage = false, user = null, defaultView = "mon
 												},
 												onClick: (e) => e.stopPropagation(),
 												title: "Add event to Google Calendar",
-												children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ExternalLink, { size: 12 }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Add to G-Cal" })]
+												children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ExternalLink, { size: 12 }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "+ Google Calendar" })]
 											})]
 										}), isLongWeekend(ev.date) && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
 											style: {
@@ -6024,7 +6358,7 @@ function EnterpriseCalendar({ canManage = false, user = null, defaultView = "mon
 														gap: "5px"
 													},
 													title: "Add event to Google Calendar",
-													children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ExternalLink, { size: 13 }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Add to G-Cal" })]
+													children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ExternalLink, { size: 13 }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "+ Google Calendar" })]
 												}),
 												/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Button, {
 													variant: "outline",
@@ -7751,14 +8085,7 @@ function CalendarWidgets({ user = null }) {
 		const day = d.getUTCDay();
 		return day === 1 || day === 5;
 	};
-	const getGoogleCalendarUrl = (h) => {
-		if (!h?.date) return "#";
-		const title = encodeURIComponent(h.name || h.title || "Holiday");
-		const start = (h.date || "").replace(/-/g, "");
-		const d = new Date(h.endDate || h.date);
-		d.setDate(d.getDate() + 1);
-		return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${start}/${d.toISOString().split("T")[0].replace(/-/g, "")}&details=${encodeURIComponent(`${h.category || "Official Holiday"} - Edufyi HR Calendar`)}`;
-	};
+	const getGoogleCalendarUrl = (h) => formatGoogleCalendarUrl(h);
 	const monthNames = [
 		"Jan",
 		"Feb",
@@ -8338,20 +8665,26 @@ function CalendarWidgets({ user = null }) {
 							href: m.meetingLink.url,
 							target: "_blank",
 							rel: "noopener noreferrer",
+							title: "Join Google Meet Video Conference",
 							style: {
-								padding: "4px 8px",
+								padding: "4px 10px",
 								background: "#059669",
 								color: "#ffffff",
-								borderRadius: "5px",
+								borderRadius: "6px",
 								fontSize: "11px",
 								fontWeight: 700,
 								textDecoration: "none",
 								display: "inline-flex",
 								alignItems: "center",
 								gap: "4px",
-								flexShrink: 0
+								flexShrink: 0,
+								boxShadow: "0 1px 2px rgba(5, 150, 105, 0.25)"
 							},
-							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Video, { size: 11 }), " Join"]
+							children: [
+								/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Video, { size: 12 }),
+								" ",
+								isGoogleMeet(m) ? "Google Meet" : "Join"
+							]
 						})]
 					}, m.id || m._id))
 				}) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {

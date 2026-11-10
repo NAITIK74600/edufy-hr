@@ -12,6 +12,7 @@ import {
   AlertTriangle,
 } from 'lucide-react'
 import { Button } from '../ui'
+import { formatGoogleCalendarUrl, isGoogleMeet } from '../../utils/googleCalendarHelper'
 
 export function UpcomingEventsView({
   events = [],
@@ -144,12 +145,56 @@ export function UpcomingEventsView({
             <span>{ev.date} ({ev.day || ''})</span>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
             {ev.meetingLink?.url && (
-              <span style={{ color: '#059669', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
-                <Video size={13} /> Video Call
-              </span>
+              <a
+                href={ev.meetingLink.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                title="Join Google Meet Video Conference"
+                style={{
+                  padding: '3px 8px',
+                  borderRadius: '6px',
+                  background: '#059669',
+                  color: '#ffffff',
+                  fontWeight: 700,
+                  fontSize: '11px',
+                  textDecoration: 'none',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  boxShadow: '0 1px 2px rgba(5, 150, 105, 0.2)',
+                }}
+              >
+                <Video size={12} />
+                <span>{isGoogleMeet(ev) ? 'Join Meet' : 'Join Call'}</span>
+              </a>
             )}
+
+            <a
+              href={formatGoogleCalendarUrl(ev)}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              title="Add event to your personal or work Google Calendar"
+              style={{
+                padding: '3px 7px',
+                borderRadius: '6px',
+                border: '1px solid #cbd5e1',
+                background: '#ffffff',
+                color: '#0284c7',
+                fontSize: '11px',
+                fontWeight: 600,
+                textDecoration: 'none',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '3px',
+              }}
+            >
+              <ExternalLink size={11} /> + G-Cal
+            </a>
+
             {ev.location?.name && (
               <span style={{ color: '#0284c7', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
                 <MapPin size={13} /> {ev.location.name}

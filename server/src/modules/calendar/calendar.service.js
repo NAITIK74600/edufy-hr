@@ -172,6 +172,7 @@ export const calendarService = {
       applicableDepartments: ev.applicableDepartments || ['All'],
       location: ev.location || { name: 'Head Office' },
       meetingLink: ev.meetingLink || { url: '', provider: 'none' },
+      googleCalendarUrl: googleCalendarService.generateGoogleCalendarUrl(ev),
       priority: ev.priority || 'normal',
       visibility: ev.visibility || 'public',
       status: ev.status || 'scheduled',
@@ -460,6 +461,21 @@ export const calendarService = {
     })
 
     const updated = await event.save()
+
+    // Sync update to Google Calendar if linked
+    if (updated.meetingLink?.googleEventId) {
+      googleCalendarService.updateGoogleEvent(updated.meetingLink.googleEventId, {
+        title: updated.title,
+        description: updated.description,
+        date: updated.date,
+        endDate: updated.endDate,
+        startTime: updated.startTime,
+        endTime: updated.endTime,
+        allDay: updated.allDay,
+        participants: updated.participants,
+        location: updated.location,
+      }).catch(() => {})
+    }
 
     // Reschedule reminders
     calendarNotificationService.scheduleEventReminders(updated).catch(() => {})

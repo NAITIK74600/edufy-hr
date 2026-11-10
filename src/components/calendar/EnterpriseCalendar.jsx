@@ -44,6 +44,7 @@ import { EventFormModal } from './EventFormModal'
 import { UpcomingEventsView } from './UpcomingEventsView'
 import { WeeklyCalendarView } from './WeeklyCalendarView'
 import { DailyCalendarView } from './DailyCalendarView'
+import { formatGoogleCalendarUrl, isGoogleMeet } from '../../utils/googleCalendarHelper'
 
 function formatLocation(loc) {
   if (!loc) return ''
@@ -105,6 +106,11 @@ const MONTH_NAMES = [
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
 export function EnterpriseCalendar({ canManage = false, user = null, defaultView = 'month' }) {
+  const userRoleNormalized = String(user?.role || '').toLowerCase().trim().replace(/[\s-]+/g, '_')
+  const isEmployeeOrIntern = userRoleNormalized === 'employee' || userRoleNormalized === 'intern'
+  const isManagerialRole = ['admin', 'hr', 'hr_executive', 'director', 'managing_director', 'co_founder', 'manager', 'lead', 'operations_executive'].includes(userRoleNormalized)
+  canManage = Boolean(canManage && isManagerialRole && !isEmployeeOrIntern)
+
   const [storeState, setStoreState] = useState(() => hrStore.getState())
 
   // Safe local date formatting without UTC offset day shifts
@@ -257,20 +263,7 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
   }, [isFlyerLightbox, flyerImages.length])
 
   // Helper: Generate Add to Google Calendar URL
-  const getGoogleCalendarUrl = (ev) => {
-    if (!ev?.date) return '#'
-    const title = encodeURIComponent(ev.title || ev.name || 'Company Holiday')
-    const start = (ev.date || '').replace(/-/g, '')
-    const endDateObj = new Date(ev.endDate || ev.date)
-    endDateObj.setDate(endDateObj.getDate() + 1)
-    const end = endDateObj.toISOString().split('T')[0].replace(/-/g, '')
-    const locText = formatLocation(ev.location) || 'All Offices'
-    const details = encodeURIComponent(
-      `${ev.description ? ev.description + '\n\n' : ''}Category: ${ev.category || 'Holiday'}\nLocation: ${locText}\nEdufyi HR Portal`
-    )
-    const location = encodeURIComponent(locText || 'Edufyi Technologies')
-    return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${start}/${end}&details=${details}&location=${location}`
-  }
+  const getGoogleCalendarUrl = (ev) => formatGoogleCalendarUrl(ev)
 
   // Helper: Detect 3-day long weekends (Friday or Monday holiday)
   const isLongWeekend = (dateStr) => {
@@ -1953,7 +1946,7 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
                             title="Add event to Google Calendar"
                           >
                             <ExternalLink size={12} />
-                            <span>Add to G-Cal</span>
+                            <span>+ Google Calendar</span>
                           </a>
                         </div>
 
@@ -2267,7 +2260,7 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
                                 title="Add event to Google Calendar"
                               >
                                 <ExternalLink size={13} />
-                                <span>Add to G-Cal</span>
+                                <span>+ Google Calendar</span>
                               </a>
 
                               <Button variant="outline" onClick={() => setSelectedEvent(ev)} style={{ fontSize: '12px', padding: '6px 12px' }}>
