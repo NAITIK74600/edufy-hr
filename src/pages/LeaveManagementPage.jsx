@@ -2111,6 +2111,30 @@ export function LeaveManagementPage({ mode = 'self', route, query: propQuery }) 
   const allLeaves = storeState.leaves || []
   const allEmployees = storeState.employees || []
 
+  // KPIs & Double LOP Categorization
+  const allDoubleLopLeaves = useMemo(() => {
+    return allLeaves.filter(isDoubleLopLeave)
+  }, [allLeaves])
+
+  const totalRequests = allLeaves.length
+  const pendingAdminCount = allLeaves.filter((l) => l.status === 'pending_admin').length
+  const pendingDoubleLopCount = allLeaves.filter((l) => isDoubleLopLeave(l) && ['pending_tl', 'pending_manager', 'pending_director', 'pending_hr', 'pending_admin'].includes(l.status)).length
+  const approvedDoubleLopCount = allLeaves.filter((l) => isDoubleLopLeave(l) && l.status === 'approved').length
+
+  const pendingCount = allLeaves.filter(
+    (l) =>
+      l.status === 'pending_manager' ||
+      l.status === 'pending_director' ||
+      l.status === 'pending_hr' ||
+      l.status === 'pending_admin'
+  ).length
+  const approvedCount = allLeaves.filter((l) => l.status === 'approved').length
+
+  const today = todayKey()
+  const onLeaveToday = allLeaves.filter(
+    (l) => l.status === 'approved' && l.startDate <= today && l.endDate >= today
+  )
+
   // Filter requests based on mode and tab
   let filteredRequests = activeTab === 'lop' ? allDoubleLopLeaves : allLeaves
   if (mode === 'self') {
@@ -2238,30 +2262,6 @@ export function LeaveManagementPage({ mode = 'self', route, query: propQuery }) 
     const latest = filteredRequests.find((request) => request?.id === selected?.id) ?? filteredRequests[0] ?? null
     if (latest !== selected) setSelected(latest)
   }, [filteredRequests, targetEntityId])
-
-  // KPIs & Double LOP Categorization
-  const allDoubleLopLeaves = useMemo(() => {
-    return allLeaves.filter(isDoubleLopLeave)
-  }, [allLeaves])
-
-  const totalRequests = allLeaves.length
-  const pendingAdminCount = allLeaves.filter((l) => l.status === 'pending_admin').length
-  const pendingDoubleLopCount = allLeaves.filter((l) => isDoubleLopLeave(l) && ['pending_tl', 'pending_manager', 'pending_director', 'pending_hr', 'pending_admin'].includes(l.status)).length
-  const approvedDoubleLopCount = allLeaves.filter((l) => isDoubleLopLeave(l) && l.status === 'approved').length
-
-  const pendingCount = allLeaves.filter(
-    (l) =>
-      l.status === 'pending_manager' ||
-      l.status === 'pending_director' ||
-      l.status === 'pending_hr' ||
-      l.status === 'pending_admin'
-  ).length
-  const approvedCount = allLeaves.filter((l) => l.status === 'approved').length
-
-  const today = todayKey()
-  const onLeaveToday = allLeaves.filter(
-    (l) => l.status === 'approved' && l.startDate <= today && l.endDate >= today
-  )
 
   const handleQuickApprove = storeAction(async (request) => {
     let role = 'hr'
