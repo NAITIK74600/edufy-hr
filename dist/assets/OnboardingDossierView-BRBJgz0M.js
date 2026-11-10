@@ -2,7 +2,7 @@ import { n as __toESM } from "./rolldown-runtime-CO0Nlsmt.js";
 import { A as ShieldCheck, At as FileCheckCorner, Bt as Clock, Dt as FileText, Ft as Download, Gt as CircleAlert, I as Send, Lt as CreditCard, Mt as Eye, Qt as Camera, Wt as CircleCheck, Xt as Check, Y as Pen, _n as require_react, ct as Lock, d as Users, g as Upload, ht as Layers, i as X, lt as LockOpen, on as Briefcase, v as TrendingUp, z as RotateCcw } from "./icons-vendor-CNlTUIuG.js";
 import { r as require_react_dom } from "./react-vendor-B_MMQ54z.js";
 import { a as require_jsx_runtime } from "./motion-vendor-3i60tGNx.js";
-import { I as apiClient, T as hrStore, x as useAuth } from "./index-CH5N69zy.js";
+import { I as apiClient, T as hrStore, x as useAuth } from "./index-Brl2RgGN.js";
 import { r as unmaskBankAccount } from "./payrollMatcher-DYZYv1X2.js";
 // src/constants/verificationConstants.js
 var import_react = /* @__PURE__ */ __toESM(require_react(), 1);
@@ -582,15 +582,16 @@ function OnboardingDossierView({ employee, canEdit = false, canVerify = false, o
 					phone: pDigits.length >= 10 ? pPhone : "",
 					address: pAddress
 				},
-				onboardingStatus: "submitted",
-				onboardingSubmittedAt: (/* @__PURE__ */ new Date()).toISOString()
+				onboardingStatus: isVerified ? "verified" : employee?.onboardingStatus || "submitted",
+				onboardingSubmittedAt: isVerified ? employee?.onboardingSubmittedAt : employee?.onboardingSubmittedAt || (/* @__PURE__ */ new Date()).toISOString()
 			};
 			if (!payload.avatarUrl && editData?.onboardingDocs?.passportPhoto?.url) payload.avatarUrl = editData.onboardingDocs.passportPhoto.url;
-			setLocalStatus("submitted");
+			if (!isVerified) setLocalStatus("submitted");
 			if (editData.onboardingDocs) setLocalDocs((prev) => ({
 				...prev,
 				...editData.onboardingDocs
 			}));
+			if (editData.dob && (isSelf || isEmployeePortal)) apiClient.patch("/employees/me/dob", { dob: editData.dob }).catch(() => {});
 			const empId = employee?.id || employee?._id || employee?.employeeId;
 			if (isSelf || isEmployeePortal) try {
 				await apiClient.patch("/employees/me/onboarding", payload);
@@ -601,7 +602,7 @@ function OnboardingDossierView({ employee, canEdit = false, canVerify = false, o
 			}
 			else if (hrStore.updateOnboardingDocs) await hrStore.updateOnboardingDocs(empId, payload);
 			else if (hrStore.updateEmployee) await hrStore.updateEmployee(empId, payload);
-			hrStore.addNotification({
+			if (!isVerified) hrStore.addNotification({
 				id: `notif-onboard-${Date.now()}`,
 				type: "onboarding",
 				title: "Onboarding Verification Required",
@@ -609,7 +610,7 @@ function OnboardingDossierView({ employee, canEdit = false, canVerify = false, o
 				time: "Just now",
 				read: false
 			});
-			setFeedback("✓ Onboarding details and documents submitted to HR for verification!");
+			setFeedback(isVerified ? "✓ Personal details and date of birth updated successfully!" : "✓ Onboarding details submitted for verification!");
 			setIsEditing(false);
 			if (onUpdated) onUpdated();
 			setTimeout(() => setFeedback(""), 5e3);

@@ -88,19 +88,17 @@ export function EventFormModal({
   const [isSearchingPlaces, setIsSearchingPlaces] = useState(false)
 
   const isMeetingCategory = (cat) => Boolean(cat && (cat.includes('Meeting') || cat.includes('Session') || cat.includes('Interview')))
-  const generateMeetCode = () => `${Math.random().toString(36).substring(2, 5)}-${Math.random().toString(36).substring(2, 6)}-${Math.random().toString(36).substring(2, 5)}`
 
-  // Video Meeting (Google Meet - Default for all meeting events)
+  // Video Meeting (Google Meet - Real API generation via conferenceData)
   const initialCat = initialEvent?.category || 'Company Meeting'
   const shouldAutoMeet = !initialEvent && isMeetingCategory(initialCat)
-  const [meetingUrl, setMeetingUrl] = useState(
-    initialEvent?.meetingLink?.url || (shouldAutoMeet ? `https://meet.google.com/${generateMeetCode()}` : '')
-  )
+  const [meetingUrl, setMeetingUrl] = useState(initialEvent?.meetingLink?.url || '')
   const [meetingProvider, setMeetingProvider] = useState(
     initialEvent?.meetingLink?.provider || (shouldAutoMeet ? 'google_meet' : 'none')
   )
-  const [autoCreateMeet, setAutoCreateMeet] = useState(shouldAutoMeet)
+  const [autoCreateMeet, setAutoCreateMeet] = useState(shouldAutoMeet || Boolean(initialEvent?.meetingLink?.url))
   const [meetCopied, setMeetCopied] = useState(false)
+  const [externalEmailInput, setExternalEmailInput] = useState('')
 
   // Participants
   const [participants, setParticipants] = useState(() => {
@@ -184,8 +182,6 @@ export function EventFormModal({
   const handleGenerateGoogleMeet = () => {
     setAutoCreateMeet(true)
     setMeetingProvider('google_meet')
-    const randomCode = generateMeetCode()
-    setMeetingUrl(`https://meet.google.com/${randomCode}`)
   }
 
   const handleCopyMeet = () => {
@@ -198,12 +194,35 @@ export function EventFormModal({
 
   const handleCategoryChange = (newCat) => {
     setCategory(newCat)
-    if (isMeetingCategory(newCat) && (!meetingUrl || meetingProvider === 'none')) {
-      const code = generateMeetCode()
-      setMeetingUrl(`https://meet.google.com/${code}`)
+    if (isMeetingCategory(newCat)) {
       setMeetingProvider('google_meet')
       setAutoCreateMeet(true)
     }
+  }
+
+  const handleAddExternalGuest = () => {
+    const email = externalEmailInput.trim().toLowerCase()
+    if (!email || !email.includes('@') || !email.includes('.')) {
+      alert('Please enter a valid guest email address.')
+      return
+    }
+    if (participants.some((p) => (p.email || '').toLowerCase() === email)) {
+      alert('This guest is already in the attendee list.')
+      return
+    }
+    setParticipants([
+      ...participants,
+      {
+        employeeId: 'ext_' + Math.random().toString(36).substring(2, 10),
+        name: email.split('@')[0],
+        email,
+        department: 'External Guest',
+        role: 'required',
+        rsvpStatus: 'pending',
+        isExternal: true,
+      },
+    ])
+    setExternalEmailInput('')
   }
 
   const toggleReminder = (mins) => {
@@ -506,8 +525,8 @@ export function EventFormModal({
                   style={{
                     padding: '14px 16px',
                     borderRadius: '12px',
-                    background: meetingUrl ? '#f0fdf4' : '#f8fafc',
-                    border: meetingUrl ? '1.5px solid #86efac' : '1px dashed #cbd5e1',
+                    background: (meetingUrl || autoCreateMeet) ? '#f0fdf4' : '#f8fafc',
+                    border: (meetingUrl || autoCreateMeet) ? '1.5px solid #86efac' : '1px dashed #cbd5e1',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
@@ -521,8 +540,8 @@ export function EventFormModal({
                         width: '38px',
                         height: '38px',
                         borderRadius: '8px',
-                        background: meetingUrl ? '#059669' : '#e2e8f0',
-                        color: meetingUrl ? '#ffffff' : '#64748b',
+                        background: (meetingUrl || autoCreateMeet) ? '#059669' : '#e2e8f0',
+                        color: (meetingUrl || autoCreateMeet) ? '#ffffff' : '#64748b',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
@@ -532,36 +551,63 @@ export function EventFormModal({
                       <Video size={18} />
                     </div>
                     <div>
-                      <div style={{ fontSize: '13px', fontWeight: 700, color: meetingUrl ? '#065f46' : 'var(--ink, #1e293b)' }}>
-                        {meetingUrl ? 'Google Meet Video Call Attached' : 'Google Meet Video Conference'}
+                      <div style={{ fontSize: '13px', fontWeight: 700, color: (meetingUrl || autoCreateMeet) ? '#065f46' : 'var(--ink, #1e293b)' }}>
+                        {meetingUrl ? 'Google Meet Video Call Attached' : autoCreateMeet ? 'Google Meet Auto-Generation Enabled' : 'Google Meet Video Conference'}
                       </div>
-                      <div style={{ fontSize: '11px', color: meetingUrl ? '#047857' : 'var(--muted, #64748b)' }}>
-                        {meetingUrl ? meetingUrl : 'Attach a 1-click Google Meet video link for all participants'}
+                      <div style={{ fontSize: '11px', color: (meetingUrl || autoCreateMeet) ? '#047857' : 'var(--muted, #64748b)' }}>
+                        {meetingUrl
+                          ? meetingUrl
+                          : autoCreateMeet
+                          ? 'Genuine Google Meet video link will be generated via Google Calendar API upon submission.'
+                          : 'Attach a 1-click Google Meet video link for all participants.'}
                       </div>
                     </div>
                   </div>
 
                   <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                    <button
-                      type="button"
-                      onClick={handleGenerateGoogleMeet}
-                      style={{
-                        padding: '6px 14px',
-                        background: '#059669',
-                        color: '#ffffff',
-                        border: 'none',
-                        borderRadius: '6px',
-                        fontSize: '12px',
-                        fontWeight: 700,
-                        cursor: 'pointer',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                      }}
-                    >
-                      <Sparkles size={13} />
-                      {meetingUrl ? 'Regenerate Meet' : 'Add Google Meet'}
-                    </button>
+                    {!autoCreateMeet && !meetingUrl ? (
+                      <button
+                        type="button"
+                        onClick={handleGenerateGoogleMeet}
+                        style={{
+                          padding: '6px 14px',
+                          background: '#059669',
+                          color: '#ffffff',
+                          border: 'none',
+                          borderRadius: '6px',
+                          fontSize: '12px',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                        }}
+                      >
+                        <Sparkles size={13} />
+                        Add Google Meet
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAutoCreateMeet(false)
+                          setMeetingUrl('')
+                          setMeetingProvider('none')
+                        }}
+                        style={{
+                          padding: '6px 10px',
+                          background: '#fee2e2',
+                          color: '#b91c1c',
+                          border: 'none',
+                          borderRadius: '6px',
+                          fontSize: '11px',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        Remove Meet
+                      </button>
+                    )}
 
                     {meetingUrl && (
                       <>
@@ -599,26 +645,6 @@ export function EventFormModal({
                           }}
                         >
                           {meetCopied ? '✓ Copied' : 'Copy'}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setMeetingUrl('')
-                            setMeetingProvider('none')
-                            setAutoCreateMeet(false)
-                          }}
-                          style={{
-                            padding: '6px 10px',
-                            background: '#fee2e2',
-                            color: '#b91c1c',
-                            border: 'none',
-                            borderRadius: '6px',
-                            fontSize: '11px',
-                            fontWeight: 700,
-                            cursor: 'pointer',
-                          }}
-                        >
-                          Remove
                         </button>
                       </>
                     )}
@@ -949,6 +975,49 @@ export function EventFormModal({
                     })}
                   </div>
                 )}
+
+                {/* External Guests / Outside Email Addresses */}
+                <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '12px 14px' }}>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: 'var(--ink, #0f172a)', marginBottom: '6px' }}>
+                    Invite External Guest (Client, Candidate, Investor)
+                  </label>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <input
+                      type="email"
+                      className="ui-input"
+                      placeholder="e.g. client@partner.com, candidate@gmail.com"
+                      value={externalEmailInput}
+                      onChange={(e) => setExternalEmailInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault()
+                          handleAddExternalGuest()
+                        }
+                      }}
+                      style={{ fontSize: '12px' }}
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAddExternalGuest}
+                      style={{
+                        padding: '6px 14px',
+                        background: '#0d9488',
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: '6px',
+                        fontSize: '12px',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      + Add Guest
+                    </button>
+                  </div>
+                  <small style={{ color: '#64748b', fontSize: '11px', marginTop: '4px', display: 'block' }}>
+                    External guests receive official Google Calendar invitations and Google Meet access directly in their inbox.
+                  </small>
+                </div>
 
                 {/* Selected Participants List */}
                 <div>

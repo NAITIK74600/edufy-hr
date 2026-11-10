@@ -1,13 +1,13 @@
 import { n as __toESM } from "./rolldown-runtime-CO0Nlsmt.js";
 import { A as ShieldCheck, Bt as Clock, Dt as FileText, E as Sparkles, Ft as Download, Gt as CircleAlert, H as Receipt, I as Send, J as Phone, K as Plus, Kt as ChevronUp, L as Search, Mt as Eye, Q as Paperclip, U as Radio, Ut as CircleQuestionMark, V as RefreshCw, Vt as Clock3, Wt as CircleCheck, Xt as Check, Yt as ChevronDown, Z as Pause, _ as TriangleAlert, _n as require_react, a as Wifi, at as MapPin, b as Ticket, bt as Heart, d as Users, f as User, fn as Award, g as Upload, h as UserCheck, i as X, j as ShieldAlert, k as Shield, kt as FileCheck, mn as ArrowRight, o as Wallet, q as Play, s as WalletCards, sn as BriefcaseBusiness, st as LogOut, tn as CalendarDays, tt as MessageSquare, ut as LocateFixed, v as TrendingUp, y as Trash, zt as Coffee } from "./icons-vendor-CNlTUIuG.js";
 import { a as require_jsx_runtime } from "./motion-vendor-3i60tGNx.js";
-import { I as apiClient, O as currentPayrollMonth, P as workspaceAction, T as hrStore, _ as resolveUserDisplayName, c as StatusBadge, g as getTimeOfDayGreeting, h as getRoleBadgeLabel, i as EmptyState, k as todayKey, o as PageHeader, t as Button, x as useAuth } from "./index-CH5N69zy.js";
+import { I as apiClient, O as currentPayrollMonth, P as workspaceAction, T as hrStore, _ as resolveUserDisplayName, c as StatusBadge, g as getTimeOfDayGreeting, h as getRoleBadgeLabel, i as EmptyState, k as todayKey, o as PageHeader, t as Button, x as useAuth } from "./index-Brl2RgGN.js";
 import { n as formatINR } from "./currency-oCUzM0NR.js";
-import { n as HolidayCalendarShowcase, t as CalendarWidgets } from "./CalendarWidgets-D7Enqg73.js";
-import { a as PerformanceWorkspace, i as CompanyPoliciesView, n as getDailyAttendanceStatus, r as getLateCountInfo, t as CompanyDocumentsView } from "./CompanyDocumentsView-RDSAWEJv.js";
-import { t as PayslipPreviewModal } from "./PayslipPreviewModal-dTNBqPXm.js";
+import { n as HolidayCalendarShowcase, t as CalendarWidgets } from "./CalendarWidgets-BTRL6GJN.js";
+import { a as PerformanceWorkspace, i as CompanyPoliciesView, n as getDailyAttendanceStatus, r as getLateCountInfo, t as CompanyDocumentsView } from "./CompanyDocumentsView-DjVPZkRu.js";
+import { t as PayslipPreviewModal } from "./PayslipPreviewModal-DOWIA9Wx.js";
 import { n as findEmployeeForUser, r as unmaskBankAccount, t as doesPayrollMatchUser } from "./payrollMatcher-DYZYv1X2.js";
-import { n as safeEmergencyContact, r as safeParentsContact, t as OnboardingDossierView } from "./OnboardingDossierView-ChdYkuHr.js";
+import { n as safeEmergencyContact, r as safeParentsContact, t as OnboardingDossierView } from "./OnboardingDossierView-BRBJgz0M.js";
 // src/services/liveGpsTracker.js
 var import_react = /* @__PURE__ */ __toESM(require_react(), 1);
 /**
@@ -4893,9 +4893,29 @@ function ESSAnnouncementsView({ user }) {
 function ESSProfileView({ user }) {
 	const [storeState, setStoreState] = (0, import_react.useState)(() => hrStore.getState());
 	const [profileTab, setProfileTab] = (0, import_react.useState)("personal");
+	const [isEditingDob, setIsEditingDob] = (0, import_react.useState)(false);
+	const [dobValue, setDobValue] = (0, import_react.useState)("");
+	const [dobSaving, setDobSaving] = (0, import_react.useState)(false);
+	const [dobFeedback, setDobFeedback] = (0, import_react.useState)("");
 	(0, import_react.useEffect)(() => {
 		return hrStore.subscribe(setStoreState);
 	}, []);
+	async function handleSaveDobDirect() {
+		if (!dobValue) return;
+		setDobSaving(true);
+		setDobFeedback("");
+		try {
+			if (hrStore.updateMyDob) await hrStore.updateMyDob(dobValue);
+			else await apiClient.patch("/employees/me/dob", { dob: dobValue });
+			setIsEditingDob(false);
+			setDobFeedback("Date of birth updated successfully! 🎂 (Directly saved)");
+			setTimeout(() => setDobFeedback(""), 4e3);
+		} catch (err) {
+			setDobFeedback(err?.response?.data?.error?.message || err?.message || "Failed to update birthday.");
+		} finally {
+			setDobSaving(false);
+		}
+	}
 	const employee = (0, import_react.useMemo)(() => {
 		const list = storeState.employees || [];
 		return list.find((e) => String(e.id || e._id || e.employeeId) === String(user?.employeeId || user?._id || user?.id)) || list.find((e) => e.email?.toLowerCase() === user?.email?.toLowerCase()) || user || {};
@@ -5134,15 +5154,125 @@ function ESSProfileView({ user }) {
 						}),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 							className: "profile-detail-row",
-							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Date of Birth" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: employee?.dob ? new Date(employee.dob).toLocaleDateString("en-GB", {
-								day: "numeric",
-								month: "short",
-								year: "numeric"
-							}) : identity.dob ? new Date(identity.dob).toLocaleDateString("en-GB", {
-								day: "numeric",
-								month: "short",
-								year: "numeric"
-							}) : "Not provided" })]
+							style: { alignItems: "flex-start" },
+							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Date of Birth" }), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+								style: {
+									display: "flex",
+									flexDirection: "column",
+									gap: "6px"
+								},
+								children: [
+									/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+										style: {
+											display: "flex",
+											alignItems: "center",
+											gap: "8px",
+											flexWrap: "wrap"
+										},
+										children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: employee?.dob ? new Date(employee.dob).toLocaleDateString("en-GB", {
+											day: "numeric",
+											month: "short",
+											year: "numeric"
+										}) : identity.dob ? new Date(identity.dob).toLocaleDateString("en-GB", {
+											day: "numeric",
+											month: "short",
+											year: "numeric"
+										}) : "Not provided" }), !isEditingDob ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
+											type: "button",
+											onClick: () => {
+												const raw = employee?.dob || identity?.dob;
+												if (raw) try {
+													setDobValue(new Date(raw).toISOString().split("T")[0]);
+												} catch {
+													setDobValue("");
+												}
+												else setDobValue("");
+												setIsEditingDob(true);
+											},
+											style: {
+												border: "1px solid #cbd5e1",
+												background: "#f8fafc",
+												borderRadius: "6px",
+												padding: "3px 8px",
+												fontSize: "11px",
+												fontWeight: 600,
+												cursor: "pointer",
+												color: "var(--teal, #006e6f)",
+												display: "inline-flex",
+												alignItems: "center",
+												gap: "4px"
+											},
+											children: [
+												/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Cake, { size: 12 }),
+												" ",
+												employee?.dob || identity?.dob ? "Change Birthday" : "Add Birthday"
+											]
+										}) : null]
+									}),
+									isEditingDob && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+										style: {
+											display: "flex",
+											alignItems: "center",
+											gap: "6px",
+											flexWrap: "wrap",
+											marginTop: "4px"
+										},
+										children: [
+											/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+												type: "date",
+												value: dobValue,
+												onChange: (e) => setDobValue(e.target.value),
+												max: (/* @__PURE__ */ new Date()).toISOString().split("T")[0],
+												className: "ui-input",
+												style: {
+													fontSize: "12px",
+													padding: "4px 8px",
+													width: "auto"
+												}
+											}),
+											/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+												type: "button",
+												disabled: dobSaving || !dobValue,
+												onClick: handleSaveDobDirect,
+												style: {
+													border: "none",
+													background: "var(--teal, #006e6f)",
+													color: "#fff",
+													borderRadius: "6px",
+													padding: "5px 10px",
+													fontSize: "11px",
+													fontWeight: 700,
+													cursor: "pointer"
+												},
+												children: dobSaving ? "Saving..." : "Save Birthday"
+											}),
+											/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+												type: "button",
+												disabled: dobSaving,
+												onClick: () => setIsEditingDob(false),
+												style: {
+													border: "1px solid #cbd5e1",
+													background: "#fff",
+													borderRadius: "6px",
+													padding: "5px 8px",
+													fontSize: "11px",
+													cursor: "pointer",
+													color: "#64748b"
+												},
+												children: "Cancel"
+											})
+										]
+									}),
+									dobFeedback && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("small", {
+										style: {
+											color: dobFeedback.includes("✓") || dobFeedback.includes("🎂") ? "#15803d" : "#b91c1c",
+											fontSize: "11px",
+											fontWeight: 600
+										},
+										children: dobFeedback
+									})
+								]
+							})]
 						}),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 							className: "profile-detail-row",

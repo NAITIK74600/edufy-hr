@@ -410,7 +410,7 @@ export function createCalendarRouter({ auth, useDatabase = true }) {
         const cat = (e.category || e.type || '').toLowerCase()
         let key
         if (cat.includes('anniversary') || e.type === 'anniversary') {
-          const cleanName = (e.name || e.title || '').replace(/\s*\(.*\)/, '').replace(/\s*·.*/, '').trim().toLowerCase()
+          const cleanName = (e.name || e.title || '').split(/[\(·•\-–—\|]/)[0].trim().toLowerCase()
           key = `anniv:${cleanName}:${e.date}`
         } else if (cat.includes('birthday') || e.type === 'birthday') {
           const cleanName = (e.name || e.title || '').replace(/'s birthday.*/i, '').trim().toLowerCase()
@@ -424,7 +424,16 @@ export function createCalendarRouter({ auth, useDatabase = true }) {
           key = `event:${e.id || e.entityId || e.title}:${e.date}`
         }
 
-        if (seenSemanticKeys.has(key)) continue
+        if (seenSemanticKeys.has(key)) {
+          // If we already added a minimal synthetic event, replace with the richer persisted event
+          const idx = uniqueEvents.findIndex((u) => u._semanticKey === key)
+          if (idx !== -1 && !uniqueEvents[idx].description && e.description) {
+            e._semanticKey = key
+            uniqueEvents[idx] = e
+          }
+          continue
+        }
+        e._semanticKey = key
         seenSemanticKeys.add(key)
         uniqueEvents.push(e)
       }
@@ -1618,20 +1627,138 @@ export function createCalendarRouter({ auth, useDatabase = true }) {
   })
 
   // =========================================================================
+  // 19. GET /api/v1/calendar/meetings/dashboard - Dedicated Meetings Dashboard
+  // =========================================================================
+  router.get('/meetings/dashboard', auth.authenticate, async (req, res, next) => {
+    try {
+      const actor = req.auth.user
+      const scope = req.query.scope || 'all'
+      const status = req.query.status || ''
+      const search = req.query.search || ''
+
+      const meetings = await calendarService.listMeetings({
+        actor,
+        scope,
+        status,
+        search,
+      })
+
+      const allMeetings = await calendarService.listMeetings({ actor, scope: 'all' })
+      const todayStr = new Date().toISOString().slice(0, 10)
+      const actorId = String(actor.id || actor.employeeId || actor._id || '')
+
+      const counts = {
+        all: allMeetings.length,
+        today: allMeetings.filter((m) => m.date === todayStr && m.status !== 'cancelled').length,
+        upcoming: allMeetings.filter((m) => m.date >= todayStr && m.status !== 'cancelled').length,
+        completed: allMeetings.filter((m) => m.date < todayStr && m.status !== 'cancelled').length,
+        cancelled: allMeetings.filter((m) => m.status === 'cancelled').length,
+        my: allMeetings.filter((m) => m.organizer?.employeeId === actorId || m.createdBy === actor.name).length,
+      }
+
+      res.json({
+        success: true,
+        counts,
+        data: meetings,
+      })
+    } catch (error) {
+      next(error)
+    }
+  })
+
+  // =========================================================================
+  // 20. POST /api/v1/calendar/meetings - Schedule Meeting with Real Google Meet
+  // =========================================================================
+  router.post('/meetings', auth.authenticate, async (req, res, next) => {
+    try {
+      const actor = req.auth.user
+      const userRole = String(actor.role || '').toLowerCase().trim().replace(/[\s-]+/g, '_')
+      const isEmployeeOrIntern = userRole === 'employee' || userRole === 'intern'
+      const isManagerialRole = ['admin', 'hr', 'hr_executive', 'director', 'managing_director', 'co_founder', 'manager', 'lead', 'operations_executive'].includes(userRole)
+
+      if (isEmployeeOrIntern || !isManagerialRole) {
+        return res.status(403).json({
+          success: false,
+          code: 'FORBIDDEN',
+          message: 'Employees and interns do not have permission to schedule corporate meetings. Please contact HR or your Team Lead.',
+        })
+      }
+
+      const {
+        title,
+        description,
+        category = 'Company Meeting',
+        date,
+        startTime = '10:00',
+        endTime = '11:00',
+        timezone = 'Asia/Kolkata',
+        attendees = [],
+        externalEmails = [],
+        createGoogleMeet = true,
+        locationName = 'Google Meet / Online',
+      } = req.body || {}
+
+      if (!title || !title.trim()) {
+        return res.status(400).json({ success: false, message: 'Meeting title is required.' })
+      }
+      if (!date) {
+        return res.status(400).json({ success: false, message: 'Meeting date is required.' })
+      }
+
+      // Compile internal + external attendees
+      const compiledAttendees = [...attendees]
+      if (Array.isArray(externalEmails)) {
+        for (const ext of externalEmails) {
+          const email = (typeof ext === 'string' ? ext : ext.email || '').trim().toLowerCase()
+          if (email && email.includes('@') && !compiledAttendees.some((a) => a.email === email)) {
+            compiledAttendees.push({
+              employeeId: 'ext_' + Math.random().toString(36).substring(2, 10),
+              name: (typeof ext === 'object' && ext.name) ? ext.name : email.split('@')[0],
+              email,
+              role: 'required',
+              rsvpStatus: 'pending',
+            })
+          }
+        }
+      }
+
+      const created = await calendarService.createEvent({
+        eventData: {
+          title: title.trim(),
+          description: description?.trim() || '',
+          category,
+          date,
+          startTime,
+          endTime,
+          timezone,
+          participants: compiledAttendees,
+          autoCreateMeet: Boolean(createGoogleMeet),
+          meetingProvider: createGoogleMeet ? 'google_meet' : 'none',
+          locationName,
+        },
+        actor,
+        ip: req.ip,
+      })
+
+      res.status(201).json({
+        success: true,
+        message: 'Meeting scheduled successfully.',
+        data: created,
+      })
+    } catch (error) {
+      next(error)
+    }
+  })
+
+  // =========================================================================
   // 21. GOOGLE INTEGRATION: Connect, Callback, Disconnect
   // =========================================================================
   router.get('/integrations', auth.authenticate, async (req, res, next) => {
     try {
-      const integration = await CalendarIntegration.findOne({ provider: 'google' }).lean().catch(() => null)
+      const status = await googleCalendarService.getIntegrationStatus()
       res.json({
         success: true,
-        data: {
-          googleConfigured: googleCalendarService.isConfigured(),
-          isConnected: Boolean(integration?.isConnected),
-          accountEmail: integration?.accountEmail || null,
-          lastSyncAt: integration?.lastSyncAt || null,
-          syncStatus: integration?.syncStatus || 'disconnected',
-        },
+        data: status,
       })
     } catch (error) {
       next(error)
@@ -1680,11 +1807,8 @@ export function createCalendarRouter({ auth, useDatabase = true }) {
       if (!isManagement(req.auth.user)) {
         return res.status(403).json({ success: false, message: 'Permission denied.' })
       }
-      await CalendarIntegration.findOneAndUpdate(
-        { provider: 'google' },
-        { isConnected: false, accessToken: null, refreshToken: null, syncStatus: 'disconnected' }
-      )
-      res.json({ success: true, message: 'Google integration disconnected.' })
+      const result = await googleCalendarService.disconnect()
+      res.json(result)
     } catch (error) {
       next(error)
     }

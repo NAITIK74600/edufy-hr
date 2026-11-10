@@ -3349,10 +3349,34 @@ function ESSAnnouncementsView({ user }) {
 function ESSProfileView({ user }) {
   const [storeState, setStoreState] = useState(() => hrStore.getState())
   const [profileTab, setProfileTab] = useState('personal') // 'personal' | 'employment' | 'onboarding' | 'bank' | 'emergency'
+  const [isEditingDob, setIsEditingDob] = useState(false)
+  const [dobValue, setDobValue] = useState('')
+  const [dobSaving, setDobSaving] = useState(false)
+  const [dobFeedback, setDobFeedback] = useState('')
 
   useEffect(() => {
     return hrStore.subscribe(setStoreState)
   }, [])
+
+  async function handleSaveDobDirect() {
+    if (!dobValue) return
+    setDobSaving(true)
+    setDobFeedback('')
+    try {
+      if (hrStore.updateMyDob) {
+        await hrStore.updateMyDob(dobValue)
+      } else {
+        await apiClient.patch('/employees/me/dob', { dob: dobValue })
+      }
+      setIsEditingDob(false)
+      setDobFeedback('Date of birth updated successfully! 🎂 (Directly saved)')
+      setTimeout(() => setDobFeedback(''), 4000)
+    } catch (err) {
+      setDobFeedback(err?.response?.data?.error?.message || err?.message || 'Failed to update birthday.')
+    } finally {
+      setDobSaving(false)
+    }
+  }
 
   const employee = useMemo(() => {
     const list = storeState.employees || []
@@ -3515,9 +3539,103 @@ function ESSProfileView({ user }) {
               <span>Contact Number</span>
               <strong>{employee?.phone || '+91 98765 43210'}</strong>
             </div>
-            <div className="profile-detail-row">
+            <div className="profile-detail-row" style={{ alignItems: 'flex-start' }}>
               <span>Date of Birth</span>
-              <strong>{employee?.dob ? new Date(employee.dob).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : (identity.dob ? new Date(identity.dob).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Not provided')}</strong>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                  <strong>
+                    {employee?.dob
+                      ? new Date(employee.dob).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+                      : (identity.dob
+                        ? new Date(identity.dob).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+                        : 'Not provided')}
+                  </strong>
+                  {!isEditingDob ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const raw = employee?.dob || identity?.dob
+                        if (raw) {
+                          try {
+                            setDobValue(new Date(raw).toISOString().split('T')[0])
+                          } catch {
+                            setDobValue('')
+                          }
+                        } else {
+                          setDobValue('')
+                        }
+                        setIsEditingDob(true)
+                      }}
+                      style={{
+                        border: '1px solid #cbd5e1',
+                        background: '#f8fafc',
+                        borderRadius: '6px',
+                        padding: '3px 8px',
+                        fontSize: '11px',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        color: 'var(--teal, #006e6f)',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                      }}
+                    >
+                      <Cake size={12} /> {employee?.dob || identity?.dob ? 'Change Birthday' : 'Add Birthday'}
+                    </button>
+                  ) : null}
+                </div>
+
+                {isEditingDob && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', marginTop: '4px' }}>
+                    <input
+                      type="date"
+                      value={dobValue}
+                      onChange={(e) => setDobValue(e.target.value)}
+                      max={new Date().toISOString().split('T')[0]}
+                      className="ui-input"
+                      style={{ fontSize: '12px', padding: '4px 8px', width: 'auto' }}
+                    />
+                    <button
+                      type="button"
+                      disabled={dobSaving || !dobValue}
+                      onClick={handleSaveDobDirect}
+                      style={{
+                        border: 'none',
+                        background: 'var(--teal, #006e6f)',
+                        color: '#fff',
+                        borderRadius: '6px',
+                        padding: '5px 10px',
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {dobSaving ? 'Saving...' : 'Save Birthday'}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={dobSaving}
+                      onClick={() => setIsEditingDob(false)}
+                      style={{
+                        border: '1px solid #cbd5e1',
+                        background: '#fff',
+                        borderRadius: '6px',
+                        padding: '5px 8px',
+                        fontSize: '11px',
+                        cursor: 'pointer',
+                        color: '#64748b',
+                      }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                )}
+                {dobFeedback && (
+                  <small style={{ color: dobFeedback.includes('✓') || dobFeedback.includes('🎂') ? '#15803d' : '#b91c1c', fontSize: '11px', fontWeight: 600 }}>
+                    {dobFeedback}
+                  </small>
+                )}
+              </div>
             </div>
             <div className="profile-detail-row">
               <span>Residential Address</span>

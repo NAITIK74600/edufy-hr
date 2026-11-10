@@ -524,16 +524,23 @@ export function OnboardingDossierView({ employee, canEdit = false, canVerify = f
           phone: pDigits.length >= 10 ? pPhone : '',
           address: pAddress,
         },
-        onboardingStatus: 'submitted',
-        onboardingSubmittedAt: new Date().toISOString(),
+        onboardingStatus: isVerified ? 'verified' : (employee?.onboardingStatus || 'submitted'),
+        onboardingSubmittedAt: isVerified ? employee?.onboardingSubmittedAt : (employee?.onboardingSubmittedAt || new Date().toISOString()),
       }
       if (!payload.avatarUrl && editData?.onboardingDocs?.passportPhoto?.url) {
         payload.avatarUrl = editData.onboardingDocs.passportPhoto.url
       }
 
-      setLocalStatus('submitted')
+      if (!isVerified) {
+        setLocalStatus('submitted')
+      }
       if (editData.onboardingDocs) {
         setLocalDocs((prev) => ({ ...prev, ...editData.onboardingDocs }))
+      }
+
+      // If employee updated their DOB, sync directly to DOB endpoint without requiring HR approval
+      if (editData.dob && (isSelf || isEmployeePortal)) {
+        apiClient.patch('/employees/me/dob', { dob: editData.dob }).catch(() => {})
       }
 
       const empId = employee?.id || employee?._id || employee?.employeeId
@@ -556,17 +563,19 @@ export function OnboardingDossierView({ employee, canEdit = false, canVerify = f
         await hrStore.updateEmployee(empId, payload)
       }
 
-      // Notify HR of the update
-      hrStore.addNotification({
-        id: `notif-onboard-${Date.now()}`,
-        type: 'onboarding',
-        title: 'Onboarding Verification Required',
-        message: `Employee ${employee?.name || 'Employee'} (${employee?.employeeId || 'ID'}) has uploaded/updated onboarding documents. Please review and verify.`,
-        time: 'Just now',
-        read: false,
-      })
+      // Notify HR of the update ONLY if initial submission / not already verified
+      if (!isVerified) {
+        hrStore.addNotification({
+          id: `notif-onboard-${Date.now()}`,
+          type: 'onboarding',
+          title: 'Onboarding Verification Required',
+          message: `Employee ${employee?.name || 'Employee'} (${employee?.employeeId || 'ID'}) has uploaded/updated onboarding documents. Please review and verify.`,
+          time: 'Just now',
+          read: false,
+        })
+      }
 
-      setFeedback('✓ Onboarding details and documents submitted to HR for verification!')
+      setFeedback(isVerified ? '✓ Personal details and date of birth updated successfully!' : '✓ Onboarding details submitted for verification!')
       setIsEditing(false)
       if (onUpdated) onUpdated()
       setTimeout(() => setFeedback(''), 5000)

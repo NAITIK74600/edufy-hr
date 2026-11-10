@@ -7022,9 +7022,20 @@ const localStore = {
     notifyListeners()
     return storeState.leaves.find((l) => l.id === leaveId)
   },
-  deleteLeave(leaveId) {
+  async deleteLeave(leaveId) {
     const cleanId = String(leaveId)
     const existing = storeState.leaves.find((l) => String(l.id) === cleanId || String(l._id) === cleanId)
+    try {
+      await apiClient.delete(`/leave/requests/${cleanId}`)
+    } catch (err) {
+      // Also try fallback route if 404
+      try {
+        await apiClient.delete(`/leave/${cleanId}`)
+      } catch (fallbackErr) {
+        console.error('[hrStore] Failed to delete leave request on backend:', fallbackErr?.response?.data || fallbackErr?.message)
+        throw fallbackErr
+      }
+    }
     storeState.leaves = storeState.leaves.filter((l) => String(l.id) !== cleanId && String(l._id) !== cleanId)
     if (existing) {
       this.addAuditLog('HR', 'LEAVE_DELETE', `Deleted leave request ${cleanId} for ${existing.employeeName}`)

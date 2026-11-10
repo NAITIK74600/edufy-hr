@@ -1,5 +1,6 @@
 import crypto from 'crypto'
 import { CalendarEvent, EVENT_CATEGORIES } from '../../models/CalendarEvent.js'
+import { Meeting } from '../../models/Meeting.js'
 import { CalendarInvitation } from '../../models/CalendarInvitation.js'
 import { CalendarPreference } from '../../models/CalendarPreference.js'
 import { CalendarAuditLog } from '../../models/CalendarAuditLog.js'
@@ -376,6 +377,43 @@ export const calendarService = {
     // 3. Dispatch invitations
     calendarNotificationService.sendInvitationNotifications({ event: saved, actor }).catch(() => {})
 
+    // 4. Upsert Meeting document if this is a meeting event
+    if (saved.category?.includes('Meeting') || saved.category?.includes('Session') || saved.category?.includes('Interview') || saved.meetingLink?.url) {
+      Meeting.findOneAndUpdate(
+        { calendarEventId: saved._id },
+        {
+          title: saved.title,
+          description: saved.description,
+          category: saved.category,
+          date: saved.date,
+          startTime: saved.startTime || '10:00',
+          endTime: saved.endTime || '11:00',
+          timezone: saved.timezone,
+          organizer: saved.organizer,
+          attendees: (saved.participants || []).map((p) => ({
+            employeeId: p.employeeId,
+            name: p.name,
+            email: p.email,
+            department: p.department,
+            role: p.role,
+            rsvpStatus: p.rsvpStatus,
+          })),
+          location: saved.location,
+          calendarId: 'primary',
+          googleEventId: saved.meetingLink?.googleEventId || null,
+          googleCalendarHtmlLink: saved.meetingLink?.htmlLink || null,
+          meetUrl: saved.meetingLink?.url || null,
+          meetCode: saved.meetingLink?.meetCode || null,
+          conferenceId: saved.meetingLink?.conferenceId || null,
+          conferenceStatus: saved.meetingLink?.conferenceStatus || (saved.meetingLink?.url ? 'confirmed' : 'none'),
+          status: saved.status || 'scheduled',
+          createdBy: saved.createdBy,
+          calendarEventId: saved._id,
+        },
+        { upsert: true }
+      ).catch((err) => console.warn('[Meeting Model Sync Notice]:', err.message))
+    }
+
     return saved
   },
 
@@ -462,9 +500,38 @@ export const calendarService = {
 
     const updated = await event.save()
 
+    // Update synced Meeting document
+    Meeting.updateOne(
+      { calendarEventId: updated._id },
+      {
+        $set: {
+          title: updated.title,
+          description: updated.description,
+          category: updated.category,
+          date: updated.date,
+          startTime: updated.startTime,
+          endTime: updated.endTime,
+          attendees: (updated.participants || []).map((p) => ({
+            employeeId: p.employeeId,
+            name: p.name,
+            email: p.email,
+            department: p.department,
+            role: p.role,
+            rsvpStatus: p.rsvpStatus,
+          })),
+          location: updated.location,
+          meetUrl: updated.meetingLink?.url,
+          meetCode: updated.meetingLink?.meetCode,
+          conferenceStatus: updated.meetingLink?.conferenceStatus,
+          status: updated.status,
+          updatedBy: actor?.name,
+        },
+      }
+    ).catch(() => {})
+
     // Sync update to Google Calendar if linked
     if (updated.meetingLink?.googleEventId) {
-      googleCalendarService.updateGoogleEvent(updated.meetingLink.googleEventId, {
+      await googleCalendarService.updateGoogleEvent(updated.meetingLink.googleEventId, {
         title: updated.title,
         description: updated.description,
         date: updated.date,
@@ -474,7 +541,7 @@ export const calendarService = {
         allDay: updated.allDay,
         participants: updated.participants,
         location: updated.location,
-      }).catch(() => {})
+      }).catch((err) => console.warn('[calendar.service] Google event update warning:', err?.message))
     }
 
     // Reschedule reminders
@@ -576,6 +643,11 @@ export const calendarService = {
     event.cancellationReason = reason
     await event.save()
 
+    Meeting.updateOne(
+      { calendarEventId: event._id },
+      { $set: { status: 'cancelled', cancellationReason: reason } }
+    ).catch(() => {})
+
     // Cancel pending reminders
     calendarNotificationService.cancelEventReminders(eventId).catch(() => {})
 
@@ -584,7 +656,9 @@ export const calendarService = {
 
     // Clean Google Calendar if synced
     if (event.meetingLink?.googleEventId) {
-      googleCalendarService.deleteGoogleEvent(event.meetingLink.googleEventId).catch(() => {})
+      await googleCalendarService.deleteGoogleEvent(event.meetingLink.googleEventId).catch((err) =>
+        console.warn('[calendar.service] Google event delete warning:', err?.message)
+      )
     }
 
     return { success: true, message: 'Event successfully cancelled.' }
@@ -627,6 +701,114 @@ export const calendarService = {
       activeDeadlinesCount: deadlines.length,
       upcomingDeadlines: deadlines.map((d) => ({ id: d._id, title: d.title, date: d.date, priority: d.priority })),
     }
+  },
+
+  /**
+   * List meetings for the Meetings Dashboard with scope filters
+   */
+  async listMeetings({ actor, scope = 'all', status = '', search = '' }) {
+    const actorId = String(actor?.id || actor?.employeeId || actor?._id || '')
+    const actorEmail = (actor?.email || '').toLowerCase().trim()
+    const canManage = Boolean(
+      actor?.role &&
+      ['admin', 'hr', 'hr_executive', 'director', 'managing_director', 'co_founder'].includes(
+        actor.role.toLowerCase()
+      )
+    )
+
+    const todayStr = new Date().toISOString().slice(0, 10)
+    const query = {}
+
+    // Status filter
+    if (status && status !== 'all') {
+      query.status = status
+    }
+
+    // Role-based visibility
+    if (!canManage) {
+      query.$or = [
+        { 'organizer.employeeId': actorId },
+        { 'attendees.employeeId': actorId },
+        ...(actorEmail ? [{ 'attendees.email': actorEmail }] : []),
+      ]
+    }
+
+    // Search filter
+    if (search && search.trim()) {
+      const s = search.trim()
+      query.$and = query.$and || []
+      query.$and.push({
+        $or: [
+          { title: { $regex: s, $options: 'i' } },
+          { description: { $regex: s, $options: 'i' } },
+          { 'organizer.name': { $regex: s, $options: 'i' } },
+        ],
+      })
+    }
+
+    let meetings = await Meeting.find(query).sort({ date: 1, startTime: 1 }).lean().catch(() => [])
+
+    // If Meeting collection has fewer results than CalendarEvent meetings, pull from CalendarEvent
+    if (meetings.length === 0) {
+      const calQuery = {
+        category: {
+          $in: [
+            'Company Meeting',
+            'Department Meeting',
+            'Individual Meeting',
+            'Client Meeting',
+            'Interview',
+            'Training Session',
+            'Meeting',
+          ],
+        },
+      }
+      if (status && status !== 'all') calQuery.status = status
+      if (!canManage) {
+        calQuery.$or = [
+          { ownerId: actorId },
+          { 'organizer.employeeId': actorId },
+          { 'participants.employeeId': actorId },
+          ...(actorEmail ? [{ 'participants.email': actorEmail }] : []),
+        ]
+      }
+      const rawEvents = await CalendarEvent.find(calQuery).sort({ date: 1, startTime: 1 }).lean().catch(() => [])
+      meetings = rawEvents.map((ev) => ({
+        _id: ev._id,
+        id: String(ev._id),
+        title: ev.title,
+        description: ev.description,
+        category: ev.category,
+        date: ev.date,
+        startTime: ev.startTime || '10:00',
+        endTime: ev.endTime || '11:00',
+        timezone: ev.timezone || 'Asia/Kolkata',
+        organizer: ev.organizer || { name: 'Edufyi HR' },
+        attendees: ev.participants || [],
+        location: ev.location,
+        meetUrl: ev.meetingLink?.url,
+        meetCode: ev.meetingLink?.meetCode,
+        conferenceStatus: ev.meetingLink?.conferenceStatus || (ev.meetingLink?.url ? 'confirmed' : 'none'),
+        status: ev.status || 'scheduled',
+        createdBy: ev.createdBy,
+        calendarEventId: ev._id,
+      }))
+    }
+
+    // Apply dashboard scope
+    if (scope === 'today') {
+      return meetings.filter((m) => m.date === todayStr && m.status !== 'cancelled')
+    } else if (scope === 'upcoming') {
+      return meetings.filter((m) => m.date >= todayStr && m.status !== 'cancelled')
+    } else if (scope === 'completed') {
+      return meetings.filter((m) => m.date < todayStr && m.status !== 'cancelled')
+    } else if (scope === 'cancelled') {
+      return meetings.filter((m) => m.status === 'cancelled')
+    } else if (scope === 'my') {
+      return meetings.filter((m) => m.organizer?.employeeId === actorId || m.createdBy === actor?.name)
+    }
+
+    return meetings
   },
 }
 

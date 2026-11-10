@@ -180,21 +180,25 @@ export async function seedAllEmployees() {
       ],
     })
 
-    // 1b. Purge legacy dummy/fake birthdays (1995-09-20, 1999-02-24) from seeded or test accounts
+    // 1b. Purge legacy dummy/fake birthdays (1995-09-20, 1999-02-24) from ALL seeded or test accounts
     const dummyDobs = [
       new Date('1995-09-20T00:00:00.000Z'),
       new Date('1995-09-19T18:30:00.000Z'),
       '1995-09-20',
       '1999-02-24',
       new Date('1999-02-24T00:00:00.000Z'),
+      new Date('1999-02-23T18:30:00.000Z'),
     ]
     await Employee.updateMany(
       {
         $or: [
           { dob: { $in: dummyDobs } },
           { 'identity.dob': { $in: dummyDobs } },
+          { dob: '1995-09-20' },
+          { dob: '1999-02-24' },
+          { 'identity.dob': '1995-09-20' },
+          { 'identity.dob': '1999-02-24' },
         ],
-        employeeId: { $in: ['EDU-ADM-001', 'EDU-DIR-001'] }
       },
       {
         $unset: { dob: 1, 'identity.dob': 1 }
@@ -206,7 +210,7 @@ export async function seedAllEmployees() {
       sourceType: 'employee_birthday',
       $or: [
         { sourceId: { $regex: /bday_(EDU-ADM-001|EDU-DIR-001)/ } },
-        { 'sourceData.employeeId': { $in: ['EDU-ADM-001', 'EDU-DIR-001'] } }
+        { 'sourceData.employeeId': { $in: ['EDU-ADM-001', 'EDU-DIR-001'] } },
       ]
     }).catch(() => {})
 

@@ -22,7 +22,7 @@ export const calendarService = {
         const cat = (ev.category || ev.type || '').toLowerCase()
         let key
         if (cat.includes('anniversary') || ev.type === 'anniversary') {
-          const cleanName = (ev.name || ev.title || '').replace(/\s*\(.*\)/, '').replace(/\s*·.*/, '').trim().toLowerCase()
+          const cleanName = (ev.name || ev.title || '').split(/[\(·•\-–—\|]/)[0].trim().toLowerCase()
           key = `anniv:${cleanName}:${ev.date}`
         } else if (cat.includes('birthday') || ev.type === 'birthday') {
           const cleanName = (ev.name || ev.title || '').replace(/'s birthday.*/i, '').trim().toLowerCase()

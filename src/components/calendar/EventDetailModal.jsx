@@ -290,9 +290,9 @@ export function EventDetailModal({
               <div>
                 <div style={{ fontSize: '13px', fontWeight: 800, color: '#065f46', display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <span>{isMeet ? 'Google Meet Video Call' : 'Online Video Conference'}</span>
-                  {event.meetingLink.googleEventId && !event.meetingLink.googleEventId.startsWith('sim_') && (
+                  {event.meetingLink.googleEventId && (
                     <span style={{ fontSize: '10px', fontWeight: 700, padding: '1px 6px', borderRadius: '4px', background: '#dcfce7', color: '#15803d' }}>
-                      Synced to Google
+                      {event.meetingLink.conferenceStatus === 'confirmed' ? '✓ Google Meet Confirmed' : 'Google Calendar Synced'}
                     </span>
                   )}
                 </div>
