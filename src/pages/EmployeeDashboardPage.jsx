@@ -84,6 +84,7 @@ import { OnboardingDossierView } from '../components/OnboardingDossierView'
 import { CompanyPoliciesView } from '../components/CompanyPoliciesView'
 import { formatAttendanceNotes, getDailyAttendanceStatus, getLateCountInfo } from '../utils/attendanceUtils'
 import { HolidayCalendarShowcase } from '../components/HolidayCalendarShowcase'
+import { CalendarWidgets } from '../components/calendar/CalendarWidgets'
 import { CompanyDocumentsView } from '../components/CompanyDocumentsView'
 import { liveGpsTracker } from '../services/liveGpsTracker'
 
@@ -1526,6 +1527,11 @@ function ESSOverview({ user }) {
         <a href="#/employee/documents" className="ess-shortcut-chip">
           <FileCheck size={13} style={{ color: '#30A06A' }} /> Company Policies & NDA
         </a>
+      </div>
+
+      {/* 5. CALENDAR & CELEBRATION WIDGETS (Upcoming Holidays, Birthdays, Anniversaries, Google Meet) */}
+      <div style={{ marginTop: '6px', marginBottom: '14px' }}>
+        <CalendarWidgets user={user} />
       </div>
 
       {/* WORKSPACE GRID */}

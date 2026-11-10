@@ -130,7 +130,12 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
       }
 
       const requests = {
-        employees: fetchEmployees().catch((err) => { console.warn('Could not load employees:', err.message); return { data: [] } }),
+        employees: fetchEmployees().catch((err) => {
+          console.warn('Could not load employees:', err.message)
+          const existing = state().employees
+          if (existing && existing.length > 0) return { data: existing }
+          return { data: actor ? [normalizeEmployee(actor)] : [] }
+        }),
         attendance: apiClient.get(management ? '/attendance' : '/attendance/self').catch(() => ({ data: [] })),
         leaves: apiClient.get(management ? '/leave/hr/requests' : '/leave/self').catch(() => ({ data: [] })),
         payroll: payrollAllowed ? apiClient.get('/payroll').catch(() => ({ data: [] })) : Promise.resolve({ data: [] }),

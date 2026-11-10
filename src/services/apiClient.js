@@ -31,10 +31,10 @@ export class ApiError extends Error {
 
 const inFlightGets = new Map()
 
-async function executeApiRequest(path, options = {}, retries = 1) {
+async function executeApiRequest(path, options = {}, retries = 2) {
   const activeToken = accessToken || readStoredToken()
   let response
-  const timeoutSignal = typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(10000) : undefined
+  const timeoutSignal = typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(20000) : undefined
   try {
     response = await fetch(`${API_BASE_URL}${path}`, {
       headers: {
@@ -48,11 +48,14 @@ async function executeApiRequest(path, options = {}, retries = 1) {
     })
   } catch (err) {
     if (retries > 0 && (!options.method || options.method === 'GET')) {
-      const delay = (4 - retries) * 300
+      const delay = (3 - retries) * 400
       await new Promise((r) => setTimeout(r, delay))
       return executeApiRequest(path, options, retries - 1)
     }
-    throw new ApiError('The service is temporarily unavailable. Reconnecting...', { status: 0, code: 'NETWORK_ERROR' })
+    const message = err?.name === 'TimeoutError' || err?.name === 'AbortError'
+      ? 'The request took too long. Retrying in background...'
+      : 'The service is temporarily unavailable. Reconnecting...'
+    throw new ApiError(message, { status: 0, code: 'NETWORK_ERROR' })
   }
 
   // Handle temporary 502/503/504 while server reloads

@@ -165,7 +165,7 @@ export function createMongoEmployeeRepository() {
       const queryPromise = (async () => {
         const [records, total] = await Promise.all([
           Employee.find(query)
-            .select('+passwordHash -documents.fileKey')
+            .select('+passwordHash -documents -onboardingDocs -complianceDocs -onboardingChecklist -offboardingChecklist -employmentHistory')
             .populate('managerId', 'employeeId name email')
             .sort({ [sortField]: sortOrder })
             .skip((safePage - 1) * safeLimit)
