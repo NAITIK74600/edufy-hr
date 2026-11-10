@@ -55,6 +55,9 @@ export function GoogleAccountSettingsModal({ isOpen, onClose, onIntegrationChang
 
     window.addEventListener('edufyi:google-calendar-connected', handleConnected)
     const handleMsg = (e) => {
+      if (e.origin && e.origin !== window.location.origin && e.origin !== 'https://edufyione.edufyitech.in') {
+        return
+      }
       if (e.data === 'google_calendar_connected' || e.data?.type === 'google_calendar_connected') {
         handleConnected()
       } else if (e.data?.type === 'google_calendar_error') {
@@ -76,7 +79,7 @@ export function GoogleAccountSettingsModal({ isOpen, onClose, onIntegrationChang
     setErrorMsg('')
     setFeedback('')
     try {
-      const res = await apiClient.post('/calendar/google/connect')
+      const res = await apiClient.post('/calendar/google/connect', {})
       const authUrl = res?.authUrl || res?.data?.authUrl || (res?.data && typeof res.data === 'string' ? res.data : null)
       if (authUrl) {
         // Open authorization in a clean centered popup window
@@ -97,7 +100,8 @@ export function GoogleAccountSettingsModal({ isOpen, onClose, onIntegrationChang
         setErrorMsg(res?.message || 'Failed to generate Google authorization URL. Please verify GOOGLE_CLIENT_ID in server environment.')
       }
     } catch (err) {
-      setErrorMsg(err.message || 'Failed to initiate Google OAuth.')
+      const detailedError = err?.fields?.message || err?.message || 'Failed to initiate Google OAuth.'
+      setErrorMsg(detailedError)
     } finally {
       setConnecting(false)
     }

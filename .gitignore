@@ -23,6 +23,7 @@ _webuzo_build/
 *.runtime.json
 *credentials*.json
 google.runtime.json
+.backup_repair_google/
 
 # Unnecessary root files
 clean_store_teams.cjs

@@ -481,7 +481,8 @@ export function createApp(options = {}) {
                 <p>You can close this window and return to Edufyi HR.</p>
                 <script>
                   if (window.opener) {
-                    window.opener.postMessage('google_calendar_connected', '*');
+                    const target = window.location.origin.includes('edufyione.edufyitech.in') ? 'https://edufyione.edufyitech.in' : window.location.origin;
+                    window.opener.postMessage('google_calendar_connected', target);
                     window.close();
                   } else {
                     window.location.href = '/#/admin/holidays';

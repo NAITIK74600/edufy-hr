@@ -472,7 +472,7 @@ export const calendarService = {
    * Connect Google Calendar / Meet
    */
   async connectGoogle() {
-    const res = await apiClient.post('/calendar/google/connect')
+    const res = await apiClient.post('/calendar/google/connect', {})
     return res
   },
 
@@ -480,7 +480,7 @@ export const calendarService = {
    * Disconnect Google Calendar
    */
   async disconnectGoogle() {
-    const res = await apiClient.post('/calendar/google/disconnect')
+    const res = await apiClient.post('/calendar/google/disconnect', {})
     return res
   },
 

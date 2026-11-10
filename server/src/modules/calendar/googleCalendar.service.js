@@ -58,7 +58,10 @@ function ensureEnvLoaded() {
           if (line && !line.startsWith('#') && line.includes('=')) {
             const idx = line.indexOf('=')
             const k = line.slice(0, idx).trim()
-            const v = line.slice(idx + 1).trim()
+            let v = line.slice(idx + 1).trim()
+            if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) {
+              v = v.slice(1, -1).trim()
+            }
             if (k && (!process.env[k] || process.env[k].trim() === '')) {
               process.env[k] = v
             }
@@ -176,7 +179,10 @@ export const googleCalendarService = {
     const signingKey = process.env.GOOGLE_TOKEN_ENCRYPTION_KEY || process.env.JWT_SECRET || 'edufyi-oauth-state-secret'
     const expectedSig = crypto.createHmac('sha256', signingKey).update(payloadBase64).digest('base64url')
 
-    if (!crypto.timingSafeEqual(Buffer.from(providedSig), Buffer.from(expectedSig))) {
+    const bufProvided = Buffer.from(providedSig)
+    const bufExpected = Buffer.from(expectedSig)
+
+    if (bufProvided.length !== bufExpected.length || !crypto.timingSafeEqual(bufProvided, bufExpected)) {
       return { valid: false, reason: 'Invalid state signature. Potential CSRF or tampering attempt.' }
     }
 

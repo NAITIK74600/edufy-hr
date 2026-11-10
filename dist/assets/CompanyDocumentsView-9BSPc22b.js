@@ -1,7 +1,7 @@
 import { n as __toESM } from "./rolldown-runtime-CO0Nlsmt.js";
 import { $t as Calendar, A as ShieldCheck, At as FileCheckCorner, Bt as Clock, Dt as FileText, Ft as Download, Gt as CircleAlert, H as Receipt, L as Search, Mt as Eye, Pt as ExternalLink, Q as Paperclip, Vt as Clock3, Wt as CircleCheck, _n as require_react, ct as Lock, dn as Bell, g as Upload, i as X, in as BuildingComplex, ln as BookOpen, pt as LifeBuoy, rt as Megaphone, s as WalletCards, tn as CalendarDays, v as TrendingUp, y as Trash } from "./icons-vendor-CNlTUIuG.js";
 import { a as require_jsx_runtime } from "./motion-vendor-3i60tGNx.js";
-import { I as apiClient, P as workspaceAction, T as hrStore, a as Field, o as PageHeader, r as DataTable, t as Button, x as useAuth } from "./index-DmErKaMp.js";
+import { I as apiClient, P as workspaceAction, T as hrStore, a as Field, o as PageHeader, r as DataTable, t as Button, x as useAuth } from "./index-C9_EJn8m.js";
 import { n as formatINR } from "./currency-oCUzM0NR.js";
 import { n as OFFICIAL_COMPANY_DOCUMENTS, r as COMPANY_POLICIES, t as COMPLIANCE_AND_NDA_TEMPLATES } from "./companyDocumentsConstants-DUkgikMQ.js";
 // src/components/WorkspaceRecords.jsx

@@ -1,7 +1,7 @@
 import { n as __toESM } from "./rolldown-runtime-CO0Nlsmt.js";
 import { $t as Calendar, A as ShieldCheck, B as Repeat, Bt as Clock, E as Sparkles, Ft as Download, Gt as CircleAlert, Ht as CircleX, Jt as ChevronLeft, K as Plus, L as Search, Ot as FileSpreadsheet, Pt as ExternalLink, Rt as Copy, Ut as CircleQuestionMark, V as RefreshCw, Wt as CircleCheck, Xt as Check, Y as Pen, _ as TriangleAlert, _n as require_react, at as MapPin, d as Users, dn as Bell, en as CalendarRange, f as User, fn as Award, ft as List, g as Upload, ht as Layers, i as X, n as ZoomIn, qt as ChevronRight, rn as Cake, st as LogOut, t as ZoomOut, tn as CalendarDays, u as Video, x as Target, xt as Grid3x3, y as Trash } from "./icons-vendor-CNlTUIuG.js";
 import { a as require_jsx_runtime } from "./motion-vendor-3i60tGNx.js";
-import { I as apiClient, T as hrStore, a as Field, t as Button } from "./index-DmErKaMp.js";
+import { I as apiClient, T as hrStore, a as Field, t as Button } from "./index-C9_EJn8m.js";
 // src/utils/dobHelper.js
 var import_react = /* @__PURE__ */ __toESM(require_react(), 1);
 /**
@@ -502,13 +502,13 @@ var calendarService = {
 	* Connect Google Calendar / Meet
 	*/
 	async connectGoogle() {
-		return await apiClient.post("/calendar/google/connect");
+		return await apiClient.post("/calendar/google/connect", {});
 	},
 	/**
 	* Disconnect Google Calendar
 	*/
 	async disconnectGoogle() {
-		return await apiClient.post("/calendar/google/disconnect");
+		return await apiClient.post("/calendar/google/disconnect", {});
 	},
 	/**
 	* Trigger on-demand HR lifecycle sync
@@ -4318,6 +4318,7 @@ function GoogleAccountSettingsModal({ isOpen, onClose, onIntegrationChanged }) {
 		};
 		window.addEventListener("edufyi:google-calendar-connected", handleConnected);
 		const handleMsg = (e) => {
+			if (e.origin && e.origin !== window.location.origin && e.origin !== "https://edufyione.edufyitech.in") return;
 			if (e.data === "google_calendar_connected" || e.data?.type === "google_calendar_connected") handleConnected();
 			else if (e.data?.type === "google_calendar_error") setErrorMsg(e.data.error || "Google connection was cancelled or denied.");
 		};
@@ -4333,7 +4334,7 @@ function GoogleAccountSettingsModal({ isOpen, onClose, onIntegrationChanged }) {
 		setErrorMsg("");
 		setFeedback("");
 		try {
-			const res = await apiClient.post("/calendar/google/connect");
+			const res = await apiClient.post("/calendar/google/connect", {});
 			const authUrl = res?.authUrl || res?.data?.authUrl || (res?.data && typeof res.data === "string" ? res.data : null);
 			if (authUrl) {
 				const width = 600;
@@ -4344,7 +4345,8 @@ function GoogleAccountSettingsModal({ isOpen, onClose, onIntegrationChanged }) {
 				if (!popup || popup.closed || typeof popup.closed === "undefined") window.location.href = authUrl;
 			} else setErrorMsg(res?.message || "Failed to generate Google authorization URL. Please verify GOOGLE_CLIENT_ID in server environment.");
 		} catch (err) {
-			setErrorMsg(err.message || "Failed to initiate Google OAuth.");
+			const detailedError = err?.fields?.message || err?.message || "Failed to initiate Google OAuth.";
+			setErrorMsg(detailedError);
 		} finally {
 			setConnecting(false);
 		}

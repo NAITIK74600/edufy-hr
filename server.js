@@ -40,7 +40,10 @@ for (const envPath of candidateEnvPaths) {
         if (line && !line.startsWith('#') && line.includes('=')) {
           const idx = line.indexOf('=')
           const key = line.slice(0, idx).trim()
-          const val = line.slice(idx + 1).trim()
+          let val = line.slice(idx + 1).trim()
+          if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+            val = val.slice(1, -1).trim()
+          }
           if (key && (!process.env[key] || process.env[key].trim() === '')) {
             process.env[key] = val
           }

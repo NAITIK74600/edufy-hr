@@ -1895,7 +1895,7 @@ export function createCalendarRouter({ auth, useDatabase = true }) {
     return isManagement(user)
   }
 
-  router.post('/google/connect', auth.authenticate, async (req, res, next) => {
+  const handleConnect = async (req, res, next) => {
     try {
       if (!canManageGoogle(req.auth.user)) {
         return res.status(403).json({ success: false, message: 'Only Management or HR can connect Google Workspace.' })
@@ -1921,7 +1921,10 @@ export function createCalendarRouter({ auth, useDatabase = true }) {
     } catch (error) {
       next(error)
     }
-  })
+  }
+
+  router.post('/google/connect', auth.authenticate, handleConnect)
+  router.get('/google/connect', auth.authenticate, handleConnect)
 
   router.post('/google/exchange-code', async (req, res, next) => {
     try {
@@ -1980,7 +1983,10 @@ export function createCalendarRouter({ auth, useDatabase = true }) {
               </div>
               <script>
                 if (window.opener) {
-                  try { window.opener.postMessage({ type: 'google_calendar_error', error: ${JSON.stringify(error)} }, '*'); } catch (e) {}
+                  try {
+                    const target = window.location.origin.includes('edufyione.edufyitech.in') ? 'https://edufyione.edufyitech.in' : window.location.origin;
+                    window.opener.postMessage({ type: 'google_calendar_error', error: ${JSON.stringify(error)} }, target);
+                  } catch (e) {}
                   setTimeout(() => window.close(), 2500);
                 }
               </script>
@@ -2052,7 +2058,8 @@ export function createCalendarRouter({ auth, useDatabase = true }) {
             <script>
               try {
                 if (window.opener) {
-                  window.opener.postMessage('google_calendar_connected', '*');
+                  const target = window.location.origin.includes('edufyione.edufyitech.in') ? 'https://edufyione.edufyitech.in' : window.location.origin;
+                  window.opener.postMessage('google_calendar_connected', target);
                   setTimeout(() => window.close(), 1200);
                 } else {
                   setTimeout(() => { window.location.href = 'https://edufyione.edufyitech.in'; }, 2000);
