@@ -209,10 +209,22 @@ function App() {
             // Clean the query parameters from URL without full reload
             const cleanUrl = window.location.origin + window.location.pathname + window.location.hash
             window.history.replaceState({}, document.title, cleanUrl)
+
+            // If running inside a popup window, signal opener and auto-close
+            if (window.opener) {
+              try {
+                window.opener.postMessage('google_calendar_connected', '*')
+                setTimeout(() => window.close(), 600)
+              } catch (e) {}
+            }
             window.dispatchEvent(new CustomEvent('edufyi:google-calendar-connected', { detail: res }))
           }
         } catch (err) {
           console.warn('[Google OAuth Code Exchange Error]:', err?.message)
+          if (window.opener) {
+            alert('Google Authorization Error: ' + (err?.message || 'Failed to exchange token with Google.'))
+            try { window.close() } catch (e) {}
+          }
         }
       }
       exchangeOAuthCode()
@@ -377,7 +389,7 @@ if (container && (container instanceof Element || container.nodeType === 1)) {
 }
 
 // Register PWA Service Worker for Offline, Mobile App & Background Execution
-const ACTIVE_PWA_CACHE = 'edufyi-hr-pwa-v37'
+const ACTIVE_PWA_CACHE = 'edufyi-hr-pwa-v43'
 function registerServiceWorker() {
   if (typeof window !== 'undefined' && 'serviceWorker' in navigator && window.location.protocol.startsWith('http')) {
     // Proactively purge old PWA caches

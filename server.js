@@ -18,6 +18,32 @@ function log(msg) {
   try { fs.appendFileSync(logFile, line, 'utf8') } catch {}
 }
 
+// Pre-load .env into process.env before any ES Module imports
+const envPath = path.resolve(__dirname, '.env')
+if (fs.existsSync(envPath)) {
+  try {
+    if (typeof process.loadEnvFile === 'function') {
+      process.loadEnvFile(envPath)
+    }
+  } catch {}
+  try {
+    const lines = fs.readFileSync(envPath, 'utf8').split('\n')
+    for (const l of lines) {
+      const line = l.trim()
+      if (line && !line.startsWith('#') && line.includes('=')) {
+        const [k, ...v] = line.split('=')
+        const key = k.trim()
+        if (key && !process.env[key]) {
+          process.env[key] = v.join('=').trim()
+        }
+      }
+    }
+    log(`Loaded environment from: ${envPath}`)
+  } catch (err) {
+    log(`Failed reading .env: ${err.message}`)
+  }
+}
+
 log(`server.js entrypoint triggered. Current directory: ${process.cwd()}`)
 
 try {

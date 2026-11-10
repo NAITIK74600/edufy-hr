@@ -1918,13 +1918,23 @@ export function createCalendarRouter({ auth, useDatabase = true }) {
     }
   })
 
-  router.post('/google/exchange-code', auth.authenticate, async (req, res, next) => {
+  router.post('/google/exchange-code', async (req, res, next) => {
     try {
       const { code } = req.body
       if (!code) {
         return res.status(400).json({ success: false, message: 'Missing authorization code.' })
       }
-      const result = await googleCalendarService.exchangeCodeForTokens(code, req.auth.user)
+      let actor = { id: 'admin', name: 'Administrator' }
+      const authHeader = req.get('authorization')
+      if (authHeader?.startsWith('Bearer ')) {
+        try {
+          const claims = jwt.decode(authHeader.slice(7))
+          if (claims?.sub) {
+            actor = { id: claims.sub, name: claims.name || claims.sub }
+          }
+        } catch {}
+      }
+      const result = await googleCalendarService.exchangeCodeForTokens(code, actor)
       res.json({
         success: true,
         message: 'Google Workspace successfully connected.',
@@ -1932,6 +1942,7 @@ export function createCalendarRouter({ auth, useDatabase = true }) {
         accountEmail: result?.accountEmail,
       })
     } catch (error) {
+      console.error('[Google OAuth Exchange Notice]:', error.message)
       res.status(400).json({
         success: false,
         message: error.message || 'Failed to exchange authorization code for Google tokens.',

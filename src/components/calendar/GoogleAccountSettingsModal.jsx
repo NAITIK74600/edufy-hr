@@ -77,8 +77,20 @@ export function GoogleAccountSettingsModal({ isOpen, onClose, onIntegrationChang
       const res = await apiClient.post('/calendar/google/connect')
       const authUrl = res?.authUrl || res?.data?.authUrl || (res?.data && typeof res.data === 'string' ? res.data : null)
       if (authUrl) {
-        // Redirect browser to Google OAuth 2.0 Consent Screen
-        window.location.href = authUrl
+        // Open authorization in a clean centered popup window
+        const width = 600
+        const height = 720
+        const left = Math.max(0, Math.round((window.screen.width - width) / 2))
+        const top = Math.max(0, Math.round((window.screen.height - height) / 2))
+        const popup = window.open(
+          authUrl,
+          'google_oauth_popup',
+          `width=${width},height=${height},top=${top},left=${left},status=no,toolbar=no,menubar=no`
+        )
+        // If popup was blocked by browser policy, fallback directly to full page redirect
+        if (!popup || popup.closed || typeof popup.closed === 'undefined') {
+          window.location.href = authUrl
+        }
       } else {
         setErrorMsg(res?.message || 'Failed to generate Google authorization URL. Please verify GOOGLE_CLIENT_ID in server environment.')
       }
