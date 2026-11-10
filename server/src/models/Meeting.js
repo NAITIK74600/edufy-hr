@@ -98,3 +98,4 @@ meetingSchema.index({ 'attendees.email': 1 })
 meetingSchema.index({ 'organizer.employeeId': 1 })
 
 export const Meeting = mongoose.models.Meeting ?? mongoose.model('Meeting', meetingSchema)
+

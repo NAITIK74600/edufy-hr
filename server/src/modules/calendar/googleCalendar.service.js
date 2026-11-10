@@ -522,12 +522,14 @@ export const googleCalendarService = {
    */
   async getIntegrationStatus() {
     const integration = await CalendarIntegration.findOne({ provider: 'google' }).lean().catch(() => null)
+    const isConn = Boolean(integration?.isConnected)
     return {
       googleConfigured: this.isConfigured(),
-      isConnected: Boolean(integration?.isConnected),
+      isConnected: isConn,
+      connected: isConn,
       accountEmail: integration?.accountEmail || null,
       lastSyncAt: integration?.lastSyncAt || null,
-      syncStatus: integration?.syncStatus || 'disconnected',
+      syncStatus: integration?.syncStatus || (isConn ? 'active' : 'disconnected'),
       lastError: integration?.lastError || null,
       defaultTimezone: integration?.settings?.defaultTimezone || 'Asia/Kolkata',
     }

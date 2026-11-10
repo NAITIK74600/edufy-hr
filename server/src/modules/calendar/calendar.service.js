@@ -379,7 +379,7 @@ export const calendarService = {
 
     // 4. Upsert Meeting document if this is a meeting event
     if (saved.category?.includes('Meeting') || saved.category?.includes('Session') || saved.category?.includes('Interview') || saved.meetingLink?.url) {
-      Meeting.findOneAndUpdate(
+      await Meeting.findOneAndUpdate(
         { calendarEventId: saved._id },
         {
           title: saved.title,

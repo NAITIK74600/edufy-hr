@@ -42,8 +42,26 @@ export function MeetingsDashboardView({
     setLoading(true)
     try {
       const res = await apiClient.get('/calendar/meetings/dashboard')
-      if (res.data?.success && res.data?.data) {
-        setDashboardData(res.data.data)
+      if (res?.today) {
+        setDashboardData(res)
+      } else if (res?.data?.today) {
+        setDashboardData(res.data)
+      } else if (Array.isArray(res?.data) || Array.isArray(res)) {
+        const all = Array.isArray(res?.data) ? res.data : res
+        const todayStr = new Date().toISOString().slice(0, 10)
+        setDashboardData({
+          summary: res?.counts || res?.summary || {
+            today: all.filter((m) => m.date === todayStr && m.status !== 'cancelled').length,
+            upcoming: all.filter((m) => m.date >= todayStr && m.status !== 'cancelled').length,
+            completed: all.filter((m) => m.date < todayStr && m.status !== 'cancelled').length,
+            cancelled: all.filter((m) => m.status === 'cancelled').length,
+          },
+          today: all.filter((m) => m.date === todayStr && m.status !== 'cancelled'),
+          upcoming: all.filter((m) => m.date >= todayStr && m.status !== 'cancelled'),
+          completed: all.filter((m) => m.date < todayStr && m.status !== 'cancelled'),
+          cancelled: all.filter((m) => m.status === 'cancelled'),
+          my: all,
+        })
       }
     } catch (err) {
       console.warn('[MeetingsDashboard] Failed to fetch dashboard meetings:', err.message)
@@ -466,3 +484,4 @@ export function MeetingsDashboardView({
     </div>
   )
 }
+

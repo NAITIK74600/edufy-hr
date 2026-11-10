@@ -19,6 +19,7 @@ export function GoogleAccountSettingsModal({ isOpen, onClose, onIntegrationChang
   const [loading, setLoading] = useState(false)
   const [disconnecting, setDisconnecting] = useState(false)
   const [connecting, setConnecting] = useState(false)
+  const [syncing, setSyncing] = useState(false)
   const [status, setStatus] = useState(null)
   const [feedback, setFeedback] = useState('')
   const [errorMsg, setErrorMsg] = useState('')
@@ -28,11 +29,12 @@ export function GoogleAccountSettingsModal({ isOpen, onClose, onIntegrationChang
     setErrorMsg('')
     try {
       const res = await apiClient.get('/calendar/integrations')
-      if (res.data?.success) {
-        setStatus(res.data.data)
+      const statusData = res?.data || res
+      if (res?.success || statusData?.googleConfigured !== undefined) {
+        setStatus(statusData)
       }
     } catch (err) {
-      setErrorMsg(err.response?.data?.error?.message || err.message || 'Failed to fetch Google integration status.')
+      setErrorMsg(err.message || 'Failed to fetch Google integration status.')
     } finally {
       setLoading(false)
     }
@@ -44,6 +46,27 @@ export function GoogleAccountSettingsModal({ isOpen, onClose, onIntegrationChang
     }
   }, [isOpen])
 
+  useEffect(() => {
+    const handleConnected = () => {
+      setFeedback('Google Workspace successfully connected!')
+      fetchStatus()
+      if (onIntegrationChanged) onIntegrationChanged()
+    }
+
+    window.addEventListener('edufyi:google-calendar-connected', handleConnected)
+    const handleMsg = (e) => {
+      if (e.data === 'google_calendar_connected') {
+        handleConnected()
+      }
+    }
+    window.addEventListener('message', handleMsg)
+
+    return () => {
+      window.removeEventListener('edufyi:google-calendar-connected', handleConnected)
+      window.removeEventListener('message', handleMsg)
+    }
+  }, [onIntegrationChanged])
+
   if (!isOpen) return null
 
   const handleConnect = async () => {
@@ -52,16 +75,37 @@ export function GoogleAccountSettingsModal({ isOpen, onClose, onIntegrationChang
     setFeedback('')
     try {
       const res = await apiClient.post('/calendar/google/connect')
-      if (res.data?.success && res.data?.data?.authUrl) {
+      const authUrl = res?.authUrl || res?.data?.authUrl || (res?.data && typeof res.data === 'string' ? res.data : null)
+      if (authUrl) {
         // Redirect browser to Google OAuth 2.0 Consent Screen
-        window.location.href = res.data.data.authUrl
+        window.location.href = authUrl
       } else {
-        setErrorMsg('Failed to generate Google authorization URL.')
+        setErrorMsg(res?.message || 'Failed to generate Google authorization URL. Please verify GOOGLE_CLIENT_ID in server environment.')
       }
     } catch (err) {
-      setErrorMsg(err.response?.data?.error?.message || err.message || 'Failed to initiate Google OAuth.')
+      setErrorMsg(err.message || 'Failed to initiate Google OAuth.')
     } finally {
       setConnecting(false)
+    }
+  }
+
+  const handleSync = async () => {
+    setSyncing(true)
+    setErrorMsg('')
+    setFeedback('')
+    try {
+      const res = await apiClient.post('/calendar/google/sync')
+      if (res?.success) {
+        setFeedback(res.message || 'Successfully synchronized Google Calendar events.')
+        await fetchStatus()
+        if (onIntegrationChanged) onIntegrationChanged()
+      } else {
+        setErrorMsg(res?.message || 'Failed to sync with Google Calendar.')
+      }
+    } catch (err) {
+      setErrorMsg(err.message || 'Failed to sync with Google Calendar.')
+    } finally {
+      setSyncing(false)
     }
   }
 
@@ -73,19 +117,21 @@ export function GoogleAccountSettingsModal({ isOpen, onClose, onIntegrationChang
     setErrorMsg('')
     try {
       const res = await apiClient.post('/calendar/google/disconnect')
-      if (res.data?.success) {
+      if (res?.success) {
         setFeedback('Google Workspace integration disconnected.')
         await fetchStatus()
         if (onIntegrationChanged) onIntegrationChanged()
+      } else {
+        setErrorMsg(res?.message || 'Failed to disconnect Google account.')
       }
     } catch (err) {
-      setErrorMsg(err.response?.data?.error?.message || err.message || 'Failed to disconnect Google account.')
+      setErrorMsg(err.message || 'Failed to disconnect Google account.')
     } finally {
       setDisconnecting(false)
     }
   }
 
-  const isConnected = Boolean(status?.connected)
+  const isConnected = Boolean(status?.connected || status?.isConnected)
   const isExpired = Boolean(status?.expired)
 
   return (
@@ -407,6 +453,30 @@ export function GoogleAccountSettingsModal({ isOpen, onClose, onIntegrationChang
               Close
             </button>
 
+            {isConnected && (
+              <button
+                type="button"
+                onClick={handleSync}
+                disabled={syncing}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '8px 14px',
+                  borderRadius: '8px',
+                  border: '1px solid #0d9488',
+                  background: '#f0fdf4',
+                  color: '#0f766e',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                <RefreshCw size={13} className={syncing ? 'spin' : ''} />
+                {syncing ? 'Syncing...' : 'Sync Calendar Events'}
+              </button>
+            )}
+
             <button
               type="button"
               onClick={handleConnect}
@@ -449,3 +519,4 @@ export function GoogleAccountSettingsModal({ isOpen, onClose, onIntegrationChang
     </div>
   )
 }
+

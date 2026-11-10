@@ -67,7 +67,11 @@ async function executeApiRequest(path, options = {}, retries = 2) {
 
   const body = await response.json().catch(() => null)
   if (!response.ok) {
-    const error = body?.error ?? {}
+    const errorMsg = body?.message || 
+                     (typeof body?.error === 'string' ? body.error : body?.error?.message) ||
+                     (body?.code ? `Error: ${body.code}` : undefined) ||
+                     `Request failed (${response.status})`
+    const error = (body?.error && typeof body.error === 'object') ? body.error : {}
     if (response.status === 401 && !path.startsWith('/auth/login')) {
       accessToken = null
       try {
@@ -79,9 +83,9 @@ async function executeApiRequest(path, options = {}, retries = 2) {
       window.dispatchEvent(new Event('edufyi:auth-expired'))
       throw new ApiError('Your session expired. Please sign in again.', { status: 401, code: 'AUTH_REQUIRED' })
     }
-    throw new ApiError(error.message ?? 'The request could not be completed.', {
+    throw new ApiError(errorMsg, {
       status: response.status,
-      code: error.code ?? 'REQUEST_FAILED',
+      code: error.code || body?.code || 'REQUEST_FAILED',
       fields: error.fields
     })
   }

@@ -8,6 +8,7 @@ import { findRoute, readPath } from './app/routes'
 import { LoadingState } from './components/ui'
 import './styles.css'
 import { hrStore } from './services/hrStore'
+import { apiClient } from './services/apiClient'
 
 // Route-based code splitting with React.lazy() for fast initial page load
 const LoginPage = lazy(() => import('./pages/LoginPage').then((m) => ({ default: m.LoginPage })))
@@ -192,6 +193,31 @@ function useRoute() {
 function App() {
   const route = useRoute()
   const { user, status } = useAuth()
+
+  // Detect and exchange Google OAuth 2.0 authorization code on redirect
+  useEffect(() => {
+    const searchParams = new URLSearchParams(window.location.search)
+    const code = searchParams.get('code')
+    const state = searchParams.get('state')
+    const scope = searchParams.get('scope')
+
+    if (code && (state?.includes('actor_') || state?.includes('edufyi') || scope?.includes('calendar') || scope?.includes('google'))) {
+      const exchangeOAuthCode = async () => {
+        try {
+          const res = await apiClient.post('/calendar/google/exchange-code', { code })
+          if (res?.success) {
+            // Clean the query parameters from URL without full reload
+            const cleanUrl = window.location.origin + window.location.pathname + window.location.hash
+            window.history.replaceState({}, document.title, cleanUrl)
+            window.dispatchEvent(new CustomEvent('edufyi:google-calendar-connected', { detail: res }))
+          }
+        } catch (err) {
+          console.warn('[Google OAuth Code Exchange Error]:', err?.message)
+        }
+      }
+      exchangeOAuthCode()
+    }
+  }, [])
 
   const isAuthRoute =
     route.path === '/login' ||

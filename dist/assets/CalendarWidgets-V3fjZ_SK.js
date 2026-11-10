@@ -1,7 +1,7 @@
 import { n as __toESM } from "./rolldown-runtime-CO0Nlsmt.js";
 import { $t as Calendar, A as ShieldCheck, B as Repeat, Bt as Clock, E as Sparkles, Ft as Download, Gt as CircleAlert, Ht as CircleX, Jt as ChevronLeft, K as Plus, L as Search, Ot as FileSpreadsheet, Pt as ExternalLink, Rt as Copy, Ut as CircleQuestionMark, V as RefreshCw, Wt as CircleCheck, Xt as Check, Y as Pen, _ as TriangleAlert, _n as require_react, at as MapPin, d as Users, dn as Bell, en as CalendarRange, f as User, fn as Award, ft as List, g as Upload, ht as Layers, i as X, n as ZoomIn, qt as ChevronRight, rn as Cake, st as LogOut, t as ZoomOut, tn as CalendarDays, u as Video, x as Target, xt as Grid3x3, y as Trash } from "./icons-vendor-CNlTUIuG.js";
 import { a as require_jsx_runtime } from "./motion-vendor-3i60tGNx.js";
-import { I as apiClient, T as hrStore, a as Field, t as Button } from "./index-Brl2RgGN.js";
+import { I as apiClient, T as hrStore, a as Field, t as Button } from "./index-BGr58VOo.js";
 // src/utils/dobHelper.js
 var import_react = /* @__PURE__ */ __toESM(require_react(), 1);
 /**
@@ -3720,7 +3720,25 @@ function MeetingsDashboardView({ onScheduleMeeting, onSelectMeeting, canSchedule
 		setLoading(true);
 		try {
 			const res = await apiClient.get("/calendar/meetings/dashboard");
-			if (res.data?.success && res.data?.data) setDashboardData(res.data.data);
+			if (res?.today) setDashboardData(res);
+			else if (res?.data?.today) setDashboardData(res.data);
+			else if (Array.isArray(res?.data) || Array.isArray(res)) {
+				const all = Array.isArray(res?.data) ? res.data : res;
+				const todayStr = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
+				setDashboardData({
+					summary: res?.counts || res?.summary || {
+						today: all.filter((m) => m.date === todayStr && m.status !== "cancelled").length,
+						upcoming: all.filter((m) => m.date >= todayStr && m.status !== "cancelled").length,
+						completed: all.filter((m) => m.date < todayStr && m.status !== "cancelled").length,
+						cancelled: all.filter((m) => m.status === "cancelled").length
+					},
+					today: all.filter((m) => m.date === todayStr && m.status !== "cancelled"),
+					upcoming: all.filter((m) => m.date >= todayStr && m.status !== "cancelled"),
+					completed: all.filter((m) => m.date < todayStr && m.status !== "cancelled"),
+					cancelled: all.filter((m) => m.status === "cancelled"),
+					my: all
+				});
+			}
 		} catch (err) {
 			console.warn("[MeetingsDashboard] Failed to fetch dashboard meetings:", err.message);
 		} finally {
@@ -4272,6 +4290,7 @@ function GoogleAccountSettingsModal({ isOpen, onClose, onIntegrationChanged }) {
 	const [loading, setLoading] = (0, import_react.useState)(false);
 	const [disconnecting, setDisconnecting] = (0, import_react.useState)(false);
 	const [connecting, setConnecting] = (0, import_react.useState)(false);
+	const [syncing, setSyncing] = (0, import_react.useState)(false);
 	const [status, setStatus] = (0, import_react.useState)(null);
 	const [feedback, setFeedback] = (0, import_react.useState)("");
 	const [errorMsg, setErrorMsg] = (0, import_react.useState)("");
@@ -4280,9 +4299,10 @@ function GoogleAccountSettingsModal({ isOpen, onClose, onIntegrationChanged }) {
 		setErrorMsg("");
 		try {
 			const res = await apiClient.get("/calendar/integrations");
-			if (res.data?.success) setStatus(res.data.data);
+			const statusData = res?.data || res;
+			if (res?.success || statusData?.googleConfigured !== void 0) setStatus(statusData);
 		} catch (err) {
-			setErrorMsg(err.response?.data?.error?.message || err.message || "Failed to fetch Google integration status.");
+			setErrorMsg(err.message || "Failed to fetch Google integration status.");
 		} finally {
 			setLoading(false);
 		}
@@ -4290,6 +4310,22 @@ function GoogleAccountSettingsModal({ isOpen, onClose, onIntegrationChanged }) {
 	(0, import_react.useEffect)(() => {
 		if (isOpen) fetchStatus();
 	}, [isOpen]);
+	(0, import_react.useEffect)(() => {
+		const handleConnected = () => {
+			setFeedback("Google Workspace successfully connected!");
+			fetchStatus();
+			if (onIntegrationChanged) onIntegrationChanged();
+		};
+		window.addEventListener("edufyi:google-calendar-connected", handleConnected);
+		const handleMsg = (e) => {
+			if (e.data === "google_calendar_connected") handleConnected();
+		};
+		window.addEventListener("message", handleMsg);
+		return () => {
+			window.removeEventListener("edufyi:google-calendar-connected", handleConnected);
+			window.removeEventListener("message", handleMsg);
+		};
+	}, [onIntegrationChanged]);
 	if (!isOpen) return null;
 	const handleConnect = async () => {
 		setConnecting(true);
@@ -4297,12 +4333,30 @@ function GoogleAccountSettingsModal({ isOpen, onClose, onIntegrationChanged }) {
 		setFeedback("");
 		try {
 			const res = await apiClient.post("/calendar/google/connect");
-			if (res.data?.success && res.data?.data?.authUrl) window.location.href = res.data.data.authUrl;
-			else setErrorMsg("Failed to generate Google authorization URL.");
+			const authUrl = res?.authUrl || res?.data?.authUrl || (res?.data && typeof res.data === "string" ? res.data : null);
+			if (authUrl) window.location.href = authUrl;
+			else setErrorMsg(res?.message || "Failed to generate Google authorization URL. Please verify GOOGLE_CLIENT_ID in server environment.");
 		} catch (err) {
-			setErrorMsg(err.response?.data?.error?.message || err.message || "Failed to initiate Google OAuth.");
+			setErrorMsg(err.message || "Failed to initiate Google OAuth.");
 		} finally {
 			setConnecting(false);
+		}
+	};
+	const handleSync = async () => {
+		setSyncing(true);
+		setErrorMsg("");
+		setFeedback("");
+		try {
+			const res = await apiClient.post("/calendar/google/sync");
+			if (res?.success) {
+				setFeedback(res.message || "Successfully synchronized Google Calendar events.");
+				await fetchStatus();
+				if (onIntegrationChanged) onIntegrationChanged();
+			} else setErrorMsg(res?.message || "Failed to sync with Google Calendar.");
+		} catch (err) {
+			setErrorMsg(err.message || "Failed to sync with Google Calendar.");
+		} finally {
+			setSyncing(false);
 		}
 	};
 	const handleDisconnect = async () => {
@@ -4310,18 +4364,19 @@ function GoogleAccountSettingsModal({ isOpen, onClose, onIntegrationChanged }) {
 		setDisconnecting(true);
 		setErrorMsg("");
 		try {
-			if ((await apiClient.post("/calendar/google/disconnect")).data?.success) {
+			const res = await apiClient.post("/calendar/google/disconnect");
+			if (res?.success) {
 				setFeedback("Google Workspace integration disconnected.");
 				await fetchStatus();
 				if (onIntegrationChanged) onIntegrationChanged();
-			}
+			} else setErrorMsg(res?.message || "Failed to disconnect Google account.");
 		} catch (err) {
-			setErrorMsg(err.response?.data?.error?.message || err.message || "Failed to disconnect Google account.");
+			setErrorMsg(err.message || "Failed to disconnect Google account.");
 		} finally {
 			setDisconnecting(false);
 		}
 	};
-	const isConnected = Boolean(status?.connected);
+	const isConnected = Boolean(status?.connected || status?.isConnected);
 	const isExpired = Boolean(status?.expired);
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
 		style: {
@@ -4708,43 +4763,68 @@ function GoogleAccountSettingsModal({ isOpen, onClose, onIntegrationChanged }) {
 							alignItems: "center",
 							gap: "10px"
 						},
-						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-							type: "button",
-							onClick: onClose,
-							style: {
-								padding: "8px 14px",
-								borderRadius: "8px",
-								border: "1px solid #cbd5e1",
-								background: "#ffffff",
-								color: "#475569",
-								fontSize: "12px",
-								fontWeight: 600,
-								cursor: "pointer"
-							},
-							children: "Close"
-						}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-							type: "button",
-							onClick: handleConnect,
-							disabled: connecting,
-							style: {
-								display: "inline-flex",
-								alignItems: "center",
-								gap: "6px",
-								padding: "8px 18px",
-								borderRadius: "8px",
-								border: "none",
-								background: "linear-gradient(135deg, #0d9488 0%, #0f766e 100%)",
-								color: "#ffffff",
-								fontSize: "12.5px",
-								fontWeight: 700,
-								cursor: "pointer",
-								boxShadow: "0 2px 8px rgba(13, 148, 136, 0.25)"
-							},
-							children: connecting ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(RefreshCw, {
-								size: 13,
-								className: "spin"
-							}), "Connecting..."] }) : isConnected ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(RefreshCw, { size: 13 }), "Reconnect Google"] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ExternalLink, { size: 13 }), "Connect Google Account"] })
-						})]
+						children: [
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+								type: "button",
+								onClick: onClose,
+								style: {
+									padding: "8px 14px",
+									borderRadius: "8px",
+									border: "1px solid #cbd5e1",
+									background: "#ffffff",
+									color: "#475569",
+									fontSize: "12px",
+									fontWeight: 600,
+									cursor: "pointer"
+								},
+								children: "Close"
+							}),
+							isConnected && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
+								type: "button",
+								onClick: handleSync,
+								disabled: syncing,
+								style: {
+									display: "inline-flex",
+									alignItems: "center",
+									gap: "6px",
+									padding: "8px 14px",
+									borderRadius: "8px",
+									border: "1px solid #0d9488",
+									background: "#f0fdf4",
+									color: "#0f766e",
+									fontSize: "12px",
+									fontWeight: 600,
+									cursor: "pointer"
+								},
+								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(RefreshCw, {
+									size: 13,
+									className: syncing ? "spin" : ""
+								}), syncing ? "Syncing..." : "Sync Calendar Events"]
+							}),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+								type: "button",
+								onClick: handleConnect,
+								disabled: connecting,
+								style: {
+									display: "inline-flex",
+									alignItems: "center",
+									gap: "6px",
+									padding: "8px 18px",
+									borderRadius: "8px",
+									border: "none",
+									background: "linear-gradient(135deg, #0d9488 0%, #0f766e 100%)",
+									color: "#ffffff",
+									fontSize: "12.5px",
+									fontWeight: 700,
+									cursor: "pointer",
+									boxShadow: "0 2px 8px rgba(13, 148, 136, 0.25)"
+								},
+								children: connecting ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(RefreshCw, {
+									size: 13,
+									className: "spin"
+								}), "Connecting..."] }) : isConnected ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(RefreshCw, { size: 13 }), "Reconnect Google"] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ExternalLink, { size: 13 }), "Connect Google Account"] })
+							})
+						]
 					})]
 				})
 			]

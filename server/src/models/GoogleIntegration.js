@@ -53,3 +53,4 @@ googleIntegrationSchema.set('toJSON', {
 
 export const GoogleIntegration =
   mongoose.models.GoogleIntegration ?? mongoose.model('GoogleIntegration', googleIntegrationSchema)
+
