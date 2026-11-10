@@ -333,7 +333,7 @@ function App() {
 }
 
 const container = document.getElementById('root')
-if (container) {
+if (container && (container instanceof Element || container.nodeType === 1)) {
   if (!window.__react_root) {
     window.__react_root = createRoot(container)
   }
@@ -351,13 +351,14 @@ if (container) {
 }
 
 // Register PWA Service Worker for Offline, Mobile App & Background Execution
+const ACTIVE_PWA_CACHE = 'edufyi-hr-pwa-v30'
 function registerServiceWorker() {
   if (typeof window !== 'undefined' && 'serviceWorker' in navigator && window.location.protocol.startsWith('http')) {
-    // Proactively purge old PWA caches (older than edufyi-hr-pwa-v26)
+    // Proactively purge old PWA caches
     if (typeof caches !== 'undefined') {
       caches.keys().then((keys) => {
         keys.forEach((key) => {
-          if (key !== 'edufyi-hr-pwa-v26') {
+          if (key !== ACTIVE_PWA_CACHE) {
             console.log('[PWA] Purging legacy cache:', key)
             caches.delete(key)
           }

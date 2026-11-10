@@ -3,6 +3,7 @@ import mongoose from 'mongoose'
 const notificationSchema = new mongoose.Schema({
   notificationId: { type: String, index: true },
   recipientId: { type: String, index: true, required: true },
+  recipientRole: { type: String, default: null, index: true },
   ownerId: { type: String, index: true },
   employeeId: { type: String, index: true },
   title: { type: String, required: true, trim: true },

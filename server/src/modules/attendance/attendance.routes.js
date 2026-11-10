@@ -133,7 +133,7 @@ export function createAttendanceRouter({ auth, service, useDatabase = false, per
         const saved = await AttendanceSettings.findOneAndUpdate(
           { key: 'office' },
           { $set: { ...values, key: 'office' } },
-          { upsert: true, new: true, returnDocument: 'after' }
+          { upsert: true, returnDocument: 'after' }
         ).lean()
         await AttendanceSettings.deleteMany({ key: { $ne: 'office' } }).catch(() => {})
         service.updateConfig(saved || values)

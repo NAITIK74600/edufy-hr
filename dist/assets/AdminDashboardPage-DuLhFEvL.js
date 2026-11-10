@@ -2,9 +2,9 @@ import { n as __toESM } from "./rolldown-runtime-CO0Nlsmt.js";
 import { $t as Calendar, A as ShieldCheck, Bt as Clock, Dt as FileText, F as Server, Ft as Download, Gt as CircleAlert, It as DollarSign, K as Plus, Kt as ChevronUp, L as Search, Mt as Eye, Nt as EyeOff, Ot as FileSpreadsheet, Pt as ExternalLink, Rt as Copy, St as Globe, T as SquarePen, V as RefreshCw, Wt as CircleCheck, Xt as Check, Yt as ChevronDown, _n as require_react, _t as Key, a as Wifi, an as Building, at as MapPin, ct as Lock, d as Users, fn as Award, g as Upload, gn as Activity, gt as Laptop, h as UserCheck, ht as Layers, i as X, j as ShieldAlert, k as Shield, m as UserPlus, mn as ArrowRight, on as Briefcase, ot as Mail, y as Trash, z as RotateCcw } from "./icons-vendor-CNlTUIuG.js";
 import { r as require_react_dom } from "./react-vendor-B_MMQ54z.js";
 import { a as require_jsx_runtime } from "./motion-vendor-3i60tGNx.js";
-import { A as copyTextToClipboard, D as storeAction, F as workspaceKeys, I as apiClient, M as generateAutoPassword, N as generateNextEmployeeCode, P as workspaceAction, S as INITIAL_DEPARTMENTS, T as hrStore, c as StatusBadge, h as getRoleBadgeLabel, i as EmptyState, j as formatCredentialsShareText, k as todayKey, o as PageHeader, t as Button, w as getRecommendedRoleConfig, x as useAuth } from "./index-h6RiD0DV.js";
+import { A as copyTextToClipboard, D as storeAction, F as workspaceKeys, I as apiClient, M as generateAutoPassword, N as generateNextEmployeeCode, P as workspaceAction, S as INITIAL_DEPARTMENTS, T as hrStore, c as StatusBadge, h as getRoleBadgeLabel, i as EmptyState, j as formatCredentialsShareText, k as todayKey, o as PageHeader, t as Button, w as getRecommendedRoleConfig, x as useAuth } from "./index-DZ25qf2r.js";
 import { n as formatINR } from "./currency-oCUzM0NR.js";
-import { n as HolidayCalendarShowcase, t as CalendarWidgets } from "./CalendarWidgets-DCU2mDJR.js";
+import { n as HolidayCalendarShowcase, t as CalendarWidgets } from "./CalendarWidgets-BpXozTFf.js";
 // src/pages/AdminDashboardPage.jsx
 var import_react = /* @__PURE__ */ __toESM(require_react(), 1);
 var import_react_dom = require_react_dom();
@@ -456,7 +456,7 @@ function AdminOverviewModule({ onNavigate }) {
 							fontWeight: 800,
 							color: "var(--ink, #0f172a)"
 						},
-						children: "Calendar & Workforce Celebrations"
+						children: "Calendar & Workforce Milestones"
 					}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
 						style: {
 							fontSize: "11.5px",

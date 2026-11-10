@@ -134,7 +134,7 @@ export function createNotificationRouter({ auth }) {
             ...(preferences ? { preferences } : {}),
           },
         },
-        { upsert: true, new: true }
+        { upsert: true, returnDocument: 'after' }
       )
 
       return res.status(200).json({

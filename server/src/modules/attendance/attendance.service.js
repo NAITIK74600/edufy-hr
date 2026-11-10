@@ -13,6 +13,7 @@ import mongoose from 'mongoose'
 import { dispatchAttendanceNotification, createUnifiedNotification } from '../../services/unifiedNotification.service.js'
 import { Employee } from '../../models/Employee.js'
 import { LeaveRequest } from '../../models/LeaveRequest.js'
+import { normalizeDateString } from '../../utils/dateHelper.js'
 
 export const DEFAULT_LOCATIONS = [
   {
@@ -558,9 +559,9 @@ export function createAttendanceService({ repository, companySettings = {}, leav
         const requests = await leaveRepository.listRequests({ employeeId: empObjId || employeeId })
         const match = (requests || []).find((r) => {
           if (r.status !== 'approved') return false
-          const sStr = typeof r.startDate === 'string' ? r.startDate.slice(0, 10) : new Date(r.startDate).toISOString().slice(0, 10)
-          const eStr = typeof r.endDate === 'string' ? r.endDate.slice(0, 10) : new Date(r.endDate).toISOString().slice(0, 10)
-          const inRange = workDate >= sStr && workDate <= eStr
+          const sStr = normalizeDateString(r.startDate)
+          const eStr = normalizeDateString(r.endDate) || sStr
+          const inRange = sStr && workDate >= sStr && workDate <= eStr
           const inBreakdown = Array.isArray(r.dayBreakdown) && r.dayBreakdown.some((d) => d.date === workDate)
           return inRange || inBreakdown
         })
@@ -2171,7 +2172,8 @@ export function createAttendanceService({ repository, companySettings = {}, leav
                   continue // Overnight shifts cross midnight, exempt from standard evening cutoff
                 }
                 // 2. Evening shifts ending after cut-off time:
-                if (!options.forceToday && workDate === todayDate && shiftDef.endMinutes && shiftDef.endMinutes > cutOffMinutes) {
+                const isEveningShift = shiftDef.shiftId === 'evening' || (shiftDef.name && shiftDef.name.toLowerCase().includes('evening')) || (shiftDef.startMinutes >= 13 * 60 && shiftDef.endMinutes > 21 * 60)
+                if (!options.forceToday && workDate === todayDate && isEveningShift && (currentMins < shiftDef.endMinutes || shiftDef.endMinutes > cutOffMinutes)) {
                   continue // Shift ends after cut-off time, ongoing session
                 }
                 // 3. Minimum duration safeguard (checked in less than 60 mins ago):
@@ -2494,7 +2496,8 @@ export function createAttendanceService({ repository, companySettings = {}, leav
           status: 'approved'
         }).lean()
         for (const req of (approvedHalfDayLeaves || [])) {
-          const reqDate = typeof req.startDate === 'string' ? req.startDate.slice(0, 10) : new Date(req.startDate).toISOString().slice(0, 10)
+          const reqDate = normalizeDateString(req.startDate)
+          if (!reqDate) continue
           let reqEmpCode = req.employeeCode || null
           if (!reqEmpCode && req.employeeId && mongoose.isValidObjectId(req.employeeId)) {
             try {

@@ -158,7 +158,7 @@ export function createMongoAttendanceRepository() {
       if (auditEvent) {
         updateDoc.$push = { auditEvents: auditEvent }
       }
-      return AttendanceRecord.findOneAndUpdate(filter, updateDoc, { new: true }).lean()
+      return AttendanceRecord.findOneAndUpdate(filter, updateDoc, { returnDocument: 'after' }).lean()
     },
     async findExpiredGeofenceRecords(now = new Date()) {
       const query = {
@@ -243,14 +243,14 @@ export function createMongoAttendanceRepository() {
           ],
         },
         updateDoc,
-        { new: true }
+        { returnDocument: 'after' }
       ).lean()
     },
     async recordAuditEvent(recordId, auditEvent) {
       return AttendanceRecord.findByIdAndUpdate(
         recordId,
         { $push: { auditEvents: auditEvent } },
-        { new: true }
+        { returnDocument: 'after' }
       ).lean()
     },
     async listAutoPunchOuts({ date, reviewStatus, limit = 50, skip = 0 } = {}) {
@@ -308,7 +308,7 @@ export function createMongoAttendanceRepository() {
           },
         }
       }
-      const updated = await AttendanceRecord.findByIdAndUpdate(recordId, updateDoc, { new: true }).lean()
+      const updated = await AttendanceRecord.findByIdAndUpdate(recordId, updateDoc, { returnDocument: 'after' }).lean()
       return updated ? { ...updated, id: String(updated._id) } : null
     },
         async findActiveTodayRecords(date) {
@@ -488,7 +488,7 @@ export function createMongoAttendanceRepository() {
       const doc = await AttendanceRecord.findOneAndUpdate(
         filter,
         { $set: { ...data, employeeId: resolvedCode } },
-        { upsert: true, new: true, returnDocument: 'after', setDefaultsOnInsert: true }
+        { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true }
       ).lean()
       return { id: String(doc._id), ...doc }
     },
@@ -501,21 +501,21 @@ export function createMongoAttendanceRepository() {
         doc = await AttendanceRecord.findByIdAndUpdate(
           cleanId,
           { $set: safeFields },
-          { new: true, returnDocument: 'after' }
+          { returnDocument: 'after' }
         ).lean()
       }
       if (!doc && fields.employeeId && fields.date) {
         doc = await AttendanceRecord.findOneAndUpdate(
           { employeeId: String(fields.employeeId).toUpperCase().trim(), date: String(fields.date).trim() },
           { $set: safeFields },
-          { new: true, returnDocument: 'after' }
+          { returnDocument: 'after' }
         ).lean()
       }
       if (!doc && cleanId) {
         doc = await AttendanceRecord.findOneAndUpdate(
           { id: cleanId },
           { $set: safeFields },
-          { new: true, returnDocument: 'after' }
+          { returnDocument: 'after' }
         ).lean()
       }
       return doc ? { id: String(doc._id), ...doc } : null

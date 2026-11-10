@@ -3,6 +3,7 @@ import { Employee } from '../../models/Employee.js'
 import { LeaveRequest } from '../../models/LeaveRequest.js'
 import { workspaceModels } from '../../models/Workspace.js'
 import { extractEmployeeDob } from './dobHelper.js'
+import { normalizeDateString, parseYearMonthSafe } from '../../utils/dateHelper.js'
 
 /**
  * Intelligent HR Automation & Calendar Sync Engine
@@ -30,7 +31,7 @@ export const calendarSyncService = {
     try {
       // 1. Sync Employee Lifecycle: Birthdays, Anniversaries, Joinings, Probations
       const employees = await Employee.find({
-        status: { $in: ['active', 'onboarding', 'probation', 'notice_period'] },
+        status: { $nin: ['inactive', 'resigned', 'terminated', 'deleted'] },
       }).lean().catch(() => [])
 
       for (const emp of employees) {
@@ -214,9 +215,12 @@ export const calendarSyncService = {
       }).lean().catch(() => [])
 
       for (const leave of approvedLeaves) {
-        if (!leave.startDate) continue
-        const lYear = parseInt(leave.startDate.slice(0, 4), 10)
-        if (lYear !== targetYear && (!leave.endDate || parseInt(leave.endDate.slice(0, 4), 10) !== targetYear)) {
+        const startStr = normalizeDateString(leave.startDate)
+        const endStr = normalizeDateString(leave.endDate) || startStr
+        if (!startStr) continue
+        const { year: lYear } = parseYearMonthSafe(startStr, targetYear)
+        const { year: lEndYear } = parseYearMonthSafe(endStr, targetYear)
+        if (lYear !== targetYear && lEndYear !== targetYear) {
           continue
         }
 
@@ -230,9 +234,9 @@ export const calendarSyncService = {
             title: `${empName} · On Leave (${leaveType})`,
             description: `Approved ${leaveType} leave for ${empName}. Duration: ${leave.daysCount || 1} day(s).`,
             category: 'Leave-related Entry',
-            date: leave.startDate,
-            startDate: leave.startDate,
-            endDate: leave.endDate || leave.startDate,
+            date: startStr,
+            startDate: startStr,
+            endDate: endStr,
             allDay: true,
             department: leave.department || 'General',
             organizer: { employeeId: leave.employeeId, name: empName },
@@ -248,7 +252,7 @@ export const calendarSyncService = {
               approvedBy: leave.approvedBy,
             },
           },
-          { upsert: true }
+          { upsert: true, returnDocument: 'after' }
         )
         summary.approvedLeaves++
       }
@@ -259,12 +263,14 @@ export const calendarSyncService = {
       }).lean().catch(() => [])
 
       for (const h of holidays) {
-        if (!h.date) continue
-        const hYear = parseInt(h.date.slice(0, 4), 10)
+        const hDateStr = normalizeDateString(h.date)
+        const hEndDateStr = normalizeDateString(h.endDate) || hDateStr
+        if (!hDateStr) continue
+        const { year: hYear } = parseYearMonthSafe(hDateStr, targetYear)
         if (!h.isRecurring && hYear !== targetYear) continue
 
-        const effectiveDate = h.isRecurring ? `${targetYear}-${h.date.slice(5)}` : h.date
-        const effectiveEndDate = h.endDate ? (h.isRecurring ? `${targetYear}-${h.endDate.slice(5)}` : h.endDate) : effectiveDate
+        const effectiveDate = h.isRecurring ? `${targetYear}-${hDateStr.slice(5)}` : hDateStr
+        const effectiveEndDate = h.endDate ? (h.isRecurring ? `${targetYear}-${hEndDateStr.slice(5)}` : hEndDateStr) : effectiveDate
         const sourceId = `holiday_${h._id}_${targetYear}`
 
         await CalendarEvent.findOneAndUpdate(
@@ -288,7 +294,7 @@ export const calendarSyncService = {
             sourceId,
             sourceData: { holidayId: String(h._id), isPaid: h.isPaid !== false },
           },
-          { upsert: true }
+          { upsert: true, returnDocument: 'after' }
         )
         summary.holidays++
       }

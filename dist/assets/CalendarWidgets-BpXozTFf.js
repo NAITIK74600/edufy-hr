@@ -1,7 +1,7 @@
 import { n as __toESM } from "./rolldown-runtime-CO0Nlsmt.js";
 import { $t as Calendar, B as Repeat, Bt as Clock, E as Sparkles, Ft as Download, Gt as CircleAlert, Ht as CircleX, Jt as ChevronLeft, K as Plus, L as Search, Ot as FileSpreadsheet, Pt as ExternalLink, Rt as Copy, Ut as CircleQuestionMark, Wt as CircleCheck, Xt as Check, Y as Pen, _n as require_react, at as MapPin, d as Users, dn as Bell, en as CalendarRange, fn as Award, ft as List, g as Upload, ht as Layers, i as X, n as ZoomIn, qt as ChevronRight, rn as Cake, t as ZoomOut, tn as CalendarDays, u as Video, x as Target, xt as Grid3x3, y as Trash } from "./icons-vendor-CNlTUIuG.js";
 import { a as require_jsx_runtime } from "./motion-vendor-3i60tGNx.js";
-import { I as apiClient, T as hrStore, a as Field, t as Button } from "./index-h6RiD0DV.js";
+import { I as apiClient, T as hrStore, a as Field, t as Button } from "./index-DZ25qf2r.js";
 // src/utils/dobHelper.js
 var import_react = /* @__PURE__ */ __toESM(require_react(), 1);
 /**
@@ -9,12 +9,43 @@ var import_react = /* @__PURE__ */ __toESM(require_react(), 1);
 */
 function parseDobToMonthDay(rawDob) {
 	if (!rawDob) return null;
-	if (rawDob instanceof Date && !isNaN(rawDob.getTime())) return {
-		month: rawDob.getUTCMonth() + 1,
-		day: String(rawDob.getUTCDate()).padStart(2, "0")
-	};
+	if (rawDob instanceof Date && !isNaN(rawDob.getTime())) {
+		try {
+			const parts = new Intl.DateTimeFormat("en-IN", {
+				timeZone: "Asia/Kolkata",
+				day: "2-digit",
+				month: "2-digit"
+			}).formatToParts(rawDob);
+			const dayPart = parts.find((p) => p.type === "day")?.value;
+			const monthPart = parts.find((p) => p.type === "month")?.value;
+			if (dayPart && monthPart) return {
+				month: parseInt(monthPart, 10),
+				day: dayPart.padStart(2, "0")
+			};
+		} catch {}
+		return {
+			month: rawDob.getUTCMonth() + 1,
+			day: String(rawDob.getUTCDate()).padStart(2, "0")
+		};
+	}
 	const str = String(rawDob).trim();
 	if (!str) return null;
+	if (str.includes("T")) {
+		const d = new Date(str);
+		if (!isNaN(d.getTime())) try {
+			const parts = new Intl.DateTimeFormat("en-IN", {
+				timeZone: "Asia/Kolkata",
+				day: "2-digit",
+				month: "2-digit"
+			}).formatToParts(d);
+			const dayPart = parts.find((p) => p.type === "day")?.value;
+			const monthPart = parts.find((p) => p.type === "month")?.value;
+			if (dayPart && monthPart) return {
+				month: parseInt(monthPart, 10),
+				day: dayPart.padStart(2, "0")
+			};
+		} catch {}
+	}
 	const ymdMatch = str.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/);
 	if (ymdMatch) {
 		const month = parseInt(ymdMatch[2], 10);
@@ -34,10 +65,25 @@ function parseDobToMonthDay(rawDob) {
 		};
 	}
 	const d = new Date(str);
-	if (!isNaN(d.getTime())) return {
-		month: d.getUTCMonth() + 1,
-		day: String(d.getUTCDate()).padStart(2, "0")
-	};
+	if (!isNaN(d.getTime())) {
+		try {
+			const parts = new Intl.DateTimeFormat("en-IN", {
+				timeZone: "Asia/Kolkata",
+				day: "2-digit",
+				month: "2-digit"
+			}).formatToParts(d);
+			const dayPart = parts.find((p) => p.type === "day")?.value;
+			const monthPart = parts.find((p) => p.type === "month")?.value;
+			if (dayPart && monthPart) return {
+				month: parseInt(monthPart, 10),
+				day: dayPart.padStart(2, "0")
+			};
+		} catch {}
+		return {
+			month: d.getUTCMonth() + 1,
+			day: String(d.getUTCDate()).padStart(2, "0")
+		};
+	}
 	return null;
 }
 function extractEmployeeDob(emp) {
@@ -5172,7 +5218,7 @@ function EnterpriseCalendar({ canManage = false, user = null, defaultView = "mon
 												children: cell.dayNum
 											}),
 											cellEvents.some((e) => e.type === "birthday" || e.category === "Birthday" || e.category === "Employee Birthday") && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
-												title: "Birthday celebrations on this day",
+												title: "Employee birthdays on this day",
 												style: {
 													fontSize: "11px",
 													lineHeight: 1
@@ -5559,7 +5605,7 @@ function EnterpriseCalendar({ canManage = false, user = null, defaultView = "mon
 											padding: "1px 6px",
 											borderRadius: "8px"
 										},
-										children: "Celebrations"
+										children: "Birthdays"
 									})]
 								}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 									style: {
@@ -7916,7 +7962,7 @@ function CalendarWidgets({ user = null }) {
 							borderRadius: "12px",
 							fontWeight: 700
 						},
-						children: birthdaysThisMonth.length > 0 ? `${birthdaysThisMonth.length} Celebrations` : nextUpcomingBirthday ? `Next: ${nextUpcomingBirthday.formattedDate || nextUpcomingBirthday.date?.slice(5)}` : "0 on record"
+						children: birthdaysThisMonth.length > 0 ? `${birthdaysThisMonth.length} Birthdays` : nextUpcomingBirthday ? `Next: ${nextUpcomingBirthday.formattedDate || nextUpcomingBirthday.date?.slice(5)}` : "0 on record"
 					})]
 				}), birthdaysThisMonth.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
 					style: {

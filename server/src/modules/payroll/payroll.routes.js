@@ -16,6 +16,7 @@ import {
 } from '../../services/payslip.service.js'
 import { generatePayslipPdf } from '../../services/pdf.service.js'
 import { sendPayslipEmail } from '../../services/mail.service.js'
+import { normalizeDateString } from '../../utils/dateHelper.js'
 
 function invalid(message, statusCode = 400) {
   return Object.assign(new Error(message), { statusCode, code: 'PAYROLL_VALIDATION_ERROR' })
@@ -385,9 +386,9 @@ async function context(employee, month) {
       if (dayOfWeek !== 0 && dayOfWeek !== 6 && !countedDates.has(dStr)) {
         const hasLeave = leave.some((req) => {
           if (req.status !== 'approved') return false
-          const s = typeof req.startDate === 'string' ? req.startDate.slice(0, 10) : new Date(req.startDate).toISOString().slice(0, 10)
-          const e = typeof req.endDate === 'string' ? req.endDate.slice(0, 10) : new Date(req.endDate).toISOString().slice(0, 10)
-          return dStr >= s && dStr <= e
+          const s = normalizeDateString(req.startDate)
+          const e = normalizeDateString(req.endDate) || s
+          return s && dStr >= s && dStr <= e
         })
         if (!hasLeave) {
           const dayOfMonth = curDate.getUTCDate()

@@ -108,13 +108,64 @@ export async function createUnifiedNotification({
   metadata = {},
   recipientRole = null,
 }) {
-  const targetRecipientId = String(employeeId || recipientId || '')
+  let targetRecipientId = String(employeeId || recipientId || '')
   if (!targetRecipientId && !recipientRole) {
     throw new Error('Notification requires an employeeId or recipientRole.')
   }
 
-  // 1. Idempotency check: prevent duplicate notifications
   const isDbReady = Boolean(mongoose.connection && mongoose.connection.readyState === 1)
+
+  // If a role-based notification is sent without a specific recipient ID, resolve actual active employees for that role
+  if (!targetRecipientId && recipientRole) {
+    let resolvedEmployees = []
+    if (isDbReady) {
+      try {
+        const { Employee } = await import('../models/Employee.js')
+        const normRole = String(recipientRole).toLowerCase()
+        let queryRoles = [normRole]
+        if (normRole === 'admin') queryRoles = ['admin', 'director', 'managing_director']
+        else if (normRole === 'hr') queryRoles = ['hr', 'hr_executive', 'admin']
+        else if (normRole === 'management' || normRole === 'leadership') queryRoles = ['admin', 'hr', 'director', 'managing_director', 'manager']
+
+        resolvedEmployees = await Employee.find({
+          role: { $in: queryRoles },
+          status: { $ne: 'inactive' },
+        }).select('_id employeeId email name role').lean()
+      } catch (err) {
+        console.warn('[unifiedNotification] Error resolving role recipients:', err.message)
+      }
+    }
+
+    if (resolvedEmployees && resolvedEmployees.length > 0) {
+      const results = await Promise.allSettled(
+        resolvedEmployees.map((emp) => {
+          const empId = emp.employeeId || String(emp._id)
+          const subKey = idempotencyKey ? `${idempotencyKey}_${empId}` : undefined
+          return createUnifiedNotification({
+            employeeId: empId,
+            recipientId: empId,
+            title,
+            message,
+            category,
+            eventType,
+            relatedEntityId,
+            targetUrl,
+            priority,
+            idempotencyKey: subKey,
+            metadata: { ...metadata, recipientEmployeeName: emp.name },
+            recipientRole,
+          })
+        })
+      )
+      const firstFulfilled = results.find((r) => r.status === 'fulfilled')
+      if (firstFulfilled) return firstFulfilled.value
+    }
+
+    // Fallback if no matching employees exist in DB or during cold setup:
+    targetRecipientId = `role_${String(recipientRole).toLowerCase()}`
+  }
+
+  // 1. Idempotency check: prevent duplicate notifications
   if (idempotencyKey && isDbReady) {
     try {
       const existing = await Notification.findOne({ idempotencyKey }).lean()
@@ -130,6 +181,7 @@ export async function createUnifiedNotification({
   const docData = {
     notificationId,
     recipientId: targetRecipientId,
+    recipientRole: recipientRole || null,
     ownerId: targetRecipientId,
     employeeId: targetRecipientId,
     title,

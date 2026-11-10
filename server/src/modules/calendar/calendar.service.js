@@ -7,6 +7,7 @@ import { Employee } from '../../models/Employee.js'
 import { googleCalendarService } from './googleCalendar.service.js'
 import { googleMapsService } from './googleMaps.service.js'
 import { calendarNotificationService } from './calendarNotification.service.js'
+import { normalizeDateString, parseYearMonthSafe } from '../../utils/dateHelper.js'
 
 function formatTime12(timeStr) {
   if (!timeStr) return null
@@ -121,8 +122,9 @@ export const calendarService = {
     // Process & expand recurring events within target year/month
     const results = []
     for (const ev of filteredEvents) {
-      const eYear = parseInt(ev.date.slice(0, 4), 10)
-      const eMonth = parseInt(ev.date.slice(5, 7), 10)
+      const evDate = normalizeDateString(ev.date)
+      if (!evDate) continue
+      const { year: eYear, month: eMonth } = parseYearMonthSafe(evDate, year)
 
       // Check if recurring
       if (ev.recurrence?.pattern && ev.recurrence.pattern !== 'none') {
@@ -133,7 +135,7 @@ export const calendarService = {
         if (year && eYear !== year) continue
         if (month && eMonth !== month) continue
 
-        results.push(this.formatEventPayload(ev, actorId, canManage))
+        results.push(this.formatEventPayload({ ...ev, date: evDate }, actorId, canManage))
       }
     }
 

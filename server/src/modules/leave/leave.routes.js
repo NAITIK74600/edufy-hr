@@ -128,7 +128,7 @@ export function createLeaveRouter({ auth, service }) {
 
         { _id: current._id, $expr: { $lte: [{ $add: ['$used', '$reserved'] }, allowance] } },
 
-        { $set: { allowance } }, { new: true, returnDocument: 'after', runValidators: true },
+        { $set: { allowance } }, { returnDocument: 'after', runValidators: true },
 
       ).lean() : (await LeaveBalance.create({ employeeId: empObjectId, leaveType: request.params.leaveType, allowance })).toObject()
 

@@ -1,5 +1,5 @@
 // Edufyi HR Progressive Web App (PWA) Service Worker
-const CACHE_NAME = 'edufyi-hr-pwa-v28'
+const CACHE_NAME = 'edufyi-hr-pwa-v30'
 const PRECACHE_ASSETS = [
   '/',
   '/index.html',

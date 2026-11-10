@@ -84,7 +84,8 @@ export function createEmployeeRouter({ auth, service, userStore, employeeReposit
       if (payload.identity && typeof payload.identity === 'object' && payload.identity.dob && !payload.dob) {
         payload.dob = payload.identity.dob
       }
-      if (payload.dob && payload.identity && typeof payload.identity === 'object') {
+      if (payload.dob) {
+        if (!payload.identity || typeof payload.identity !== 'object') payload.identity = {}
         payload.identity.dob = payload.dob
       }
       // If passportPhoto is uploaded, sync to avatarUrl automatically
@@ -355,7 +356,8 @@ export function createEmployeeRouter({ auth, service, userStore, employeeReposit
       if (updateBody.identity && typeof updateBody.identity === 'object' && updateBody.identity.dob && !updateBody.dob) {
         updateBody.dob = updateBody.identity.dob
       }
-      if (updateBody.dob && updateBody.identity && typeof updateBody.identity === 'object') {
+      if (updateBody.dob) {
+        if (!updateBody.identity || typeof updateBody.identity !== 'object') updateBody.identity = {}
         updateBody.identity.dob = updateBody.dob
       }
       if (isSelf) {

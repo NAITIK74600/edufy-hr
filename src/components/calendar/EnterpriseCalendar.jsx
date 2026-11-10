@@ -1686,9 +1686,9 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
                         {cell.dayNum}
                       </span>
 
-                      {/* Birthday / Celebration Indicator (Visible even on Mobile) */}
+                      {/* Birthday Indicator (Visible even on Mobile) */}
                       {cellEvents.some((e) => e.type === 'birthday' || e.category === 'Birthday' || e.category === 'Employee Birthday') && (
-                        <span title="Birthday celebrations on this day" style={{ fontSize: '11px', lineHeight: 1 }}>🎂</span>
+                        <span title="Employee birthdays on this day" style={{ fontSize: '11px', lineHeight: 1 }}>🎂</span>
                       )}
 
                       {/* Small badge count if multiple events on desktop */}
@@ -1980,7 +1980,7 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
                         <Cake size={13} /> {MONTH_NAMES[currentDate.getMonth()]} Birthdays ({birthdaysList.length})
                       </span>
                       <span style={{ fontSize: '10px', fontWeight: 700, color: '#db2777', background: '#ffffff', padding: '1px 6px', borderRadius: '8px' }}>
-                        Celebrations
+                        Birthdays
                       </span>
                     </div>
 

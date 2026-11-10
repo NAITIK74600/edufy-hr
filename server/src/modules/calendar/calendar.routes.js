@@ -15,6 +15,7 @@ import { googleCalendarService } from './googleCalendar.service.js'
 import { calendarSyncService } from './calendarSync.service.js'
 import { calendarNotificationService } from './calendarNotification.service.js'
 import { extractEmployeeDob } from './dobHelper.js'
+import { normalizeDateString, parseYearMonthSafe } from '../../utils/dateHelper.js'
 
 const MANAGEMENT_ROLES = new Set(['admin', 'hr', 'hr_executive', 'director', 'managing_director', 'co_founder'])
 const isManagement = (user) => Boolean(user?.role && MANAGEMENT_ROLES.has(user.role.toLowerCase()))
@@ -85,9 +86,10 @@ export function createCalendarRouter({ auth, useDatabase = true }) {
       const holidays = await workspaceModels.holidays.find(holidayQuery).lean().catch(() => [])
 
       for (const h of holidays) {
-        if (!h.date) continue
-        const hYear = parseInt(h.date.slice(0, 4), 10)
-        const hMonth = parseInt(h.date.slice(5, 7), 10)
+        const hDate = normalizeDateString(h.date)
+        const hEndDate = normalizeDateString(h.endDate) || hDate
+        if (!hDate) continue
+        const { year: hYear, month: hMonth } = parseYearMonthSafe(hDate, targetYear)
 
         // Year filter (handle recurring holidays across all years)
         if (!h.isRecurring && hYear !== targetYear) continue
@@ -108,12 +110,12 @@ export function createCalendarRouter({ auth, useDatabase = true }) {
 
         // Search query
         const name = (h.name || h.title || '').toLowerCase()
-        if (searchQuery && !name.includes(searchQuery) && !h.date.includes(searchQuery)) {
+        if (searchQuery && !name.includes(searchQuery) && !hDate.includes(searchQuery)) {
           continue
         }
 
-        const effectiveDate = h.isRecurring ? `${targetYear}-${h.date.slice(5)}` : h.date
-        const effectiveEndDate = h.endDate ? (h.isRecurring ? `${targetYear}-${h.endDate.slice(5)}` : h.endDate) : effectiveDate
+        const effectiveDate = h.isRecurring ? `${targetYear}-${hDate.slice(5)}` : hDate
+        const effectiveEndDate = h.endDate ? (h.isRecurring ? `${targetYear}-${hEndDate.slice(5)}` : hEndDate) : effectiveDate
 
         events.push({
           id: String(h._id),
@@ -140,7 +142,7 @@ export function createCalendarRouter({ auth, useDatabase = true }) {
       // 2. Fetch Employee Birthdays (Respecting privacy permissions)
       try {
         const employees = await Employee.find({
-          status: { $in: ['active', 'onboarding', 'notice', 'probation', 'Active', 'ONBOARDING'] },
+          status: { $nin: ['inactive', 'resigned', 'terminated', 'deleted'] },
         }).select('_id employeeId firstName lastName name displayName department designation avatarUrl dob identity dateOfBirth birthDate personalDetails').lean().catch((err) => {
           console.warn('[Calendar Birthday Query Error]:', err.message)
           return []
@@ -276,11 +278,13 @@ export function createCalendarRouter({ auth, useDatabase = true }) {
         const leaves = await LeaveRequest.find(leaveFilter).lean().catch(() => [])
 
         for (const l of leaves) {
-          if (!l.startDate) continue
-          const lYear = parseInt(l.startDate.slice(0, 4), 10)
-          const lMonth = parseInt(l.startDate.slice(5, 7), 10)
+          const lStartStr = normalizeDateString(l.startDate)
+          const lEndStr = normalizeDateString(l.endDate) || lStartStr
+          if (!lStartStr) continue
+          const { year: lYear, month: lMonth } = parseYearMonthSafe(lStartStr, targetYear)
+          const { year: lEndYear } = parseYearMonthSafe(lEndStr, targetYear)
 
-          if (lYear !== targetYear) continue
+          if (lYear !== targetYear && lEndYear !== targetYear) continue
           if (targetMonth && lMonth !== targetMonth) continue
 
           if (filterCategory !== 'all' && filterCategory.toLowerCase() !== 'leave') {
@@ -294,9 +298,9 @@ export function createCalendarRouter({ auth, useDatabase = true }) {
             name: l.employeeName,
             leaveType: l.leaveType,
             status: l.status,
-            date: l.startDate,
-            endDate: l.endDate || l.startDate,
-            day: getWeekday(l.startDate),
+            date: lStartStr,
+            endDate: lEndStr,
+            day: getWeekday(lStartStr),
             category: 'Leave',
             type: 'leave',
             department: l.department || 'General',
@@ -370,8 +374,9 @@ export function createCalendarRouter({ auth, useDatabase = true }) {
 
       // In-memory filter for flexible matching & recurring options
       holidays = holidays.filter((h) => {
-        if (!h.date) return false
-        const hYear = parseInt(h.date.slice(0, 4), 10)
+        const hDate = normalizeDateString(h.date)
+        if (!hDate) return false
+        const { year: hYear } = parseYearMonthSafe(hDate, year)
         if (!h.isRecurring && year && hYear !== year) return false
         if (category && category !== 'all' && (h.category || h.type || '').toLowerCase() !== category.toLowerCase()) return false
         if (department && department !== 'all') {
@@ -381,7 +386,7 @@ export function createCalendarRouter({ auth, useDatabase = true }) {
         }
         if (search) {
           const name = (h.name || h.title || '').toLowerCase()
-          if (!name.includes(search) && !h.date.includes(search)) return false
+          if (!name.includes(search) && !hDate.includes(search)) return false
         }
         return true
       })
@@ -595,7 +600,7 @@ export function createCalendarRouter({ auth, useDatabase = true }) {
 
       updates.updatedBy = actor.name || actor.displayName || 'Admin'
 
-      const updated = await workspaceModels.holidays.findByIdAndUpdate(holidayId, { $set: updates }, { new: true })
+      const updated = await workspaceModels.holidays.findByIdAndUpdate(holidayId, { $set: updates }, { returnDocument: 'after' })
 
       // Audit Log
       await CalendarAuditLog.create({
@@ -675,7 +680,8 @@ export function createCalendarRouter({ auth, useDatabase = true }) {
       }
 
       const targetYear = req.body.targetYear ? parseInt(req.body.targetYear, 10) : null
-      const targetDate = req.body.targetDate || (targetYear ? `${targetYear}-${original.date.slice(5)}` : null)
+      const origDate = normalizeDateString(original.date)
+      const targetDate = req.body.targetDate || (targetYear && origDate ? `${targetYear}-${origDate.slice(5)}` : null)
 
       if (!targetDate || !/^\d{4}-\d{2}-\d{2}$/.test(targetDate)) {
         return res.status(400).json({ success: false, code: 'VALIDATION_ERROR', message: 'Target date (YYYY-MM-DD) or valid targetYear is required.' })
@@ -899,8 +905,9 @@ export function createCalendarRouter({ auth, useDatabase = true }) {
 
       if (year) {
         holidays = holidays.filter((h) => {
-          if (!h.date) return false
-          const hYear = parseInt(h.date.slice(0, 4), 10)
+          const hDate = normalizeDateString(h.date)
+          if (!hDate) return false
+          const { year: hYear } = parseYearMonthSafe(hDate, year)
           return h.isRecurring || hYear === year
         })
       }
@@ -986,15 +993,18 @@ export function createCalendarRouter({ auth, useDatabase = true }) {
       // 1. Total Holidays This Year
       const allHolidays = await workspaceModels.holidays.find({ status: { $ne: 'inactive' } }).lean().catch(() => [])
       const thisYearHolidays = allHolidays.filter((h) => {
-        if (!h.date) return false
-        const y = parseInt(h.date.slice(0, 4), 10)
+        const hDate = normalizeDateString(h.date)
+        if (!hDate) return false
+        const { year: y } = parseYearMonthSafe(hDate, currentYear)
         return h.isRecurring || y === currentYear
       })
 
       // 2. Upcoming Holidays
       const upcomingHolidays = allHolidays
         .map((h) => {
-          const effectiveDate = h.isRecurring ? `${currentYear}-${h.date.slice(5)}` : h.date
+          const hDate = normalizeDateString(h.date)
+          if (!hDate) return null
+          const effectiveDate = h.isRecurring ? `${currentYear}-${hDate.slice(5)}` : hDate
           const daysRemaining = calculateDaysUntil(effectiveDate)
           return {
             id: String(h._id),
@@ -1005,7 +1015,7 @@ export function createCalendarRouter({ auth, useDatabase = true }) {
             daysRemaining,
           }
         })
-        .filter((h) => h.daysRemaining !== null && h.daysRemaining >= 0)
+        .filter((h) => h && h.daysRemaining !== null && h.daysRemaining >= 0)
         .sort((a, b) => a.daysRemaining - b.daysRemaining)
 
       const nextHoliday = upcomingHolidays.length > 0 ? upcomingHolidays[0] : null
@@ -1015,7 +1025,7 @@ export function createCalendarRouter({ auth, useDatabase = true }) {
       const upcomingBirthdays = []
       try {
         const activeEmployees = await Employee.find({
-          status: { $in: ['active', 'onboarding', 'notice', 'probation', 'Active', 'ONBOARDING'] },
+          status: { $nin: ['inactive', 'resigned', 'terminated', 'deleted'] },
         })
           .select('_id employeeId firstName lastName name displayName department designation avatarUrl dob identity dateOfBirth birthDate personalDetails')
           .lean()

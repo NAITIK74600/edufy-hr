@@ -12,6 +12,7 @@ export function currentPayrollMonth() {
 }
 
 export function normalizeEmployee(employee) {
+  if (!employee || typeof employee !== 'object') return null
   const mgrObj = typeof employee?.managerId === 'object' ? employee.managerId : null
   const mgrId = mgrObj?._id ? String(mgrObj._id) : (employee?.managerId ? String(employee.managerId) : null)
   const managerName = mgrObj?.name || employee?.managerName || employee?.reportingManager || ''
@@ -21,8 +22,20 @@ export function normalizeEmployee(employee) {
   const squad = employee?.squad || employee?.team || ''
   const squadId = employee?.squadId || employee?.teamId || ''
 
+  const normalizeDateStr = (val) => {
+    if (!val) return ''
+    if (typeof val === 'string') return val.slice(0, 10)
+    if (val instanceof Date && !isNaN(val.getTime())) return val.toISOString().slice(0, 10)
+    try {
+      const d = new Date(val)
+      return isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10)
+    } catch {
+      return ''
+    }
+  }
+
   const rawDob = employee?.dob || employee?.identity?.dob || employee?.dateOfBirth || employee?.birthDate || ''
-  const cleanDob = typeof rawDob === 'string' ? rawDob.slice(0, 10) : (rawDob instanceof Date ? rawDob.toISOString().slice(0, 10) : '')
+  const cleanDob = normalizeDateStr(rawDob)
 
   return {
     ...employee,
@@ -37,13 +50,13 @@ export function normalizeEmployee(employee) {
     teamLeadName: employee?.teamLeadName || '',
     dob: cleanDob,
     identity: { ...(employee?.identity || {}), dob: cleanDob || employee?.identity?.dob },
-    joiningDate: employee.joiningDate?.slice(0, 10) ?? '',
-    employmentEndDate: employee.employmentEndDate?.slice(0, 10) ?? '',
+    joiningDate: normalizeDateStr(employee.joiningDate),
+    employmentEndDate: normalizeDateStr(employee.employmentEndDate),
     exitDetails: employee.exitDetails
       ? {
         ...employee.exitDetails,
-        resignationDate: employee.exitDetails.resignationDate ? String(employee.exitDetails.resignationDate).slice(0, 10) : '',
-        lastWorkingDay: employee.exitDetails.lastWorkingDay ? String(employee.exitDetails.lastWorkingDay).slice(0, 10) : '',
+        resignationDate: normalizeDateStr(employee.exitDetails.resignationDate),
+        lastWorkingDay: normalizeDateStr(employee.exitDetails.lastWorkingDay),
       }
       : null,
     offboardingChecklist: Array.isArray(employee.offboardingChecklist) ? employee.offboardingChecklist : [],
@@ -122,7 +135,7 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
             const result = await apiClient.get(`/employees?limit=100&page=${page++}`)
             const batch = Array.isArray(result) ? result : (Array.isArray(result?.data) ? result.data : (Array.isArray(result?.records) ? result.records : []))
             if (batch.length === 0) break
-            list.push(...batch.map(normalizeEmployee))
+            list.push(...batch.map(normalizeEmployee).filter(Boolean))
             total = Number(result?.meta?.total ?? result?.pagination?.total ?? list.length)
             if (batch.length < 100) break
           } while (list.length < total && page <= 25)
@@ -171,7 +184,11 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
       const employees = data.employees || []
       if (!payrollAllowed) dataErrors.payroll = 'Your account does not have payroll access. Contact HR.'
       const prevEmployees = state().employees || []
-      const listToProcess = management ? employees : [...employees, ...data.directory.filter((record) => record.id !== employees[0].id).map(normalizeEmployee)]
+      const primaryEmpId = employees[0]?.id || employees[0]?._id
+      const directoryList = Array.isArray(data.directory) ? data.directory : []
+      const listToProcess = management
+        ? employees
+        : [...employees, ...directoryList.filter((record) => !primaryEmpId || (record.id !== primaryEmpId && record._id !== primaryEmpId)).map(normalizeEmployee)]
       const resolvedEmployees = listToProcess.map((fresh) => {
         const prev = prevEmployees.find((p) => p.id === fresh.id || p.employeeId === fresh.employeeId)
         if (prev?.status === 'notice' && fresh.status !== 'inactive' && !fresh.exitDetails && prev.exitDetails) {

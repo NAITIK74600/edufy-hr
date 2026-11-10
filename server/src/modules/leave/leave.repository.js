@@ -258,14 +258,14 @@ export function createMongoLeaveRepository() {
             const cl = await LeaveBalance.findOneAndUpdate(
               { employeeId: emp._id, leaveType: 'casual' },
               { $setOnInsert: { allowance: casualQuota, used: 0, reserved: 0, month: currentMonthKey, updatedAt: new Date() } },
-              { upsert: true, new: true }
+              { upsert: true, returnDocument: 'after' }
             ).populate('employeeId', 'employeeId name department employmentType designation role').lean()
             if (cl) records.push(cl)
 
             const sl = await LeaveBalance.findOneAndUpdate(
               { employeeId: emp._id, leaveType: 'sick' },
               { $setOnInsert: { allowance: sickQuota, used: 0, reserved: 0, month: currentMonthKey, updatedAt: new Date() } },
-              { upsert: true, new: true }
+              { upsert: true, returnDocument: 'after' }
             ).populate('employeeId', 'employeeId name department employmentType designation role').lean()
             if (sl) records.push(sl)
 

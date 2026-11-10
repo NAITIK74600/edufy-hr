@@ -277,7 +277,7 @@ export function CalendarWidgets({ user = null }) {
             </span>
             <span style={{ fontSize: '11px', background: '#fdf2f8', color: '#db2777', padding: '2px 8px', borderRadius: '12px', fontWeight: 700 }}>
               {birthdaysThisMonth.length > 0
-                ? `${birthdaysThisMonth.length} Celebrations`
+                ? `${birthdaysThisMonth.length} Birthdays`
                 : (nextUpcomingBirthday ? `Next: ${nextUpcomingBirthday.formattedDate || nextUpcomingBirthday.date?.slice(5)}` : '0 on record')}
             </span>
           </div>

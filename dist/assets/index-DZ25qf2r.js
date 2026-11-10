@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/LoginPage-DAR5fIbs.js","assets/rolldown-runtime-CO0Nlsmt.js","assets/icons-vendor-CNlTUIuG.js","assets/motion-vendor-3i60tGNx.js","assets/ModulePlaceholder-DU1-35SD.js","assets/EmployeeDashboardPage-D1i8AiDX.js","assets/currency-oCUzM0NR.js","assets/CalendarWidgets-DCU2mDJR.js","assets/CompanyDocumentsView-_ADd22GU.js","assets/companyDocumentsConstants-DUkgikMQ.js","assets/PayslipPreviewModal-dWoC5hUB.js","assets/react-vendor-B_MMQ54z.js","assets/pdf-vendor-BkGpxo0p.js","assets/payrollMatcher-DYZYv1X2.js","assets/OnboardingDossierView-DVms89WN.js","assets/AdminDashboardPage-CxAqcKPk.js","assets/EmployeesPage-Cys3jvQQ.js","assets/EmployeeComplianceStatusCard-C0uCrRGx.js","assets/OverviewPage-DXj7M2z9.js","assets/LeaveManagementPage-Ddl5XMa8.js","assets/WorkspaceModulePage-CS9ySrLU.js","assets/OrgHierarchyPage-HWg8mLjW.js","assets/PayrollPage-BeOcKmhx.js","assets/EmployeeProfilePage-LmEh_V8n.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/LoginPage-CVTHCcEx.js","assets/rolldown-runtime-CO0Nlsmt.js","assets/icons-vendor-CNlTUIuG.js","assets/motion-vendor-3i60tGNx.js","assets/ModulePlaceholder-C5Uponpi.js","assets/EmployeeDashboardPage-DNQlITxO.js","assets/currency-oCUzM0NR.js","assets/CalendarWidgets-BpXozTFf.js","assets/CompanyDocumentsView-B1zh45P3.js","assets/companyDocumentsConstants-DUkgikMQ.js","assets/PayslipPreviewModal-CD2NUsHP.js","assets/react-vendor-B_MMQ54z.js","assets/pdf-vendor-BkGpxo0p.js","assets/payrollMatcher-DYZYv1X2.js","assets/OnboardingDossierView-R9_YP_If.js","assets/AdminDashboardPage-DuLhFEvL.js","assets/EmployeesPage-CYLBpNUP.js","assets/EmployeeComplianceStatusCard-D_eHFEbM.js","assets/OverviewPage-73XRT9xg.js","assets/LeaveManagementPage-B63cBRCk.js","assets/WorkspaceModulePage-D-Su4gnB.js","assets/OrgHierarchyPage-BQPg0cV6.js","assets/PayrollPage-DV9Wha-C.js","assets/EmployeeProfilePage-3TpQQMuA.js"])))=>i.map(i=>d[i]);
 import { n as __toESM } from "./rolldown-runtime-CO0Nlsmt.js";
 import { $ as Network, A as ShieldCheck, D as Smartphone, Dt as FileText, E as Sparkles, Et as FingerprintPattern, Ft as Download, Gt as CircleAlert, I as Send, K as Plus, M as Share, Mt as Eye, Nt as EyeOff, P as Settings2, Qt as Camera, Tt as FolderOpen, Ut as CircleQuestionMark, Vt as Clock3, Wt as CircleCheck, Yt as ChevronDown, _n as require_react, an as Building, at as MapPin, b as Ticket, c as VolumeX, cn as Bot, ct as Lock, d as Users, dn as Bell, dt as LoaderCircle, f as User, gt as Laptop, h as UserCheck, i as X, jt as FileChartColumnIncreasing, l as Volume2, ln as BookOpen, m as UserPlus, mt as LayoutDashboard, nt as Menu, rt as Megaphone, s as WalletCards, sn as BriefcaseBusiness, st as LogOut, tn as CalendarDays, vt as KeyRound, w as SquarePlus, x as Target, y as Trash, yt as House } from "./icons-vendor-CNlTUIuG.js";
 import { n as require_client, r as require_react_dom } from "./react-vendor-B_MMQ54z.js";
@@ -652,6 +652,7 @@ function currentPayrollMonth() {
 	});
 }
 function normalizeEmployee(employee) {
+	if (!employee || typeof employee !== "object") return null;
 	const mgrObj = typeof employee?.managerId === "object" ? employee.managerId : null;
 	const mgrId = mgrObj?._id ? String(mgrObj._id) : employee?.managerId ? String(employee.managerId) : null;
 	const managerName = mgrObj?.name || employee?.managerName || employee?.reportingManager || "";
@@ -659,8 +660,18 @@ function normalizeEmployee(employee) {
 	const teamId = employee?.teamId || employee?.squadId || "";
 	const squad = employee?.squad || employee?.team || "";
 	const squadId = employee?.squadId || employee?.teamId || "";
-	const rawDob = employee?.dob || employee?.identity?.dob || employee?.dateOfBirth || employee?.birthDate || "";
-	const cleanDob = typeof rawDob === "string" ? rawDob.slice(0, 10) : rawDob instanceof Date ? rawDob.toISOString().slice(0, 10) : "";
+	const normalizeDateStr = (val) => {
+		if (!val) return "";
+		if (typeof val === "string") return val.slice(0, 10);
+		if (val instanceof Date && !isNaN(val.getTime())) return val.toISOString().slice(0, 10);
+		try {
+			const d = new Date(val);
+			return isNaN(d.getTime()) ? "" : d.toISOString().slice(0, 10);
+		} catch {
+			return "";
+		}
+	};
+	const cleanDob = normalizeDateStr(employee?.dob || employee?.identity?.dob || employee?.dateOfBirth || employee?.birthDate || "");
 	return {
 		...employee,
 		id: String(employee?.id ?? employee?._id),
@@ -677,12 +688,12 @@ function normalizeEmployee(employee) {
 			...employee?.identity || {},
 			dob: cleanDob || employee?.identity?.dob
 		},
-		joiningDate: employee.joiningDate?.slice(0, 10) ?? "",
-		employmentEndDate: employee.employmentEndDate?.slice(0, 10) ?? "",
+		joiningDate: normalizeDateStr(employee.joiningDate),
+		employmentEndDate: normalizeDateStr(employee.employmentEndDate),
 		exitDetails: employee.exitDetails ? {
 			...employee.exitDetails,
-			resignationDate: employee.exitDetails.resignationDate ? String(employee.exitDetails.resignationDate).slice(0, 10) : "",
-			lastWorkingDay: employee.exitDetails.lastWorkingDay ? String(employee.exitDetails.lastWorkingDay).slice(0, 10) : ""
+			resignationDate: normalizeDateStr(employee.exitDetails.resignationDate),
+			lastWorkingDay: normalizeDateStr(employee.exitDetails.lastWorkingDay)
 		} : null,
 		offboardingChecklist: Array.isArray(employee.offboardingChecklist) ? employee.offboardingChecklist : []
 	};
@@ -756,7 +767,7 @@ function createConnectedStore(store, notify, rawLocal = {}) {
 						const result = await apiClient.get(`/employees?limit=100&page=${page++}`);
 						const batch = Array.isArray(result) ? result : Array.isArray(result?.data) ? result.data : Array.isArray(result?.records) ? result.records : [];
 						if (batch.length === 0) break;
-						list.push(...batch.map(normalizeEmployee));
+						list.push(...batch.map(normalizeEmployee).filter(Boolean));
 						total = Number(result?.meta?.total ?? result?.pagination?.total ?? list.length);
 						if (batch.length < 100) break;
 					} while (list.length < total && page <= 25);
@@ -803,7 +814,9 @@ function createConnectedStore(store, notify, rawLocal = {}) {
 			const employees = data.employees || [];
 			if (!payrollAllowed) dataErrors.payroll = "Your account does not have payroll access. Contact HR.";
 			const prevEmployees = state().employees || [];
-			const finalEmployees = (management ? employees : [...employees, ...data.directory.filter((record) => record.id !== employees[0].id).map(normalizeEmployee)]).map((fresh) => {
+			const primaryEmpId = employees[0]?.id || employees[0]?._id;
+			const directoryList = Array.isArray(data.directory) ? data.directory : [];
+			const finalEmployees = (management ? employees : [...employees, ...directoryList.filter((record) => !primaryEmpId || record.id !== primaryEmpId && record._id !== primaryEmpId).map(normalizeEmployee)]).map((fresh) => {
 				const prev = prevEmployees.find((p) => p.id === fresh.id || p.employeeId === fresh.employeeId);
 				if (prev?.status === "notice" && fresh.status !== "inactive" && !fresh.exitDetails && prev.exitDetails) return {
 					...fresh,
@@ -17252,19 +17265,19 @@ function ConfirmationDialog({ open, title, message, confirmLabel = "Confirm", on
 	}), document.body);
 }
 // src/main.jsx
-var LoginPage = (0, import_react.lazy)(() => __vitePreload(() => import("./LoginPage-DAR5fIbs.js").then((m) => ({ default: m.LoginPage })), __vite__mapDeps([0,1,2,3])));
-var NotFoundPage = (0, import_react.lazy)(() => __vitePreload(() => import("./ModulePlaceholder-DU1-35SD.js").then((m) => ({ default: m.NotFoundPage })), __vite__mapDeps([4,2,1,3])));
-var EmployeeDashboardPage = (0, import_react.lazy)(() => __vitePreload(() => import("./EmployeeDashboardPage-D1i8AiDX.js").then((m) => ({ default: m.EmployeeDashboardPage })), __vite__mapDeps([5,1,2,3,6,7,8,9,10,11,12,13,14])));
-var AccessDeniedPage = (0, import_react.lazy)(() => __vitePreload(() => import("./EmployeeDashboardPage-D1i8AiDX.js").then((m) => ({ default: m.AccessDeniedPage })), __vite__mapDeps([5,1,2,3,6,7,8,9,10,11,12,13,14])));
-var AdminDashboardPage = (0, import_react.lazy)(() => __vitePreload(() => import("./AdminDashboardPage-CxAqcKPk.js").then((m) => ({ default: m.AdminDashboardPage })), __vite__mapDeps([15,1,2,11,3,6,7])));
-var AdminUsersModule = (0, import_react.lazy)(() => __vitePreload(() => import("./AdminDashboardPage-CxAqcKPk.js").then((m) => ({ default: m.AdminUsersModule })), __vite__mapDeps([15,1,2,11,3,6,7])));
-var EmployeesPage = (0, import_react.lazy)(() => __vitePreload(() => import("./EmployeesPage-Cys3jvQQ.js").then((m) => ({ default: m.EmployeesPage })), __vite__mapDeps([16,1,2,3,6,14,11,13,17,9])));
-var OverviewPage = (0, import_react.lazy)(() => __vitePreload(() => import("./OverviewPage-DXj7M2z9.js").then((m) => ({ default: m.OverviewPage })), __vite__mapDeps([18,1,2,3,7])));
-var LeaveManagementPage = (0, import_react.lazy)(() => __vitePreload(() => import("./LeaveManagementPage-Ddl5XMa8.js").then((m) => ({ default: m.LeaveManagementPage })), __vite__mapDeps([19,1,2,11,3])));
-var WorkspaceModulePage = (0, import_react.lazy)(() => __vitePreload(() => import("./WorkspaceModulePage-CS9ySrLU.js").then((m) => ({ default: m.WorkspaceModulePage })), __vite__mapDeps([20,1,2,11,3,6,7,15,8,9])));
-var OrgHierarchyPage = (0, import_react.lazy)(() => __vitePreload(() => import("./OrgHierarchyPage-HWg8mLjW.js").then((m) => ({ default: m.OrgHierarchyPage })), __vite__mapDeps([21,1,2,3])));
-var PayrollPage = (0, import_react.lazy)(() => __vitePreload(() => import("./PayrollPage-BeOcKmhx.js").then((m) => ({ default: m.PayrollPage })), __vite__mapDeps([22,1,2,3,10,11,12,13])));
-var EmployeeProfilePage = (0, import_react.lazy)(() => __vitePreload(() => import("./EmployeeProfilePage-LmEh_V8n.js").then((m) => ({ default: m.EmployeeProfilePage })), __vite__mapDeps([23,1,2,3,6,14,11,13,17,9])));
+var LoginPage = (0, import_react.lazy)(() => __vitePreload(() => import("./LoginPage-CVTHCcEx.js").then((m) => ({ default: m.LoginPage })), __vite__mapDeps([0,1,2,3])));
+var NotFoundPage = (0, import_react.lazy)(() => __vitePreload(() => import("./ModulePlaceholder-C5Uponpi.js").then((m) => ({ default: m.NotFoundPage })), __vite__mapDeps([4,2,1,3])));
+var EmployeeDashboardPage = (0, import_react.lazy)(() => __vitePreload(() => import("./EmployeeDashboardPage-DNQlITxO.js").then((m) => ({ default: m.EmployeeDashboardPage })), __vite__mapDeps([5,1,2,3,6,7,8,9,10,11,12,13,14])));
+var AccessDeniedPage = (0, import_react.lazy)(() => __vitePreload(() => import("./EmployeeDashboardPage-DNQlITxO.js").then((m) => ({ default: m.AccessDeniedPage })), __vite__mapDeps([5,1,2,3,6,7,8,9,10,11,12,13,14])));
+var AdminDashboardPage = (0, import_react.lazy)(() => __vitePreload(() => import("./AdminDashboardPage-DuLhFEvL.js").then((m) => ({ default: m.AdminDashboardPage })), __vite__mapDeps([15,1,2,11,3,6,7])));
+var AdminUsersModule = (0, import_react.lazy)(() => __vitePreload(() => import("./AdminDashboardPage-DuLhFEvL.js").then((m) => ({ default: m.AdminUsersModule })), __vite__mapDeps([15,1,2,11,3,6,7])));
+var EmployeesPage = (0, import_react.lazy)(() => __vitePreload(() => import("./EmployeesPage-CYLBpNUP.js").then((m) => ({ default: m.EmployeesPage })), __vite__mapDeps([16,1,2,3,6,14,11,13,17,9])));
+var OverviewPage = (0, import_react.lazy)(() => __vitePreload(() => import("./OverviewPage-73XRT9xg.js").then((m) => ({ default: m.OverviewPage })), __vite__mapDeps([18,1,2,3,7])));
+var LeaveManagementPage = (0, import_react.lazy)(() => __vitePreload(() => import("./LeaveManagementPage-B63cBRCk.js").then((m) => ({ default: m.LeaveManagementPage })), __vite__mapDeps([19,1,2,11,3])));
+var WorkspaceModulePage = (0, import_react.lazy)(() => __vitePreload(() => import("./WorkspaceModulePage-D-Su4gnB.js").then((m) => ({ default: m.WorkspaceModulePage })), __vite__mapDeps([20,1,2,11,3,6,7,15,8,9])));
+var OrgHierarchyPage = (0, import_react.lazy)(() => __vitePreload(() => import("./OrgHierarchyPage-BQPg0cV6.js").then((m) => ({ default: m.OrgHierarchyPage })), __vite__mapDeps([21,1,2,3])));
+var PayrollPage = (0, import_react.lazy)(() => __vitePreload(() => import("./PayrollPage-DV9Wha-C.js").then((m) => ({ default: m.PayrollPage })), __vite__mapDeps([22,1,2,3,10,11,12,13])));
+var EmployeeProfilePage = (0, import_react.lazy)(() => __vitePreload(() => import("./EmployeeProfilePage-3TpQQMuA.js").then((m) => ({ default: m.EmployeeProfilePage })), __vite__mapDeps([23,1,2,3,6,14,11,13,17,9])));
 var ErrorBoundary = class extends import_react.Component {
 	constructor(props) {
 		super(props);
@@ -17554,18 +17567,19 @@ function App() {
 	});
 }
 var container = document.getElementById("root");
-if (container) {
+if (container && (container instanceof Element || container.nodeType === 1)) {
 	if (!window.__react_root) window.__react_root = (0, import_client.createRoot)(container);
 	window.__react_root.render(/* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_react.StrictMode, { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ErrorBoundary, { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MotionConfig, {
 		reducedMotion: "user",
 		children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AuthProvider, { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(App, {}) })
 	}) }) }));
 }
+var ACTIVE_PWA_CACHE = "edufyi-hr-pwa-v30";
 function registerServiceWorker() {
 	if (typeof window !== "undefined" && "serviceWorker" in navigator && window.location.protocol.startsWith("http")) {
 		if (typeof caches !== "undefined") caches.keys().then((keys) => {
 			keys.forEach((key) => {
-				if (key !== "edufyi-hr-pwa-v26") {
+				if (key !== ACTIVE_PWA_CACHE) {
 					console.log("[PWA] Purging legacy cache:", key);
 					caches.delete(key);
 				}
