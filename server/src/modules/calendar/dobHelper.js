@@ -62,3 +62,4 @@ export function extractEmployeeDob(emp) {
 
   return parseDobToMonthDay(rawDob)
 }
+

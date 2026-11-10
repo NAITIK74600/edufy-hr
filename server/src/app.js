@@ -429,13 +429,32 @@ export function createApp(options = {}) {
       },
     }))
   }
+  // Explicit non-cached routes for PWA Service Worker & Manifest
+  app.get(['/sw.js', '/manifest.json'], (req, res, next) => {
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
+    res.setHeader('Pragma', 'no-cache')
+    res.setHeader('Expires', '0')
+    const fileName = req.path.replace(/^\//, '')
+    const publicPath = path.resolve(process.cwd(), 'public', fileName)
+    const distPath = options.staticDirectory ? path.resolve(options.staticDirectory, fileName) : null
+    const targetPath = fs.existsSync(publicPath) ? publicPath : (distPath && fs.existsSync(distPath) ? distPath : null)
+    if (targetPath) {
+      if (fileName.endsWith('.js')) res.setHeader('Content-Type', 'application/javascript')
+      if (fileName.endsWith('.json')) res.setHeader('Content-Type', 'application/manifest+json')
+      return res.sendFile(targetPath)
+    }
+    next()
+  })
+
   const publicDir = path.resolve(process.cwd(), 'public')
   if (fs.existsSync(publicDir)) {
     app.use(express.static(publicDir, {
       maxAge: '1y',
       setHeaders: (res, filePath) => {
-        if (filePath.endsWith('.html')) {
+        if (filePath.endsWith('.html') || filePath.endsWith('sw.js') || filePath.endsWith('manifest.json')) {
           res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
+          res.setHeader('Pragma', 'no-cache')
+          res.setHeader('Expires', '0')
         } else if (isCacheableStatic(filePath) || filePath.includes(`${path.sep}fonts${path.sep}`) || filePath.includes('/fonts/')) {
           res.setHeader('Cache-Control', 'public, max-age=31536000, immutable')
         }
@@ -446,8 +465,10 @@ export function createApp(options = {}) {
     app.use(express.static(options.staticDirectory, {
       maxAge: '1y',
       setHeaders: (res, filePath) => {
-        if (filePath.endsWith('.html')) {
+        if (filePath.endsWith('.html') || filePath.endsWith('sw.js') || filePath.endsWith('manifest.json')) {
           res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
+          res.setHeader('Pragma', 'no-cache')
+          res.setHeader('Expires', '0')
         } else if (filePath.includes(`${path.sep}assets${path.sep}`) || filePath.includes('/assets/') || isCacheableStatic(filePath)) {
           res.setHeader('Cache-Control', 'public, max-age=31536000, immutable')
         }
@@ -459,6 +480,8 @@ export function createApp(options = {}) {
         return next()
       }
       response.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
+      response.setHeader('Pragma', 'no-cache')
+      response.setHeader('Expires', '0')
       return response.sendFile(path.join(options.staticDirectory, 'index.html'))
     })
   } else {

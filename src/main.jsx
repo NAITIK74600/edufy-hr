@@ -96,16 +96,17 @@ class ErrorBoundary extends Component {
 
 function DataStatus({ children }) {
   const [state, setState] = useState(() => hrStore.getState())
-  const [tookLong, setTookLong] = useState(false)
+  const [isInitialLoading, setIsInitialLoading] = useState(() => !hrStore.getState()?.dataReady && (!hrStore.getState()?.employees || hrStore.getState().employees.length === 0))
 
   useEffect(() => hrStore.subscribe(setState), [])
 
   useEffect(() => {
     if (state.dataReady) {
-      setTookLong(false)
+      setIsInitialLoading(false)
       return
     }
-    const timer = setTimeout(() => setTookLong(true), 2500)
+    // Never trap the user in a loading spinner: wait at most 1.2s on cold launch, then show UI smoothly
+    const timer = setTimeout(() => setIsInitialLoading(false), 1200)
     return () => clearTimeout(timer)
   }, [state.dataReady])
 
@@ -166,53 +167,29 @@ function DataStatus({ children }) {
           </button>
         </div>
       )}
-      {!state.dataReady ? (
-        state.dataError ? (
-          <div style={{ padding: '60px 24px', textAlign: 'center' }}>
-            <p style={{ color: '#b42318', marginBottom: '16px', fontSize: '14.5px', fontWeight: 600 }}>
-              {state.dataError}
-            </p>
-            <button
-              type="button"
-              className="ui-button primary"
-              onClick={() => hrStore.perform(() => hrStore.refresh())}
-            >
-              Retry Connection
-            </button>
-          </div>
-        ) : (
-          <div style={{ textAlign: 'center' }}>
-            <LoadingState />
-            {tookLong && (
-              <div style={{ marginTop: '16px', color: '#586D72', fontSize: '13px' }}>
-                <p>Syncing enterprise database records... Still working.</p>
-                <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', marginTop: '8px' }}>
-                  <button
-                    type="button"
-                    className="ui-button secondary"
-                    style={{ padding: '6px 14px', fontSize: '12px' }}
-                    onClick={() => hrStore.perform(() => hrStore.refresh())}
-                  >
-                    Retry Sync
-                  </button>
-                  <button
-                    type="button"
-                    className="ui-button primary"
-                    style={{ padding: '6px 14px', fontSize: '12px' }}
-                    onClick={() => {
-                      const s = hrStore.getState()
-                      if (s) s.dataReady = true
-                      setState((prev) => ({ ...prev, dataReady: true }))
-                    }}
-                  >
-                    Continue to Dashboard
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        )
-      ) : children}
+
+      {/* Non-intrusive enterprise sync progress bar when syncing in background */}
+      {!state.dataReady && !state.dataError && (
+        <div
+          style={{
+            height: '3px',
+            width: '100%',
+            background: 'linear-gradient(90deg, #006e6f 0%, #00d2ff 50%, #006e6f 100%)',
+            backgroundSize: '200% 100%',
+            animation: 'edufyiShimmer 1.5s infinite linear',
+            borderRadius: '2px',
+            marginBottom: '10px',
+          }}
+        />
+      )}
+
+      {isInitialLoading ? (
+        <div style={{ textAlign: 'center', padding: '60px 20px' }}>
+          <LoadingState />
+        </div>
+      ) : (
+        children
+      )}
     </>
   )
 }
@@ -393,16 +370,28 @@ if (container) {
 // Register PWA Service Worker for Offline, Mobile App & Background Execution
 function registerServiceWorker() {
   if (typeof window !== 'undefined' && 'serviceWorker' in navigator && window.location.protocol.startsWith('http')) {
-    let refreshing = false;
+    // Proactively purge old PWA caches (older than edufyi-hr-pwa-v26)
+    if (typeof caches !== 'undefined') {
+      caches.keys().then((keys) => {
+        keys.forEach((key) => {
+          if (key !== 'edufyi-hr-pwa-v26') {
+            console.log('[PWA] Purging legacy cache:', key)
+            caches.delete(key)
+          }
+        })
+      }).catch(() => {})
+    }
+
+    let refreshing = false
     navigator.serviceWorker.addEventListener('controllerchange', () => {
       if (!refreshing) {
-        refreshing = true;
-        window.location.reload();
+        refreshing = true
+        window.location.reload()
       }
-    });
+    })
 
-navigator.serviceWorker
-      .register('/sw.js', { scope: '/' })
+    navigator.serviceWorker
+      .register('/sw.js', { scope: '/', updateViaCache: 'none' })
       .then((reg) => {
         console.log('[PWA] Service Worker registered with scope:', reg.scope)
         reg.update().catch(() => {})

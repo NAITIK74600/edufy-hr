@@ -115,10 +115,11 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
           let total = 0
           do {
             const result = await apiClient.get(`/employees?limit=100&page=${page++}`)
-            const batch = Array.isArray(result?.data) ? result.data : []
+            const batch = Array.isArray(result) ? result : (Array.isArray(result?.data) ? result.data : (Array.isArray(result?.records) ? result.records : []))
             if (batch.length === 0) break
             list.push(...batch.map(normalizeEmployee))
-            total = Number(result?.meta?.total ?? list.length)
+            total = Number(result?.meta?.total ?? result?.pagination?.total ?? list.length)
+            if (batch.length < 100) break
           } while (list.length < total && page <= 25)
           return { data: list }
         } else {

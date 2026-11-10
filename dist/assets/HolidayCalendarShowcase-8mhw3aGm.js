@@ -1,9 +1,50 @@
 import { n as __toESM } from "./rolldown-runtime-CO0Nlsmt.js";
 import { $t as Calendar, B as Repeat, Bt as Clock, E as Sparkles, Ft as Download, Gt as CircleAlert, Ht as CircleX, Jt as ChevronLeft, K as Plus, L as Search, Ot as FileSpreadsheet, Pt as ExternalLink, Rt as Copy, Ut as CircleQuestionMark, Wt as CircleCheck, Xt as Check, Y as Pen, _n as require_react, at as MapPin, d as Users, dn as Bell, en as CalendarRange, fn as Award, ft as List, g as Upload, ht as Layers, i as X, n as ZoomIn, qt as ChevronRight, rn as Cake, t as ZoomOut, tn as CalendarDays, u as Video, x as Target, xt as Grid3x3, y as Trash } from "./icons-vendor-CNlTUIuG.js";
 import { a as require_jsx_runtime } from "./motion-vendor-3i60tGNx.js";
-import { I as apiClient, T as hrStore, a as Field, t as Button } from "./index-DPfPlI3e.js";
-// src/services/calendarService.js
+import { I as apiClient, T as hrStore, a as Field, t as Button } from "./index-DVl5k7e1.js";
+// src/utils/dobHelper.js
 var import_react = /* @__PURE__ */ __toESM(require_react(), 1);
+/**
+* Frontend DOB parsing and extraction utility for Edufyi HR Calendar & Celebration widgets.
+*/
+function parseDobToMonthDay(rawDob) {
+	if (!rawDob) return null;
+	if (rawDob instanceof Date && !isNaN(rawDob.getTime())) return {
+		month: rawDob.getUTCMonth() + 1,
+		day: String(rawDob.getUTCDate()).padStart(2, "0")
+	};
+	const str = String(rawDob).trim();
+	if (!str) return null;
+	const ymdMatch = str.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/);
+	if (ymdMatch) {
+		const month = parseInt(ymdMatch[2], 10);
+		const day = String(parseInt(ymdMatch[3], 10)).padStart(2, "0");
+		if (month >= 1 && month <= 12 && parseInt(day, 10) >= 1 && parseInt(day, 10) <= 31) return {
+			month,
+			day
+		};
+	}
+	const dmyMatch = str.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})/);
+	if (dmyMatch) {
+		const day = String(parseInt(dmyMatch[1], 10)).padStart(2, "0");
+		const month = parseInt(dmyMatch[2], 10);
+		if (month >= 1 && month <= 12 && parseInt(day, 10) >= 1 && parseInt(day, 10) <= 31) return {
+			month,
+			day
+		};
+	}
+	const d = new Date(str);
+	if (!isNaN(d.getTime())) return {
+		month: d.getUTCMonth() + 1,
+		day: String(d.getUTCDate()).padStart(2, "0")
+	};
+	return null;
+}
+function extractEmployeeDob(emp) {
+	if (!emp || typeof emp !== "object") return null;
+	return parseDobToMonthDay(emp.dob || emp.identity?.dob || emp.dateOfBirth || emp.birthDate || emp.personalDetails?.dob || emp.personalDetails?.dateOfBirth);
+}
+// src/services/calendarService.js
 var calendarService = {
 	/**
 	* Fetch merged stream of holidays, birthdays, work anniversaries, leaves, and custom events.
@@ -50,37 +91,10 @@ var calendarService = {
 				});
 			});
 			employees.forEach((emp) => {
-				const rawDob = emp.dob || emp.identity?.dob;
-				let m = null;
-				let day = null;
-				if (rawDob) {
-					const d = new Date(rawDob);
-					if (!isNaN(d.getTime())) {
-						const istDate = new Date(d.getTime() + 198e5);
-						m = istDate.getUTCMonth() + 1;
-						day = String(istDate.getUTCDate()).padStart(2, "0");
-					}
-				}
-				if (!m || !day) {
-					const seed = (emp.employeeId || String(emp.id || emp._id || "")).split("").reduce((acc, c) => acc + c.charCodeAt(0), 0);
-					m = seed % 12 + 1;
-					const maxDays = [
-						0,
-						31,
-						28,
-						31,
-						30,
-						31,
-						30,
-						31,
-						31,
-						30,
-						31,
-						30,
-						31
-					][m];
-					day = String(seed % maxDays + 1).padStart(2, "0");
-				}
+				const dobInfo = extractEmployeeDob(emp);
+				if (!dobInfo) return;
+				const m = dobInfo.month;
+				const day = dobInfo.day;
 				if (month && m !== parseInt(month, 10)) return;
 				const bDate = `${targetYear}-${String(m).padStart(2, "0")}-${day}`;
 				events.push({
@@ -7601,4 +7615,4 @@ function EnterpriseCalendar({ canManage = false, user = null, defaultView = "mon
 function HolidayCalendarShowcase(props) {
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EnterpriseCalendar, { ...props });
 }
-export { calendarService as n, HolidayCalendarShowcase as t };
+export { calendarService as n, extractEmployeeDob as r, HolidayCalendarShowcase as t };

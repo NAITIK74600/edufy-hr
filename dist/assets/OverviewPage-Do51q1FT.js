@@ -1,9 +1,9 @@
 import { n as __toESM } from "./rolldown-runtime-CO0Nlsmt.js";
 import { Dt as FileText, E as Sparkles, H as Receipt, Ut as CircleQuestionMark, Vt as Clock3, Wt as CircleCheck, Zt as ChartColumn, _n as require_react, d as Users, m as UserPlus, mn as ArrowRight, mt as LayoutDashboard, pn as ArrowUpRight, r as Zap, s as WalletCards, sn as BriefcaseBusiness, tn as CalendarDays, un as BellRing, v as TrendingUp } from "./icons-vendor-CNlTUIuG.js";
 import { a as require_jsx_runtime } from "./motion-vendor-3i60tGNx.js";
-import { O as currentPayrollMonth, T as hrStore, _ as resolveUserDisplayName, b as hasPermission, c as StatusBadge, g as getTimeOfDayGreeting, k as todayKey, o as PageHeader, t as Button, v as findRoute, x as useAuth } from "./index-DPfPlI3e.js";
-import "./HolidayCalendarShowcase-BqNjKE64.js";
-import { t as CalendarWidgets } from "./CalendarWidgets-Bu5Y3um3.js";
+import { O as currentPayrollMonth, T as hrStore, _ as resolveUserDisplayName, b as hasPermission, c as StatusBadge, g as getTimeOfDayGreeting, k as todayKey, o as PageHeader, t as Button, v as findRoute, x as useAuth } from "./index-DVl5k7e1.js";
+import "./HolidayCalendarShowcase-8mhw3aGm.js";
+import { t as CalendarWidgets } from "./CalendarWidgets-DdHyzVAZ.js";
 // src/pages/OverviewPage.jsx
 var import_react = /* @__PURE__ */ __toESM(require_react(), 1);
 var import_jsx_runtime = require_jsx_runtime();

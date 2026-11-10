@@ -1,5 +1,6 @@
 import { apiClient } from './apiClient.js'
 import { hrStore } from './hrStore.js'
+import { extractEmployeeDob } from '../utils/dobHelper.js'
 
 export const calendarService = {
   /**
@@ -53,27 +54,12 @@ export const calendarService = {
         })
       })
 
-      // Birthdays fallback
+      // Birthdays fallback (Strictly real dynamic DOB from employee records, 0 dummy data)
       employees.forEach((emp) => {
-        const rawDob = emp.dob || emp.identity?.dob
-        let m = null
-        let day = null
-
-        if (rawDob) {
-          const d = new Date(rawDob)
-          if (!isNaN(d.getTime())) {
-            const istDate = new Date(d.getTime() + (5.5 * 60 * 60 * 1000))
-            m = istDate.getUTCMonth() + 1
-            day = String(istDate.getUTCDate()).padStart(2, '0')
-          }
-        }
-
-        if (!m || !day) {
-          const seed = (emp.employeeId || String(emp.id || emp._id || '')).split('').reduce((acc, c) => acc + c.charCodeAt(0), 0)
-          m = (seed % 12) + 1
-          const maxDays = [0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][m]
-          day = String((seed % maxDays) + 1).padStart(2, '0')
-        }
+        const dobInfo = extractEmployeeDob(emp)
+        if (!dobInfo) return
+        const m = dobInfo.month
+        const day = dobInfo.day
 
         if (month && m !== parseInt(month, 10)) return
         const bDate = `${targetYear}-${String(m).padStart(2, '0')}-${day}`
