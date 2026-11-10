@@ -194,40 +194,15 @@ function App() {
   const route = useRoute()
   const { user, status } = useAuth()
 
-  // Detect and exchange Google OAuth 2.0 authorization code on redirect
+  // Canonical OAuth 2.0 redirect forwarder: Route any domain-root Google redirects directly to canonical backend callback
   useEffect(() => {
     const searchParams = new URLSearchParams(window.location.search)
     const code = searchParams.get('code')
     const state = searchParams.get('state')
-    const scope = searchParams.get('scope')
 
-    if (code && (state?.includes('actor_') || state?.includes('edufyi') || scope?.includes('calendar') || scope?.includes('google'))) {
-      const exchangeOAuthCode = async () => {
-        try {
-          const res = await apiClient.post('/calendar/google/exchange-code', { code })
-          if (res?.success) {
-            // Clean the query parameters from URL without full reload
-            const cleanUrl = window.location.origin + window.location.pathname + window.location.hash
-            window.history.replaceState({}, document.title, cleanUrl)
-
-            // If running inside a popup window, signal opener and auto-close
-            if (window.opener) {
-              try {
-                window.opener.postMessage('google_calendar_connected', '*')
-                setTimeout(() => window.close(), 600)
-              } catch (e) {}
-            }
-            window.dispatchEvent(new CustomEvent('edufyi:google-calendar-connected', { detail: res }))
-          }
-        } catch (err) {
-          console.warn('[Google OAuth Code Exchange Error]:', err?.message)
-          if (window.opener) {
-            alert('Google Authorization Error: ' + (err?.message || 'Failed to exchange token with Google.'))
-            try { window.close() } catch (e) {}
-          }
-        }
-      }
-      exchangeOAuthCode()
+    if (code && state) {
+      // Forward to the canonical server-side callback for cryptographically verified single token exchange
+      window.location.href = `/api/v1/calendar/google/callback${window.location.search}`
     }
   }, [])
 
@@ -389,7 +364,7 @@ if (container && (container instanceof Element || container.nodeType === 1)) {
 }
 
 // Register PWA Service Worker for Offline, Mobile App & Background Execution
-const ACTIVE_PWA_CACHE = 'edufyi-hr-pwa-v46'
+const ACTIVE_PWA_CACHE = 'edufyi-hr-pwa-v47'
 function registerServiceWorker() {
   if (typeof window !== 'undefined' && 'serviceWorker' in navigator && window.location.protocol.startsWith('http')) {
     // Proactively purge old PWA caches

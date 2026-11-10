@@ -9,11 +9,6 @@ import { encryptToken, decryptToken } from '../../utils/encryption.js'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
-// Resilient, zero-leak runtime defaults (constructed via character codes to prevent git push scanner collisions)
-const FALLBACK_CLIENT_ID = String.fromCharCode(50,52,48,51,50,54,57,52,50,53,56,48,45,118,113,112,48,112,56,116,97,99,110,49,111,98,116,111,97,112,101,103,117,115,97,49,110,49,104,55,118,112,116,105,101,46,97,112,112,115,46,103,111,111,103,108,101,117,115,101,114,99,111,110,116,101,110,116,46,99,111,109)
-const FALLBACK_SECRET_1 = String.fromCharCode(71,79,67,83,80,88,45,97,76,65,51,112,115,108,49,73,88,87,45,77,78,72,52,85,50,120,49,101,71,75,97,80,83,71,74)
-const FALLBACK_SECRET_2 = String.fromCharCode(71,79,67,83,80,88,45,106,103,70,53,74,98,76,49,72,72,71,103,107,81,78,86,83,72,107,105,53,54,81,78,89,111,57,89)
-
 /**
  * Production Google Calendar & Google Meet Integration Service
  * - Handles OAuth 2.0 flow with AES-256-GCM encrypted token storage
@@ -21,60 +16,51 @@ const FALLBACK_SECRET_2 = String.fromCharCode(71,79,67,83,80,88,45,106,103,70,53
  * - Exponential backoff retry logic for Google Calendar REST APIs
  * - Verified Google Meet conferenceData generation (ZERO fake links)
  * - Synchronizes creations, updates, and cancellations
+ * - Cryptographically signed OAuth state with replay protection
  */
+
+// In-memory OAuth state registry (10-minute TTL, single-use per authorization attempt)
+const activeOAuthStates = new Map()
+
+// Clean up expired states every 5 minutes
+const stateCleanerInterval = setInterval(() => {
+  const now = Date.now()
+  for (const [nonce, data] of activeOAuthStates.entries()) {
+    if (data.expiresAt < now) {
+      activeOAuthStates.delete(nonce)
+    }
+  }
+}, 5 * 60 * 1000)
+if (stateCleanerInterval.unref) stateCleanerInterval.unref()
 
 let envLoadAttempted = false
 function ensureEnvLoaded() {
-  if (envLoadAttempted && process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+  if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
     return
   }
   envLoadAttempted = true
 
   const candidatePaths = [
-    path.resolve(__dirname, 'google.runtime.json'),
-    path.resolve(__dirname, '../../../../google.runtime.json'),
     path.resolve(__dirname, '../../../../.env'),
-    path.resolve(__dirname, '../../../google.runtime.json'),
     path.resolve(__dirname, '../../../.env'),
-    path.resolve(process.cwd(), 'google.runtime.json'),
     path.resolve(process.cwd(), '.env'),
-    path.resolve(process.cwd(), '..', 'google.runtime.json'),
     path.resolve(process.cwd(), '..', '.env'),
-    '/home/admin_edufytech/EDUFYIONE/google.runtime.json',
     '/home/admin_edufytech/EDUFYIONE/.env',
-    '/home/admin_edufytech/edufyione/google.runtime.json',
     '/home/admin_edufytech/edufyione/.env',
   ]
 
   for (const envPath of candidatePaths) {
     try {
       if (fs.existsSync(envPath)) {
-        if (envPath.endsWith('.json')) {
-          const json = JSON.parse(fs.readFileSync(envPath, 'utf8'))
-          const target = json.web || json
-          if (target.client_id && !process.env.GOOGLE_CLIENT_ID) {
-            process.env.GOOGLE_CLIENT_ID = target.client_id.trim()
-          }
-          if (target.client_secret && !process.env.GOOGLE_CLIENT_SECRET) {
-            process.env.GOOGLE_CLIENT_SECRET = target.client_secret.trim()
-          }
-          if (target.project_id && !process.env.GOOGLE_PROJECT_ID) {
-            process.env.GOOGLE_PROJECT_ID = target.project_id.trim()
-          }
-          if (Array.isArray(target.redirect_uris) && target.redirect_uris[0] && !process.env.GOOGLE_REDIRECT_URI) {
-            process.env.GOOGLE_REDIRECT_URI = target.redirect_uris[0].trim()
-          }
-        } else {
-          const raw = fs.readFileSync(envPath, 'utf8')
-          for (const rawLine of raw.split('\n')) {
-            const line = rawLine.trim()
-            if (line && !line.startsWith('#') && line.includes('=')) {
-              const idx = line.indexOf('=')
-              const k = line.slice(0, idx).trim()
-              const v = line.slice(idx + 1).trim()
-              if (k && !process.env[k]) {
-                process.env[k] = v
-              }
+        const raw = fs.readFileSync(envPath, 'utf8')
+        for (const rawLine of raw.split('\n')) {
+          const line = rawLine.trim()
+          if (line && !line.startsWith('#') && line.includes('=')) {
+            const idx = line.indexOf('=')
+            const k = line.slice(0, idx).trim()
+            const v = line.slice(idx + 1).trim()
+            if (k && (!process.env[k] || process.env[k].trim() === '')) {
+              process.env[k] = v
             }
           }
         }
@@ -117,26 +103,28 @@ async function fetchWithRetry(url, options, maxRetries = 2) {
 
 export const googleCalendarService = {
   /**
-   * Get server-side Google OAuth client configuration
+   * Get server-side Google OAuth client configuration strictly from environment variables
    */
   getClientConfig() {
     ensureEnvLoaded()
 
-    const rawClientId = process.env.GOOGLE_CLIENT_ID?.trim()
-    const rawClientSecret = process.env.GOOGLE_CLIENT_SECRET?.trim()
-    const rawRedirectUri = process.env.GOOGLE_REDIRECT_URI?.trim()
+    const clientId = process.env.GOOGLE_CLIENT_ID?.trim() || ''
+    const clientSecret = process.env.GOOGLE_CLIENT_SECRET?.trim() || ''
+    const redirectUri = (process.env.GOOGLE_REDIRECT_URI?.trim() || 'https://edufyione.edufyitech.in/api/v1/calendar/google/callback').replace(/\/+$/, '')
+    const apiKey = process.env.GOOGLE_CALENDAR_API_KEY?.trim() || ''
+    const projectId = process.env.GOOGLE_PROJECT_ID?.trim() || 'hr-ed-514310'
 
     return {
-      clientId: rawClientId || FALLBACK_CLIENT_ID,
-      clientSecret: rawClientSecret || FALLBACK_SECRET_1 || FALLBACK_SECRET_2,
-      redirectUri: (rawRedirectUri || 'https://edufyione.edufyitech.in').replace(/\/+$/, ''),
-      apiKey: process.env.GOOGLE_CALENDAR_API_KEY || '',
-      projectId: process.env.GOOGLE_PROJECT_ID || 'hr-ed-514310',
+      clientId,
+      clientSecret,
+      redirectUri,
+      apiKey,
+      projectId,
     }
   },
 
   /**
-   * Check if Google OAuth client credentials are configured
+   * Check if Google OAuth client credentials are genuinely configured in server environment
    */
   isConfigured() {
     const { clientId, clientSecret } = this.getClientConfig()
@@ -144,11 +132,82 @@ export const googleCalendarService = {
   },
 
   /**
-   * Generate secure Google OAuth 2.0 authorization URL
+   * Generate cryptographically signed, user-bound OAuth state token with replay protection
    */
-  getAuthUrl(state = '') {
+  generateOAuthState(user = null) {
+    const nonce = crypto.randomBytes(24).toString('hex')
+    const timestamp = Date.now()
+    const expiresAt = timestamp + 10 * 60 * 1000 // 10 minutes TTL
+    const userId = String(user?.id || user?._id || 'admin')
+    const userEmail = user?.email || ''
+    const userName = user?.displayName || user?.name || 'Administrator'
+
+    const stateData = {
+      nonce,
+      userId,
+      userEmail,
+      userName,
+      expiresAt,
+    }
+
+    const signingKey = process.env.GOOGLE_TOKEN_ENCRYPTION_KEY || process.env.JWT_SECRET || 'edufyi-oauth-state-secret'
+    const payloadBase64 = Buffer.from(JSON.stringify(stateData)).toString('base64url')
+    const signature = crypto.createHmac('sha256', signingKey).update(payloadBase64).digest('base64url')
+    const stateString = `${payloadBase64}.${signature}`
+
+    activeOAuthStates.set(nonce, stateData)
+    return stateString
+  },
+
+  /**
+   * Validate and consume OAuth state token (one-time use, prevents replay attacks)
+   */
+  validateAndConsumeOAuthState(stateString) {
+    if (!stateString || typeof stateString !== 'string') {
+      return { valid: false, reason: 'Missing state parameter.' }
+    }
+
+    const parts = stateString.split('.')
+    if (parts.length !== 2) {
+      return { valid: false, reason: 'Malformed state parameter format.' }
+    }
+
+    const [payloadBase64, providedSig] = parts
+    const signingKey = process.env.GOOGLE_TOKEN_ENCRYPTION_KEY || process.env.JWT_SECRET || 'edufyi-oauth-state-secret'
+    const expectedSig = crypto.createHmac('sha256', signingKey).update(payloadBase64).digest('base64url')
+
+    if (!crypto.timingSafeEqual(Buffer.from(providedSig), Buffer.from(expectedSig))) {
+      return { valid: false, reason: 'Invalid state signature. Potential CSRF or tampering attempt.' }
+    }
+
+    let stateData
+    try {
+      stateData = JSON.parse(Buffer.from(payloadBase64, 'base64url').toString('utf8'))
+    } catch {
+      return { valid: false, reason: 'Invalid state payload encoding.' }
+    }
+
+    if (Date.now() > stateData.expiresAt) {
+      activeOAuthStates.delete(stateData.nonce)
+      return { valid: false, reason: 'OAuth session state has expired (10-minute limit). Please initiate connection again.' }
+    }
+
+    if (!activeOAuthStates.has(stateData.nonce)) {
+      return { valid: false, reason: 'OAuth state already consumed or not recognized. Replay protection triggered.' }
+    }
+
+    // Single-use: Consume state immediately
+    activeOAuthStates.delete(stateData.nonce)
+    return { valid: true, stateData }
+  },
+
+  /**
+   * Generate secure Google OAuth 2.0 authorization URL pointing to canonical callback
+   */
+  getAuthUrl(user = null) {
+    if (!this.isConfigured()) return null
     const { clientId, redirectUri } = this.getClientConfig()
-    if (!clientId) return null
+    const state = this.generateOAuthState(user)
 
     const scopes = [
       'https://www.googleapis.com/auth/calendar.events',
@@ -163,7 +222,7 @@ export const googleCalendarService = {
       scope: scopes,
       access_type: 'offline',
       prompt: 'consent',
-      state: state || 'edufyi_google_oauth',
+      state,
     })
 
     return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`
@@ -172,57 +231,52 @@ export const googleCalendarService = {
   /**
    * Exchange Google authorization code for access and refresh tokens
    */
-  async exchangeCodeForTokens(code, actor = null) {
-    const { clientId, clientSecret, redirectUri } = this.getClientConfig()
-    const primarySecret = clientSecret || process.env.GOOGLE_CLIENT_SECRET || ''
-    const candidateSecrets = Array.from(new Set([
-      primarySecret,
-      FALLBACK_SECRET_1,
-      FALLBACK_SECRET_2,
-    ].filter(Boolean)))
-
-    if (!clientId || candidateSecrets.length === 0) {
+  async exchangeCodeForTokens(code, actor = null, redirectUriOverride = null) {
+    if (!this.isConfigured()) {
       throw new Error('Google OAuth credentials (GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET) not configured in server environment.')
     }
 
+    const { clientId, clientSecret, redirectUri } = this.getClientConfig()
+    const effectiveUri = redirectUriOverride || redirectUri
+
     const candidateRedirectUris = Array.from(new Set([
-      redirectUri ? redirectUri.replace(/\/+$/, '') : 'https://edufyione.edufyitech.in',
-      redirectUri ? (redirectUri.replace(/\/+$/, '') + '/') : 'https://edufyione.edufyitech.in/',
-    ]))
+      effectiveUri ? effectiveUri.replace(/\/+$/, '') : '',
+      effectiveUri ? (effectiveUri.replace(/\/+$/, '') + '/') : '',
+      redirectUri ? redirectUri.replace(/\/+$/, '') : '',
+      'https://edufyione.edufyitech.in/api/v1/calendar/google/callback',
+      'https://edufyione.edufyitech.in',
+      'https://edufyione.edufyitech.in/',
+    ].filter(Boolean)))
 
     let tokenData = null
     let lastError = null
 
-    for (const secret of candidateSecrets) {
-      for (const uri of candidateRedirectUris) {
-        try {
-          const res = await fetchWithRetry('https://oauth2.googleapis.com/token', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: new URLSearchParams({
-              code,
-              client_id: clientId,
-              client_secret: secret,
-              redirect_uri: uri,
-              grant_type: 'authorization_code',
-            }),
-          })
-          const data = await res.json()
-          if (res.ok && data.access_token) {
-            tokenData = data
-            process.env.GOOGLE_CLIENT_SECRET = secret
+    for (const uri of candidateRedirectUris) {
+      try {
+        const res = await fetchWithRetry('https://oauth2.googleapis.com/token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({
+            code,
+            client_id: clientId,
+            client_secret: clientSecret,
+            redirect_uri: uri,
+            grant_type: 'authorization_code',
+          }),
+        })
+        const data = await res.json()
+        if (res.ok && data.access_token) {
+          tokenData = data
+          break
+        } else {
+          lastError = data.error_description || data.error || 'Failed to exchange authorization code.'
+          if (data.error !== 'redirect_uri_mismatch') {
             break
-          } else {
-            lastError = data.error_description || data.error || 'Failed to exchange authorization code.'
-            if (data.error !== 'invalid_client' && data.error !== 'redirect_uri_mismatch') {
-              break
-            }
           }
-        } catch (err) {
-          lastError = err.message
         }
+      } catch (err) {
+        lastError = err.message
       }
-      if (tokenData) break
     }
 
     if (!tokenData || !tokenData.access_token) {
@@ -332,38 +386,27 @@ export const googleCalendarService = {
     }
 
     const { clientId, clientSecret } = this.getClientConfig()
-    const primarySecret = clientSecret || process.env.GOOGLE_CLIENT_SECRET || ''
-    const candidateSecrets = Array.from(new Set([
-      primarySecret,
-      FALLBACK_SECRET_1,
-      FALLBACK_SECRET_2,
-    ].filter(Boolean)))
-
-    if (!clientId || candidateSecrets.length === 0) return decryptToken(integration.encryptedAccessToken)
+    if (!clientId || !clientSecret) return decryptToken(integration.encryptedAccessToken)
 
     try {
       let refreshed = null
-      for (const sec of candidateSecrets) {
-        const res = await fetchWithRetry('https://oauth2.googleapis.com/token', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: new URLSearchParams({
-            client_id: clientId,
-            client_secret: sec,
-            refresh_token: refreshTokenPlain,
-            grant_type: 'refresh_token',
-          }),
-        })
-        const data = await res.json()
-        if (res.ok && data.access_token) {
-          refreshed = data
-          process.env.GOOGLE_CLIENT_SECRET = sec
-          break
-        } else {
-          refreshed = data
-          if (data.error !== 'invalid_client') break
-        }
+      const res = await fetchWithRetry('https://oauth2.googleapis.com/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          client_id: clientId,
+          client_secret: clientSecret,
+          refresh_token: refreshTokenPlain,
+          grant_type: 'refresh_token',
+        }),
+      })
+      const data = await res.json()
+      if (res.ok && data.access_token) {
+        refreshed = data
+      } else {
+        refreshed = data
       }
+
       if (refreshed?.access_token) {
         integration.encryptedAccessToken = encryptToken(refreshed.access_token)
         integration.tokenExpiry = new Date(Date.now() + (refreshed.expires_in || 3600) * 1000)
@@ -649,15 +692,27 @@ export const googleCalendarService = {
    * Retrieve safe public integration status (never returning secrets or encrypted tokens)
    */
   async getIntegrationStatus() {
+    const isConfig = this.isConfigured()
+    const { redirectUri, projectId } = this.getClientConfig()
     const integration = await CalendarIntegration.findOne({ provider: 'google' }).lean().catch(() => null)
-    const isConn = Boolean(integration?.isConnected)
+    const isConn = Boolean(integration?.isConnected && integration?.encryptedAccessToken)
     return {
-      googleConfigured: this.isConfigured(),
+      provider: 'google',
+      isConfigured: isConfig,
+      googleConfigured: isConfig,
       isConnected: isConn,
       connected: isConn,
       accountEmail: integration?.accountEmail || null,
+      connectedBy: integration?.connectedByName || integration?.connectedBy || null,
+      connectedAt: integration?.connectedAt || null,
       lastSyncAt: integration?.lastSyncAt || null,
       syncStatus: integration?.syncStatus || (isConn ? 'active' : 'disconnected'),
+      scopes: integration?.scopes || [],
+      expired: integration?.tokenExpiry ? new Date(integration.tokenExpiry) < new Date() : false,
+      tokenExpiry: integration?.tokenExpiry || null,
+      projectId,
+      redirectUri,
+      hasError: Boolean(integration?.lastError),
       lastError: integration?.lastError || null,
       defaultTimezone: integration?.settings?.defaultTimezone || 'Asia/Kolkata',
     }

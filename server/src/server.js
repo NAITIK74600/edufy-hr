@@ -29,6 +29,8 @@ try { process.loadEnvFile?.() } catch {}
 const envCandidatePaths = [
   path.resolve(rootDir, '.env'),
   path.resolve(process.cwd(), '.env'),
+  '/home/admin_edufytech/EDUFYIONE/.env',
+  '/home/admin_edufytech/edufyione/.env',
 ]
 for (const envPath of envCandidatePaths) {
   if (fs.existsSync(envPath)) {
@@ -37,10 +39,11 @@ for (const envPath of envCandidatePaths) {
       for (const line of envLines) {
         const trimmed = line.trim()
         if (trimmed && !trimmed.startsWith('#') && trimmed.includes('=')) {
-          const [k, ...v] = trimmed.split('=')
-          const key = k.trim()
-          if (key && !process.env[key]) {
-            process.env[key] = v.join('=').trim()
+          const idx = trimmed.indexOf('=')
+          const key = trimmed.slice(0, idx).trim()
+          const val = trimmed.slice(idx + 1).trim()
+          if (key && (!process.env[key] || process.env[key].trim() === '')) {
+            process.env[key] = val
           }
         }
       }

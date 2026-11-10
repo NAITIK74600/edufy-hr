@@ -1900,8 +1900,13 @@ export function createCalendarRouter({ auth, useDatabase = true }) {
       if (!canManageGoogle(req.auth.user)) {
         return res.status(403).json({ success: false, message: 'Only Management or HR can connect Google Workspace.' })
       }
-      const actorId = req.auth.user.id || req.auth.user._id || 'user'
-      const authUrl = googleCalendarService.getAuthUrl(`actor_${actorId}`)
+      if (!googleCalendarService.isConfigured()) {
+        return res.status(400).json({
+          success: false,
+          message: 'Google Client ID & Secret not configured in environment variables (GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET).',
+        })
+      }
+      const authUrl = googleCalendarService.getAuthUrl(req.auth.user)
       if (!authUrl) {
         return res.status(400).json({
           success: false,
@@ -1920,20 +1925,26 @@ export function createCalendarRouter({ auth, useDatabase = true }) {
 
   router.post('/google/exchange-code', async (req, res, next) => {
     try {
-      const { code } = req.body
+      const { code, state } = req.body
       if (!code) {
         return res.status(400).json({ success: false, message: 'Missing authorization code.' })
       }
-      let actor = { id: 'admin', name: 'Administrator' }
-      const authHeader = req.get('authorization')
-      if (authHeader?.startsWith('Bearer ')) {
-        try {
-          const claims = jwt.decode(authHeader.slice(7))
-          if (claims?.sub) {
-            actor = { id: claims.sub, name: claims.name || claims.sub }
-          }
-        } catch {}
+
+      // Enforce cryptographic state validation to prevent arbitrary code injection
+      const stateValidation = googleCalendarService.validateAndConsumeOAuthState(state)
+      if (!stateValidation.valid) {
+        return res.status(403).json({
+          success: false,
+          message: stateValidation.reason || 'Invalid or expired OAuth state parameter.',
+        })
       }
+
+      const actor = {
+        id: stateValidation.stateData.userId,
+        email: stateValidation.stateData.userEmail,
+        name: stateValidation.stateData.userName,
+      }
+
       const result = await googleCalendarService.exchangeCodeForTokens(code, actor)
       res.json({
         success: true,
@@ -1952,18 +1963,91 @@ export function createCalendarRouter({ auth, useDatabase = true }) {
 
   router.get('/google/callback', async (req, res, next) => {
     try {
-      const { code } = req.query
-      if (!code) return res.status(400).send('Missing authorization code.')
-      await googleCalendarService.exchangeCodeForTokens(code)
+      const { code, state, error, error_description } = req.query
+
+      // 1. Handle user cancellation or denial by Google
+      if (error) {
+        return res.status(400).send(`
+          <!DOCTYPE html>
+          <html>
+            <head><meta charset="utf-8"><title>Connection Cancelled</title></head>
+            <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; text-align: center; padding: 60px 20px; background: #fef2f2; color: #991b1b;">
+              <div style="max-width: 480px; margin: 0 auto; background: #ffffff; padding: 36px; border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.08); border: 1px solid #fee2e2;">
+                <div style="font-size: 48px; margin-bottom: 12px;">⚠️</div>
+                <h2 style="color: #991b1b; margin-bottom: 8px;">Google Authorization Notice</h2>
+                <p style="color: #64748b; font-size: 14px; margin-bottom: 24px;">${String(error_description || error || 'Google authorization was denied or cancelled.')}</p>
+                <a href="https://edufyione.edufyitech.in" style="display: inline-block; padding: 10px 24px; background: #991b1b; color: #ffffff; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 14px;" onclick="if(window.opener){window.close();} return true;">Close Window</a>
+              </div>
+              <script>
+                if (window.opener) {
+                  try { window.opener.postMessage({ type: 'google_calendar_error', error: ${JSON.stringify(error)} }, '*'); } catch (e) {}
+                  setTimeout(() => window.close(), 2500);
+                }
+              </script>
+            </body>
+          </html>
+        `)
+      }
+
+      if (!code) {
+        return res.status(400).send('Missing authorization code from Google.')
+      }
+
+      // 2. Cryptographically validate OAuth state
+      const stateValidation = googleCalendarService.validateAndConsumeOAuthState(state)
+      if (!stateValidation.valid) {
+        return res.status(403).send(`
+          <!DOCTYPE html>
+          <html>
+            <head><meta charset="utf-8"><title>Security Error</title></head>
+            <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; text-align: center; padding: 60px 20px; background: #fef2f2; color: #991b1b;">
+              <div style="max-width: 480px; margin: 0 auto; background: #ffffff; padding: 36px; border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.08); border: 1px solid #fee2e2;">
+                <div style="font-size: 48px; margin-bottom: 12px;">🔒</div>
+                <h2 style="color: #991b1b; margin-bottom: 8px;">Security Verification Failed</h2>
+                <p style="color: #64748b; font-size: 14px; margin-bottom: 24px;">${String(stateValidation.reason || 'Invalid or expired OAuth state parameter.')}</p>
+                <a href="https://edufyione.edufyitech.in" style="display: inline-block; padding: 10px 24px; background: #991b1b; color: #ffffff; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 14px;">Return to HR Portal</a>
+              </div>
+            </body>
+          </html>
+        `)
+      }
+
+      const actor = {
+        id: stateValidation.stateData.userId,
+        email: stateValidation.stateData.userEmail,
+        name: stateValidation.stateData.userName,
+      }
+
+      // 3. Canonical token exchange using canonical callback URL
+      const integration = await googleCalendarService.exchangeCodeForTokens(
+        code,
+        actor,
+        'https://edufyione.edufyitech.in/api/v1/calendar/google/callback'
+      )
+
       res.send(`
+        <!DOCTYPE html>
         <html>
-          <head><title>Google Calendar Connected</title></head>
-          <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; text-align: center; padding: 60px 20px; background: #f8fafc; color: #0f172a;">
-            <div style="max-width: 480px; margin: 0 auto; background: #ffffff; padding: 36px; border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.08);">
-              <div style="font-size: 48px; margin-bottom: 12px;">✅</div>
-              <h2 style="color: #0f766e; margin-bottom: 8px;">Google Calendar Successfully Connected!</h2>
-              <p style="color: #64748b; font-size: 14px; margin-bottom: 24px;">Your organization Google account is now synchronized with Edufyi HR.</p>
-              <a href="https://edufyione.edufyitech.in" style="display: inline-block; padding: 10px 24px; background: #0f766e; color: #ffffff; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 14px;">Return to HR Portal</a>
+          <head>
+            <meta charset="utf-8">
+            <title>Google Calendar Connected</title>
+            <style>
+              body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; text-align: center; padding: 60px 20px; background: #f8fafc; color: #0f172a; }
+              .card { max-width: 480px; margin: 0 auto; background: #ffffff; padding: 36px; border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.08); border: 1px solid #e2e8f0; }
+              .icon { font-size: 48px; margin-bottom: 12px; }
+              h2 { color: #0f766e; margin-bottom: 8px; font-size: 22px; font-weight: 700; }
+              p { color: #64748b; font-size: 14px; margin-bottom: 20px; line-height: 1.5; }
+              .badge { display: inline-block; padding: 6px 14px; background: #ecfdf5; color: #059669; border-radius: 9999px; font-weight: 600; font-size: 13px; margin-bottom: 24px; border: 1px solid #a7f3d0; }
+              .btn { display: inline-block; padding: 10px 24px; background: #0f766e; color: #ffffff; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 14px; }
+            </style>
+          </head>
+          <body>
+            <div class="card">
+              <div class="icon">✅</div>
+              <h2>Google Calendar Connected!</h2>
+              <div class="badge">${integration.accountEmail || 'Authorized Account'}</div>
+              <p>Your Google Workspace account is now synchronized with Edufyi HR.</p>
+              <a href="https://edufyione.edufyitech.in" class="btn" onclick="if(window.opener){window.close();} return true;">Return to HR Portal</a>
             </div>
             <script>
               try {
@@ -1979,7 +2063,21 @@ export function createCalendarRouter({ auth, useDatabase = true }) {
         </html>
       `)
     } catch (error) {
-      res.status(500).send(`Google Connection Error: ${error.message}`)
+      console.error('[Google Callback Error]:', error.message)
+      res.status(500).send(`
+        <!DOCTYPE html>
+        <html>
+          <head><meta charset="utf-8"><title>Connection Error</title></head>
+          <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; text-align: center; padding: 60px 20px; background: #fef2f2; color: #991b1b;">
+            <div style="max-width: 480px; margin: 0 auto; background: #ffffff; padding: 36px; border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.08); border: 1px solid #fee2e2;">
+              <div style="font-size: 48px; margin-bottom: 12px;">❌</div>
+              <h2 style="color: #991b1b; margin-bottom: 8px;">Google Connection Failed</h2>
+              <p style="color: #64748b; font-size: 14px; margin-bottom: 24px;">${String(error.message)}</p>
+              <a href="https://edufyione.edufyitech.in" style="display: inline-block; padding: 10px 24px; background: #991b1b; color: #ffffff; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 14px;">Return to Portal</a>
+            </div>
+          </body>
+        </html>
+      `)
     }
   })
 

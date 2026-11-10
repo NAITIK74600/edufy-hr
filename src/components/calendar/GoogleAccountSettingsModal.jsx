@@ -55,8 +55,10 @@ export function GoogleAccountSettingsModal({ isOpen, onClose, onIntegrationChang
 
     window.addEventListener('edufyi:google-calendar-connected', handleConnected)
     const handleMsg = (e) => {
-      if (e.data === 'google_calendar_connected') {
+      if (e.data === 'google_calendar_connected' || e.data?.type === 'google_calendar_connected') {
         handleConnected()
+      } else if (e.data?.type === 'google_calendar_error') {
+        setErrorMsg(e.data.error || 'Google connection was cancelled or denied.')
       }
     }
     window.addEventListener('message', handleMsg)

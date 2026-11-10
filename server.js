@@ -19,28 +19,38 @@ function log(msg) {
 }
 
 // Pre-load .env into process.env before any ES Module imports
-const envPath = path.resolve(__dirname, '.env')
-if (fs.existsSync(envPath)) {
-  try {
-    if (typeof process.loadEnvFile === 'function') {
-      process.loadEnvFile(envPath)
-    }
-  } catch {}
-  try {
-    const lines = fs.readFileSync(envPath, 'utf8').split('\n')
-    for (const l of lines) {
-      const line = l.trim()
-      if (line && !line.startsWith('#') && line.includes('=')) {
-        const [k, ...v] = line.split('=')
-        const key = k.trim()
-        if (key && !process.env[key]) {
-          process.env[key] = v.join('=').trim()
+const candidateEnvPaths = [
+  path.resolve(__dirname, '.env'),
+  path.resolve(process.cwd(), '.env'),
+  '/home/admin_edufytech/EDUFYIONE/.env',
+  '/home/admin_edufytech/edufyione/.env',
+]
+
+for (const envPath of candidateEnvPaths) {
+  if (fs.existsSync(envPath)) {
+    try {
+      if (typeof process.loadEnvFile === 'function') {
+        process.loadEnvFile(envPath)
+      }
+    } catch {}
+    try {
+      const lines = fs.readFileSync(envPath, 'utf8').split('\n')
+      for (const l of lines) {
+        const line = l.trim()
+        if (line && !line.startsWith('#') && line.includes('=')) {
+          const idx = line.indexOf('=')
+          const key = line.slice(0, idx).trim()
+          const val = line.slice(idx + 1).trim()
+          if (key && (!process.env[key] || process.env[key].trim() === '')) {
+            process.env[key] = val
+          }
         }
       }
+      log(`Loaded environment from: ${envPath}`)
+      break
+    } catch (err) {
+      log(`Failed reading .env (${envPath}): ${err.message}`)
     }
-    log(`Loaded environment from: ${envPath}`)
-  } catch (err) {
-    log(`Failed reading .env: ${err.message}`)
   }
 }
 
