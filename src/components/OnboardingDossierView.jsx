@@ -36,6 +36,30 @@ import { unmaskBankAccount } from '../utils/payrollMatcher'
 
 import { VERIFICATION_TEMPLATES } from '../constants/verificationConstants.js'
 
+export function safeEmergencyContact(val) {
+  if (!val || typeof val !== 'object') return { name: '', relationship: '', phone: '' }
+  const rawPhone = typeof val.phone === 'string' ? val.phone.replace(/[^0-9+\s\-()]/g, '').trim() : ''
+  const hasDigits = /\d/.test(rawPhone)
+  return {
+    name: typeof val.name === 'string' ? val.name.trim() : '',
+    relationship: typeof val.relationship === 'string' ? val.relationship.trim() : '',
+    phone: hasDigits ? rawPhone : '',
+  }
+}
+
+export function safeParentsContact(val) {
+  if (!val || typeof val !== 'object') return { fatherName: '', motherName: '', parentPhone: '', address: '' }
+  const rawPhone = String(val.parentPhone || val.phone || '').replace(/[^0-9+\s\-()]/g, '').trim()
+  const hasDigits = /\d/.test(rawPhone)
+  return {
+    fatherName: typeof val.fatherName === 'string' ? val.fatherName.trim() : '',
+    motherName: typeof val.motherName === 'string' ? val.motherName.trim() : '',
+    parentPhone: hasDigits ? rawPhone : '',
+    phone: hasDigits ? rawPhone : '',
+    address: typeof val.address === 'string' ? val.address.trim() : '',
+  }
+}
+
 
 function ModalDocInput({ doc, currentDoc, onSelect }) {
   const hasFile = Boolean(
@@ -227,8 +251,8 @@ export function OnboardingDossierView({ employee, canEdit = false, canVerify = f
   }, [viewingDoc, isEditing, rejectModal, employeeRevisionModal])
 
   const identity = employee?.identity || {}
-  const parents = employee?.parentsContact || {}
-  const emergency = employee?.emergencyContact || {}
+  const parents = safeParentsContact(employee?.parentsContact)
+  const emergency = safeEmergencyContact(employee?.emergencyContact)
   const bank = employee?.bankDetails || {}
   const rawDocs = { ...(employee?.onboardingDocs || {}), ...localDocs }
   const docs = {
@@ -272,17 +296,8 @@ export function OnboardingDossierView({ employee, canEdit = false, canVerify = f
       dob: employee?.dob ? String(employee.dob).slice(0, 10) : (identity.dob ? String(identity.dob).slice(0, 10) : ''),
     },
     dob: employee?.dob ? String(employee.dob).slice(0, 10) : (identity.dob ? String(identity.dob).slice(0, 10) : ''),
-    parentsContact: {
-      fatherName: parents.fatherName || '',
-      motherName: parents.motherName || '',
-      parentPhone: parents.parentPhone || parents.phone || '',
-      address: parents.address || '',
-    },
-    emergencyContact: {
-      name: emergency.name || '',
-      relationship: emergency.relationship || '',
-      phone: emergency.phone || '',
-    },
+    parentsContact: safeParentsContact(employee?.parentsContact || parents),
+    emergencyContact: safeEmergencyContact(employee?.emergencyContact || emergency),
     bankDetails: {
       bankName: bank.bankName || '',
       accountNumber: bank.accountNumber || '',
@@ -305,17 +320,8 @@ export function OnboardingDossierView({ employee, canEdit = false, canVerify = f
           dob: employee?.dob ? String(employee.dob).slice(0, 10) : (employee.identity?.dob ? String(employee.identity.dob).slice(0, 10) : (prev.identity?.dob || '')),
         },
         dob: employee?.dob ? String(employee.dob).slice(0, 10) : (employee.identity?.dob ? String(employee.identity.dob).slice(0, 10) : (prev.dob || '')),
-        parentsContact: {
-          fatherName: employee.parentsContact?.fatherName || prev.parentsContact?.fatherName || '',
-          motherName: employee.parentsContact?.motherName || prev.parentsContact?.motherName || '',
-          parentPhone: employee.parentsContact?.parentPhone || employee.parentsContact?.phone || prev.parentsContact?.parentPhone || '',
-          address: employee.parentsContact?.address || prev.parentsContact?.address || '',
-        },
-        emergencyContact: {
-          name: employee.emergencyContact?.name || prev.emergencyContact?.name || '',
-          relationship: employee.emergencyContact?.relationship || prev.emergencyContact?.relationship || '',
-          phone: employee.emergencyContact?.phone || prev.emergencyContact?.phone || '',
-        },
+        parentsContact: safeParentsContact(employee.parentsContact || prev.parentsContact),
+        emergencyContact: safeEmergencyContact(employee.emergencyContact || prev.emergencyContact),
         bankDetails: {
           bankName: employee.bankDetails?.bankName || prev.bankDetails?.bankName || '',
           accountNumber: employee.bankDetails?.accountNumber || prev.bankDetails?.accountNumber || '',
@@ -466,9 +472,52 @@ export function OnboardingDossierView({ employee, canEdit = false, canVerify = f
     e.preventDefault()
     setSaving(true)
     setFeedback('')
+
+    // Strict Emergency Contact validation & normalization
+    const ecName = (editData.emergencyContact?.name || '').trim()
+    const ecRel = (editData.emergencyContact?.relationship || '').trim()
+    const ecPhone = String(editData.emergencyContact?.phone || '').replace(/[^0-9+\s\-()]/g, '').trim()
+    const ecDigits = ecPhone.replace(/\D/g, '')
+
+    if (ecName && ecName.length < 2) {
+      setFeedback('Error: Emergency Contact Name must contain at least 2 characters.')
+      setSaving(false)
+      return
+    }
+    if (ecPhone && ecDigits.length < 10) {
+      setFeedback('Error: Emergency Contact Phone Number must contain at least 10 numerical digits.')
+      setSaving(false)
+      return
+    }
+
+    // Strict Parents Contact Phone validation & normalization
+    const pFather = (editData.parentsContact?.fatherName || '').trim()
+    const pMother = (editData.parentsContact?.motherName || '').trim()
+    const pPhone = String(editData.parentsContact?.parentPhone || editData.parentsContact?.phone || '').replace(/[^0-9+\s\-()]/g, '').trim()
+    const pDigits = pPhone.replace(/\D/g, '')
+    const pAddress = (editData.parentsContact?.address || '').trim()
+
+    if (pPhone && pDigits.length < 10) {
+      setFeedback("Error: Parents' Contact Phone Number must contain at least 10 numerical digits.")
+      setSaving(false)
+      return
+    }
+
     try {
       const payload = {
         ...editData,
+        emergencyContact: {
+          name: ecName,
+          relationship: ecRel,
+          phone: ecDigits.length >= 10 ? ecPhone : '',
+        },
+        parentsContact: {
+          fatherName: pFather,
+          motherName: pMother,
+          parentPhone: pDigits.length >= 10 ? pPhone : '',
+          phone: pDigits.length >= 10 ? pPhone : '',
+          address: pAddress,
+        },
         onboardingStatus: 'submitted',
         onboardingSubmittedAt: new Date().toISOString(),
       }
@@ -2553,11 +2602,26 @@ export function OnboardingDossierView({ employee, canEdit = false, canVerify = f
                       Parents' Contact Phone
                       <input
                         type="tel"
+                        inputMode="tel"
+                        autoComplete="tel"
                         className="ui-input"
                         value={editData.parentsContact.parentPhone || ''}
-                        onChange={(e) => setEditData({ ...editData, parentsContact: { ...editData.parentsContact, parentPhone: e.target.value } })}
-                        placeholder="e.g. +91 98765 43210"
+                        onChange={(e) => {
+                          const sanitized = e.target.value.replace(/[^0-9+\s\-()]/g, '')
+                          setEditData((prev) => ({
+                            ...prev,
+                            parentsContact: {
+                              ...(prev.parentsContact || {}),
+                              parentPhone: sanitized,
+                            },
+                          }))
+                        }}
+                        placeholder="e.g. +91 98765 43210 (Numerical values only)"
+                        maxLength={20}
                       />
+                      <span style={{ fontSize: '10px', color: '#64748b' }}>
+                        Numerical digits only (min. 10 digits)
+                      </span>
                     </label>
                     <label style={{ display: 'grid', gap: '5px', fontSize: '12px', fontWeight: 600, color: '#334155' }}>
                       Permanent Residence Address
@@ -2565,7 +2629,16 @@ export function OnboardingDossierView({ employee, canEdit = false, canVerify = f
                         type="text"
                         className="ui-input"
                         value={editData.parentsContact.address || ''}
-                        onChange={(e) => setEditData({ ...editData, parentsContact: { ...editData.parentsContact, address: e.target.value } })}
+                        onChange={(e) => {
+                          const val = e.target.value
+                          setEditData((prev) => ({
+                            ...prev,
+                            parentsContact: {
+                              ...(prev.parentsContact || {}),
+                              address: val,
+                            },
+                          }))
+                        }}
                         placeholder="House / Street / City / State / Pincode"
                       />
                     </label>
@@ -2587,31 +2660,80 @@ export function OnboardingDossierView({ employee, canEdit = false, canVerify = f
                       Emergency Contact Name
                       <input
                         type="text"
+                        autoComplete="name"
                         className="ui-input"
                         value={editData.emergencyContact.name || ''}
-                        onChange={(e) => setEditData({ ...editData, emergencyContact: { ...editData.emergencyContact, name: e.target.value } })}
-                        placeholder="e.g. Rajesh Kumar"
+                        onChange={(e) => {
+                          const val = e.target.value
+                          setEditData((prev) => ({
+                            ...prev,
+                            emergencyContact: {
+                              ...(prev.emergencyContact || {}),
+                              name: val,
+                            },
+                          }))
+                        }}
+                        placeholder="e.g. Rajesh Kumar (Full Name)"
+                        maxLength={60}
                       />
                     </label>
                     <label style={{ display: 'grid', gap: '5px', fontSize: '12px', fontWeight: 600, color: '#334155' }}>
                       Relationship to Employee
                       <input
                         type="text"
+                        list="relationship-presets"
                         className="ui-input"
                         value={editData.emergencyContact.relationship || ''}
-                        onChange={(e) => setEditData({ ...editData, emergencyContact: { ...editData.emergencyContact, relationship: e.target.value } })}
-                        placeholder="e.g. Father, Mother, Spouse, Sibling, Friend"
+                        onChange={(e) => {
+                          const val = e.target.value
+                          setEditData((prev) => ({
+                            ...prev,
+                            emergencyContact: {
+                              ...(prev.emergencyContact || {}),
+                              relationship: val,
+                            },
+                          }))
+                        }}
+                        placeholder="e.g. Father, Mother, Spouse, Brother, Sister"
+                        maxLength={40}
                       />
+                      <datalist id="relationship-presets">
+                        <option value="Father" />
+                        <option value="Mother" />
+                        <option value="Spouse" />
+                        <option value="Brother" />
+                        <option value="Sister" />
+                        <option value="Son" />
+                        <option value="Daughter" />
+                        <option value="Guardian" />
+                        <option value="Relative" />
+                        <option value="Friend" />
+                      </datalist>
                     </label>
                     <label style={{ display: 'grid', gap: '5px', fontSize: '12px', fontWeight: 600, color: '#334155' }}>
                       Emergency Contact Phone Number
                       <input
                         type="tel"
+                        inputMode="tel"
+                        autoComplete="tel"
                         className="ui-input"
                         value={editData.emergencyContact.phone || ''}
-                        onChange={(e) => setEditData({ ...editData, emergencyContact: { ...editData.emergencyContact, phone: e.target.value } })}
-                        placeholder="e.g. +91 98765 43210"
+                        onChange={(e) => {
+                          const sanitized = e.target.value.replace(/[^0-9+\s\-()]/g, '')
+                          setEditData((prev) => ({
+                            ...prev,
+                            emergencyContact: {
+                              ...(prev.emergencyContact || {}),
+                              phone: sanitized,
+                            },
+                          }))
+                        }}
+                        placeholder="e.g. +91 98765 43210 (Numerical values only)"
+                        maxLength={20}
                       />
+                      <span style={{ fontSize: '10px', color: '#64748b' }}>
+                        Numerical digits only (min. 10 digits)
+                      </span>
                     </label>
                   </div>
                 </div>

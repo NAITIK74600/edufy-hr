@@ -1,10 +1,10 @@
 import { n as __toESM } from "./rolldown-runtime-CO0Nlsmt.js";
 import { A as ShieldCheck, Bt as Clock, Dt as FileText, G as Power, K as Plus, L as Search, Pt as ExternalLink, Rt as Copy, V as RefreshCw, Wt as CircleCheck, X as PenLine, Xt as Check, _ as TriangleAlert, _n as require_react, d as Users, h as UserCheck, hn as ArrowLeft, kt as FileCheck, m as UserPlus, nn as Calculator, ot as Mail, p as UserX, rn as Cake, y as Trash } from "./icons-vendor-CNlTUIuG.js";
 import { a as require_jsx_runtime } from "./motion-vendor-3i60tGNx.js";
-import { A as copyTextToClipboard, C as INITIAL_ROLES, D as storeAction, I as apiClient, M as generateAutoPassword, N as generateNextEmployeeCode, T as hrStore, a as Field, b as hasPermission, c as StatusBadge, h as getRoleBadgeLabel, i as EmptyState, j as formatCredentialsShareText, n as ConfirmationDialog, o as PageHeader, r as DataTable, s as StatePanel, t as Button, w as getRecommendedRoleConfig, x as useAuth } from "./index-CBp-KtMT.js";
+import { A as copyTextToClipboard, C as INITIAL_ROLES, D as storeAction, I as apiClient, M as generateAutoPassword, N as generateNextEmployeeCode, T as hrStore, a as Field, b as hasPermission, c as StatusBadge, h as getRoleBadgeLabel, i as EmptyState, j as formatCredentialsShareText, n as ConfirmationDialog, o as PageHeader, r as DataTable, s as StatePanel, t as Button, w as getRecommendedRoleConfig, x as useAuth } from "./index-DrEnzUgz.js";
 import { n as formatINR } from "./currency-oCUzM0NR.js";
-import { t as OnboardingDossierView } from "./OnboardingDossierView-B7WXapwM.js";
-import { t as EmployeeComplianceStatusCard } from "./EmployeeComplianceStatusCard-CJ51EwdA.js";
+import { t as OnboardingDossierView } from "./OnboardingDossierView-DaIGdlZa.js";
+import { t as EmployeeComplianceStatusCard } from "./EmployeeComplianceStatusCard-DivQEDgI.js";
 // src/utils/salaryCalculator.js
 var import_react = /* @__PURE__ */ __toESM(require_react(), 1);
 /**
@@ -918,6 +918,13 @@ function EmployeeDirectory({ route } = {}) {
 			department: cleanDept,
 			designation: isDir ? emp.designation && emp.designation.toLowerCase().includes("director") ? emp.designation : "Managing Director" : emp.designation || "Pending Designation",
 			dob: emp.dob ? String(emp.dob).slice(0, 10) : emp.identity?.dob ? String(emp.identity.dob).slice(0, 10) : "",
+			emergencyContactName: emp.emergencyContact?.name || "",
+			emergencyContactRelationship: emp.emergencyContact?.relationship || "",
+			emergencyContactPhone: emp.emergencyContact?.phone || "",
+			fatherName: emp.parentsContact?.fatherName || "",
+			motherName: emp.parentsContact?.motherName || "",
+			parentPhone: emp.parentsContact?.parentPhone || emp.parentsContact?.phone || "",
+			parentAddress: emp.parentsContact?.address || "",
 			bankName: emp.bankDetails?.bankName || "",
 			accountNumber: emp.bankDetails?.accountNumber || "",
 			ifscCode: emp.bankDetails?.ifscCode || "",
@@ -964,6 +971,18 @@ function EmployeeDirectory({ route } = {}) {
 				ifscCode: String(editingEmployee.ifscCode || "").trim().toUpperCase(),
 				panTaxId: String(editingEmployee.panTaxId || "").trim().toUpperCase(),
 				uanNumber: String(editingEmployee.uanNumber || "").trim()
+			},
+			emergencyContact: {
+				name: String(editingEmployee.emergencyContactName || "").trim(),
+				relationship: String(editingEmployee.emergencyContactRelationship || "").trim(),
+				phone: String(editingEmployee.emergencyContactPhone || "").replace(/[^0-9+\s\-()]/g, "").trim()
+			},
+			parentsContact: {
+				fatherName: String(editingEmployee.fatherName || "").trim(),
+				motherName: String(editingEmployee.motherName || "").trim(),
+				parentPhone: String(editingEmployee.parentPhone || "").replace(/[^0-9+\s\-()]/g, "").trim(),
+				phone: String(editingEmployee.parentPhone || "").replace(/[^0-9+\s\-()]/g, "").trim(),
+				address: String(editingEmployee.parentAddress || "").trim()
 			}
 		};
 		delete updates.permissions;
@@ -4343,6 +4362,104 @@ function EmployeeDirectory({ route } = {}) {
 											})
 										})
 									]
+								}),
+								/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+									className: "form-section-title",
+									style: { marginTop: "16px" },
+									children: "Emergency & Family Contacts"
+								}),
+								/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+									style: {
+										display: "grid",
+										gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+										gap: "12px"
+									},
+									children: [
+										/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, {
+											label: "Emergency Contact Name",
+											children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+												type: "text",
+												placeholder: "e.g. Rajesh Kumar",
+												value: editingEmployee.emergencyContactName || "",
+												onChange: (e) => setEditingEmployee({
+													...editingEmployee,
+													emergencyContactName: e.target.value
+												})
+											})
+										}),
+										/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, {
+											label: "Relationship",
+											children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+												type: "text",
+												placeholder: "e.g. Brother, Father, Spouse",
+												value: editingEmployee.emergencyContactRelationship || "",
+												onChange: (e) => setEditingEmployee({
+													...editingEmployee,
+													emergencyContactRelationship: e.target.value
+												})
+											})
+										}),
+										/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, {
+											label: "Emergency Contact Phone",
+											children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+												type: "tel",
+												inputMode: "tel",
+												placeholder: "e.g. +91 98765 43210 (Digits only)",
+												value: editingEmployee.emergencyContactPhone || "",
+												onChange: (e) => setEditingEmployee({
+													...editingEmployee,
+													emergencyContactPhone: e.target.value.replace(/[^0-9+\s\-()]/g, "")
+												})
+											})
+										})
+									]
+								}),
+								/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+									style: {
+										display: "grid",
+										gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+										gap: "12px",
+										marginTop: "10px"
+									},
+									children: [
+										/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, {
+											label: "Father's Name",
+											children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+												type: "text",
+												placeholder: "Father's Name",
+												value: editingEmployee.fatherName || "",
+												onChange: (e) => setEditingEmployee({
+													...editingEmployee,
+													fatherName: e.target.value
+												})
+											})
+										}),
+										/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, {
+											label: "Mother's Name",
+											children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+												type: "text",
+												placeholder: "Mother's Name",
+												value: editingEmployee.motherName || "",
+												onChange: (e) => setEditingEmployee({
+													...editingEmployee,
+													motherName: e.target.value
+												})
+											})
+										}),
+										/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, {
+											label: "Parents' Phone",
+											children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+												type: "tel",
+												inputMode: "tel",
+												placeholder: "e.g. +91 98765 43210 (Digits only)",
+												value: editingEmployee.parentPhone || "",
+												onChange: (e) => setEditingEmployee({
+													...editingEmployee,
+													parentPhone: e.target.value.replace(/[^0-9+\s\-()]/g, "")
+												})
+											})
+										})
+									]
 								})
 							]
 						}),
@@ -5164,6 +5281,13 @@ function EmployeeForm({ id }) {
 					...emp,
 					phone: emp.phone || "",
 					dob: emp.dob ? String(emp.dob).slice(0, 10) : emp.identity?.dob ? String(emp.identity.dob).slice(0, 10) : "",
+					emergencyContactName: emp.emergencyContact?.name || "",
+					emergencyContactRelationship: emp.emergencyContact?.relationship || "",
+					emergencyContactPhone: emp.emergencyContact?.phone || "",
+					fatherName: emp.parentsContact?.fatherName || "",
+					motherName: emp.parentsContact?.motherName || "",
+					parentPhone: emp.parentsContact?.parentPhone || emp.parentsContact?.phone || "",
+					parentAddress: emp.parentsContact?.address || "",
 					bankName: emp.bankDetails?.bankName || "",
 					accountNumber: emp.bankDetails?.accountNumber || "",
 					ifscCode: emp.bankDetails?.ifscCode || "",

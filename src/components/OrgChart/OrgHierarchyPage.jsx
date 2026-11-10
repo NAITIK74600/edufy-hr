@@ -1785,6 +1785,30 @@ function QuickAddEmployeeModal({ allEmployees, defaultManagerId, isOpen, onClose
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginTop: '10px' }}>
                   <div>
+                    <label style={{ fontSize: '11px', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '4px' }}>Emergency Relationship</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Father, Spouse, Sibling"
+                      value={formData.emergencyRelation}
+                      onChange={(e) => setFormData({ ...formData, emergencyRelation: e.target.value })}
+                      style={{ width: '100%', padding: '8px 10px', fontSize: '12px', borderRadius: '6px', border: '1px solid #cbd5e1' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '11px', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '4px' }}>Emergency Contact Phone</label>
+                    <input
+                      type="tel"
+                      inputMode="tel"
+                      placeholder="+91 98765 43210 (Digits only)"
+                      value={formData.emergencyPhone}
+                      onChange={(e) => setFormData({ ...formData, emergencyPhone: e.target.value.replace(/[^0-9+\s\-()]/g, '') })}
+                      style={{ width: '100%', padding: '8px 10px', fontSize: '12px', borderRadius: '6px', border: '1px solid #cbd5e1' }}
+                    />
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginTop: '10px' }}>
+                  <div>
                     <label style={{ fontSize: '11px', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '4px' }}>Father's Name</label>
                     <input
                       type="text"
@@ -1811,9 +1835,10 @@ function QuickAddEmployeeModal({ allEmployees, defaultManagerId, isOpen, onClose
                     <label style={{ fontSize: '11px', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '4px' }}>Parents Phone</label>
                     <input
                       type="tel"
-                      placeholder="+91 98765 11111"
+                      inputMode="tel"
+                      placeholder="+91 98765 11111 (Digits only)"
                       value={formData.parentPhone}
-                      onChange={(e) => setFormData({ ...formData, parentPhone: e.target.value })}
+                      onChange={(e) => setFormData({ ...formData, parentPhone: e.target.value.replace(/[^0-9+\s\-()]/g, '') })}
                       style={{ width: '100%', padding: '8px 10px', fontSize: '12px', borderRadius: '6px', border: '1px solid #cbd5e1' }}
                     />
                   </div>

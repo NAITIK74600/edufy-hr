@@ -81,6 +81,31 @@ export function createEmployeeRouter({ auth, service, userStore, employeeReposit
       for (const key of allowed) {
         if (request.body && request.body[key] !== undefined) payload[key] = request.body[key]
       }
+      if (payload.emergencyContact) {
+        if (typeof payload.emergencyContact !== 'object' || payload.emergencyContact === null) {
+          payload.emergencyContact = {}
+        }
+        const ecPhone = String(payload.emergencyContact.phone || '').replace(/[^0-9+\s\-()]/g, '').trim()
+        payload.emergencyContact = {
+          name: String(payload.emergencyContact.name || '').trim(),
+          relationship: String(payload.emergencyContact.relationship || '').trim(),
+          phone: /\d/.test(ecPhone) ? ecPhone : '',
+        }
+      }
+      if (payload.parentsContact) {
+        if (typeof payload.parentsContact !== 'object' || payload.parentsContact === null) {
+          payload.parentsContact = {}
+        }
+        const pPhone = String(payload.parentsContact.parentPhone || payload.parentsContact.phone || '').replace(/[^0-9+\s\-()]/g, '').trim()
+        const validPhone = /\d/.test(pPhone) ? pPhone : ''
+        payload.parentsContact = {
+          fatherName: String(payload.parentsContact.fatherName || '').trim(),
+          motherName: String(payload.parentsContact.motherName || '').trim(),
+          parentPhone: validPhone,
+          phone: validPhone,
+          address: String(payload.parentsContact.address || '').trim(),
+        }
+      }
       if (payload.identity && typeof payload.identity === 'object' && payload.identity.dob && !payload.dob) {
         payload.dob = payload.identity.dob
       }
@@ -383,6 +408,31 @@ export function createEmployeeRouter({ auth, service, userStore, employeeReposit
             }
           }
           updateBody.onboardingDocs = sanitizedDocs
+        }
+      }
+      if (updateBody.emergencyContact) {
+        if (typeof updateBody.emergencyContact !== 'object' || updateBody.emergencyContact === null) {
+          updateBody.emergencyContact = {}
+        }
+        const ecPhone = String(updateBody.emergencyContact.phone || '').replace(/[^0-9+\s\-()]/g, '').trim()
+        updateBody.emergencyContact = {
+          name: String(updateBody.emergencyContact.name || '').trim(),
+          relationship: String(updateBody.emergencyContact.relationship || '').trim(),
+          phone: /\d/.test(ecPhone) ? ecPhone : '',
+        }
+      }
+      if (updateBody.parentsContact) {
+        if (typeof updateBody.parentsContact !== 'object' || updateBody.parentsContact === null) {
+          updateBody.parentsContact = {}
+        }
+        const pPhone = String(updateBody.parentsContact.parentPhone || updateBody.parentsContact.phone || '').replace(/[^0-9+\s\-()]/g, '').trim()
+        const validPhone = /\d/.test(pPhone) ? pPhone : ''
+        updateBody.parentsContact = {
+          fatherName: String(updateBody.parentsContact.fatherName || '').trim(),
+          motherName: String(updateBody.parentsContact.motherName || '').trim(),
+          parentPhone: validPhone,
+          phone: validPhone,
+          address: String(updateBody.parentsContact.address || '').trim(),
         }
       }
       const updated = await service.update(request.params.id, updateBody, request.auth.user)

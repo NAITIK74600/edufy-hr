@@ -2,7 +2,7 @@ import { n as __toESM } from "./rolldown-runtime-CO0Nlsmt.js";
 import { A as ShieldCheck, At as FileCheckCorner, Bt as Clock, Dt as FileText, Ft as Download, Gt as CircleAlert, I as Send, Lt as CreditCard, Mt as Eye, Qt as Camera, Wt as CircleCheck, Xt as Check, Y as Pen, _n as require_react, ct as Lock, d as Users, g as Upload, ht as Layers, i as X, lt as LockOpen, on as Briefcase, v as TrendingUp, z as RotateCcw } from "./icons-vendor-CNlTUIuG.js";
 import { r as require_react_dom } from "./react-vendor-B_MMQ54z.js";
 import { a as require_jsx_runtime } from "./motion-vendor-3i60tGNx.js";
-import { I as apiClient, T as hrStore, x as useAuth } from "./index-CBp-KtMT.js";
+import { I as apiClient, T as hrStore, x as useAuth } from "./index-DrEnzUgz.js";
 import { r as unmaskBankAccount } from "./payrollMatcher-DYZYv1X2.js";
 // src/constants/verificationConstants.js
 var import_react = /* @__PURE__ */ __toESM(require_react(), 1);
@@ -66,6 +66,37 @@ var VERIFICATION_TEMPLATES = [
 ];
 // src/components/OnboardingDossierView.jsx
 var import_jsx_runtime = require_jsx_runtime();
+function safeEmergencyContact(val) {
+	if (!val || typeof val !== "object") return {
+		name: "",
+		relationship: "",
+		phone: ""
+	};
+	const rawPhone = typeof val.phone === "string" ? val.phone.replace(/[^0-9+\s\-()]/g, "").trim() : "";
+	const hasDigits = /\d/.test(rawPhone);
+	return {
+		name: typeof val.name === "string" ? val.name.trim() : "",
+		relationship: typeof val.relationship === "string" ? val.relationship.trim() : "",
+		phone: hasDigits ? rawPhone : ""
+	};
+}
+function safeParentsContact(val) {
+	if (!val || typeof val !== "object") return {
+		fatherName: "",
+		motherName: "",
+		parentPhone: "",
+		address: ""
+	};
+	const rawPhone = String(val.parentPhone || val.phone || "").replace(/[^0-9+\s\-()]/g, "").trim();
+	const hasDigits = /\d/.test(rawPhone);
+	return {
+		fatherName: typeof val.fatherName === "string" ? val.fatherName.trim() : "",
+		motherName: typeof val.motherName === "string" ? val.motherName.trim() : "",
+		parentPhone: hasDigits ? rawPhone : "",
+		phone: hasDigits ? rawPhone : "",
+		address: typeof val.address === "string" ? val.address.trim() : ""
+	};
+}
 function ModalDocInput({ doc, currentDoc, onSelect }) {
 	const hasFile = Boolean(currentDoc && (currentDoc.url || currentDoc.fileName || Array.isArray(currentDoc.files) && currentDoc.files.length > 0));
 	const isReuploadRequested = Boolean(currentDoc && (currentDoc.reuploadRequested === true || currentDoc.status === "reupload_requested" || currentDoc.status === "rejected"));
@@ -299,8 +330,8 @@ function OnboardingDossierView({ employee, canEdit = false, canVerify = false, o
 		employeeRevisionModal
 	]);
 	const identity = employee?.identity || {};
-	const parents = employee?.parentsContact || {};
-	const emergency = employee?.emergencyContact || {};
+	const parents = safeParentsContact(employee?.parentsContact);
+	const emergency = safeEmergencyContact(employee?.emergencyContact);
 	const bank = employee?.bankDetails || {};
 	const rawDocs = {
 		...employee?.onboardingDocs || {},
@@ -343,17 +374,8 @@ function OnboardingDossierView({ employee, canEdit = false, canVerify = false, o
 			dob: employee?.dob ? String(employee.dob).slice(0, 10) : identity.dob ? String(identity.dob).slice(0, 10) : ""
 		},
 		dob: employee?.dob ? String(employee.dob).slice(0, 10) : identity.dob ? String(identity.dob).slice(0, 10) : "",
-		parentsContact: {
-			fatherName: parents.fatherName || "",
-			motherName: parents.motherName || "",
-			parentPhone: parents.parentPhone || parents.phone || "",
-			address: parents.address || ""
-		},
-		emergencyContact: {
-			name: emergency.name || "",
-			relationship: emergency.relationship || "",
-			phone: emergency.phone || ""
-		},
+		parentsContact: safeParentsContact(employee?.parentsContact || parents),
+		emergencyContact: safeEmergencyContact(employee?.emergencyContact || emergency),
 		bankDetails: {
 			bankName: bank.bankName || "",
 			accountNumber: bank.accountNumber || "",
@@ -373,17 +395,8 @@ function OnboardingDossierView({ employee, canEdit = false, canVerify = false, o
 				dob: employee?.dob ? String(employee.dob).slice(0, 10) : employee.identity?.dob ? String(employee.identity.dob).slice(0, 10) : prev.identity?.dob || ""
 			},
 			dob: employee?.dob ? String(employee.dob).slice(0, 10) : employee.identity?.dob ? String(employee.identity.dob).slice(0, 10) : prev.dob || "",
-			parentsContact: {
-				fatherName: employee.parentsContact?.fatherName || prev.parentsContact?.fatherName || "",
-				motherName: employee.parentsContact?.motherName || prev.parentsContact?.motherName || "",
-				parentPhone: employee.parentsContact?.parentPhone || employee.parentsContact?.phone || prev.parentsContact?.parentPhone || "",
-				address: employee.parentsContact?.address || prev.parentsContact?.address || ""
-			},
-			emergencyContact: {
-				name: employee.emergencyContact?.name || prev.emergencyContact?.name || "",
-				relationship: employee.emergencyContact?.relationship || prev.emergencyContact?.relationship || "",
-				phone: employee.emergencyContact?.phone || prev.emergencyContact?.phone || ""
-			},
+			parentsContact: safeParentsContact(employee.parentsContact || prev.parentsContact),
+			emergencyContact: safeEmergencyContact(employee.emergencyContact || prev.emergencyContact),
 			bankDetails: {
 				bankName: employee.bankDetails?.bankName || prev.bankDetails?.bankName || "",
 				accountNumber: employee.bankDetails?.accountNumber || prev.bankDetails?.accountNumber || "",
@@ -522,9 +535,45 @@ function OnboardingDossierView({ employee, canEdit = false, canVerify = false, o
 		e.preventDefault();
 		setSaving(true);
 		setFeedback("");
+		const ecName = (editData.emergencyContact?.name || "").trim();
+		const ecRel = (editData.emergencyContact?.relationship || "").trim();
+		const ecPhone = String(editData.emergencyContact?.phone || "").replace(/[^0-9+\s\-()]/g, "").trim();
+		const ecDigits = ecPhone.replace(/\D/g, "");
+		if (ecName && ecName.length < 2) {
+			setFeedback("Error: Emergency Contact Name must contain at least 2 characters.");
+			setSaving(false);
+			return;
+		}
+		if (ecPhone && ecDigits.length < 10) {
+			setFeedback("Error: Emergency Contact Phone Number must contain at least 10 numerical digits.");
+			setSaving(false);
+			return;
+		}
+		const pFather = (editData.parentsContact?.fatherName || "").trim();
+		const pMother = (editData.parentsContact?.motherName || "").trim();
+		const pPhone = String(editData.parentsContact?.parentPhone || editData.parentsContact?.phone || "").replace(/[^0-9+\s\-()]/g, "").trim();
+		const pDigits = pPhone.replace(/\D/g, "");
+		const pAddress = (editData.parentsContact?.address || "").trim();
+		if (pPhone && pDigits.length < 10) {
+			setFeedback("Error: Parents' Contact Phone Number must contain at least 10 numerical digits.");
+			setSaving(false);
+			return;
+		}
 		try {
 			const payload = {
 				...editData,
+				emergencyContact: {
+					name: ecName,
+					relationship: ecRel,
+					phone: ecDigits.length >= 10 ? ecPhone : ""
+				},
+				parentsContact: {
+					fatherName: pFather,
+					motherName: pMother,
+					parentPhone: pDigits.length >= 10 ? pPhone : "",
+					phone: pDigits.length >= 10 ? pPhone : "",
+					address: pAddress
+				},
 				onboardingStatus: "submitted",
 				onboardingSubmittedAt: (/* @__PURE__ */ new Date()).toISOString()
 			};
@@ -3780,19 +3829,35 @@ function OnboardingDossierView({ employee, canEdit = false, canVerify = false, o
 															fontWeight: 600,
 															color: "#334155"
 														},
-														children: ["Parents' Contact Phone", /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
-															type: "tel",
-															className: "ui-input",
-															value: editData.parentsContact.parentPhone || "",
-															onChange: (e) => setEditData({
-																...editData,
-																parentsContact: {
-																	...editData.parentsContact,
-																	parentPhone: e.target.value
-																}
+														children: [
+															"Parents' Contact Phone",
+															/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+																type: "tel",
+																inputMode: "tel",
+																autoComplete: "tel",
+																className: "ui-input",
+																value: editData.parentsContact.parentPhone || "",
+																onChange: (e) => {
+																	const sanitized = e.target.value.replace(/[^0-9+\s\-()]/g, "");
+																	setEditData((prev) => ({
+																		...prev,
+																		parentsContact: {
+																			...prev.parentsContact || {},
+																			parentPhone: sanitized
+																		}
+																	}));
+																},
+																placeholder: "e.g. +91 98765 43210 (Numerical values only)",
+																maxLength: 20
 															}),
-															placeholder: "e.g. +91 98765 43210"
-														})]
+															/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+																style: {
+																	fontSize: "10px",
+																	color: "#64748b"
+																},
+																children: "Numerical digits only (min. 10 digits)"
+															})
+														]
 													}),
 													/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", {
 														style: {
@@ -3806,13 +3871,16 @@ function OnboardingDossierView({ employee, canEdit = false, canVerify = false, o
 															type: "text",
 															className: "ui-input",
 															value: editData.parentsContact.address || "",
-															onChange: (e) => setEditData({
-																...editData,
-																parentsContact: {
-																	...editData.parentsContact,
-																	address: e.target.value
-																}
-															}),
+															onChange: (e) => {
+																const val = e.target.value;
+																setEditData((prev) => ({
+																	...prev,
+																	parentsContact: {
+																		...prev.parentsContact || {},
+																		address: val
+																	}
+																}));
+															},
 															placeholder: "House / Street / City / State / Pincode"
 														})]
 													})
@@ -3866,16 +3934,21 @@ function OnboardingDossierView({ employee, canEdit = false, canVerify = false, o
 														},
 														children: ["Emergency Contact Name", /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
 															type: "text",
+															autoComplete: "name",
 															className: "ui-input",
 															value: editData.emergencyContact.name || "",
-															onChange: (e) => setEditData({
-																...editData,
-																emergencyContact: {
-																	...editData.emergencyContact,
-																	name: e.target.value
-																}
-															}),
-															placeholder: "e.g. Rajesh Kumar"
+															onChange: (e) => {
+																const val = e.target.value;
+																setEditData((prev) => ({
+																	...prev,
+																	emergencyContact: {
+																		...prev.emergencyContact || {},
+																		name: val
+																	}
+																}));
+															},
+															placeholder: "e.g. Rajesh Kumar (Full Name)",
+															maxLength: 60
 														})]
 													}),
 													/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", {
@@ -3886,19 +3959,42 @@ function OnboardingDossierView({ employee, canEdit = false, canVerify = false, o
 															fontWeight: 600,
 															color: "#334155"
 														},
-														children: ["Relationship to Employee", /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
-															type: "text",
-															className: "ui-input",
-															value: editData.emergencyContact.relationship || "",
-															onChange: (e) => setEditData({
-																...editData,
-																emergencyContact: {
-																	...editData.emergencyContact,
-																	relationship: e.target.value
-																}
+														children: [
+															"Relationship to Employee",
+															/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+																type: "text",
+																list: "relationship-presets",
+																className: "ui-input",
+																value: editData.emergencyContact.relationship || "",
+																onChange: (e) => {
+																	const val = e.target.value;
+																	setEditData((prev) => ({
+																		...prev,
+																		emergencyContact: {
+																			...prev.emergencyContact || {},
+																			relationship: val
+																		}
+																	}));
+																},
+																placeholder: "e.g. Father, Mother, Spouse, Brother, Sister",
+																maxLength: 40
 															}),
-															placeholder: "e.g. Father, Mother, Spouse, Sibling, Friend"
-														})]
+															/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("datalist", {
+																id: "relationship-presets",
+																children: [
+																	/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "Father" }),
+																	/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "Mother" }),
+																	/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "Spouse" }),
+																	/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "Brother" }),
+																	/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "Sister" }),
+																	/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "Son" }),
+																	/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "Daughter" }),
+																	/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "Guardian" }),
+																	/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "Relative" }),
+																	/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "Friend" })
+																]
+															})
+														]
 													}),
 													/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", {
 														style: {
@@ -3908,19 +4004,35 @@ function OnboardingDossierView({ employee, canEdit = false, canVerify = false, o
 															fontWeight: 600,
 															color: "#334155"
 														},
-														children: ["Emergency Contact Phone Number", /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
-															type: "tel",
-															className: "ui-input",
-															value: editData.emergencyContact.phone || "",
-															onChange: (e) => setEditData({
-																...editData,
-																emergencyContact: {
-																	...editData.emergencyContact,
-																	phone: e.target.value
-																}
+														children: [
+															"Emergency Contact Phone Number",
+															/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+																type: "tel",
+																inputMode: "tel",
+																autoComplete: "tel",
+																className: "ui-input",
+																value: editData.emergencyContact.phone || "",
+																onChange: (e) => {
+																	const sanitized = e.target.value.replace(/[^0-9+\s\-()]/g, "");
+																	setEditData((prev) => ({
+																		...prev,
+																		emergencyContact: {
+																			...prev.emergencyContact || {},
+																			phone: sanitized
+																		}
+																	}));
+																},
+																placeholder: "e.g. +91 98765 43210 (Numerical values only)",
+																maxLength: 20
 															}),
-															placeholder: "e.g. +91 98765 43210"
-														})]
+															/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+																style: {
+																	fontSize: "10px",
+																	color: "#64748b"
+																},
+																children: "Numerical digits only (min. 10 digits)"
+															})
+														]
 													})
 												]
 											})]
@@ -5233,4 +5345,4 @@ function VerificationFormCard({ template, docData, isVerified, canEdit, isHRorAd
 		})]
 	});
 }
-export { VERIFICATION_TEMPLATES as n, OnboardingDossierView as t };
+export { VERIFICATION_TEMPLATES as i, safeEmergencyContact as n, safeParentsContact as r, OnboardingDossierView as t };

@@ -4850,9 +4850,17 @@ const localStore = {
     }
 
     const emergencyContact = {
-      name: empData.emergencyContactName || empData.emergencyContact?.name || 'Emergency Contact',
-      relationship: empData.emergencyContactRelationship || empData.emergencyContact?.relationship || 'Family',
-      phone: empData.emergencyContactPhone || empData.emergencyContact?.phone || empData.phone || '+91 98765 00001',
+      name: String(empData.emergencyContactName || empData.emergencyContact?.name || '').trim(),
+      relationship: String(empData.emergencyContactRelationship || empData.emergencyContact?.relationship || '').trim(),
+      phone: String(empData.emergencyContactPhone || empData.emergencyContact?.phone || empData.phone || '').replace(/[^0-9+\s\-()]/g, '').trim(),
+    }
+
+    const parentsContact = {
+      fatherName: String(empData.fatherName || empData.parentsContact?.fatherName || '').trim(),
+      motherName: String(empData.motherName || empData.parentsContact?.motherName || '').trim(),
+      parentPhone: String(empData.parentPhone || empData.parentsContact?.parentPhone || empData.parentsContact?.phone || '').replace(/[^0-9+\s\-()]/g, '').trim(),
+      phone: String(empData.parentPhone || empData.parentsContact?.parentPhone || empData.parentsContact?.phone || '').replace(/[^0-9+\s\-()]/g, '').trim(),
+      address: String(empData.parentAddress || empData.parentsContact?.address || '').trim(),
     }
 
     const newEmp = {
@@ -4875,6 +4883,7 @@ const localStore = {
       managerName: empData.managerName || 'Sarah Chen',
       bankDetails,
       emergencyContact,
+      parentsContact,
       documents: [
         { id: `doc-${Date.now()}-1`, name: `Offer_Letter_${(empData.name || empData.displayName || "Employee").replace(/\s+/g, '_')}.pdf`, type: 'Offer Letter', size: '1.2 MB', date: empData.joiningDate || '2026-10-01' },
         { id: `doc-${Date.now()}-2`, name: `NDA_Signed_${(empData.name || empData.displayName || "Employee").replace(/\s+/g, '_')}.pdf`, type: 'NDA', size: '650 KB', date: empData.joiningDate || '2026-10-01' },
@@ -4972,8 +4981,27 @@ const localStore = {
     const emp = storeState.employees.find((e) => e.id === id || e._id === id || e.employeeId === id)
     if (!emp) return false
     if (payload.identity) emp.identity = { ...(emp.identity || {}), ...payload.identity }
-    if (payload.parentsContact) emp.parentsContact = { ...(emp.parentsContact || {}), ...payload.parentsContact }
-    if (payload.emergencyContact) emp.emergencyContact = { ...(emp.emergencyContact || {}), ...payload.emergencyContact }
+    if (payload.parentsContact) {
+      const prevP = (emp.parentsContact && typeof emp.parentsContact === 'object') ? emp.parentsContact : {}
+      const newP = typeof payload.parentsContact === 'object' ? payload.parentsContact : {}
+      const pPhone = String(newP.parentPhone ?? newP.phone ?? prevP.parentPhone ?? prevP.phone ?? '').replace(/[^0-9+\s\-()]/g, '').trim()
+      emp.parentsContact = {
+        fatherName: String(newP.fatherName ?? prevP.fatherName ?? '').trim(),
+        motherName: String(newP.motherName ?? prevP.motherName ?? '').trim(),
+        parentPhone: pPhone,
+        phone: pPhone,
+        address: String(newP.address ?? prevP.address ?? '').trim(),
+      }
+    }
+    if (payload.emergencyContact) {
+      const prevE = (emp.emergencyContact && typeof emp.emergencyContact === 'object') ? emp.emergencyContact : {}
+      const newE = typeof payload.emergencyContact === 'object' ? payload.emergencyContact : {}
+      emp.emergencyContact = {
+        name: String(newE.name ?? prevE.name ?? '').trim(),
+        relationship: String(newE.relationship ?? prevE.relationship ?? '').trim(),
+        phone: String(newE.phone ?? prevE.phone ?? '').replace(/[^0-9+\s\-()]/g, '').trim(),
+      }
+    }
     if (payload.bankDetails) emp.bankDetails = { ...(emp.bankDetails || {}), ...payload.bankDetails }
     if (payload.onboardingDocs) emp.onboardingDocs = { ...(emp.onboardingDocs || {}), ...payload.onboardingDocs }
     if (payload.financeDetails) emp.financeDetails = { ...(emp.financeDetails || {}), ...payload.financeDetails }
@@ -5347,11 +5375,23 @@ const localStore = {
       ...(updates.uanNumber ? { uanNumber: updates.uanNumber } : {}),
     }
 
+    const existingEmergency = (existing.emergencyContact && typeof existing.emergencyContact === 'object') ? existing.emergencyContact : {}
+    const updatesEmergency = (updates.emergencyContact && typeof updates.emergencyContact === 'object') ? updates.emergencyContact : {}
     const updatedEmergency = {
-      ...(existing.emergencyContact || {}),
-      ...(updates.emergencyContact || {}),
-      ...(updates.emergencyContactName ? { name: updates.emergencyContactName } : {}),
-      ...(updates.emergencyContactPhone ? { phone: updates.emergencyContactPhone } : {}),
+      name: String(updates.emergencyContactName || updatesEmergency.name || existingEmergency.name || '').trim(),
+      relationship: String(updates.emergencyContactRelationship || updatesEmergency.relationship || existingEmergency.relationship || '').trim(),
+      phone: String(updates.emergencyContactPhone || updatesEmergency.phone || existingEmergency.phone || '').replace(/[^0-9+\s\-()]/g, '').trim(),
+    }
+
+    const existingParents = (existing.parentsContact && typeof existing.parentsContact === 'object') ? existing.parentsContact : {}
+    const updatesParents = (updates.parentsContact && typeof updates.parentsContact === 'object') ? updates.parentsContact : {}
+    const pPhone = String(updates.parentPhone || updatesParents.parentPhone || updatesParents.phone || existingParents.parentPhone || existingParents.phone || '').replace(/[^0-9+\s\-()]/g, '').trim()
+    const updatedParents = {
+      fatherName: String(updates.fatherName || updatesParents.fatherName || existingParents.fatherName || '').trim(),
+      motherName: String(updates.motherName || updatesParents.motherName || existingParents.motherName || '').trim(),
+      parentPhone: pPhone,
+      phone: pPhone,
+      address: String(updates.parentAddress || updatesParents.address || existingParents.address || '').trim(),
     }
 
     storeState.employees = storeState.employees.map((emp) => {
@@ -5364,6 +5404,7 @@ const localStore = {
           salaryStructure: updates.salaryStructure !== undefined ? updates.salaryStructure : (emp.salaryStructure || {}),
           bankDetails: updatedBankDetails,
           emergencyContact: updatedEmergency,
+          parentsContact: updatedParents,
         }
       }
       return emp

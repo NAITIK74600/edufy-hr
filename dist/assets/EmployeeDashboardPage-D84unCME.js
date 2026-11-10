@@ -1,13 +1,13 @@
 import { n as __toESM } from "./rolldown-runtime-CO0Nlsmt.js";
 import { A as ShieldCheck, Bt as Clock, Dt as FileText, E as Sparkles, Ft as Download, Gt as CircleAlert, H as Receipt, I as Send, J as Phone, K as Plus, Kt as ChevronUp, L as Search, Mt as Eye, Q as Paperclip, U as Radio, Ut as CircleQuestionMark, V as RefreshCw, Vt as Clock3, Wt as CircleCheck, Xt as Check, Yt as ChevronDown, Z as Pause, _ as TriangleAlert, _n as require_react, a as Wifi, at as MapPin, b as Ticket, bt as Heart, d as Users, f as User, fn as Award, g as Upload, h as UserCheck, i as X, j as ShieldAlert, k as Shield, kt as FileCheck, mn as ArrowRight, o as Wallet, q as Play, s as WalletCards, sn as BriefcaseBusiness, st as LogOut, tn as CalendarDays, tt as MessageSquare, ut as LocateFixed, v as TrendingUp, y as Trash, zt as Coffee } from "./icons-vendor-CNlTUIuG.js";
 import { a as require_jsx_runtime } from "./motion-vendor-3i60tGNx.js";
-import { I as apiClient, O as currentPayrollMonth, P as workspaceAction, T as hrStore, _ as resolveUserDisplayName, c as StatusBadge, g as getTimeOfDayGreeting, h as getRoleBadgeLabel, i as EmptyState, k as todayKey, o as PageHeader, t as Button, x as useAuth } from "./index-CBp-KtMT.js";
+import { I as apiClient, O as currentPayrollMonth, P as workspaceAction, T as hrStore, _ as resolveUserDisplayName, c as StatusBadge, g as getTimeOfDayGreeting, h as getRoleBadgeLabel, i as EmptyState, k as todayKey, o as PageHeader, t as Button, x as useAuth } from "./index-DrEnzUgz.js";
 import { n as formatINR } from "./currency-oCUzM0NR.js";
-import { n as HolidayCalendarShowcase, t as CalendarWidgets } from "./CalendarWidgets-kmLq0_jR.js";
-import { a as PerformanceWorkspace, i as CompanyPoliciesView, n as getDailyAttendanceStatus, r as getLateCountInfo, t as CompanyDocumentsView } from "./CompanyDocumentsView-BbcB6feo.js";
-import { t as PayslipPreviewModal } from "./PayslipPreviewModal-D1SMhjDp.js";
+import { n as HolidayCalendarShowcase, t as CalendarWidgets } from "./CalendarWidgets-CFSY7SJt.js";
+import { a as PerformanceWorkspace, i as CompanyPoliciesView, n as getDailyAttendanceStatus, r as getLateCountInfo, t as CompanyDocumentsView } from "./CompanyDocumentsView-BuUHqxYz.js";
+import { t as PayslipPreviewModal } from "./PayslipPreviewModal-DDeDpxWJ.js";
 import { n as findEmployeeForUser, r as unmaskBankAccount, t as doesPayrollMatchUser } from "./payrollMatcher-DYZYv1X2.js";
-import { t as OnboardingDossierView } from "./OnboardingDossierView-B7WXapwM.js";
+import { n as safeEmergencyContact, r as safeParentsContact, t as OnboardingDossierView } from "./OnboardingDossierView-DaIGdlZa.js";
 // src/services/liveGpsTracker.js
 var import_react = /* @__PURE__ */ __toESM(require_react(), 1);
 /**
@@ -4902,8 +4902,8 @@ function ESSProfileView({ user }) {
 	}, [storeState.employees, user]);
 	const bank = employee?.bankDetails || {};
 	const identity = employee?.identity || {};
-	const emergency = employee?.emergencyContact || {};
-	const parents = employee?.parentsContact || {};
+	const emergency = safeEmergencyContact(employee?.emergencyContact);
+	const parents = safeParentsContact(employee?.parentsContact);
 	const isVerified = employee?.onboardingStatus === "verified";
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 		style: {
@@ -5338,19 +5338,19 @@ function ESSProfileView({ user }) {
 					children: [
 						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 							className: "profile-detail-row",
-							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Primary Contact Name" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: emergency.name || "Elena Rivera" })]
+							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Primary Contact Name" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: emergency.name || "Not recorded" })]
 						}),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 							className: "profile-detail-row",
-							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Relationship" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: emergency.relationship || "Spouse" })]
+							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Relationship" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: emergency.relationship || "Not recorded" })]
 						}),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 							className: "profile-detail-row",
-							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Contact Number" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: emergency.phone || "+91 98765 11223" })]
+							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Contact Number" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: emergency.phone || "Not recorded" })]
 						}),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 							className: "profile-detail-row",
-							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Parents Phone Contact" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: parents.parentPhone || parents.phone || "+91 98450 99887" })]
+							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Parents Phone Contact" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: parents.parentPhone || parents.phone || "Not recorded" })]
 						})
 					]
 				})]

@@ -454,6 +454,13 @@ function EmployeeDirectory({ route } = {}) {
       department: cleanDept,
       designation: isDir ? (emp.designation && emp.designation.toLowerCase().includes('director') ? emp.designation : 'Managing Director') : (emp.designation || 'Pending Designation'),
       dob: emp.dob ? String(emp.dob).slice(0, 10) : (emp.identity?.dob ? String(emp.identity.dob).slice(0, 10) : ''),
+      emergencyContactName: emp.emergencyContact?.name || '',
+      emergencyContactRelationship: emp.emergencyContact?.relationship || '',
+      emergencyContactPhone: emp.emergencyContact?.phone || '',
+      fatherName: emp.parentsContact?.fatherName || '',
+      motherName: emp.parentsContact?.motherName || '',
+      parentPhone: emp.parentsContact?.parentPhone || emp.parentsContact?.phone || '',
+      parentAddress: emp.parentsContact?.address || '',
       bankName: emp.bankDetails?.bankName || '',
       accountNumber: emp.bankDetails?.accountNumber || '',
       ifscCode: emp.bankDetails?.ifscCode || '',
@@ -505,6 +512,18 @@ function EmployeeDirectory({ route } = {}) {
         ifscCode: String(editingEmployee.ifscCode || '').trim().toUpperCase(),
         panTaxId: String(editingEmployee.panTaxId || '').trim().toUpperCase(),
         uanNumber: String(editingEmployee.uanNumber || '').trim(),
+      },
+      emergencyContact: {
+        name: String(editingEmployee.emergencyContactName || '').trim(),
+        relationship: String(editingEmployee.emergencyContactRelationship || '').trim(),
+        phone: String(editingEmployee.emergencyContactPhone || '').replace(/[^0-9+\s\-()]/g, '').trim(),
+      },
+      parentsContact: {
+        fatherName: String(editingEmployee.fatherName || '').trim(),
+        motherName: String(editingEmployee.motherName || '').trim(),
+        parentPhone: String(editingEmployee.parentPhone || '').replace(/[^0-9+\s\-()]/g, '').trim(),
+        phone: String(editingEmployee.parentPhone || '').replace(/[^0-9+\s\-()]/g, '').trim(),
+        address: String(editingEmployee.parentAddress || '').trim(),
       },
     }
     delete updates.permissions
@@ -2862,6 +2881,64 @@ function EmployeeDirectory({ route } = {}) {
                     />
                   </Field>
                 </div>
+
+                <p className="form-section-title" style={{ marginTop: '16px' }}>Emergency & Family Contacts</p>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
+                  <Field label="Emergency Contact Name">
+                    <input
+                      type="text"
+                      placeholder="e.g. Rajesh Kumar"
+                      value={editingEmployee.emergencyContactName || ''}
+                      onChange={(e) => setEditingEmployee({ ...editingEmployee, emergencyContactName: e.target.value })}
+                    />
+                  </Field>
+                  <Field label="Relationship">
+                    <input
+                      type="text"
+                      placeholder="e.g. Brother, Father, Spouse"
+                      value={editingEmployee.emergencyContactRelationship || ''}
+                      onChange={(e) => setEditingEmployee({ ...editingEmployee, emergencyContactRelationship: e.target.value })}
+                    />
+                  </Field>
+                  <Field label="Emergency Contact Phone">
+                    <input
+                      type="tel"
+                      inputMode="tel"
+                      placeholder="e.g. +91 98765 43210 (Digits only)"
+                      value={editingEmployee.emergencyContactPhone || ''}
+                      onChange={(e) => setEditingEmployee({ ...editingEmployee, emergencyContactPhone: e.target.value.replace(/[^0-9+\s\-()]/g, '') })}
+                    />
+                  </Field>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', marginTop: '10px' }}>
+                  <Field label="Father's Name">
+                    <input
+                      type="text"
+                      placeholder="Father's Name"
+                      value={editingEmployee.fatherName || ''}
+                      onChange={(e) => setEditingEmployee({ ...editingEmployee, fatherName: e.target.value })}
+                    />
+                  </Field>
+                  <Field label="Mother's Name">
+                    <input
+                      type="text"
+                      placeholder="Mother's Name"
+                      value={editingEmployee.motherName || ''}
+                      onChange={(e) => setEditingEmployee({ ...editingEmployee, motherName: e.target.value })}
+                    />
+                  </Field>
+                  <Field label="Parents' Phone">
+                    <input
+                      type="tel"
+                      inputMode="tel"
+                      placeholder="e.g. +91 98765 43210 (Digits only)"
+                      value={editingEmployee.parentPhone || ''}
+                      onChange={(e) => setEditingEmployee({ ...editingEmployee, parentPhone: e.target.value.replace(/[^0-9+\s\-()]/g, '') })}
+                    />
+                  </Field>
+                </div>
               </div>
 
               {modalError && (
@@ -3456,6 +3533,13 @@ function EmployeeForm({ id }) {
           ...emp,
           phone: emp.phone || '',
           dob: emp.dob ? String(emp.dob).slice(0, 10) : (emp.identity?.dob ? String(emp.identity.dob).slice(0, 10) : ''),
+      emergencyContactName: emp.emergencyContact?.name || '',
+      emergencyContactRelationship: emp.emergencyContact?.relationship || '',
+      emergencyContactPhone: emp.emergencyContact?.phone || '',
+      fatherName: emp.parentsContact?.fatherName || '',
+      motherName: emp.parentsContact?.motherName || '',
+      parentPhone: emp.parentsContact?.parentPhone || emp.parentsContact?.phone || '',
+      parentAddress: emp.parentsContact?.address || '',
       bankName: emp.bankDetails?.bankName || '',
           accountNumber: emp.bankDetails?.accountNumber || '',
           ifscCode: emp.bankDetails?.ifscCode || '',

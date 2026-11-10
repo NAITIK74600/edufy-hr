@@ -351,7 +351,7 @@ if (container && (container instanceof Element || container.nodeType === 1)) {
 }
 
 // Register PWA Service Worker for Offline, Mobile App & Background Execution
-const ACTIVE_PWA_CACHE = 'edufyi-hr-pwa-v32'
+const ACTIVE_PWA_CACHE = 'edufyi-hr-pwa-v33'
 function registerServiceWorker() {
   if (typeof window !== 'undefined' && 'serviceWorker' in navigator && window.location.protocol.startsWith('http')) {
     // Proactively purge old PWA caches

@@ -1,7 +1,7 @@
 import { n as __toESM } from "./rolldown-runtime-CO0Nlsmt.js";
 import { $ as Network, A as ShieldCheck, Ct as GitFork, Gt as CircleAlert, J as Phone, L as Search, Pt as ExternalLink, X as PenLine, Xt as Check, Yt as ChevronDown, _n as require_react, an as Building, d as Users, h as UserCheck, ht as Layers, i as X, it as Maximize2, m as UserPlus, mn as ArrowRight, n as ZoomIn, ot as Mail, qt as ChevronRight, t as ZoomOut, z as RotateCcw } from "./icons-vendor-CNlTUIuG.js";
 import { a as require_jsx_runtime } from "./motion-vendor-3i60tGNx.js";
-import { T as hrStore, x as useAuth } from "./index-CBp-KtMT.js";
+import { T as hrStore, x as useAuth } from "./index-DrEnzUgz.js";
 // src/components/OrgChart/OrgHierarchyPage.jsx
 var import_react = /* @__PURE__ */ __toESM(require_react(), 1);
 var import_jsx_runtime = require_jsx_runtime();
@@ -2568,6 +2568,64 @@ function QuickAddEmployeeModal({ allEmployees, defaultManagerId, isOpen, onClose
 											display: "block",
 											marginBottom: "4px"
 										},
+										children: "Emergency Relationship"
+									}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+										type: "text",
+										placeholder: "e.g. Father, Spouse, Sibling",
+										value: formData.emergencyRelation,
+										onChange: (e) => setFormData({
+											...formData,
+											emergencyRelation: e.target.value
+										}),
+										style: {
+											width: "100%",
+											padding: "8px 10px",
+											fontSize: "12px",
+											borderRadius: "6px",
+											border: "1px solid #cbd5e1"
+										}
+									})] }), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("label", {
+										style: {
+											fontSize: "11px",
+											fontWeight: 600,
+											color: "#475569",
+											display: "block",
+											marginBottom: "4px"
+										},
+										children: "Emergency Contact Phone"
+									}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+										type: "tel",
+										inputMode: "tel",
+										placeholder: "+91 98765 43210 (Digits only)",
+										value: formData.emergencyPhone,
+										onChange: (e) => setFormData({
+											...formData,
+											emergencyPhone: e.target.value.replace(/[^0-9+\s\-()]/g, "")
+										}),
+										style: {
+											width: "100%",
+											padding: "8px 10px",
+											fontSize: "12px",
+											borderRadius: "6px",
+											border: "1px solid #cbd5e1"
+										}
+									})] })]
+								}),
+								/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+									style: {
+										display: "grid",
+										gridTemplateColumns: "1fr 1fr",
+										gap: "12px",
+										marginTop: "10px"
+									},
+									children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("label", {
+										style: {
+											fontSize: "11px",
+											fontWeight: 600,
+											color: "#475569",
+											display: "block",
+											marginBottom: "4px"
+										},
 										children: "Father's Name"
 									}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
 										type: "text",
@@ -2628,11 +2686,12 @@ function QuickAddEmployeeModal({ allEmployees, defaultManagerId, isOpen, onClose
 										children: "Parents Phone"
 									}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
 										type: "tel",
-										placeholder: "+91 98765 11111",
+										inputMode: "tel",
+										placeholder: "+91 98765 11111 (Digits only)",
 										value: formData.parentPhone,
 										onChange: (e) => setFormData({
 											...formData,
-											parentPhone: e.target.value
+											parentPhone: e.target.value.replace(/[^0-9+\s\-()]/g, "")
 										}),
 										style: {
 											width: "100%",

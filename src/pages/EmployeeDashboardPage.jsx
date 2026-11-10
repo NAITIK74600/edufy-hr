@@ -80,7 +80,7 @@ import { getTimeOfDayGreeting, getRoleBadgeLabel, resolveUserDisplayName } from 
 import { formatINR, formatINRRaw, amountInWordsINR } from '../utils/currency'
 import { PayslipPreviewModal } from '../components/payroll/PayslipPreviewModal'
 import { doesPayrollMatchUser, unmaskBankAccount, findEmployeeForUser } from '../utils/payrollMatcher'
-import { OnboardingDossierView } from '../components/OnboardingDossierView'
+import { OnboardingDossierView, safeEmergencyContact, safeParentsContact } from '../components/OnboardingDossierView'
 import { CompanyPoliciesView } from '../components/CompanyPoliciesView'
 import { formatAttendanceNotes, getDailyAttendanceStatus, getLateCountInfo } from '../utils/attendanceUtils'
 import { HolidayCalendarShowcase } from '../components/HolidayCalendarShowcase'
@@ -3366,8 +3366,8 @@ function ESSProfileView({ user }) {
 
   const bank = employee?.bankDetails || {}
   const identity = employee?.identity || {}
-  const emergency = employee?.emergencyContact || {}
-  const parents = employee?.parentsContact || {}
+  const emergency = safeEmergencyContact(employee?.emergencyContact)
+  const parents = safeParentsContact(employee?.parentsContact)
   const isVerified = employee?.onboardingStatus === 'verified'
 
   return (
@@ -3662,19 +3662,19 @@ function ESSProfileView({ user }) {
           <div style={{ display: 'grid', gap: '8px', marginTop: '14px' }}>
             <div className="profile-detail-row">
               <span>Primary Contact Name</span>
-              <strong>{emergency.name || 'Elena Rivera'}</strong>
+              <strong>{emergency.name || 'Not recorded'}</strong>
             </div>
             <div className="profile-detail-row">
               <span>Relationship</span>
-              <strong>{emergency.relationship || 'Spouse'}</strong>
+              <strong>{emergency.relationship || 'Not recorded'}</strong>
             </div>
             <div className="profile-detail-row">
               <span>Contact Number</span>
-              <strong>{emergency.phone || '+91 98765 11223'}</strong>
+              <strong>{emergency.phone || 'Not recorded'}</strong>
             </div>
             <div className="profile-detail-row">
               <span>Parents Phone Contact</span>
-              <strong>{parents.parentPhone || parents.phone || '+91 98450 99887'}</strong>
+              <strong>{parents.parentPhone || parents.phone || 'Not recorded'}</strong>
             </div>
           </div>
         </section>
