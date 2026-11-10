@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/LoginPage-vPWwrB-k.js","assets/rolldown-runtime-CO0Nlsmt.js","assets/icons-vendor-CNlTUIuG.js","assets/motion-vendor-3i60tGNx.js","assets/ModulePlaceholder-BMOZ8s6D.js","assets/EmployeeDashboardPage-Cc16p6dO.js","assets/currency-oCUzM0NR.js","assets/CalendarWidgets-D4O1aAiK.js","assets/CompanyDocumentsView-D3r1YqlP.js","assets/companyDocumentsConstants-DUkgikMQ.js","assets/PayslipPreviewModal-4iTsk4Zr.js","assets/react-vendor-B_MMQ54z.js","assets/pdf-vendor-BkGpxo0p.js","assets/payrollMatcher-DYZYv1X2.js","assets/OnboardingDossierView-CVG3VSmO.js","assets/AdminDashboardPage-DPmXJ3-9.js","assets/EmployeesPage-CNxs6IOp.js","assets/EmployeeComplianceStatusCard-cgNg5A8H.js","assets/OverviewPage-5Gh0v2yE.js","assets/LeaveManagementPage-CiWgyfoe.js","assets/WorkspaceModulePage-BgTPu8_8.js","assets/OrgHierarchyPage-BPtAvKF6.js","assets/PayrollPage-VRP1lWAp.js","assets/EmployeeProfilePage-DPExPvxr.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/LoginPage-CzaApCpz.js","assets/rolldown-runtime-CO0Nlsmt.js","assets/icons-vendor-CNlTUIuG.js","assets/motion-vendor-3i60tGNx.js","assets/ModulePlaceholder-CwHMV-oc.js","assets/EmployeeDashboardPage-xr05fqvV.js","assets/currency-oCUzM0NR.js","assets/CalendarWidgets-C4DTToDC.js","assets/CompanyDocumentsView-poe1PZsy.js","assets/companyDocumentsConstants-DUkgikMQ.js","assets/PayslipPreviewModal-MbCp5vee.js","assets/react-vendor-B_MMQ54z.js","assets/pdf-vendor-BkGpxo0p.js","assets/payrollMatcher-DYZYv1X2.js","assets/OnboardingDossierView-Dxi2AMJI.js","assets/AdminDashboardPage-ChON4MyE.js","assets/EmployeesPage-CMjRUOWQ.js","assets/EmployeeComplianceStatusCard-h_yD-CLA.js","assets/OverviewPage-Cro_dnaC.js","assets/LeaveManagementPage-CuoNdRpx.js","assets/WorkspaceModulePage-Dkhf9rEt.js","assets/OrgHierarchyPage-C2ZvPYs2.js","assets/PayrollPage-5RVoZLqF.js","assets/EmployeeProfilePage-LSj0g0zV.js"])))=>i.map(i=>d[i]);
 import { n as __toESM } from "./rolldown-runtime-CO0Nlsmt.js";
 import { $ as Network, A as ShieldCheck, D as Smartphone, Dt as FileText, E as Sparkles, Et as FingerprintPattern, Ft as Download, Gt as CircleAlert, I as Send, K as Plus, M as Share, Mt as Eye, Nt as EyeOff, P as Settings2, Qt as Camera, Tt as FolderOpen, Ut as CircleQuestionMark, Vt as Clock3, Wt as CircleCheck, Yt as ChevronDown, _n as require_react, an as Building, at as MapPin, b as Ticket, c as VolumeX, cn as Bot, ct as Lock, d as Users, dn as Bell, dt as LoaderCircle, f as User, gt as Laptop, h as UserCheck, i as X, jt as FileChartColumnIncreasing, l as Volume2, ln as BookOpen, m as UserPlus, mt as LayoutDashboard, nt as Menu, rt as Megaphone, s as WalletCards, sn as BriefcaseBusiness, st as LogOut, tn as CalendarDays, vt as KeyRound, w as SquarePlus, x as Target, y as Trash, yt as House } from "./icons-vendor-CNlTUIuG.js";
 import { n as require_client, r as require_react_dom } from "./react-vendor-B_MMQ54z.js";
@@ -12774,6 +12774,7 @@ function resolveNotificationRoute(notification, user) {
 	return `#/${getCanonicalPortal(user)}/notifications`;
 }
 // src/app/routes.js
+var import_react_dom = require_react_dom();
 var adminRoutes = [
 	{
 		path: "/admin",
@@ -15837,6 +15838,23 @@ function HRLayout({ route, children }) {
 			window.removeEventListener("appinstalled", onInstalled);
 		};
 	}, []);
+	const [isMobileScreen, setIsMobileScreen] = (0, import_react.useState)(() => {
+		if (typeof window === "undefined") return false;
+		return window.innerWidth <= 820;
+	});
+	(0, import_react.useEffect)(() => {
+		if (typeof window === "undefined") return;
+		const mq = window.matchMedia("(max-width: 820px)");
+		const update = () => setIsMobileScreen(mq.matches);
+		update();
+		if (mq.addEventListener) {
+			mq.addEventListener("change", update);
+			return () => mq.removeEventListener("change", update);
+		} else {
+			window.addEventListener("resize", update);
+			return () => window.removeEventListener("resize", update);
+		}
+	}, []);
 	const navRef = (0, import_react.useRef)(null);
 	const fileInputRef = (0, import_react.useRef)(null);
 	const notifRef = (0, import_react.useRef)(null);
@@ -15851,8 +15869,8 @@ function HRLayout({ route, children }) {
 	(0, import_react.useEffect)(() => {
 		function handleClickOutside(event) {
 			const path = event.composedPath ? event.composedPath() : [];
-			const clickedProfile = profileRef.current && (profileRef.current.contains(event.target) || path.includes(profileRef.current) || Boolean(event.target?.closest?.(".topbar-profile-dropdown")));
-			const clickedNotif = notifRef.current && (notifRef.current.contains(event.target) || path.includes(notifRef.current) || Boolean(event.target?.closest?.(".notif-popover")));
+			const clickedProfile = profileRef.current && (profileRef.current.contains(event.target) || path.includes(profileRef.current)) || Boolean(event.target?.closest?.(".topbar-profile-dropdown")) || Boolean(event.target?.closest?.(".profile-menu-popover"));
+			const clickedNotif = notifRef.current && (notifRef.current.contains(event.target) || path.includes(notifRef.current)) || Boolean(event.target?.closest?.(".notif-popover"));
 			if (!clickedProfile) setProfileOpen(false);
 			if (!clickedNotif) setNotifOpen(false);
 		}
@@ -16170,6 +16188,306 @@ function HRLayout({ route, children }) {
 	async function handleLogout() {
 		await logout();
 	}
+	const renderProfilePopoverNode = () => {
+		const popoverContent = /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+			className: "profile-menu-popover",
+			style: isMobileScreen ? {
+				position: "fixed",
+				bottom: "calc(68px + env(safe-area-inset-bottom, 0px))",
+				left: "10px",
+				right: "10px",
+				width: "auto",
+				maxWidth: "calc(100vw - 20px)",
+				maxHeight: "calc(85dvh - 50px)",
+				display: "flex",
+				flexDirection: "column",
+				overflow: "hidden",
+				borderRadius: "18px",
+				border: "1px solid #cbd5e1",
+				background: "#ffffff",
+				boxShadow: "0 -12px 48px rgba(15, 23, 42, 0.35)",
+				zIndex: 100005
+			} : void 0,
+			onClick: (e) => e.stopPropagation(),
+			children: [
+				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+					className: "profile-popover-header",
+					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+						className: "profile-avatar-box",
+						style: { position: "relative" },
+						children: [
+							user?.avatarUrl ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", {
+								src: user.avatarUrl,
+								alt: user?.displayName || "User",
+								className: "user-profile-img lg",
+								onError: (e) => {
+									e.currentTarget.style.display = "none";
+									if (e.currentTarget.nextElementSibling) e.currentTarget.nextElementSibling.style.display = "grid";
+								}
+							}) : null,
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+								className: `avatar avatar-${user?.avatarTone ?? "teal"}`,
+								style: {
+									display: user?.avatarUrl ? "none" : "grid",
+									width: "64px",
+									height: "64px",
+									fontSize: "18px"
+								},
+								children: user?.displayName?.slice(0, 2).toUpperCase() ?? "HR"
+							}),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+								className: "profile-online-badge lg",
+								title: "Active & Online"
+							})
+						]
+					}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+						style: {
+							flex: 1,
+							minWidth: 0
+						},
+						children: [
+							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+								style: {
+									display: "flex",
+									alignItems: "center",
+									justifyContent: "space-between",
+									gap: "8px"
+								},
+								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", {
+									style: {
+										fontSize: "14px",
+										whiteSpace: "nowrap",
+										overflow: "hidden",
+										textOverflow: "ellipsis"
+									},
+									children: user?.displayName
+								}), isMobileScreen && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+									type: "button",
+									onClick: () => setProfileOpen(false),
+									style: {
+										border: "none",
+										background: "rgba(15, 23, 42, 0.08)",
+										borderRadius: "50%",
+										width: "28px",
+										height: "28px",
+										display: "grid",
+										placeItems: "center",
+										cursor: "pointer",
+										color: "#475569",
+										padding: 0
+									},
+									"aria-label": "Close profile menu",
+									children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(X, { size: 16 })
+								})]
+							}),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+								className: "profile-popover-email",
+								children: user?.email
+							}),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+								style: {
+									display: "flex",
+									gap: "6px",
+									alignItems: "center",
+									marginTop: "6px"
+								},
+								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+									className: `role-badge role-${user?.role}`,
+									children: getRoleBadgeLabel(user?.role)
+								}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+									style: {
+										fontSize: "9px",
+										color: "var(--teal)",
+										fontWeight: "600"
+									},
+									children: "● Active"
+								})]
+							})
+						]
+					})]
+				}),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+					className: "profile-popover-body",
+					style: isMobileScreen ? {
+						flex: "1 1 auto",
+						overflowY: "auto",
+						WebkitOverflowScrolling: "touch",
+						padding: "14px 16px",
+						maxHeight: "calc(85dvh - 190px)",
+						display: "flex",
+						flexDirection: "column",
+						gap: "8px"
+					} : void 0,
+					children: [
+						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+							style: {
+								padding: "8px 10px",
+								background: "#f5f8f7",
+								borderRadius: "8px",
+								border: "1px solid rgba(29, 138, 122, 0.15)",
+								display: "grid",
+								gap: "8px"
+							},
+							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+								style: {
+									display: "flex",
+									alignItems: "center",
+									justifyContent: "space-between"
+								},
+								children: [
+									/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+										style: {
+											fontSize: "10px",
+											fontWeight: 600,
+											color: "var(--ink)"
+										},
+										children: "Profile Photo"
+									}),
+									/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+										type: "file",
+										ref: fileInputRef,
+										style: { display: "none" },
+										accept: "image/*",
+										onChange: handlePhotoUpload
+									}),
+									/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
+										type: "button",
+										className: "profile-photo-change-btn",
+										onClick: () => fileInputRef.current?.click(),
+										title: "Upload new profile picture",
+										children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Camera, { size: 12 }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Change Photo" })]
+									})
+								]
+							}), photoNotice && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+								style: {
+									fontSize: "9px",
+									color: "var(--teal)",
+									fontWeight: 600,
+									display: "flex",
+									alignItems: "center",
+									gap: "4px"
+								},
+								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(CircleCheck, { size: 12 }), " Profile photo updated successfully!"]
+							})]
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+							className: "profile-detail-row",
+							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Employee ID" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: user?.employeeId || "EDU-EMP-001" })]
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+							className: "profile-detail-row",
+							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Department" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: user?.department || "People Operations" })]
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+							className: "profile-detail-row",
+							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Designation" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: user?.designation || (isAdmin ? "System Administrator" : isExecutive ? "Managing Director" : isHR ? "HR Operations" : "Staff Member") })]
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+							className: "profile-detail-row",
+							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Assigned Shift" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: (() => {
+								const r = storeState?.companySettings?.attendanceRules;
+								if (r?.workStartTime && r?.workEndTime) {
+									const f12 = (t, referenceTime = null, isEnd = false) => {
+										const m = String(t || "").trim().replace(/[\u202F\u00A0]/g, " ").match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/i);
+										if (!m) return t;
+										let h = parseInt(m[1], 10);
+										const min = m[2];
+										const meridiem = m[3]?.toUpperCase();
+										if (meridiem === "PM" && h < 12) h += 12;
+										if (meridiem === "AM" && h === 12) h = 0;
+										if (!meridiem && isEnd && h >= 1 && h <= 11) h += 12;
+										else if (!meridiem && !isEnd && referenceTime) {
+											const refMatch = String(referenceTime).trim().replace(/[\u202F\u00A0]/g, " ").match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/i);
+											if (refMatch) {
+												let rh = parseInt(refMatch[1], 10);
+												if (refMatch[3]?.toUpperCase() === "PM" && rh < 12) rh += 12;
+												if (rh >= 13 && h < 12 && rh - h > 8 && h + 12 < rh + 2) h += 12;
+											}
+										}
+										const ampm = h >= 12 ? "PM" : "AM";
+										h = h % 12 || 12;
+										return `${String(h).padStart(2, "0")}:${min} ${ampm}`;
+									};
+									return `General (${f12(r.workStartTime, r.workEndTime, false)} – ${f12(r.workEndTime, r.workStartTime, true)})`;
+								}
+								return "General (11:00 AM – 08:00 PM)";
+							})() })]
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+							className: "profile-role-notice",
+							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ShieldCheck, { size: 14 }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: isAdmin ? "Authorized Administrator Console" : isExecutive ? "Executive Managing Director Session" : isHR ? "Authorized HR Operations Session" : "Authorized Employee Session • Self-Service Portal" })]
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
+							type: "button",
+							className: "profile-photo-change-btn",
+							style: {
+								width: "100%",
+								justifyContent: "center",
+								marginTop: "8px",
+								padding: "7px 10px",
+								background: "#ffffff",
+								border: "1px solid var(--border)"
+							},
+							onClick: () => {
+								setProfileOpen(false);
+								setChangePasswordOpen(true);
+							},
+							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(KeyRound, {
+								size: 13,
+								style: { color: "var(--teal)" }
+							}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Change Password" })]
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
+							type: "button",
+							className: "profile-photo-change-btn",
+							style: {
+								width: "100%",
+								justifyContent: "center",
+								marginTop: "6px",
+								padding: "7px 10px",
+								background: "#ffffff",
+								border: "1px solid var(--border)"
+							},
+							onClick: () => {
+								setProfileOpen(false);
+								setPasskeyModalOpen(true);
+							},
+							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FingerprintPattern, {
+								size: 13,
+								style: { color: "var(--teal)" }
+							}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Passkeys & Biometrics" })]
+						})
+					]
+				}),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+					className: "profile-popover-footer",
+					style: isMobileScreen ? { flexShrink: 0 } : void 0,
+					children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
+						type: "button",
+						className: "popover-logout-btn",
+						onClick: handleLogout,
+						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(LogOut, { size: 14 }), " Sign out of workspace"]
+					})
+				})
+			]
+		});
+		if (isMobileScreen && typeof document !== "undefined") return (0, import_react_dom.createPortal)(/* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+			className: "popover-backdrop",
+			onClick: (e) => {
+				e.stopPropagation();
+				setProfileOpen(false);
+			},
+			style: {
+				position: "fixed",
+				inset: 0,
+				background: "rgba(15, 23, 42, 0.45)",
+				backdropFilter: "blur(3px)",
+				WebkitBackdropFilter: "blur(3px)",
+				zIndex: 1e5
+			}
+		}), popoverContent] }), document.body);
+		return popoverContent;
+	};
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 		className: `app-shell ${portalClass}`,
 		children: [
@@ -16380,396 +16698,419 @@ function HRLayout({ route, children }) {
 												className: "badge-count",
 												children: unreadCount > 99 ? "99+" : unreadCount
 											})]
-										}), notifOpen && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-											className: "popover-backdrop",
-											onClick: (e) => {
-												e.stopPropagation();
-												setNotifOpen(false);
-											},
-											style: {
-												position: "fixed",
-												inset: 0,
-												background: "rgba(15, 23, 42, 0.4)",
-												backdropFilter: "blur(2px)",
-												zIndex: 1e4
-											}
-										}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-											className: "notif-popover",
-											style: {
-												width: "380px",
-												maxWidth: "calc(100vw - 20px)",
-												maxHeight: "520px",
-												display: "flex",
-												flexDirection: "column",
-												boxShadow: "0 20px 50px rgba(15, 23, 42, 0.18)",
-												borderRadius: "14px",
-												border: "1px solid #cbd5e1",
-												background: "#ffffff",
-												overflow: "hidden"
-											},
-											children: [
-												/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-													className: "notif-header",
-													style: {
-														display: "flex",
-														justifyContent: "space-between",
-														alignItems: "center",
-														padding: "12px 14px",
-														borderBottom: "1px solid #e2e8f0",
-														background: "#f8fafc"
-													},
-													children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("strong", {
-														style: {
-															fontSize: "13.5px",
-															color: "#0f172a"
-														},
-														children: ["Notifications ", unreadCount > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
-															style: {
-																color: "#0d9488",
-																fontWeight: 700
-															},
-															children: [
-																"(",
-																unreadCount,
-																" new)"
-															]
-														})]
-													}) }), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+										}), notifOpen && (() => {
+											const notifContent = /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+												className: "popover-backdrop",
+												onClick: (e) => {
+													e.stopPropagation();
+													setNotifOpen(false);
+												},
+												style: {
+													position: "fixed",
+													inset: 0,
+													background: "rgba(15, 23, 42, 0.45)",
+													backdropFilter: "blur(3px)",
+													WebkitBackdropFilter: "blur(3px)",
+													zIndex: 1e5
+												}
+											}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+												className: "notif-popover",
+												onClick: (e) => e.stopPropagation(),
+												style: isMobileScreen ? {
+													position: "fixed",
+													top: "calc(58px + env(safe-area-inset-top, 0px))",
+													bottom: "auto",
+													left: "10px",
+													right: "10px",
+													width: "auto",
+													maxWidth: "calc(100vw - 20px)",
+													maxHeight: "calc(82dvh - 60px)",
+													display: "flex",
+													flexDirection: "column",
+													boxShadow: "0 20px 50px rgba(15, 23, 42, 0.28)",
+													borderRadius: "18px",
+													border: "1px solid #cbd5e1",
+													background: "#ffffff",
+													overflow: "hidden",
+													zIndex: 100005
+												} : {
+													width: "380px",
+													maxWidth: "calc(100vw - 20px)",
+													maxHeight: "520px",
+													display: "flex",
+													flexDirection: "column",
+													boxShadow: "0 20px 50px rgba(15, 23, 42, 0.18)",
+													borderRadius: "14px",
+													border: "1px solid #cbd5e1",
+													background: "#ffffff",
+													overflow: "hidden"
+												},
+												children: [
+													/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+														className: "notif-header",
 														style: {
 															display: "flex",
-															gap: "6px",
-															alignItems: "center"
+															justifyContent: "space-between",
+															alignItems: "center",
+															padding: "12px 14px",
+															borderBottom: "1px solid #e2e8f0",
+															background: "#f8fafc"
 														},
-														children: [
-															/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
-																type: "button",
-																style: {
-																	border: "1px solid #cbd5e1",
-																	background: soundMuted ? "#f1f5f9" : "#ecfdf5",
-																	color: soundMuted ? "#64748b" : "#047857",
-																	fontSize: "10.5px",
-																	cursor: "pointer",
-																	fontWeight: 600,
-																	display: "flex",
-																	alignItems: "center",
-																	gap: "3px",
-																	padding: "3px 7px",
-																	borderRadius: "6px"
-																},
-																title: soundMuted ? "Notification chime muted (Click to unmute)" : "Notification chime enabled (Click to mute)",
-																onClick: () => {
-																	const nextState = toggleSoundMuted();
-																	setSoundMutedState(nextState);
-																	if (!nextState) playNotificationSound("notification");
-																},
-																children: [soundMuted ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(VolumeX, { size: 12 }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Volume2, { size: 12 }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: soundMuted ? "Muted" : "Sound" })]
-															}),
-															unreadCount > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-																type: "button",
-																style: {
-																	border: 0,
-																	background: "transparent",
-																	color: "#0d9488",
-																	fontSize: "11px",
-																	cursor: "pointer",
-																	fontWeight: 600,
-																	padding: "3px 6px"
-																},
-																onClick: handleMarkAllRead,
-																children: "Mark all read"
-															}),
-															notifications.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-																type: "button",
-																style: {
-																	border: 0,
-																	background: "transparent",
-																	color: "#ef4444",
-																	fontSize: "11px",
-																	cursor: "pointer",
-																	padding: "3px 6px"
-																},
-																onClick: handleClearAll,
-																children: "Clear"
-															})
-														]
-													})]
-												}),
-												/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-													style: {
-														display: "flex",
-														background: "#f1f5f9",
-														padding: "4px 6px",
-														gap: "4px",
-														overflowX: "auto",
-														borderBottom: "1px solid #e2e8f0",
-														scrollbarWidth: "none"
-													},
-													children: [
-														{
-															key: "all",
-															label: "All"
-														},
-														{
-															key: "attendance",
-															label: "Attendance"
-														},
-														{
-															key: "location",
-															label: "GPS / Wi-Fi"
-														},
-														{
-															key: "leave",
-															label: "Leaves"
-														},
-														{
-															key: "task",
-															label: "Tasks"
-														},
-														{
-															key: "announcement",
-															label: "Announcements"
-														},
-														{
-															key: "payroll",
-															label: "Payroll"
-														}
-													].map((tab) => {
-														const count = notifications.filter((n) => {
-															if (tab.key === "all") return true;
-															const c = (n.category || n.type || "").toLowerCase();
-															if (tab.key === "attendance") return c.includes("attendance") || c.includes("punch") || c.includes("shift");
-															if (tab.key === "location") return c.includes("gps") || c.includes("network") || c.includes("wifi") || c.includes("geofence");
-															if (tab.key === "leave") return c.includes("leave");
-															if (tab.key === "task") return c.includes("task");
-															if (tab.key === "announcement") return c.includes("announcement") || c.includes("broadcast") || c.includes("bulletin");
-															if (tab.key === "payroll") return c.includes("payroll") || c.includes("salary") || c.includes("payslip");
-															return false;
-														}).length;
-														const isActive = notifCategory === tab.key;
-														return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
-															type: "button",
-															onClick: () => setNotifCategory(tab.key),
+														children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("strong", {
 															style: {
-																border: 0,
-																borderRadius: "6px",
-																padding: "4px 8px",
-																fontSize: "10.5px",
-																fontWeight: isActive ? 700 : 500,
-																background: isActive ? "#ffffff" : "transparent",
-																color: isActive ? "#0f172a" : "#64748b",
-																boxShadow: isActive ? "0 1px 3px rgba(0,0,0,0.08)" : "none",
-																cursor: "pointer",
-																whiteSpace: "nowrap",
-																display: "flex",
-																alignItems: "center",
-																gap: "4px"
+																fontSize: "13.5px",
+																color: "#0f172a"
 															},
-															children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: tab.label }), count > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+															children: ["Notifications ", unreadCount > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
 																style: {
-																	fontSize: "9px",
-																	background: isActive ? "#0d9488" : "#e2e8f0",
-																	color: isActive ? "#ffffff" : "#64748b",
-																	padding: "0 4px",
-																	borderRadius: "10px",
+																	color: "#0d9488",
 																	fontWeight: 700
 																},
-																children: count
+																children: [
+																	"(",
+																	unreadCount,
+																	" new)"
+																]
 															})]
-														}, tab.key);
-													})
-												}),
-												/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-													className: "notif-list",
-													style: {
-														flex: 1,
-														overflowY: "auto",
-														maxHeight: "350px"
-													},
-													children: (() => {
-														const list = notifications.filter((n) => {
-															if (notifCategory === "all") return true;
-															const c = (n.category || n.type || "").toLowerCase();
-															if (notifCategory === "attendance") return c.includes("attendance") || c.includes("punch") || c.includes("shift");
-															if (notifCategory === "location") return c.includes("gps") || c.includes("network") || c.includes("wifi") || c.includes("geofence");
-															if (notifCategory === "leave") return c.includes("leave");
-															if (notifCategory === "task") return c.includes("task");
-															if (notifCategory === "announcement") return c.includes("announcement") || c.includes("broadcast") || c.includes("bulletin");
-															if (notifCategory === "payroll") return c.includes("payroll") || c.includes("salary") || c.includes("payslip");
-															return true;
-														});
-														if (list.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+														}) }), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 															style: {
-																padding: "36px 16px",
-																textAlign: "center",
-																color: "#94a3b8"
+																display: "flex",
+																gap: "6px",
+																alignItems: "center"
 															},
-															children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Bell, {
-																size: 24,
+															children: [
+																/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
+																	type: "button",
+																	style: {
+																		border: "1px solid #cbd5e1",
+																		background: soundMuted ? "#f1f5f9" : "#ecfdf5",
+																		color: soundMuted ? "#64748b" : "#047857",
+																		fontSize: "10.5px",
+																		cursor: "pointer",
+																		fontWeight: 600,
+																		display: "flex",
+																		alignItems: "center",
+																		gap: "3px",
+																		padding: "3px 7px",
+																		borderRadius: "6px"
+																	},
+																	title: soundMuted ? "Notification chime muted (Click to unmute)" : "Notification chime enabled (Click to mute)",
+																	onClick: () => {
+																		const nextState = toggleSoundMuted();
+																		setSoundMutedState(nextState);
+																		if (!nextState) playNotificationSound("notification");
+																	},
+																	children: [soundMuted ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(VolumeX, { size: 12 }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Volume2, { size: 12 }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: soundMuted ? "Muted" : "Sound" })]
+																}),
+																unreadCount > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+																	type: "button",
+																	style: {
+																		border: 0,
+																		background: "transparent",
+																		color: "#0d9488",
+																		fontSize: "11px",
+																		cursor: "pointer",
+																		fontWeight: 600,
+																		padding: "3px 6px"
+																	},
+																	onClick: handleMarkAllRead,
+																	children: "Mark all read"
+																}),
+																notifications.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+																	type: "button",
+																	style: {
+																		border: 0,
+																		background: "transparent",
+																		color: "#ef4444",
+																		fontSize: "11px",
+																		cursor: "pointer",
+																		padding: "3px 6px"
+																	},
+																	onClick: handleClearAll,
+																	children: "Clear"
+																})
+															]
+														})]
+													}),
+													/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+														style: {
+															display: "flex",
+															background: "#f1f5f9",
+															padding: "4px 6px",
+															gap: "4px",
+															overflowX: "auto",
+															borderBottom: "1px solid #e2e8f0",
+															scrollbarWidth: "none"
+														},
+														children: [
+															{
+																key: "all",
+																label: "All"
+															},
+															{
+																key: "attendance",
+																label: "Attendance"
+															},
+															{
+																key: "location",
+																label: "GPS / Wi-Fi"
+															},
+															{
+																key: "leave",
+																label: "Leaves"
+															},
+															{
+																key: "task",
+																label: "Tasks"
+															},
+															{
+																key: "announcement",
+																label: "Announcements"
+															},
+															{
+																key: "payroll",
+																label: "Payroll"
+															}
+														].map((tab) => {
+															const count = notifications.filter((n) => {
+																if (tab.key === "all") return true;
+																const c = (n.category || n.type || "").toLowerCase();
+																if (tab.key === "attendance") return c.includes("attendance") || c.includes("punch") || c.includes("shift");
+																if (tab.key === "location") return c.includes("gps") || c.includes("network") || c.includes("wifi") || c.includes("geofence");
+																if (tab.key === "leave") return c.includes("leave");
+																if (tab.key === "task") return c.includes("task");
+																if (tab.key === "announcement") return c.includes("announcement") || c.includes("broadcast") || c.includes("bulletin");
+																if (tab.key === "payroll") return c.includes("payroll") || c.includes("salary") || c.includes("payslip");
+																return false;
+															}).length;
+															const isActive = notifCategory === tab.key;
+															return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
+																type: "button",
+																onClick: () => setNotifCategory(tab.key),
 																style: {
-																	opacity: .4,
-																	marginBottom: "6px"
-																}
-															}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
-																style: {
-																	margin: 0,
-																	fontSize: "12px"
-																},
-																children: "No notifications in this category."
-															})]
-														});
-														return list.map((n) => {
-															const isRead = Boolean(n.read || n.readAt);
-															const categoryStr = (n.category || n.type || "system").toLowerCase();
-															const isUrgent = n.priority === "urgent" || n.priority === "high";
-															return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-																className: `notif-item ${!isRead ? "unread" : ""}`,
-																style: {
+																	border: 0,
+																	borderRadius: "6px",
+																	padding: "4px 8px",
+																	fontSize: "10.5px",
+																	fontWeight: isActive ? 700 : 500,
+																	background: isActive ? "#ffffff" : "transparent",
+																	color: isActive ? "#0f172a" : "#64748b",
+																	boxShadow: isActive ? "0 1px 3px rgba(0,0,0,0.08)" : "none",
 																	cursor: "pointer",
-																	position: "relative",
-																	padding: "10px 12px",
-																	borderBottom: "1px solid #f1f5f9",
-																	background: !isRead ? "#f8fafc" : "#ffffff",
-																	borderLeft: !isRead ? "3.5px solid #0d9488" : "3.5px solid transparent",
+																	whiteSpace: "nowrap",
 																	display: "flex",
-																	gap: "10px",
-																	alignItems: "flex-start",
-																	transition: "background 0.15s ease"
+																	alignItems: "center",
+																	gap: "4px"
 																},
-																onClick: () => {
-																	handleMarkOneRead(n);
-																	handleNotificationNavigation(n);
-																	setNotifOpen(false);
+																children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: tab.label }), count > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+																	style: {
+																		fontSize: "9px",
+																		background: isActive ? "#0d9488" : "#e2e8f0",
+																		color: isActive ? "#ffffff" : "#64748b",
+																		padding: "0 4px",
+																		borderRadius: "10px",
+																		fontWeight: 700
+																	},
+																	children: count
+																})]
+															}, tab.key);
+														})
+													}),
+													/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+														className: "notif-list",
+														style: {
+															flex: 1,
+															overflowY: "auto",
+															maxHeight: "350px"
+														},
+														children: (() => {
+															const list = notifications.filter((n) => {
+																if (notifCategory === "all") return true;
+																const c = (n.category || n.type || "").toLowerCase();
+																if (notifCategory === "attendance") return c.includes("attendance") || c.includes("punch") || c.includes("shift");
+																if (notifCategory === "location") return c.includes("gps") || c.includes("network") || c.includes("wifi") || c.includes("geofence");
+																if (notifCategory === "leave") return c.includes("leave");
+																if (notifCategory === "task") return c.includes("task");
+																if (notifCategory === "announcement") return c.includes("announcement") || c.includes("broadcast") || c.includes("bulletin");
+																if (notifCategory === "payroll") return c.includes("payroll") || c.includes("salary") || c.includes("payslip");
+																return true;
+															});
+															if (list.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+																style: {
+																	padding: "36px 16px",
+																	textAlign: "center",
+																	color: "#94a3b8"
 																},
-																children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+																children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Bell, {
+																	size: 24,
 																	style: {
-																		width: "32px",
-																		height: "32px",
-																		borderRadius: "8px",
-																		display: "grid",
-																		placeItems: "center",
-																		flex: "0 0 auto",
-																		marginTop: "2px",
-																		background: categoryStr.includes("attendance") ? "#ecfdf5" : categoryStr.includes("gps") || categoryStr.includes("network") || categoryStr.includes("wifi") ? "#eff6ff" : categoryStr.includes("leave") ? "#f0fdf4" : categoryStr.includes("task") ? "#faf5ff" : categoryStr.includes("announcement") ? "#fefce8" : categoryStr.includes("salary") || categoryStr.includes("payroll") ? "#f0f9ff" : "#f1f5f9",
-																		color: categoryStr.includes("attendance") ? "#047857" : categoryStr.includes("gps") || categoryStr.includes("network") || categoryStr.includes("wifi") ? "#1d4ed8" : categoryStr.includes("leave") ? "#15803d" : categoryStr.includes("task") ? "#7e22ce" : categoryStr.includes("announcement") ? "#854d0e" : categoryStr.includes("salary") || categoryStr.includes("payroll") ? "#0369a1" : "#475569"
-																	},
-																	children: categoryStr.includes("attendance") ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Clock3, { size: 15 }) : categoryStr.includes("gps") || categoryStr.includes("geofence") ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Target, { size: 15 }) : categoryStr.includes("network") || categoryStr.includes("wifi") ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Network, { size: 15 }) : categoryStr.includes("leave") ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CalendarDays, { size: 15 }) : categoryStr.includes("task") ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(BriefcaseBusiness, { size: 15 }) : categoryStr.includes("announcement") ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Megaphone, { size: 15 }) : categoryStr.includes("salary") || categoryStr.includes("payroll") ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(WalletCards, { size: 15 }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Bell, { size: 15 })
-																}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+																		opacity: .4,
+																		marginBottom: "6px"
+																	}
+																}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 																	style: {
-																		flex: 1,
-																		minWidth: 0
+																		margin: 0,
+																		fontSize: "12px"
 																	},
-																	children: [
-																		/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-																			style: {
-																				display: "flex",
-																				justifyContent: "space-between",
-																				alignItems: "center",
-																				gap: "6px"
-																			},
-																			children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+																	children: "No notifications in this category."
+																})]
+															});
+															return list.map((n) => {
+																const isRead = Boolean(n.read || n.readAt);
+																const categoryStr = (n.category || n.type || "system").toLowerCase();
+																const isUrgent = n.priority === "urgent" || n.priority === "high";
+																return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+																	className: `notif-item ${!isRead ? "unread" : ""}`,
+																	style: {
+																		cursor: "pointer",
+																		position: "relative",
+																		padding: "10px 12px",
+																		borderBottom: "1px solid #f1f5f9",
+																		background: !isRead ? "#f8fafc" : "#ffffff",
+																		borderLeft: !isRead ? "3.5px solid #0d9488" : "3.5px solid transparent",
+																		display: "flex",
+																		gap: "10px",
+																		alignItems: "flex-start",
+																		transition: "background 0.15s ease"
+																	},
+																	onClick: () => {
+																		handleMarkOneRead(n);
+																		handleNotificationNavigation(n);
+																		setNotifOpen(false);
+																	},
+																	children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+																		style: {
+																			width: "32px",
+																			height: "32px",
+																			borderRadius: "8px",
+																			display: "grid",
+																			placeItems: "center",
+																			flex: "0 0 auto",
+																			marginTop: "2px",
+																			background: categoryStr.includes("attendance") ? "#ecfdf5" : categoryStr.includes("gps") || categoryStr.includes("network") || categoryStr.includes("wifi") ? "#eff6ff" : categoryStr.includes("leave") ? "#f0fdf4" : categoryStr.includes("task") ? "#faf5ff" : categoryStr.includes("announcement") ? "#fefce8" : categoryStr.includes("salary") || categoryStr.includes("payroll") ? "#f0f9ff" : "#f1f5f9",
+																			color: categoryStr.includes("attendance") ? "#047857" : categoryStr.includes("gps") || categoryStr.includes("network") || categoryStr.includes("wifi") ? "#1d4ed8" : categoryStr.includes("leave") ? "#15803d" : categoryStr.includes("task") ? "#7e22ce" : categoryStr.includes("announcement") ? "#854d0e" : categoryStr.includes("salary") || categoryStr.includes("payroll") ? "#0369a1" : "#475569"
+																		},
+																		children: categoryStr.includes("attendance") ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Clock3, { size: 15 }) : categoryStr.includes("gps") || categoryStr.includes("geofence") ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Target, { size: 15 }) : categoryStr.includes("network") || categoryStr.includes("wifi") ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Network, { size: 15 }) : categoryStr.includes("leave") ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CalendarDays, { size: 15 }) : categoryStr.includes("task") ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(BriefcaseBusiness, { size: 15 }) : categoryStr.includes("announcement") ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Megaphone, { size: 15 }) : categoryStr.includes("salary") || categoryStr.includes("payroll") ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(WalletCards, { size: 15 }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Bell, { size: 15 })
+																	}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+																		style: {
+																			flex: 1,
+																			minWidth: 0
+																		},
+																		children: [
+																			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 																				style: {
 																					display: "flex",
+																					justifyContent: "space-between",
 																					alignItems: "center",
 																					gap: "6px"
 																				},
-																				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+																				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 																					style: {
-																						fontSize: "9px",
-																						fontWeight: 700,
-																						textTransform: "uppercase",
-																						padding: "1px 5px",
-																						borderRadius: "4px",
-																						background: isUrgent ? "#fee2e2" : "#f1f5f9",
-																						color: isUrgent ? "#b91c1c" : "#475569"
+																						display: "flex",
+																						alignItems: "center",
+																						gap: "6px"
 																					},
-																					children: isUrgent ? "URGENT" : n.category || n.type || "SYSTEM"
-																				}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", {
+																					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+																						style: {
+																							fontSize: "9px",
+																							fontWeight: 700,
+																							textTransform: "uppercase",
+																							padding: "1px 5px",
+																							borderRadius: "4px",
+																							background: isUrgent ? "#fee2e2" : "#f1f5f9",
+																							color: isUrgent ? "#b91c1c" : "#475569"
+																						},
+																						children: isUrgent ? "URGENT" : n.category || n.type || "SYSTEM"
+																					}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", {
+																						style: {
+																							fontSize: "12px",
+																							color: "#0f172a",
+																							fontWeight: !isRead ? 700 : 600
+																						},
+																						children: n.title
+																					})]
+																				}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+																					type: "button",
+																					title: "Remove notification",
 																					style: {
+																						border: 0,
+																						background: "transparent",
+																						color: "#94a3b8",
 																						fontSize: "12px",
-																						color: "#0f172a",
-																						fontWeight: !isRead ? 700 : 600
+																						cursor: "pointer",
+																						padding: "1px 4px"
 																					},
-																					children: n.title
+																					onClick: (e) => {
+																						e.stopPropagation();
+																						handleDeleteOne(n);
+																					},
+																					children: "✕"
 																				})]
-																			}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-																				type: "button",
-																				title: "Remove notification",
+																			}),
+																			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 																				style: {
-																					border: 0,
-																					background: "transparent",
-																					color: "#94a3b8",
-																					fontSize: "12px",
-																					cursor: "pointer",
-																					padding: "1px 4px"
+																					margin: "3px 0 4px",
+																					fontSize: "11px",
+																					color: "#475569",
+																					lineHeight: 1.35,
+																					wordBreak: "break-word"
 																				},
-																				onClick: (e) => {
-																					e.stopPropagation();
-																					handleDeleteOne(n);
-																				},
-																				children: "✕"
-																			})]
-																		}),
-																		/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
-																			style: {
-																				margin: "3px 0 4px",
-																				fontSize: "11px",
-																				color: "#475569",
-																				lineHeight: 1.35,
-																				wordBreak: "break-word"
-																			},
-																			children: n.message
-																		}),
-																		/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-																			style: {
-																				display: "flex",
-																				justifyContent: "space-between",
-																				alignItems: "center"
-																			},
-																			children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("small", {
+																				children: n.message
+																			}),
+																			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 																				style: {
-																					fontSize: "9.5px",
-																					color: "#94a3b8"
+																					display: "flex",
+																					justifyContent: "space-between",
+																					alignItems: "center"
 																				},
-																				children: n.time || (n.createdAt ? new Date(n.createdAt).toLocaleTimeString([], {
-																					hour: "2-digit",
-																					minute: "2-digit"
-																				}) : "Recently")
-																			}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
-																				style: {
-																					fontSize: "10px",
-																					color: "#0d9488",
-																					fontWeight: 600
-																				},
-																				children: "Open →"
-																			})]
-																		})
-																	]
-																})]
-															}, n.id || n._id);
-														});
-													})()
-												}),
-												/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-													style: {
-														padding: "8px 14px",
-														borderTop: "1px solid #e2e8f0",
-														textAlign: "center",
-														background: "#f8fafc"
-													},
-													children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", {
-														href: `#/${isAdmin ? "admin" : isHR ? "hr" : "employee"}/notifications`,
-														onClick: () => setNotifOpen(false),
+																				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("small", {
+																					style: {
+																						fontSize: "9.5px",
+																						color: "#94a3b8"
+																					},
+																					children: n.time || (n.createdAt ? new Date(n.createdAt).toLocaleTimeString([], {
+																						hour: "2-digit",
+																						minute: "2-digit"
+																					}) : "Recently")
+																				}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+																					style: {
+																						fontSize: "10px",
+																						color: "#0d9488",
+																						fontWeight: 600
+																					},
+																					children: "Open →"
+																				})]
+																			})
+																		]
+																	})]
+																}, n.id || n._id);
+															});
+														})()
+													}),
+													/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
 														style: {
-															fontSize: "11px",
-															fontWeight: 600,
-															color: "#0d9488",
-															textDecoration: "none"
+															padding: "8px 14px",
+															borderTop: "1px solid #e2e8f0",
+															textAlign: "center",
+															background: "#f8fafc"
 														},
-														children: "View All in Notifications Center →"
+														children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", {
+															href: `#/${isAdmin ? "admin" : isHR ? "hr" : "employee"}/notifications`,
+															onClick: () => setNotifOpen(false),
+															style: {
+																fontSize: "11px",
+																fontWeight: 600,
+																color: "#0d9488",
+																textDecoration: "none"
+															},
+															children: "View All in Notifications Center →"
+														})
 													})
-												})
-											]
-										})] })]
+												]
+											})] });
+											if (isMobileScreen && typeof document !== "undefined") return (0, import_react_dom.createPortal)(notifContent, document.body);
+											return notifContent;
+										})()]
 									}),
 									/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 										className: "status-strip",
@@ -16851,242 +17192,7 @@ function HRLayout({ route, children }) {
 													flexShrink: 0
 												}
 											})]
-										}), profileOpen && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-											className: "popover-backdrop",
-											onClick: (e) => {
-												e.stopPropagation();
-												setProfileOpen(false);
-											},
-											style: {
-												position: "fixed",
-												inset: 0,
-												background: "rgba(15, 23, 42, 0.45)",
-												backdropFilter: "blur(2px)",
-												zIndex: 1e4
-											}
-										}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-											className: "profile-menu-popover",
-											children: [
-												/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-													className: "profile-popover-header",
-													children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-														className: "profile-avatar-box",
-														style: { position: "relative" },
-														children: [
-															user?.avatarUrl ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", {
-																src: user.avatarUrl,
-																alt: user?.displayName || "User",
-																className: "user-profile-img lg",
-																onError: (e) => {
-																	e.currentTarget.style.display = "none";
-																	if (e.currentTarget.nextElementSibling) e.currentTarget.nextElementSibling.style.display = "grid";
-																}
-															}) : null,
-															/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-																className: `avatar avatar-${user?.avatarTone ?? "teal"}`,
-																style: {
-																	display: user?.avatarUrl ? "none" : "grid",
-																	width: "64px",
-																	height: "64px",
-																	fontSize: "18px"
-																},
-																children: user?.displayName?.slice(0, 2).toUpperCase() ?? "HR"
-															}),
-															/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
-																className: "profile-online-badge lg",
-																title: "Active & Online"
-															})
-														]
-													}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-														style: {
-															flex: 1,
-															minWidth: 0
-														},
-														children: [
-															/* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", {
-																style: { fontSize: "14px" },
-																children: user?.displayName
-															}),
-															/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
-																className: "profile-popover-email",
-																children: user?.email
-															}),
-															/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-																style: {
-																	display: "flex",
-																	gap: "6px",
-																	alignItems: "center",
-																	marginTop: "6px"
-																},
-																children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
-																	className: `role-badge role-${user?.role}`,
-																	children: getRoleBadgeLabel(user?.role)
-																}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
-																	style: {
-																		fontSize: "9px",
-																		color: "var(--teal)",
-																		fontWeight: "600"
-																	},
-																	children: "● Active"
-																})]
-															})
-														]
-													})]
-												}),
-												/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-													className: "profile-popover-body",
-													children: [
-														/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-															style: {
-																padding: "8px 10px",
-																background: "#f5f8f7",
-																borderRadius: "8px",
-																border: "1px solid rgba(29, 138, 122, 0.15)",
-																display: "grid",
-																gap: "8px"
-															},
-															children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-																style: {
-																	display: "flex",
-																	alignItems: "center",
-																	justifyContent: "space-between"
-																},
-																children: [
-																	/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
-																		style: {
-																			fontSize: "10px",
-																			fontWeight: 600,
-																			color: "var(--ink)"
-																		},
-																		children: "Profile Photo"
-																	}),
-																	/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
-																		type: "file",
-																		ref: fileInputRef,
-																		style: { display: "none" },
-																		accept: "image/*",
-																		onChange: handlePhotoUpload
-																	}),
-																	/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
-																		type: "button",
-																		className: "profile-photo-change-btn",
-																		onClick: () => fileInputRef.current?.click(),
-																		title: "Upload new profile picture",
-																		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Camera, { size: 12 }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Change Photo" })]
-																	})
-																]
-															}), photoNotice && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-																style: {
-																	fontSize: "9px",
-																	color: "var(--teal)",
-																	fontWeight: 600,
-																	display: "flex",
-																	alignItems: "center",
-																	gap: "4px"
-																},
-																children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(CircleCheck, { size: 12 }), " Profile photo updated successfully!"]
-															})]
-														}),
-														/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-															className: "profile-detail-row",
-															children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Employee ID" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: user?.employeeId || "EDU-EMP-001" })]
-														}),
-														/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-															className: "profile-detail-row",
-															children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Department" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: user?.department || "People Operations" })]
-														}),
-														/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-															className: "profile-detail-row",
-															children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Designation" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: user?.designation || (isAdmin ? "System Administrator" : isExecutive ? "Managing Director" : isHR ? "HR Operations" : "Staff Member") })]
-														}),
-														/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-															className: "profile-detail-row",
-															children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Assigned Shift" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: (() => {
-																const r = storeState?.companySettings?.attendanceRules;
-																if (r?.workStartTime && r?.workEndTime) {
-																	const f12 = (t, referenceTime = null, isEnd = false) => {
-																		const m = String(t || "").trim().replace(/[\u202F\u00A0]/g, " ").match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/i);
-																		if (!m) return t;
-																		let h = parseInt(m[1], 10);
-																		const min = m[2];
-																		const meridiem = m[3]?.toUpperCase();
-																		if (meridiem === "PM" && h < 12) h += 12;
-																		if (meridiem === "AM" && h === 12) h = 0;
-																		if (!meridiem && isEnd && h >= 1 && h <= 11) h += 12;
-																		else if (!meridiem && !isEnd && referenceTime) {
-																			const refMatch = String(referenceTime).trim().replace(/[\u202F\u00A0]/g, " ").match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/i);
-																			if (refMatch) {
-																				let rh = parseInt(refMatch[1], 10);
-																				if (refMatch[3]?.toUpperCase() === "PM" && rh < 12) rh += 12;
-																				if (rh >= 13 && h < 12 && rh - h > 8 && h + 12 < rh + 2) h += 12;
-																			}
-																		}
-																		const ampm = h >= 12 ? "PM" : "AM";
-																		h = h % 12 || 12;
-																		return `${String(h).padStart(2, "0")}:${min} ${ampm}`;
-																	};
-																	return `General (${f12(r.workStartTime, r.workEndTime, false)} – ${f12(r.workEndTime, r.workStartTime, true)})`;
-																}
-																return "General (11:00 AM – 08:00 PM)";
-															})() })]
-														}),
-														/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-															className: "profile-role-notice",
-															children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ShieldCheck, { size: 14 }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: isAdmin ? "Authorized Administrator Console" : isExecutive ? "Executive Managing Director Session" : isHR ? "Authorized HR Operations Session" : "Authorized Employee Session • Self-Service Portal" })]
-														}),
-														/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
-															type: "button",
-															className: "profile-photo-change-btn",
-															style: {
-																width: "100%",
-																justifyContent: "center",
-																marginTop: "8px",
-																padding: "7px 10px",
-																background: "#ffffff",
-																border: "1px solid var(--border)"
-															},
-															onClick: () => {
-																setProfileOpen(false);
-																setChangePasswordOpen(true);
-															},
-															children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(KeyRound, {
-																size: 13,
-																style: { color: "var(--teal)" }
-															}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Change Password" })]
-														}),
-														/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
-															type: "button",
-															className: "profile-photo-change-btn",
-															style: {
-																width: "100%",
-																justifyContent: "center",
-																marginTop: "6px",
-																padding: "7px 10px",
-																background: "#ffffff",
-																border: "1px solid var(--border)"
-															},
-															onClick: () => {
-																setProfileOpen(false);
-																setPasskeyModalOpen(true);
-															},
-															children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FingerprintPattern, {
-																size: 13,
-																style: { color: "var(--teal)" }
-															}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Passkeys & Biometrics" })]
-														})
-													]
-												}),
-												/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-													className: "profile-popover-footer",
-													children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
-														type: "button",
-														className: "popover-logout-btn",
-														onClick: handleLogout,
-														children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(LogOut, { size: 14 }), " Sign out of workspace"]
-													})
-												})
-											]
-										})] })]
+										}), profileOpen && renderProfilePopoverNode()]
 									})
 								]
 							})
@@ -17160,7 +17266,6 @@ function HRLayout({ route, children }) {
 	});
 }
 // src/components/ui.jsx
-var import_react_dom = require_react_dom();
 function Button({ children, variant = "primary", as: Element = "button", href, ...props }) {
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Element, {
 		className: `ui-button ${variant}`,
@@ -17343,19 +17448,19 @@ function ConfirmationDialog({ open, title, message, confirmLabel = "Confirm", on
 	}), document.body);
 }
 // src/main.jsx
-var LoginPage = (0, import_react.lazy)(() => __vitePreload(() => import("./LoginPage-vPWwrB-k.js").then((m) => ({ default: m.LoginPage })), __vite__mapDeps([0,1,2,3])));
-var NotFoundPage = (0, import_react.lazy)(() => __vitePreload(() => import("./ModulePlaceholder-BMOZ8s6D.js").then((m) => ({ default: m.NotFoundPage })), __vite__mapDeps([4,2,1,3])));
-var EmployeeDashboardPage = (0, import_react.lazy)(() => __vitePreload(() => import("./EmployeeDashboardPage-Cc16p6dO.js").then((m) => ({ default: m.EmployeeDashboardPage })), __vite__mapDeps([5,1,2,3,6,7,8,9,10,11,12,13,14])));
-var AccessDeniedPage = (0, import_react.lazy)(() => __vitePreload(() => import("./EmployeeDashboardPage-Cc16p6dO.js").then((m) => ({ default: m.AccessDeniedPage })), __vite__mapDeps([5,1,2,3,6,7,8,9,10,11,12,13,14])));
-var AdminDashboardPage = (0, import_react.lazy)(() => __vitePreload(() => import("./AdminDashboardPage-DPmXJ3-9.js").then((m) => ({ default: m.AdminDashboardPage })), __vite__mapDeps([15,1,2,11,3,6,7])));
-var AdminUsersModule = (0, import_react.lazy)(() => __vitePreload(() => import("./AdminDashboardPage-DPmXJ3-9.js").then((m) => ({ default: m.AdminUsersModule })), __vite__mapDeps([15,1,2,11,3,6,7])));
-var EmployeesPage = (0, import_react.lazy)(() => __vitePreload(() => import("./EmployeesPage-CNxs6IOp.js").then((m) => ({ default: m.EmployeesPage })), __vite__mapDeps([16,1,2,3,6,14,11,13,17,9])));
-var OverviewPage = (0, import_react.lazy)(() => __vitePreload(() => import("./OverviewPage-5Gh0v2yE.js").then((m) => ({ default: m.OverviewPage })), __vite__mapDeps([18,1,2,3,7])));
-var LeaveManagementPage = (0, import_react.lazy)(() => __vitePreload(() => import("./LeaveManagementPage-CiWgyfoe.js").then((m) => ({ default: m.LeaveManagementPage })), __vite__mapDeps([19,1,2,11,3])));
-var WorkspaceModulePage = (0, import_react.lazy)(() => __vitePreload(() => import("./WorkspaceModulePage-BgTPu8_8.js").then((m) => ({ default: m.WorkspaceModulePage })), __vite__mapDeps([20,1,2,11,3,6,7,15,8,9])));
-var OrgHierarchyPage = (0, import_react.lazy)(() => __vitePreload(() => import("./OrgHierarchyPage-BPtAvKF6.js").then((m) => ({ default: m.OrgHierarchyPage })), __vite__mapDeps([21,1,2,3])));
-var PayrollPage = (0, import_react.lazy)(() => __vitePreload(() => import("./PayrollPage-VRP1lWAp.js").then((m) => ({ default: m.PayrollPage })), __vite__mapDeps([22,1,2,3,10,11,12,13])));
-var EmployeeProfilePage = (0, import_react.lazy)(() => __vitePreload(() => import("./EmployeeProfilePage-DPExPvxr.js").then((m) => ({ default: m.EmployeeProfilePage })), __vite__mapDeps([23,1,2,3,6,14,11,13,17,9])));
+var LoginPage = (0, import_react.lazy)(() => __vitePreload(() => import("./LoginPage-CzaApCpz.js").then((m) => ({ default: m.LoginPage })), __vite__mapDeps([0,1,2,3])));
+var NotFoundPage = (0, import_react.lazy)(() => __vitePreload(() => import("./ModulePlaceholder-CwHMV-oc.js").then((m) => ({ default: m.NotFoundPage })), __vite__mapDeps([4,2,1,3])));
+var EmployeeDashboardPage = (0, import_react.lazy)(() => __vitePreload(() => import("./EmployeeDashboardPage-xr05fqvV.js").then((m) => ({ default: m.EmployeeDashboardPage })), __vite__mapDeps([5,1,2,3,6,7,8,9,10,11,12,13,14])));
+var AccessDeniedPage = (0, import_react.lazy)(() => __vitePreload(() => import("./EmployeeDashboardPage-xr05fqvV.js").then((m) => ({ default: m.AccessDeniedPage })), __vite__mapDeps([5,1,2,3,6,7,8,9,10,11,12,13,14])));
+var AdminDashboardPage = (0, import_react.lazy)(() => __vitePreload(() => import("./AdminDashboardPage-ChON4MyE.js").then((m) => ({ default: m.AdminDashboardPage })), __vite__mapDeps([15,1,2,11,3,6,7])));
+var AdminUsersModule = (0, import_react.lazy)(() => __vitePreload(() => import("./AdminDashboardPage-ChON4MyE.js").then((m) => ({ default: m.AdminUsersModule })), __vite__mapDeps([15,1,2,11,3,6,7])));
+var EmployeesPage = (0, import_react.lazy)(() => __vitePreload(() => import("./EmployeesPage-CMjRUOWQ.js").then((m) => ({ default: m.EmployeesPage })), __vite__mapDeps([16,1,2,3,6,14,11,13,17,9])));
+var OverviewPage = (0, import_react.lazy)(() => __vitePreload(() => import("./OverviewPage-Cro_dnaC.js").then((m) => ({ default: m.OverviewPage })), __vite__mapDeps([18,1,2,3,7])));
+var LeaveManagementPage = (0, import_react.lazy)(() => __vitePreload(() => import("./LeaveManagementPage-CuoNdRpx.js").then((m) => ({ default: m.LeaveManagementPage })), __vite__mapDeps([19,1,2,11,3])));
+var WorkspaceModulePage = (0, import_react.lazy)(() => __vitePreload(() => import("./WorkspaceModulePage-Dkhf9rEt.js").then((m) => ({ default: m.WorkspaceModulePage })), __vite__mapDeps([20,1,2,11,3,6,7,15,8,9])));
+var OrgHierarchyPage = (0, import_react.lazy)(() => __vitePreload(() => import("./OrgHierarchyPage-C2ZvPYs2.js").then((m) => ({ default: m.OrgHierarchyPage })), __vite__mapDeps([21,1,2,3])));
+var PayrollPage = (0, import_react.lazy)(() => __vitePreload(() => import("./PayrollPage-5RVoZLqF.js").then((m) => ({ default: m.PayrollPage })), __vite__mapDeps([22,1,2,3,10,11,12,13])));
+var EmployeeProfilePage = (0, import_react.lazy)(() => __vitePreload(() => import("./EmployeeProfilePage-LSj0g0zV.js").then((m) => ({ default: m.EmployeeProfilePage })), __vite__mapDeps([23,1,2,3,6,14,11,13,17,9])));
 var ErrorBoundary = class extends import_react.Component {
 	constructor(props) {
 		super(props);
@@ -17652,7 +17757,7 @@ if (container && (container instanceof Element || container.nodeType === 1)) {
 		children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AuthProvider, { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(App, {}) })
 	}) }) }));
 }
-var ACTIVE_PWA_CACHE = "edufyi-hr-pwa-v35";
+var ACTIVE_PWA_CACHE = "edufyi-hr-pwa-v36";
 function registerServiceWorker() {
 	if (typeof window !== "undefined" && "serviceWorker" in navigator && window.location.protocol.startsWith("http")) {
 		if (typeof caches !== "undefined") caches.keys().then((keys) => {

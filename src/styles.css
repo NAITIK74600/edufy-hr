@@ -1872,6 +1872,15 @@ label.form-label {
   background: #f7f6f2;
   border-color: #d1d0c8;
 }
+.popover-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  z-index: 100000;
+  touch-action: manipulation;
+}
 .profile-menu-popover {
   position: absolute;
   top: calc(100% + 8px);
@@ -4051,6 +4060,8 @@ html, body {
     padding-top: env(safe-area-inset-top, 0px);
     padding-left: calc(16px + env(safe-area-inset-left, 0px));
     padding-right: calc(16px + env(safe-area-inset-right, 0px));
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
   }
   .topbar-actions {
     gap: 8px;
@@ -4090,6 +4101,8 @@ html, body {
     padding-left: calc(12px + env(safe-area-inset-left, 0px));
     padding-right: calc(12px + env(safe-area-inset-right, 0px));
     gap: 6px;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
   }
   .topbar-actions { gap: 6px; flex-wrap: nowrap; align-items: center; }
   .ai-copilot-btn span { display: none; }
@@ -4162,7 +4175,7 @@ html, body {
     border: 1px solid var(--border-color, #cbd5e1) !important;
     background: #ffffff !important;
     box-shadow: 0 -12px 48px rgba(15, 23, 42, 0.35) !important;
-    z-index: 10005 !important;
+    z-index: 100005 !important;
     animation: fadeUp 0.25s cubic-bezier(0.16, 1, 0.3, 1) both !important;
   }
   .profile-popover-header {
@@ -4196,7 +4209,7 @@ html, body {
     width: auto !important;
     max-width: calc(100vw - 20px) !important;
     max-height: calc(82dvh - 60px) !important;
-    z-index: 10005 !important;
+    z-index: 100005 !important;
     border-radius: 18px !important;
     box-shadow: 0 16px 45px rgba(15, 23, 42, 0.28) !important;
   }
@@ -6307,7 +6320,7 @@ body {
     right: 8px !important;
     width: auto !important;
     max-height: calc(100vh - 120px) !important;
-    z-index: 1050 !important;
+    z-index: 100005 !important;
   }
 }
 

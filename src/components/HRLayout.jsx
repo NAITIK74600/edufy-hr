@@ -1,5 +1,6 @@
 import { resolveNotificationRoute as resolveNotificationRouteFromResolver } from '../navigation/navigationResolver.js'
 import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import {
   Network,
   Bell,
@@ -207,6 +208,25 @@ export function HRLayout({ route, children }) {
       window.removeEventListener('appinstalled', onInstalled)
     }
   }, [])
+  const [isMobileScreen, setIsMobileScreen] = useState(() => {
+    if (typeof window === 'undefined') return false
+    return window.innerWidth <= 820
+  })
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const mq = window.matchMedia('(max-width: 820px)')
+    const update = () => setIsMobileScreen(mq.matches)
+    update()
+    if (mq.addEventListener) {
+      mq.addEventListener('change', update)
+      return () => mq.removeEventListener('change', update)
+    } else {
+      window.addEventListener('resize', update)
+      return () => window.removeEventListener('resize', update)
+    }
+  }, [])
+
   const navRef = useRef(null)
   const fileInputRef = useRef(null)
   const notifRef = useRef(null)
@@ -223,8 +243,8 @@ export function HRLayout({ route, children }) {
   useEffect(() => {
     function handleClickOutside(event) {
       const path = event.composedPath ? event.composedPath() : []
-      const clickedProfile = profileRef.current && (profileRef.current.contains(event.target) || path.includes(profileRef.current) || Boolean(event.target?.closest?.('.topbar-profile-dropdown')))
-      const clickedNotif = notifRef.current && (notifRef.current.contains(event.target) || path.includes(notifRef.current) || Boolean(event.target?.closest?.('.notif-popover')))
+      const clickedProfile = (profileRef.current && (profileRef.current.contains(event.target) || path.includes(profileRef.current))) || Boolean(event.target?.closest?.('.topbar-profile-dropdown')) || Boolean(event.target?.closest?.('.profile-menu-popover'))
+      const clickedNotif = (notifRef.current && (notifRef.current.contains(event.target) || path.includes(notifRef.current))) || Boolean(event.target?.closest?.('.notif-popover'))
 
       if (!clickedProfile) setProfileOpen(false)
       if (!clickedNotif) setNotifOpen(false)
@@ -566,6 +586,243 @@ export function HRLayout({ route, children }) {
     await logout()
   }
 
+  const renderProfilePopoverNode = () => {
+    const popoverContent = (
+      <div
+        className="profile-menu-popover"
+        style={isMobileScreen ? {
+          position: 'fixed',
+          bottom: 'calc(68px + env(safe-area-inset-bottom, 0px))',
+          left: '10px',
+          right: '10px',
+          width: 'auto',
+          maxWidth: 'calc(100vw - 20px)',
+          maxHeight: 'calc(85dvh - 50px)',
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+          borderRadius: '18px',
+          border: '1px solid #cbd5e1',
+          background: '#ffffff',
+          boxShadow: '0 -12px 48px rgba(15, 23, 42, 0.35)',
+          zIndex: 100005,
+        } : undefined}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="profile-popover-header">
+          <div className="profile-avatar-box" style={{ position: 'relative' }}>
+            {user?.avatarUrl ? (
+              <img
+                src={user.avatarUrl}
+                alt={user?.displayName || 'User'}
+                className="user-profile-img lg"
+                onError={(e) => {
+                  e.currentTarget.style.display = 'none'
+                  if (e.currentTarget.nextElementSibling) {
+                    e.currentTarget.nextElementSibling.style.display = 'grid'
+                  }
+                }}
+              />
+            ) : null}
+            <div
+              className={`avatar avatar-${user?.avatarTone ?? 'teal'}`}
+              style={{ display: user?.avatarUrl ? 'none' : 'grid', width: '64px', height: '64px', fontSize: '18px' }}
+            >
+              {user?.displayName?.slice(0, 2).toUpperCase() ?? 'HR'}
+            </div>
+            <span className="profile-online-badge lg" title="Active & Online" />
+          </div>
+
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+              <strong style={{ fontSize: '14px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{user?.displayName}</strong>
+              {isMobileScreen && (
+                <button
+                  type="button"
+                  onClick={() => setProfileOpen(false)}
+                  style={{
+                    border: 'none',
+                    background: 'rgba(15, 23, 42, 0.08)',
+                    borderRadius: '50%',
+                    width: '28px',
+                    height: '28px',
+                    display: 'grid',
+                    placeItems: 'center',
+                    cursor: 'pointer',
+                    color: '#475569',
+                    padding: 0,
+                  }}
+                  aria-label="Close profile menu"
+                >
+                  <X size={16} />
+                </button>
+              )}
+            </div>
+            <span className="profile-popover-email">{user?.email}</span>
+            <div style={{ display: 'flex', gap: '6px', alignItems: 'center', marginTop: '6px' }}>
+              <span className={`role-badge role-${user?.role}`}>
+                {getRoleBadgeLabel(user?.role)}
+              </span>
+              <span style={{ fontSize: '9px', color: 'var(--teal)', fontWeight: '600' }}>● Active</span>
+            </div>
+          </div>
+        </div>
+
+        <div
+          className="profile-popover-body"
+          style={isMobileScreen ? {
+            flex: '1 1 auto',
+            overflowY: 'auto',
+            WebkitOverflowScrolling: 'touch',
+            padding: '14px 16px',
+            maxHeight: 'calc(85dvh - 190px)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '8px',
+          } : undefined}
+        >
+          {/* Photo upload / avatar picker section */}
+          <div style={{ padding: '8px 10px', background: '#f5f8f7', borderRadius: '8px', border: '1px solid rgba(29, 138, 122, 0.15)', display: 'grid', gap: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: '10px', fontWeight: 600, color: 'var(--ink)' }}>Profile Photo</span>
+              <input
+                type="file"
+                ref={fileInputRef}
+                style={{ display: 'none' }}
+                accept="image/*"
+                onChange={handlePhotoUpload}
+              />
+              <button
+                type="button"
+                className="profile-photo-change-btn"
+                onClick={() => fileInputRef.current?.click()}
+                title="Upload new profile picture"
+              >
+                <Camera size={12} />
+                <span>Change Photo</span>
+              </button>
+            </div>
+
+            {photoNotice && (
+              <div style={{ fontSize: '9px', color: 'var(--teal)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <CheckCircle2 size={12} /> Profile photo updated successfully!
+              </div>
+            )}
+          </div>
+
+          <div className="profile-detail-row">
+            <span>Employee ID</span>
+            <strong>{user?.employeeId || 'EDU-EMP-001'}</strong>
+          </div>
+          <div className="profile-detail-row">
+            <span>Department</span>
+            <strong>{user?.department || 'People Operations'}</strong>
+          </div>
+          <div className="profile-detail-row">
+            <span>Designation</span>
+            <strong>{user?.designation || (isAdmin ? 'System Administrator' : isExecutive ? 'Managing Director' : isHR ? 'HR Operations' : 'Staff Member')}</strong>
+          </div>
+          <div className="profile-detail-row">
+            <span>Assigned Shift</span>
+            <strong>{(() => {
+              const r = storeState?.companySettings?.attendanceRules
+              if (r?.workStartTime && r?.workEndTime) {
+                const f12 = (t, referenceTime = null, isEnd = false) => {
+                  const clean = String(t || '').trim().replace(/[\u202F\u00A0]/g, ' ')
+                  const m = clean.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/i)
+                  if (!m) return t
+                  let h = parseInt(m[1], 10)
+                  const min = m[2]
+                  const meridiem = m[3]?.toUpperCase()
+                  if (meridiem === 'PM' && h < 12) h += 12
+                  if (meridiem === 'AM' && h === 12) h = 0
+                  if (!meridiem && isEnd && h >= 1 && h <= 11) h += 12
+                  else if (!meridiem && !isEnd && referenceTime) {
+                    const refClean = String(referenceTime).trim().replace(/[\u202F\u00A0]/g, ' ')
+                    const refMatch = refClean.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/i)
+                    if (refMatch) {
+                      let rh = parseInt(refMatch[1], 10)
+                      if (refMatch[3]?.toUpperCase() === 'PM' && rh < 12) rh += 12
+                      if (rh >= 13 && h < 12 && (rh - h) > 8 && (h + 12) < rh + 2) h += 12
+                    }
+                  }
+                  const ampm = h >= 12 ? 'PM' : 'AM'
+                  h = h % 12 || 12
+                  return `${String(h).padStart(2, '0')}:${min} ${ampm}`
+                }
+                return `General (${f12(r.workStartTime, r.workEndTime, false)} – ${f12(r.workEndTime, r.workStartTime, true)})`
+              }
+              return 'General (11:00 AM – 08:00 PM)'
+            })()}</strong>
+          </div>
+
+          <div className="profile-role-notice">
+            <ShieldCheck size={14} />
+            <span>{isAdmin ? 'Authorized Administrator Console' : isExecutive ? 'Executive Managing Director Session' : isHR ? 'Authorized HR Operations Session' : 'Authorized Employee Session • Self-Service Portal'}</span>
+          </div>
+
+          <button
+            type="button"
+            className="profile-photo-change-btn"
+            style={{ width: '100%', justifyContent: 'center', marginTop: '8px', padding: '7px 10px', background: '#ffffff', border: '1px solid var(--border)' }}
+            onClick={() => {
+              setProfileOpen(false)
+              setChangePasswordOpen(true)
+            }}
+          >
+            <KeyRound size={13} style={{ color: 'var(--teal)' }} />
+            <span>Change Password</span>
+          </button>
+
+          <button
+            type="button"
+            className="profile-photo-change-btn"
+            style={{ width: '100%', justifyContent: 'center', marginTop: '6px', padding: '7px 10px', background: '#ffffff', border: '1px solid var(--border)' }}
+            onClick={() => {
+              setProfileOpen(false)
+              setPasskeyModalOpen(true)
+            }}
+          >
+            <Fingerprint size={13} style={{ color: 'var(--teal)' }} />
+            <span>Passkeys & Biometrics</span>
+          </button>
+        </div>
+
+        <div className="profile-popover-footer" style={isMobileScreen ? { flexShrink: 0 } : undefined}>
+          <button type="button" className="popover-logout-btn" onClick={handleLogout}>
+            <LogOut size={14} /> Sign out of workspace
+          </button>
+        </div>
+      </div>
+    )
+
+    if (isMobileScreen && typeof document !== 'undefined') {
+      return createPortal(
+        <>
+          <div
+            className="popover-backdrop"
+            onClick={(e) => {
+              e.stopPropagation()
+              setProfileOpen(false)
+            }}
+            style={{
+              position: 'fixed',
+              inset: 0,
+              background: 'rgba(15, 23, 42, 0.45)',
+              backdropFilter: 'blur(3px)',
+              WebkitBackdropFilter: 'blur(3px)',
+              zIndex: 100000,
+            }}
+          />
+          {popoverContent}
+        </>,
+        document.body
+      )
+    }
+
+    return popoverContent
+  }
+
   return (
     <div className={`app-shell ${portalClass}`}>
       <GpsBackgroundManager user={user} />
@@ -761,37 +1018,57 @@ export function HRLayout({ route, children }) {
               </button>
 
               {/* Notifications Popover */}
-              {notifOpen && (
-                <>
-                  <div
-                    className="popover-backdrop"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      setNotifOpen(false)
-                    }}
-                    style={{
-                      position: 'fixed',
-                      inset: 0,
-                      background: 'rgba(15, 23, 42, 0.4)',
-                      backdropFilter: 'blur(2px)',
-                      zIndex: 10000,
-                    }}
-                  />
-                  <div
-                    className="notif-popover"
-                  style={{
-                    width: '380px',
-                    maxWidth: 'calc(100vw - 20px)',
-                    maxHeight: '520px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    boxShadow: '0 20px 50px rgba(15, 23, 42, 0.18)',
-                    borderRadius: '14px',
-                    border: '1px solid #cbd5e1',
-                    background: '#ffffff',
-                    overflow: 'hidden',
-                  }}
-                >
+              {notifOpen && (() => {
+                const notifContent = (
+                  <>
+                    <div
+                      className="popover-backdrop"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setNotifOpen(false)
+                      }}
+                      style={{
+                        position: 'fixed',
+                        inset: 0,
+                        background: 'rgba(15, 23, 42, 0.45)',
+                        backdropFilter: 'blur(3px)',
+                        WebkitBackdropFilter: 'blur(3px)',
+                        zIndex: 100000,
+                      }}
+                    />
+                    <div
+                      className="notif-popover"
+                      onClick={(e) => e.stopPropagation()}
+                      style={isMobileScreen ? {
+                        position: 'fixed',
+                        top: 'calc(58px + env(safe-area-inset-top, 0px))',
+                        bottom: 'auto',
+                        left: '10px',
+                        right: '10px',
+                        width: 'auto',
+                        maxWidth: 'calc(100vw - 20px)',
+                        maxHeight: 'calc(82dvh - 60px)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        boxShadow: '0 20px 50px rgba(15, 23, 42, 0.28)',
+                        borderRadius: '18px',
+                        border: '1px solid #cbd5e1',
+                        background: '#ffffff',
+                        overflow: 'hidden',
+                        zIndex: 100005,
+                      } : {
+                        width: '380px',
+                        maxWidth: 'calc(100vw - 20px)',
+                        maxHeight: '520px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        boxShadow: '0 20px 50px rgba(15, 23, 42, 0.18)',
+                        borderRadius: '14px',
+                        border: '1px solid #cbd5e1',
+                        background: '#ffffff',
+                        overflow: 'hidden',
+                      }}
+                    >
                   {/* Popover Header */}
                   <div
                     className="notif-header"
@@ -1102,7 +1379,13 @@ export function HRLayout({ route, children }) {
                   </div>
                 </div>
               </>
-            )}
+            )
+
+            if (isMobileScreen && typeof document !== 'undefined') {
+              return createPortal(notifContent, document.body)
+            }
+            return notifContent
+          })()}
             </div>
 
             <div className="status-strip">
@@ -1178,175 +1461,7 @@ export function HRLayout({ route, children }) {
                   <ChevronDown size={14} className="muted-icon" style={{ pointerEvents: 'none', flexShrink: 0 }} />
                 </button>
 
-                {profileOpen && (
-                  <>
-                    <div
-                      className="popover-backdrop"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        setProfileOpen(false)
-                      }}
-                      style={{
-                        position: 'fixed',
-                        inset: 0,
-                        background: 'rgba(15, 23, 42, 0.45)',
-                        backdropFilter: 'blur(2px)',
-                        zIndex: 10000,
-                      }}
-                    />
-                    <div className="profile-menu-popover">
-                    <div className="profile-popover-header">
-                      <div className="profile-avatar-box" style={{ position: 'relative' }}>
-                        {user?.avatarUrl ? (
-                          <img
-                            src={user.avatarUrl}
-                            alt={user?.displayName || 'User'}
-                            className="user-profile-img lg"
-                            onError={(e) => {
-                              e.currentTarget.style.display = 'none'
-                              if (e.currentTarget.nextElementSibling) {
-                                e.currentTarget.nextElementSibling.style.display = 'grid'
-                              }
-                            }}
-                          />
-                        ) : null}
-                        <div
-                          className={`avatar avatar-${user?.avatarTone ?? 'teal'}`}
-                          style={{ display: user?.avatarUrl ? 'none' : 'grid', width: '64px', height: '64px', fontSize: '18px' }}
-                        >
-                          {user?.displayName?.slice(0, 2).toUpperCase() ?? 'HR'}
-                        </div>
-                        <span className="profile-online-badge lg" title="Active & Online" />
-                      </div>
-
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <strong style={{ fontSize: '14px' }}>{user?.displayName}</strong>
-                        <span className="profile-popover-email">{user?.email}</span>
-                        <div style={{ display: 'flex', gap: '6px', alignItems: 'center', marginTop: '6px' }}>
-                          <span className={`role-badge role-${user?.role}`}>
-                            {getRoleBadgeLabel(user?.role)}
-                          </span>
-                          <span style={{ fontSize: '9px', color: 'var(--teal)', fontWeight: '600' }}>● Active</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="profile-popover-body">
-                      {/* Photo upload / avatar picker section */}
-                      <div style={{ padding: '8px 10px', background: '#f5f8f7', borderRadius: '8px', border: '1px solid rgba(29, 138, 122, 0.15)', display: 'grid', gap: '8px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                          <span style={{ fontSize: '10px', fontWeight: 600, color: 'var(--ink)' }}>Profile Photo</span>
-                          <input
-                            type="file"
-                            ref={fileInputRef}
-                            style={{ display: 'none' }}
-                            accept="image/*"
-                            onChange={handlePhotoUpload}
-                          />
-                          <button
-                            type="button"
-                            className="profile-photo-change-btn"
-                            onClick={() => fileInputRef.current?.click()}
-                            title="Upload new profile picture"
-                          >
-                            <Camera size={12} />
-                            <span>Change Photo</span>
-                          </button>
-                        </div>
-
-                        {photoNotice && (
-                          <div style={{ fontSize: '9px', color: 'var(--teal)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
-                            <CheckCircle2 size={12} /> Profile photo updated successfully!
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="profile-detail-row">
-                        <span>Employee ID</span>
-                        <strong>{user?.employeeId || 'EDU-EMP-001'}</strong>
-                      </div>
-                      <div className="profile-detail-row">
-                        <span>Department</span>
-                        <strong>{user?.department || 'People Operations'}</strong>
-                      </div>
-                      <div className="profile-detail-row">
-                        <span>Designation</span>
-                        <strong>{user?.designation || (isAdmin ? 'System Administrator' : isExecutive ? 'Managing Director' : isHR ? 'HR Operations' : 'Staff Member')}</strong>
-                      </div>
-                      <div className="profile-detail-row">
-                        <span>Assigned Shift</span>
-                        <strong>{(() => {
-                          const r = storeState?.companySettings?.attendanceRules
-                          if (r?.workStartTime && r?.workEndTime) {
-                            const f12 = (t, referenceTime = null, isEnd = false) => {
-                              const clean = String(t || '').trim().replace(/[\u202F\u00A0]/g, ' ')
-                              const m = clean.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/i)
-                              if (!m) return t
-                              let h = parseInt(m[1], 10)
-                              const min = m[2]
-                              const meridiem = m[3]?.toUpperCase()
-                              if (meridiem === 'PM' && h < 12) h += 12
-                              if (meridiem === 'AM' && h === 12) h = 0
-                              if (!meridiem && isEnd && h >= 1 && h <= 11) h += 12
-                              else if (!meridiem && !isEnd && referenceTime) {
-                                const refClean = String(referenceTime).trim().replace(/[\u202F\u00A0]/g, ' ')
-                                const refMatch = refClean.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/i)
-                                if (refMatch) {
-                                  let rh = parseInt(refMatch[1], 10)
-                                  if (refMatch[3]?.toUpperCase() === 'PM' && rh < 12) rh += 12
-                                  if (rh >= 13 && h < 12 && (rh - h) > 8 && (h + 12) < rh + 2) h += 12
-                                }
-                              }
-                              const ampm = h >= 12 ? 'PM' : 'AM'
-                              h = h % 12 || 12
-                              return `${String(h).padStart(2, '0')}:${min} ${ampm}`
-                            }
-                            return `General (${f12(r.workStartTime, r.workEndTime, false)} – ${f12(r.workEndTime, r.workStartTime, true)})`
-                          }
-                          return 'General (11:00 AM – 08:00 PM)'
-                        })()}</strong>
-                      </div>
-
-                      <div className="profile-role-notice">
-                        <ShieldCheck size={14} />
-                        <span>{isAdmin ? 'Authorized Administrator Console' : isExecutive ? 'Executive Managing Director Session' : isHR ? 'Authorized HR Operations Session' : 'Authorized Employee Session • Self-Service Portal'}</span>
-                      </div>
-
-                      <button
-                        type="button"
-                        className="profile-photo-change-btn"
-                        style={{ width: '100%', justifyContent: 'center', marginTop: '8px', padding: '7px 10px', background: '#ffffff', border: '1px solid var(--border)' }}
-                        onClick={() => {
-                          setProfileOpen(false)
-                          setChangePasswordOpen(true)
-                        }}
-                      >
-                        <KeyRound size={13} style={{ color: 'var(--teal)' }} />
-                        <span>Change Password</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        className="profile-photo-change-btn"
-                        style={{ width: '100%', justifyContent: 'center', marginTop: '6px', padding: '7px 10px', background: '#ffffff', border: '1px solid var(--border)' }}
-                        onClick={() => {
-                          setProfileOpen(false)
-                          setPasskeyModalOpen(true)
-                        }}
-                      >
-                        <Fingerprint size={13} style={{ color: 'var(--teal)' }} />
-                        <span>Passkeys & Biometrics</span>
-                      </button>
-                    </div>
-
-                    <div className="profile-popover-footer">
-                      <button type="button" className="popover-logout-btn" onClick={handleLogout}>
-                        <LogOut size={14} /> Sign out of workspace
-                      </button>
-                    </div>
-                  </div>
-                </>
-                )}
+                {profileOpen && renderProfilePopoverNode()}
               </div>
             )}
           </div>
