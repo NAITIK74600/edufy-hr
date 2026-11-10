@@ -183,7 +183,7 @@ export function HRLayout({ route, children }) {
   const [aiAssistantOpen, setAiAssistantOpen] = useState(false)
   const [soundMuted, setSoundMutedState] = useState(() => isSoundMuted())
   const [storeState, setStoreState] = useState(() => hrStore.getState())
-  const [notifications, setNotifications] = useState(() => (hrStore.getUserNotifications ? hrStore.getUserNotifications(user) : hrStore.getNotifications()))
+  const [notifications, setNotifications] = useState([])
   const [notifCategory, setNotifCategory] = useState('all')
   // Push notification states removed
   const [isStandalone, setIsStandalone] = useState(() => {
@@ -266,7 +266,7 @@ export function HRLayout({ route, children }) {
           const locallyReadIds = new Set(
             prev.filter((n) => n.read || n.readAt).map((n) => String(n.id || n._id))
           )
-          return normalized.map((n) => {
+          const updated = normalized.map((n) => {
             const isRead = Boolean(n.read || n.readAt || locallyReadIds.has(String(n.id)))
             return {
               ...n,
@@ -274,6 +274,10 @@ export function HRLayout({ route, children }) {
               readAt: n.readAt || (isRead ? (n.readAt || new Date().toISOString()) : null),
             }
           })
+          if (hrStore.setNotifications) {
+            hrStore.setNotifications(updated)
+          }
+          return updated
         })
         const unread = normalized.filter((n) => !n.read && !n.readAt)
         const newArrivals = unread.filter((n) => !prevNotifIdsRef.current.has(n.id))
@@ -290,7 +294,7 @@ export function HRLayout({ route, children }) {
       // Graceful local store fallback
     }
     const local = hrStore.getUserNotifications ? hrStore.getUserNotifications(user) : hrStore.getNotifications()
-    if (Array.isArray(local)) {
+    if (Array.isArray(local) && local.length > 0) {
       setNotifications(local.map((n) => ({
         ...n,
         id: String(n.id || n._id || ''),
@@ -300,6 +304,19 @@ export function HRLayout({ route, children }) {
   }, [user])
 
   useEffect(() => {
+    // Purge any ancient bloated notification cache from legacy versions (preventing '34' flash)
+    if (typeof window !== 'undefined' && window.localStorage) {
+      try {
+        const raw = window.localStorage.getItem('edufyi_persisted_notifications_v3')
+        if (raw) {
+          const parsed = JSON.parse(raw)
+          if (Array.isArray(parsed) && parsed.length >= 25) {
+            window.localStorage.removeItem('edufyi_persisted_notifications_v3')
+          }
+        }
+      } catch (_) {}
+    }
+
     syncUnifiedNotifications(true)
     const interval = setInterval(() => syncUnifiedNotifications(false), 25000)
     const onFocus = () => syncUnifiedNotifications(true)
@@ -309,6 +326,7 @@ export function HRLayout({ route, children }) {
       const fresh = hrStore.getUserNotifications ? hrStore.getUserNotifications(user) : hrStore.getNotifications()
       if (Array.isArray(fresh) && fresh.length > 0) {
         setNotifications((prev) => {
+          if (prev.length === 0) return prev
           const map = new Map()
           prev.forEach((item) => {
             const id = String(item.id || item._id || '')
@@ -316,18 +334,8 @@ export function HRLayout({ route, children }) {
           })
           fresh.forEach((item) => {
             const id = String(item.id || item._id || '')
-            if (id) {
-              const prevItem = map.get(id)
-              const isRead = Boolean(prevItem?.read || prevItem?.readAt || item.read || item.readAt)
-              const readAt = prevItem?.readAt || item.readAt || (isRead ? (prevItem?.readAt || item.readAt || new Date().toISOString()) : null)
-              map.set(id, {
-                ...item,
-                ...prevItem,
-                id,
-                _id: id,
-                read: isRead,
-                readAt,
-              })
+            if (id && !map.has(id) && id.startsWith('notif-')) {
+              map.set(id, item)
             }
           })
           return Array.from(map.values()).sort((a, b) => new Date(b.createdAt || b.time || 0) - new Date(a.createdAt || a.time || 0))
@@ -754,8 +762,23 @@ export function HRLayout({ route, children }) {
 
               {/* Notifications Popover */}
               {notifOpen && (
-                <div
-                  className="notif-popover"
+                <>
+                  <div
+                    className="popover-backdrop"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setNotifOpen(false)
+                    }}
+                    style={{
+                      position: 'fixed',
+                      inset: 0,
+                      background: 'rgba(15, 23, 42, 0.4)',
+                      backdropFilter: 'blur(2px)',
+                      zIndex: 10000,
+                    }}
+                  />
+                  <div
+                    className="notif-popover"
                   style={{
                     width: '380px',
                     maxWidth: 'calc(100vw - 20px)',
@@ -1078,7 +1101,8 @@ export function HRLayout({ route, children }) {
                     </a>
                   </div>
                 </div>
-              )}
+              </>
+            )}
             </div>
 
             <div className="status-strip">
@@ -1155,7 +1179,22 @@ export function HRLayout({ route, children }) {
                 </button>
 
                 {profileOpen && (
-                  <div className="profile-menu-popover">
+                  <>
+                    <div
+                      className="popover-backdrop"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setProfileOpen(false)
+                      }}
+                      style={{
+                        position: 'fixed',
+                        inset: 0,
+                        background: 'rgba(15, 23, 42, 0.45)',
+                        backdropFilter: 'blur(2px)',
+                        zIndex: 10000,
+                      }}
+                    />
+                    <div className="profile-menu-popover">
                     <div className="profile-popover-header">
                       <div className="profile-avatar-box" style={{ position: 'relative' }}>
                         {user?.avatarUrl ? (
@@ -1306,6 +1345,7 @@ export function HRLayout({ route, children }) {
                       </button>
                     </div>
                   </div>
+                </>
                 )}
               </div>
             )}

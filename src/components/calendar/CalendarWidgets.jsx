@@ -27,6 +27,8 @@ export function CalendarWidgets({ user = null }) {
   }, [])
 
   const portal = user?.role === 'admin' ? 'admin' : user?.role === 'employee' ? 'employee' : 'hr'
+  const userRoleNormalized = String(user?.role || '').toLowerCase().trim().replace(/[\s-]+/g, '_')
+  const canSchedule = Boolean(user && ['admin', 'hr', 'director', 'managing_director', 'co_founder', 'manager', 'lead', 'operations_executive'].includes(userRoleNormalized))
 
   // Fallback to hrStore if widget API data not yet ready
   const storeState = hrStore.getState()
@@ -454,26 +456,45 @@ export function CalendarWidgets({ user = null }) {
             </div>
           ) : (
             <p style={{ margin: 0, fontSize: '12.5px', color: 'var(--muted, #64748b)' }}>
-              No meetings scheduled. Click below to schedule a session with Google Meet.
+              {canSchedule
+                ? 'No meetings scheduled. Click below to schedule a session with Google Meet.'
+                : 'No upcoming meetings scheduled for your squad.'}
             </p>
           )}
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '12px', paddingTop: '10px', borderTop: '1px solid var(--border, #f1f5f9)' }}>
-          <a
-            href={`#/${portal}/holidays`}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '4px',
-              fontSize: '12px',
-              fontWeight: 700,
-              color: '#059669',
-              textDecoration: 'none',
-            }}
-          >
-            + Schedule Session <ChevronRight size={14} />
-          </a>
+          {canSchedule ? (
+            <a
+              href={`#/${portal}/holidays`}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+                fontSize: '12px',
+                fontWeight: 700,
+                color: '#059669',
+                textDecoration: 'none',
+              }}
+            >
+              + Schedule Session <ChevronRight size={14} />
+            </a>
+          ) : (
+            <a
+              href={`#/${portal}/holidays`}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+                fontSize: '12px',
+                fontWeight: 600,
+                color: 'var(--teal, #006E6F)',
+                textDecoration: 'none',
+              }}
+            >
+              View Full Calendar <ChevronRight size={14} />
+            </a>
+          )}
         </div>
       </div>
     </div>

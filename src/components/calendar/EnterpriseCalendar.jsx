@@ -1396,18 +1396,20 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
               )}
             </div>
 
-            {/* Schedule Event Action (Primary for all users) */}
-            <Button
-              variant="primary"
-              onClick={() => {
-                setEditingEventData(null)
-                setIsEventModalOpen(true)
-              }}
-              style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: isSmallScreen ? '6px 10px' : '7px 14px' }}
-            >
-              <Plus size={15} />
-              <span>Schedule Event</span>
-            </Button>
+            {/* Schedule Event Action (Restricted to Authorized Admins / HR / Managers) */}
+            {canManage && (
+              <Button
+                variant="primary"
+                onClick={() => {
+                  setEditingEventData(null)
+                  setIsEventModalOpen(true)
+                }}
+                style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: isSmallScreen ? '6px 10px' : '7px 14px' }}
+              >
+                <Plus size={15} />
+                <span>Schedule Event</span>
+              </Button>
+            )}
 
             {/* Admin Management Actions */}
             {canManage && (

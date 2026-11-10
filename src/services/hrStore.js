@@ -3730,7 +3730,7 @@ function loadStore() {
       dailyReports: [],
       expenses: [],
       kudos: [],
-      notifications: fallbackNotifs !== null ? fallbackNotifs : [],
+      notifications: [],
       payroll: [],
       leavePolicies: [],
       roles: INITIAL_ROLES,
@@ -7490,6 +7490,15 @@ const localStore = {
   },
 
   // Notifications
+  setNotifications(list) {
+    if (!Array.isArray(list)) return
+    storeState.notifications = list
+    if (typeof window !== 'undefined' && window.localStorage) {
+      try {
+        window.localStorage.setItem(STORAGE_PERSISTED_NOTIFICATIONS_KEY, JSON.stringify(list))
+      } catch (_) {}
+    }
+  },
   getNotifications(viewerUser = null) {
     if (!viewerUser) return storeState.notifications
     return this.getUserNotifications(viewerUser)

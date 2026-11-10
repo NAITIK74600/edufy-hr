@@ -16,6 +16,7 @@ export function DailyCalendarView({
   onSelectEvent,
   onQuickCreate,
   categoryStyles = {},
+  canManage = false,
 }) {
   const toLocalDateStr = (d = new Date()) => {
     const y = d.getFullYear()
@@ -73,13 +74,15 @@ export function DailyCalendarView({
           </div>
         </div>
 
-        <Button
-          variant="primary"
-          onClick={() => onQuickCreate?.(selectedDate, '10:00')}
-          style={{ fontSize: '12px', padding: '6px 14px', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
-        >
-          <Plus size={14} /> Schedule on this Day
-        </Button>
+        {canManage && (
+          <Button
+            variant="primary"
+            onClick={() => onQuickCreate?.(selectedDate, '10:00')}
+            style={{ fontSize: '12px', padding: '6px 14px', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
+          >
+            <Plus size={14} /> Schedule on this Day
+          </Button>
+        )}
       </div>
 
       {/* All-Day Events Strip */}

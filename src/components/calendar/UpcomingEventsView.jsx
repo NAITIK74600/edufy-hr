@@ -17,6 +17,7 @@ export function UpcomingEventsView({
   events = [],
   onSelectEvent,
   categoryStyles = {},
+  canManage = false,
 }) {
   const toLocalDateStr = (d = new Date()) => {
     const y = d.getFullYear()
@@ -177,7 +178,9 @@ export function UpcomingEventsView({
           No Upcoming Events Scheduled
         </h3>
         <p style={{ margin: 0, fontSize: '13px', color: '#64748b' }}>
-          Your schedule is clear! Click "+ Schedule Event" above to plan a meeting, interview, or team session.
+          {canManage
+            ? 'Your schedule is clear! Click "+ Schedule Event" above to plan a meeting, interview, or team session.'
+            : 'Your schedule is clear! Official company events, meetings, and holidays will appear here.'}
         </p>
       </div>
     )

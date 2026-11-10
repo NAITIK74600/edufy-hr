@@ -1,7 +1,7 @@
 import { n as __toESM } from "./rolldown-runtime-CO0Nlsmt.js";
 import { $t as Calendar, B as Repeat, Bt as Clock, E as Sparkles, Ft as Download, Gt as CircleAlert, Ht as CircleX, Jt as ChevronLeft, K as Plus, L as Search, Ot as FileSpreadsheet, Pt as ExternalLink, Rt as Copy, Ut as CircleQuestionMark, Wt as CircleCheck, Xt as Check, Y as Pen, _n as require_react, at as MapPin, d as Users, dn as Bell, en as CalendarRange, fn as Award, ft as List, g as Upload, ht as Layers, i as X, n as ZoomIn, qt as ChevronRight, rn as Cake, t as ZoomOut, tn as CalendarDays, u as Video, x as Target, xt as Grid3x3, y as Trash } from "./icons-vendor-CNlTUIuG.js";
 import { a as require_jsx_runtime } from "./motion-vendor-3i60tGNx.js";
-import { I as apiClient, T as hrStore, a as Field, t as Button } from "./index-ByLK1Fqy.js";
+import { I as apiClient, T as hrStore, a as Field, t as Button } from "./index-D8AX-Sze.js";
 // src/utils/dobHelper.js
 var import_react = /* @__PURE__ */ __toESM(require_react(), 1);
 /**
@@ -2470,7 +2470,7 @@ function EventFormModal({ isOpen, onClose, onSaved, initialEvent = null, employe
 	});
 }
 // src/components/calendar/UpcomingEventsView.jsx
-function UpcomingEventsView({ events = [], onSelectEvent, categoryStyles = {} }) {
+function UpcomingEventsView({ events = [], onSelectEvent, categoryStyles = {}, canManage = false }) {
 	const toLocalDateStr = (d = /* @__PURE__ */ new Date()) => {
 		return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 	};
@@ -2712,7 +2712,7 @@ function UpcomingEventsView({ events = [], onSelectEvent, categoryStyles = {} })
 					fontSize: "13px",
 					color: "#64748b"
 				},
-				children: "Your schedule is clear! Click \"+ Schedule Event\" above to plan a meeting, interview, or team session."
+				children: canManage ? "Your schedule is clear! Click \"+ Schedule Event\" above to plan a meeting, interview, or team session." : "Your schedule is clear! Official company events, meetings, and holidays will appear here."
 			})
 		]
 	});
@@ -3019,7 +3019,7 @@ function formatHour(hour) {
 	const ampm = hour >= 12 ? "PM" : "AM";
 	return `${hour % 12 || 12}:00 ${ampm}`;
 }
-function DailyCalendarView({ selectedDate, events = [], onSelectEvent, onQuickCreate, categoryStyles = {} }) {
+function DailyCalendarView({ selectedDate, events = [], onSelectEvent, onQuickCreate, categoryStyles = {}, canManage = false }) {
 	const toLocalDateStr = (d = /* @__PURE__ */ new Date()) => {
 		return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 	};
@@ -3088,7 +3088,7 @@ function DailyCalendarView({ selectedDate, events = [], onSelectEvent, onQuickCr
 							" Event(s)"
 						]
 					})] })]
-				}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Button, {
+				}), canManage && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Button, {
 					variant: "primary",
 					onClick: () => onQuickCreate?.(selectedDate, "10:00"),
 					style: {
@@ -4886,7 +4886,7 @@ function EnterpriseCalendar({ canManage = false, user = null, defaultView = "mon
 									})
 								]
 							}),
-							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Button, {
+							canManage && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Button, {
 								variant: "primary",
 								onClick: () => {
 									setEditingEventData(null);
@@ -7688,6 +7688,17 @@ function CalendarWidgets({ user = null }) {
 		};
 	}, []);
 	const portal = user?.role === "admin" ? "admin" : user?.role === "employee" ? "employee" : "hr";
+	const userRoleNormalized = String(user?.role || "").toLowerCase().trim().replace(/[\s-]+/g, "_");
+	const canSchedule = Boolean(user && [
+		"admin",
+		"hr",
+		"director",
+		"managing_director",
+		"co_founder",
+		"manager",
+		"lead",
+		"operations_executive"
+	].includes(userRoleNormalized));
 	const storeState = hrStore.getState();
 	const toLocalDateStr = (d = /* @__PURE__ */ new Date()) => {
 		return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -8289,7 +8300,7 @@ function CalendarWidgets({ user = null }) {
 						fontSize: "12.5px",
 						color: "var(--muted, #64748b)"
 					},
-					children: "No meetings scheduled. Click below to schedule a session with Google Meet."
+					children: canSchedule ? "No meetings scheduled. Click below to schedule a session with Google Meet." : "No upcoming meetings scheduled for your squad."
 				})] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
 					style: {
 						display: "flex",
@@ -8299,7 +8310,7 @@ function CalendarWidgets({ user = null }) {
 						paddingTop: "10px",
 						borderTop: "1px solid var(--border, #f1f5f9)"
 					},
-					children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("a", {
+					children: canSchedule ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("a", {
 						href: `#/${portal}/holidays`,
 						style: {
 							display: "inline-flex",
@@ -8311,6 +8322,18 @@ function CalendarWidgets({ user = null }) {
 							textDecoration: "none"
 						},
 						children: ["+ Schedule Session ", /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ChevronRight, { size: 14 })]
+					}) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("a", {
+						href: `#/${portal}/holidays`,
+						style: {
+							display: "inline-flex",
+							alignItems: "center",
+							gap: "4px",
+							fontSize: "12px",
+							fontWeight: 600,
+							color: "var(--teal, #006E6F)",
+							textDecoration: "none"
+						},
+						children: ["View Full Calendar ", /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ChevronRight, { size: 14 })]
 					})
 				})]
 			})
