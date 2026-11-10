@@ -2,7 +2,7 @@ import { n as __toESM } from "./rolldown-runtime-CO0Nlsmt.js";
 import { $t as Calendar, A as ShieldCheck, Bt as Clock, C as Sun, Dt as FileText, E as Sparkles, Ft as Download, Gt as CircleAlert, I as Send, Jt as ChevronLeft, K as Plus, L as Search, Mt as Eye, N as Settings, R as Save, S as Table, V as RefreshCw, Vt as Clock3, Wt as CircleCheck, Xt as Check, Y as Pen, Yt as ChevronDown, _n as require_react, bt as Heart, d as Users, et as Moon, gn as Activity, ht as Layers, i as X, j as ShieldAlert, on as Briefcase, qt as ChevronRight, tn as CalendarDays, wt as Funnel, y as Trash } from "./icons-vendor-CNlTUIuG.js";
 import { r as require_react_dom } from "./react-vendor-B_MMQ54z.js";
 import { a as require_jsx_runtime } from "./motion-vendor-3i60tGNx.js";
-import { D as storeAction, E as is25thMonthLop, I as apiClient, T as hrStore, a as Field, c as StatusBadge, i as EmptyState, k as todayKey, n as ConfirmationDialog, o as PageHeader, r as DataTable, t as Button, x as useAuth, y as parseLocationHash } from "./index-D_hrckrf.js";
+import { D as storeAction, E as is25thMonthLop, I as apiClient, T as hrStore, a as Field, c as StatusBadge, i as EmptyState, k as todayKey, n as ConfirmationDialog, o as PageHeader, r as DataTable, t as Button, x as useAuth, y as parseLocationHash } from "./index-CdIjzjfh.js";
 // src/pages/LeavePolicySettings.jsx
 var import_react = /* @__PURE__ */ __toESM(require_react(), 1);
 var import_react_dom = require_react_dom();
@@ -3872,13 +3872,16 @@ function RequestDetail({ request, mode, onRefresh, onDeleteRequest, onPromptReje
 	const userCandIds = [
 		user?.id,
 		user?._id,
-		user?.employeeId
+		user?.employeeId,
+		user?.empId,
+		user?.employeeRef,
+		user?.email
 	].filter(Boolean).map(String);
 	const reqMgrId = request?.managerId?._id || request?.managerId?.id || request?.managerId;
 	const isAssignedManagerOfThisRequest = Boolean(reqMgrId && userCandIds.includes(String(reqMgrId)));
-	const reqEmpId = request?.employeeId?._id || request?.employeeId?.id || request?.employeeId;
-	const reqEmpCode = request?.employeeId?.employeeId || (typeof request?.employeeId === "string" ? request?.employeeId : null);
-	const isOwnRequest = Boolean(userCandIds.includes(String(reqEmpId)) || reqEmpCode && userCandIds.includes(String(reqEmpCode)));
+	const reqEmpId = request?.employeeId?._id || request?.employeeId?.id || (typeof request?.employeeId === "string" ? request?.employeeId : null) || request?.employeeRef;
+	const reqEmpCode = request?.employeeId?.employeeId || (typeof request?.employeeId === "string" ? request?.employeeId : null) || request?.employeeCode;
+	const isOwnRequest = mode === "self" || mode === "ess" || Boolean(userCandIds.includes(String(reqEmpId)) || reqEmpCode && userCandIds.includes(String(reqEmpCode)));
 	const canManagerDecide = (isManager || isDirector || isHrOrAdmin || isAssignedManagerOfThisRequest) && (currentStatus === "pending_manager" || currentStatus === "pending_tl" || request.currentApproverRole === "manager" || request.currentApproverRole === "team_lead");
 	const canDirectorDecide = (isDirector || isHrOrAdmin) && (currentStatus === "pending_director" || request.currentApproverRole === "director");
 	const canAdminDecide = isAdmin && (currentStatus === "pending_admin" || request.currentApproverRole === "admin");
@@ -3888,13 +3891,15 @@ function RequestDetail({ request, mode, onRefresh, onDeleteRequest, onPromptReje
 		"pending_director"
 	].includes(currentStatus);
 	const canDecide = canAdminDecide || canManagerDecide || canDirectorDecide || canHrDecide;
-	const canCancel = isOwnRequest && mode === "ess" && [
+	const canCancel = isOwnRequest && (mode === "self" || mode === "ess") && [
 		"pending_tl",
 		"pending_manager",
 		"pending_director",
 		"pending_hr",
-		"pending_admin"
+		"pending_admin",
+		"approved"
 	].includes(currentStatus);
+	const canDelete = isHrOrAdmin || isOwnRequest && (mode === "self" || mode === "ess") && ["cancelled", "rejected"].includes(currentStatus);
 	async function handleApprove() {
 		setBusy(true);
 		setError("");
@@ -3976,7 +3981,7 @@ function RequestDetail({ request, mode, onRefresh, onDeleteRequest, onPromptReje
 						alignItems: "center",
 						gap: "8px"
 					},
-					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(RequestStatus, { status: currentStatus }), onDeleteRequest && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
+					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(RequestStatus, { status: currentStatus }), onDeleteRequest && canDelete && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
 						type: "button",
 						className: "emp-action-btn delete",
 						onClick: () => onDeleteRequest(request),
@@ -4490,12 +4495,22 @@ function RequestDetail({ request, mode, onRefresh, onDeleteRequest, onPromptReje
 						margin: 0,
 						color: "var(--muted)"
 					},
-					children: "Your request is currently under review. You may cancel it if your plans have changed."
+					children: currentStatus === "approved" ? "This approved leave can be cancelled if your plans have changed." : "Your request is currently under review. You may cancel it if your plans have changed."
 				}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Button, {
 					variant: "secondary",
+					disabled: busy,
 					onClick: storeAction(async () => {
-						await hrStore.cancelLeave(request.id);
-						onRefresh();
+						setBusy(true);
+						try {
+							const targetId = request.id || request._id;
+							await hrStore.cancelLeave(targetId);
+							setLocalStatus("cancelled");
+							onRefresh();
+						} catch (cancelErr) {
+							setError(cancelErr?.message || "Failed to cancel leave request.");
+						} finally {
+							setBusy(false);
+						}
 					}),
 					children: "Cancel Leave Request"
 				})]
@@ -6449,10 +6464,17 @@ function LeaveManagementPage({ mode = "self", route, query: propQuery }) {
 		showFeedback(`Declined leave request for ${rejectingLeave?.employeeName || "employee"}.`);
 	});
 	const handleDeleteLeave = storeAction(async () => {
-		if (!leaveToDelete?.id) return;
-		await hrStore.deleteLeave(leaveToDelete.id);
-		setLeaveToDelete(null);
-		showFeedback("Leave record removed from system.");
+		if (!leaveToDelete?.id && !leaveToDelete?._id) return;
+		const targetId = leaveToDelete.id || leaveToDelete._id;
+		try {
+			await hrStore.deleteLeave(targetId);
+			if (selected?.id === targetId || selected?._id === targetId) setSelected(null);
+			setLeaveToDelete(null);
+			showFeedback("Leave record removed from system.");
+			setRefreshKey((k) => k + 1);
+		} catch (delErr) {
+			alert(delErr?.response?.data?.error?.message || delErr?.message || "Failed to delete leave request.");
+		}
 	});
 	function handleExportCSV() {
 		const headers = [
@@ -7198,7 +7220,7 @@ function LeaveManagementPage({ mode = "self", route, query: propQuery }) {
 								onSelect: setSelected,
 								onQuickApprove: isManagement ? handleQuickApprove : null,
 								onQuickReject: isManagement ? handleQuickRejectPrompt : null,
-								onDeleteRequest: isManagement ? setLeaveToDelete : null
+								onDeleteRequest: isManagement ? setLeaveToDelete : isSelf && ["cancelled", "rejected"].includes(request?.status) ? setLeaveToDelete : null
 							}, request?.id || request?._id || idx)) : activeTab === "lop" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 								style: {
 									padding: "24px 16px",
@@ -7372,7 +7394,7 @@ function LeaveManagementPage({ mode = "self", route, query: propQuery }) {
 												title: "View Full Details",
 												children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Eye, { size: 12 }), " View"]
 											}),
-											/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+											(isManagement || isSelf && ["cancelled", "rejected"].includes(r.status)) && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
 												type: "button",
 												className: "emp-action-btn delete",
 												onClick: () => setLeaveToDelete(r),

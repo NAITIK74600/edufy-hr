@@ -45,6 +45,11 @@ function createMemoryLeaveRepository() {
     async releaseReservation(employeeId, leaveType, units) { const balance = balances.find((entry) => entry.employeeId === employeeId && entry.leaveType === leaveType); if (balance) balance.reserved -= units; return balance },
     async commitReservation(employeeId, leaveType, units) { const balance = balances.find((entry) => entry.employeeId === employeeId && entry.leaveType === leaveType); if (balance) { balance.reserved -= units; balance.used += units }; return balance },
     async notify(data) { notifications.push(data); return data },
+    async deleteRequest(id) {
+      const idx = requests.findIndex((entry) => entry.id === id)
+      if (idx !== -1) return requests.splice(idx, 1)[0]
+      return null
+    },
   }
 }
 
@@ -231,4 +236,54 @@ test('half day leave submits with 0.5 units and validates session overlaps corre
   assert.equal(duplicateMorning.response.status, 409)
   assert.equal(duplicateMorning.body.error.code, 'LEAVE_OVERLAP')
 })
+
+test('Employee can cancel their pending request, then delete the cancelled request; active leaves cannot be deleted directly by employee', async () => {
+  const employeeToken = await login('employee@example.test', 'employee-password')
+  const hrToken = await login('hr@example.test', 'hr-password')
+
+  // 1. Employee submits a leave request
+  const submitRes = await request('/leave/requests', {
+    method: 'POST',
+    headers: { authorization: `Bearer ${employeeToken}` },
+    body: JSON.stringify({
+      leaveType: 'annual',
+      startDate: '2026-11-20',
+      endDate: '2026-11-20',
+      reason: 'Personal day',
+    }),
+  })
+  assert.equal(submitRes.response.status, 201)
+  const leaveId = submitRes.body.data.id
+
+  // 2. Employee attempts to DELETE active pending leave -> Must FAIL (400 CANNOT_DELETE_ACTIVE_LEAVE)
+  const deleteActiveRes = await request(`/leave/requests/${leaveId}`, {
+    method: 'DELETE',
+    headers: { authorization: `Bearer ${employeeToken}` },
+  })
+  assert.equal(deleteActiveRes.response.status, 400)
+  assert.equal(deleteActiveRes.body.error.code, 'CANNOT_DELETE_ACTIVE_LEAVE')
+
+  // 3. Employee cancels the leave request -> Must succeed
+  const cancelRes = await request(`/leave/requests/${leaveId}/cancel`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${employeeToken}` },
+  })
+  assert.equal(cancelRes.response.status, 200)
+  assert.equal(cancelRes.body.data.status, 'cancelled')
+
+  // 4. Employee deletes their CANCELLED leave request -> Must succeed!
+  const deleteCancelledRes = await request(`/leave/requests/${leaveId}`, {
+    method: 'DELETE',
+    headers: { authorization: `Bearer ${employeeToken}` },
+  })
+  assert.equal(deleteCancelledRes.response.status, 200)
+  assert.equal(deleteCancelledRes.body.success, true)
+
+  // 5. Verify the leave is permanently removed from repository
+  const verifyDeleted = await request(`/leave/requests/${leaveId}`, {
+    headers: { authorization: `Bearer ${employeeToken}` },
+  })
+  assert.equal(verifyDeleted.response.status, 404)
+})
+
 

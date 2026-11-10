@@ -2264,9 +2264,11 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
       return mutate(async () => {
         const res = await apiClient.post(`/leave/requests/${leaveId}/cancel`)
         if (rawLocal.cancelLeave) rawLocal.cancelLeave(leaveId)
-        const target = (state().leaves || []).find((l) => String(l.id) === String(leaveId) || String(l._id) === String(leaveId))
+        const cleanId = String(leaveId)
+        const target = (state().leaves || []).find((l) => String(l.id) === cleanId || String(l._id) === cleanId)
         if (target) {
           target.status = 'cancelled'
+          if (res?.data) Object.assign(target, res.data)
         }
         notify()
         return res.data
@@ -2278,10 +2280,17 @@ export function createConnectedStore(store, notify, rawLocal = {}) {
         try {
           const res = await apiClient.delete(`/leave/requests/${leaveId}`)
           if (rawLocal.deleteLeave) rawLocal.deleteLeave(leaveId)
+          const cleanId = String(leaveId)
+          const currentLeaves = state().leaves || []
+          const targetIndex = currentLeaves.findIndex((l) => String(l.id) === cleanId || String(l._id) === cleanId)
+          if (targetIndex !== -1) {
+            currentLeaves.splice(targetIndex, 1)
+          }
+          notify()
           return res.data
         } catch (err) {
-          if (rawLocal.deleteLeave) rawLocal.deleteLeave(leaveId)
-          return { success: true }
+          console.error('[connectedStore] Failed to delete leave request:', err?.response?.data || err?.message)
+          throw err
         }
       })
     },

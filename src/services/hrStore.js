@@ -7000,10 +7000,11 @@ const localStore = {
     return storeState.leaves.find((l) => l.id === leaveId)
   },
   deleteLeave(leaveId) {
-    const existing = storeState.leaves.find((l) => l.id === leaveId)
-    storeState.leaves = storeState.leaves.filter((l) => l.id !== leaveId)
+    const cleanId = String(leaveId)
+    const existing = storeState.leaves.find((l) => String(l.id) === cleanId || String(l._id) === cleanId)
+    storeState.leaves = storeState.leaves.filter((l) => String(l.id) !== cleanId && String(l._id) !== cleanId)
     if (existing) {
-      this.addAuditLog('HR', 'LEAVE_DELETE', `Deleted leave request ${leaveId} for ${existing.employeeName}`)
+      this.addAuditLog('HR', 'LEAVE_DELETE', `Deleted leave request ${cleanId} for ${existing.employeeName}`)
       this.addNotification({
         title: 'Leave Request Deleted',
         message: `Leave request for ${existing.employeeName} was removed.`,
@@ -7014,10 +7015,11 @@ const localStore = {
     return true
   },
   cancelLeave(leaveId, cancelReason = 'Cancelled by applicant') {
-    const existing = storeState.leaves.find((l) => l.id === leaveId || l._id === leaveId)
+    const cleanId = String(leaveId)
+    const existing = storeState.leaves.find((l) => String(l.id) === cleanId || String(l._id) === cleanId)
     if (!existing) return false
     storeState.leaves = storeState.leaves.map((l) => {
-      if (l.id === leaveId || l._id === leaveId) {
+      if (String(l.id) === cleanId || String(l._id) === cleanId) {
         return {
           ...l,
           status: 'cancelled',
@@ -7026,7 +7028,7 @@ const localStore = {
       }
       return l
     })
-    this.addAuditLog('EMPLOYEE', 'LEAVE_CANCEL', `Leave ${leaveId} cancelled`)
+    this.addAuditLog('EMPLOYEE', 'LEAVE_CANCEL', `Leave ${cleanId} cancelled`)
     this.addNotification({
       title: 'Leave Request Cancelled',
       message: `Your leave request for ${existing.startDate} to ${existing.endDate} was cancelled.`,

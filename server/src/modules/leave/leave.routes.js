@@ -359,9 +359,9 @@ export function createLeaveRouter({ auth, service }) {
 
   router.get('/balances', ...protectedRoute(PERMISSIONS.LEAVE_SELF_READ), async (request, response, next) => { try { return response.json({ success: true, data: await service.balances(request.auth.user, { leaveType: request.query.leaveType }) }) } catch (error) { return next(error) } })
 
-  router.delete('/requests/:id', ...protectedRoute(PERMISSIONS.LEAVE_HR_REVIEW), async (request, response, next) => { try { return response.json({ success: true, data: await service.delete(request.params.id, request.auth.user) }) } catch (error) { return next(error) } })
+  router.delete('/requests/:id', auth.authenticate, auth.requireAnyPermission([PERMISSIONS.LEAVE_HR_REVIEW, PERMISSIONS.LEAVE_SELF_WRITE]), async (request, response, next) => { try { return response.json({ success: true, data: await service.delete(request.params.id, request.auth.user) }) } catch (error) { return next(error) } })
 
-  router.delete('/:id', ...protectedRoute(PERMISSIONS.LEAVE_HR_REVIEW), async (request, response, next) => { try { return response.json({ success: true, data: await service.delete(request.params.id, request.auth.user) }) } catch (error) { return next(error) } })
+  router.delete('/:id', auth.authenticate, auth.requireAnyPermission([PERMISSIONS.LEAVE_HR_REVIEW, PERMISSIONS.LEAVE_SELF_WRITE]), async (request, response, next) => { try { return response.json({ success: true, data: await service.delete(request.params.id, request.auth.user) }) } catch (error) { return next(error) } })
 
 
 

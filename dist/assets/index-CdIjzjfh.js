@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/LoginPage-CzaApCpz.js","assets/rolldown-runtime-CO0Nlsmt.js","assets/icons-vendor-CNlTUIuG.js","assets/motion-vendor-3i60tGNx.js","assets/ModulePlaceholder-CwHMV-oc.js","assets/EmployeeDashboardPage-xr05fqvV.js","assets/currency-oCUzM0NR.js","assets/CalendarWidgets-C4DTToDC.js","assets/CompanyDocumentsView-poe1PZsy.js","assets/companyDocumentsConstants-DUkgikMQ.js","assets/PayslipPreviewModal-MbCp5vee.js","assets/react-vendor-B_MMQ54z.js","assets/pdf-vendor-BkGpxo0p.js","assets/payrollMatcher-DYZYv1X2.js","assets/OnboardingDossierView-Dxi2AMJI.js","assets/AdminDashboardPage-ChON4MyE.js","assets/EmployeesPage-CMjRUOWQ.js","assets/EmployeeComplianceStatusCard-h_yD-CLA.js","assets/OverviewPage-Cro_dnaC.js","assets/LeaveManagementPage-CuoNdRpx.js","assets/WorkspaceModulePage-Dkhf9rEt.js","assets/OrgHierarchyPage-C2ZvPYs2.js","assets/PayrollPage-5RVoZLqF.js","assets/EmployeeProfilePage-LSj0g0zV.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/LoginPage-DDdpLJ8E.js","assets/rolldown-runtime-CO0Nlsmt.js","assets/icons-vendor-CNlTUIuG.js","assets/motion-vendor-3i60tGNx.js","assets/ModulePlaceholder-Bwh1ONmf.js","assets/EmployeeDashboardPage-DfgZOh2M.js","assets/currency-oCUzM0NR.js","assets/CalendarWidgets-Ds8RnXF5.js","assets/CompanyDocumentsView-Y8Rt7SwH.js","assets/companyDocumentsConstants-DUkgikMQ.js","assets/PayslipPreviewModal-BjuqrAPK.js","assets/react-vendor-B_MMQ54z.js","assets/pdf-vendor-BkGpxo0p.js","assets/payrollMatcher-DYZYv1X2.js","assets/OnboardingDossierView-CJ0ZbiOC.js","assets/AdminDashboardPage-FABywn98.js","assets/EmployeesPage-DhQJzi7I.js","assets/EmployeeComplianceStatusCard-rLXeojxp.js","assets/OverviewPage-CJ7SY-OJ.js","assets/LeaveManagementPage-CGJYlBKr.js","assets/WorkspaceModulePage-IVEdivAh.js","assets/OrgHierarchyPage-4MA7oAru.js","assets/PayrollPage-5Swjv2ob.js","assets/EmployeeProfilePage-B421Bo6Y.js"])))=>i.map(i=>d[i]);
 import { n as __toESM } from "./rolldown-runtime-CO0Nlsmt.js";
 import { $ as Network, A as ShieldCheck, D as Smartphone, Dt as FileText, E as Sparkles, Et as FingerprintPattern, Ft as Download, Gt as CircleAlert, I as Send, K as Plus, M as Share, Mt as Eye, Nt as EyeOff, P as Settings2, Qt as Camera, Tt as FolderOpen, Ut as CircleQuestionMark, Vt as Clock3, Wt as CircleCheck, Yt as ChevronDown, _n as require_react, an as Building, at as MapPin, b as Ticket, c as VolumeX, cn as Bot, ct as Lock, d as Users, dn as Bell, dt as LoaderCircle, f as User, gt as Laptop, h as UserCheck, i as X, jt as FileChartColumnIncreasing, l as Volume2, ln as BookOpen, m as UserPlus, mt as LayoutDashboard, nt as Menu, rt as Megaphone, s as WalletCards, sn as BriefcaseBusiness, st as LogOut, tn as CalendarDays, vt as KeyRound, w as SquarePlus, x as Target, y as Trash, yt as House } from "./icons-vendor-CNlTUIuG.js";
 import { n as require_client, r as require_react_dom } from "./react-vendor-B_MMQ54z.js";
@@ -2942,8 +2942,12 @@ function createConnectedStore(store, notify, rawLocal = {}) {
 			return mutate(async () => {
 				const res = await apiClient.post(`/leave/requests/${leaveId}/cancel`);
 				if (rawLocal.cancelLeave) rawLocal.cancelLeave(leaveId);
-				const target = (state().leaves || []).find((l) => String(l.id) === String(leaveId) || String(l._id) === String(leaveId));
-				if (target) target.status = "cancelled";
+				const cleanId = String(leaveId);
+				const target = (state().leaves || []).find((l) => String(l.id) === cleanId || String(l._id) === cleanId);
+				if (target) {
+					target.status = "cancelled";
+					if (res?.data) Object.assign(target, res.data);
+				}
 				notify();
 				return res.data;
 			});
@@ -2954,10 +2958,15 @@ function createConnectedStore(store, notify, rawLocal = {}) {
 				try {
 					const res = await apiClient.delete(`/leave/requests/${leaveId}`);
 					if (rawLocal.deleteLeave) rawLocal.deleteLeave(leaveId);
+					const cleanId = String(leaveId);
+					const currentLeaves = state().leaves || [];
+					const targetIndex = currentLeaves.findIndex((l) => String(l.id) === cleanId || String(l._id) === cleanId);
+					if (targetIndex !== -1) currentLeaves.splice(targetIndex, 1);
+					notify();
 					return res.data;
 				} catch (err) {
-					if (rawLocal.deleteLeave) rawLocal.deleteLeave(leaveId);
-					return { success: true };
+					console.error("[connectedStore] Failed to delete leave request:", err?.response?.data || err?.message);
+					throw err;
 				}
 			});
 		},
@@ -10661,10 +10670,11 @@ var localStore = {
 		return storeState.leaves.find((l) => l.id === leaveId);
 	},
 	deleteLeave(leaveId) {
-		const existing = storeState.leaves.find((l) => l.id === leaveId);
-		storeState.leaves = storeState.leaves.filter((l) => l.id !== leaveId);
+		const cleanId = String(leaveId);
+		const existing = storeState.leaves.find((l) => String(l.id) === cleanId || String(l._id) === cleanId);
+		storeState.leaves = storeState.leaves.filter((l) => String(l.id) !== cleanId && String(l._id) !== cleanId);
 		if (existing) {
-			this.addAuditLog("HR", "LEAVE_DELETE", `Deleted leave request ${leaveId} for ${existing.employeeName}`);
+			this.addAuditLog("HR", "LEAVE_DELETE", `Deleted leave request ${cleanId} for ${existing.employeeName}`);
 			this.addNotification({
 				title: "Leave Request Deleted",
 				message: `Leave request for ${existing.employeeName} was removed.`,
@@ -10675,17 +10685,18 @@ var localStore = {
 		return true;
 	},
 	cancelLeave(leaveId, cancelReason = "Cancelled by applicant") {
-		const existing = storeState.leaves.find((l) => l.id === leaveId || l._id === leaveId);
+		const cleanId = String(leaveId);
+		const existing = storeState.leaves.find((l) => String(l.id) === cleanId || String(l._id) === cleanId);
 		if (!existing) return false;
 		storeState.leaves = storeState.leaves.map((l) => {
-			if (l.id === leaveId || l._id === leaveId) return {
+			if (String(l.id) === cleanId || String(l._id) === cleanId) return {
 				...l,
 				status: "cancelled",
 				cancellationReason: cancelReason
 			};
 			return l;
 		});
-		this.addAuditLog("EMPLOYEE", "LEAVE_CANCEL", `Leave ${leaveId} cancelled`);
+		this.addAuditLog("EMPLOYEE", "LEAVE_CANCEL", `Leave ${cleanId} cancelled`);
 		this.addNotification({
 			title: "Leave Request Cancelled",
 			message: `Your leave request for ${existing.startDate} to ${existing.endDate} was cancelled.`,
@@ -17448,19 +17459,19 @@ function ConfirmationDialog({ open, title, message, confirmLabel = "Confirm", on
 	}), document.body);
 }
 // src/main.jsx
-var LoginPage = (0, import_react.lazy)(() => __vitePreload(() => import("./LoginPage-CzaApCpz.js").then((m) => ({ default: m.LoginPage })), __vite__mapDeps([0,1,2,3])));
-var NotFoundPage = (0, import_react.lazy)(() => __vitePreload(() => import("./ModulePlaceholder-CwHMV-oc.js").then((m) => ({ default: m.NotFoundPage })), __vite__mapDeps([4,2,1,3])));
-var EmployeeDashboardPage = (0, import_react.lazy)(() => __vitePreload(() => import("./EmployeeDashboardPage-xr05fqvV.js").then((m) => ({ default: m.EmployeeDashboardPage })), __vite__mapDeps([5,1,2,3,6,7,8,9,10,11,12,13,14])));
-var AccessDeniedPage = (0, import_react.lazy)(() => __vitePreload(() => import("./EmployeeDashboardPage-xr05fqvV.js").then((m) => ({ default: m.AccessDeniedPage })), __vite__mapDeps([5,1,2,3,6,7,8,9,10,11,12,13,14])));
-var AdminDashboardPage = (0, import_react.lazy)(() => __vitePreload(() => import("./AdminDashboardPage-ChON4MyE.js").then((m) => ({ default: m.AdminDashboardPage })), __vite__mapDeps([15,1,2,11,3,6,7])));
-var AdminUsersModule = (0, import_react.lazy)(() => __vitePreload(() => import("./AdminDashboardPage-ChON4MyE.js").then((m) => ({ default: m.AdminUsersModule })), __vite__mapDeps([15,1,2,11,3,6,7])));
-var EmployeesPage = (0, import_react.lazy)(() => __vitePreload(() => import("./EmployeesPage-CMjRUOWQ.js").then((m) => ({ default: m.EmployeesPage })), __vite__mapDeps([16,1,2,3,6,14,11,13,17,9])));
-var OverviewPage = (0, import_react.lazy)(() => __vitePreload(() => import("./OverviewPage-Cro_dnaC.js").then((m) => ({ default: m.OverviewPage })), __vite__mapDeps([18,1,2,3,7])));
-var LeaveManagementPage = (0, import_react.lazy)(() => __vitePreload(() => import("./LeaveManagementPage-CuoNdRpx.js").then((m) => ({ default: m.LeaveManagementPage })), __vite__mapDeps([19,1,2,11,3])));
-var WorkspaceModulePage = (0, import_react.lazy)(() => __vitePreload(() => import("./WorkspaceModulePage-Dkhf9rEt.js").then((m) => ({ default: m.WorkspaceModulePage })), __vite__mapDeps([20,1,2,11,3,6,7,15,8,9])));
-var OrgHierarchyPage = (0, import_react.lazy)(() => __vitePreload(() => import("./OrgHierarchyPage-C2ZvPYs2.js").then((m) => ({ default: m.OrgHierarchyPage })), __vite__mapDeps([21,1,2,3])));
-var PayrollPage = (0, import_react.lazy)(() => __vitePreload(() => import("./PayrollPage-5RVoZLqF.js").then((m) => ({ default: m.PayrollPage })), __vite__mapDeps([22,1,2,3,10,11,12,13])));
-var EmployeeProfilePage = (0, import_react.lazy)(() => __vitePreload(() => import("./EmployeeProfilePage-LSj0g0zV.js").then((m) => ({ default: m.EmployeeProfilePage })), __vite__mapDeps([23,1,2,3,6,14,11,13,17,9])));
+var LoginPage = (0, import_react.lazy)(() => __vitePreload(() => import("./LoginPage-DDdpLJ8E.js").then((m) => ({ default: m.LoginPage })), __vite__mapDeps([0,1,2,3])));
+var NotFoundPage = (0, import_react.lazy)(() => __vitePreload(() => import("./ModulePlaceholder-Bwh1ONmf.js").then((m) => ({ default: m.NotFoundPage })), __vite__mapDeps([4,2,1,3])));
+var EmployeeDashboardPage = (0, import_react.lazy)(() => __vitePreload(() => import("./EmployeeDashboardPage-DfgZOh2M.js").then((m) => ({ default: m.EmployeeDashboardPage })), __vite__mapDeps([5,1,2,3,6,7,8,9,10,11,12,13,14])));
+var AccessDeniedPage = (0, import_react.lazy)(() => __vitePreload(() => import("./EmployeeDashboardPage-DfgZOh2M.js").then((m) => ({ default: m.AccessDeniedPage })), __vite__mapDeps([5,1,2,3,6,7,8,9,10,11,12,13,14])));
+var AdminDashboardPage = (0, import_react.lazy)(() => __vitePreload(() => import("./AdminDashboardPage-FABywn98.js").then((m) => ({ default: m.AdminDashboardPage })), __vite__mapDeps([15,1,2,11,3,6,7])));
+var AdminUsersModule = (0, import_react.lazy)(() => __vitePreload(() => import("./AdminDashboardPage-FABywn98.js").then((m) => ({ default: m.AdminUsersModule })), __vite__mapDeps([15,1,2,11,3,6,7])));
+var EmployeesPage = (0, import_react.lazy)(() => __vitePreload(() => import("./EmployeesPage-DhQJzi7I.js").then((m) => ({ default: m.EmployeesPage })), __vite__mapDeps([16,1,2,3,6,14,11,13,17,9])));
+var OverviewPage = (0, import_react.lazy)(() => __vitePreload(() => import("./OverviewPage-CJ7SY-OJ.js").then((m) => ({ default: m.OverviewPage })), __vite__mapDeps([18,1,2,3,7])));
+var LeaveManagementPage = (0, import_react.lazy)(() => __vitePreload(() => import("./LeaveManagementPage-CGJYlBKr.js").then((m) => ({ default: m.LeaveManagementPage })), __vite__mapDeps([19,1,2,11,3])));
+var WorkspaceModulePage = (0, import_react.lazy)(() => __vitePreload(() => import("./WorkspaceModulePage-IVEdivAh.js").then((m) => ({ default: m.WorkspaceModulePage })), __vite__mapDeps([20,1,2,11,3,6,7,15,8,9])));
+var OrgHierarchyPage = (0, import_react.lazy)(() => __vitePreload(() => import("./OrgHierarchyPage-4MA7oAru.js").then((m) => ({ default: m.OrgHierarchyPage })), __vite__mapDeps([21,1,2,3])));
+var PayrollPage = (0, import_react.lazy)(() => __vitePreload(() => import("./PayrollPage-5Swjv2ob.js").then((m) => ({ default: m.PayrollPage })), __vite__mapDeps([22,1,2,3,10,11,12,13])));
+var EmployeeProfilePage = (0, import_react.lazy)(() => __vitePreload(() => import("./EmployeeProfilePage-B421Bo6Y.js").then((m) => ({ default: m.EmployeeProfilePage })), __vite__mapDeps([23,1,2,3,6,14,11,13,17,9])));
 var ErrorBoundary = class extends import_react.Component {
 	constructor(props) {
 		super(props);
@@ -17757,7 +17768,7 @@ if (container && (container instanceof Element || container.nodeType === 1)) {
 		children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AuthProvider, { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(App, {}) })
 	}) }) }));
 }
-var ACTIVE_PWA_CACHE = "edufyi-hr-pwa-v36";
+var ACTIVE_PWA_CACHE = "edufyi-hr-pwa-v37";
 function registerServiceWorker() {
 	if (typeof window !== "undefined" && "serviceWorker" in navigator && window.location.protocol.startsWith("http")) {
 		if (typeof caches !== "undefined") caches.keys().then((keys) => {

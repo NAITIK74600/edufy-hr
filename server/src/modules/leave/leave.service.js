@@ -816,17 +816,52 @@ async function restoreCommittedRequestBalances(repository, request) {
       return publicRequest(updated)
     },
     async delete(id, actor) {
-      if (!hasPermission(actor, PERMISSIONS.LEAVE_HR_REVIEW) && !['admin', 'hr'].includes(actor.role)) {
-        throw error('Only HR operations or an administrator can delete leave records.', 403, 'FORBIDDEN')
-      }
       const request = await repository.findRequest(id)
       if (!request) throw error('Leave request not found.', 404, 'NOT_FOUND')
+
+      const isHrOrAdmin = hasPermission(actor, PERMISSIONS.LEAVE_HR_REVIEW) || ['admin', 'hr', 'director', 'managing_director'].includes(actor.role)
+
+      const reqEmpId = idOf(request.employeeId)
+      const reqEmpCode = request.employeeId?.employeeId || (typeof request.employeeId === 'string' ? request.employeeId : null)
+      const candidateActorIds = [
+        idOf(actor?.id),
+        idOf(actor?._id),
+        actor?.employeeId,
+        actor?.empId,
+        actor?.email
+      ].filter(Boolean).map(String)
+      const isSelfEmployee = candidateActorIds.includes(String(reqEmpId)) || (reqEmpCode && candidateActorIds.includes(String(reqEmpCode)))
+
+      if (!isHrOrAdmin && !isSelfEmployee) {
+        throw error('Only HR operations, administrators, or the applicant employee can delete leave records.', 403, 'FORBIDDEN')
+      }
+
+      // If actor is the employee (self-service), they can ONLY delete cancelled or rejected leaves!
+      if (!isHrOrAdmin && isSelfEmployee) {
+        if (!['cancelled', 'rejected'].includes(request.status)) {
+          throw error('Employees can only delete cancelled or rejected leave requests. Please cancel the request first.', 400, 'CANNOT_DELETE_ACTIVE_LEAVE')
+        }
+      }
+
       if (['pending_tl', 'pending_manager', 'pending_director', 'pending_hr', 'pending_admin'].includes(request.status)) {
         await releaseRequestBalances(repository, request).catch(() => null)
       } else if (request.status === 'approved') {
         await restoreCommittedRequestBalances(repository, request).catch(() => null)
       }
       await repository.deleteRequest(id)
+
+      // Also clean up any calendar events associated with this deleted leave
+      if (mongoose?.connection?.readyState === 1) {
+        try {
+          const CalendarEvent = mongoose.models.CalendarEvent
+          if (CalendarEvent) {
+            await CalendarEvent.deleteMany({ sourceId: `leave_${id}` })
+          }
+        } catch (calErr) {
+          console.warn('[leave.service] Failed to purge calendar events for deleted leave:', calErr?.message)
+        }
+      }
+
       return { success: true, id: String(id) }
     },
     async amend(id, payload, actor) {

@@ -326,13 +326,13 @@ function RequestDetail({ request, mode, onRefresh, onDeleteRequest, onPromptReje
   const isHrOrAdmin = mode === 'hr' || mode === 'admin' || ['admin', 'hr', 'director', 'managing_director'].includes(user?.role) || (user?.permissions || []).includes('leave.hr.review')
 
   // Resolve candidate IDs of current viewer
-  const userCandIds = [user?.id, user?._id, user?.employeeId].filter(Boolean).map(String)
+  const userCandIds = [user?.id, user?._id, user?.employeeId, user?.empId, user?.employeeRef, user?.email].filter(Boolean).map(String)
   const reqMgrId = request?.managerId?._id || request?.managerId?.id || request?.managerId
   const isAssignedManagerOfThisRequest = Boolean(reqMgrId && userCandIds.includes(String(reqMgrId)))
 
-  const reqEmpId = request?.employeeId?._id || request?.employeeId?.id || request?.employeeId
-  const reqEmpCode = request?.employeeId?.employeeId || (typeof request?.employeeId === 'string' ? request?.employeeId : null)
-  const isOwnRequest = Boolean(userCandIds.includes(String(reqEmpId)) || (reqEmpCode && userCandIds.includes(String(reqEmpCode))))
+  const reqEmpId = request?.employeeId?._id || request?.employeeId?.id || (typeof request?.employeeId === 'string' ? request?.employeeId : null) || request?.employeeRef
+  const reqEmpCode = request?.employeeId?.employeeId || (typeof request?.employeeId === 'string' ? request?.employeeId : null) || request?.employeeCode
+  const isOwnRequest = (mode === 'self' || mode === 'ess') || Boolean(userCandIds.includes(String(reqEmpId)) || (reqEmpCode && userCandIds.includes(String(reqEmpCode))))
 
   // Team Lead does not approve leaves; TL is only notified of squad member leaves. Manager approves!
   const canTlDecide = false
@@ -351,7 +351,12 @@ function RequestDetail({ request, mode, onRefresh, onDeleteRequest, onPromptReje
   const canDecide = canAdminDecide || canManagerDecide || canDirectorDecide || canHrDecide
 
   // Cancel is strictly for the applicant on their own request in self-service mode (never in HR/Admin review mode)
-  const canCancel = isOwnRequest && mode === 'ess' && ['pending_tl', 'pending_manager', 'pending_director', 'pending_hr', 'pending_admin'].includes(currentStatus)
+  const canCancel = isOwnRequest && (mode === 'self' || mode === 'ess') && ['pending_tl', 'pending_manager', 'pending_director', 'pending_hr', 'pending_admin', 'approved'].includes(currentStatus)
+
+  // Delete option:
+  // HR/Admin can delete any record.
+  // Employee in self-service mode can ONLY delete their own CANCELLED or REJECTED leaves!
+  const canDelete = isHrOrAdmin || (isOwnRequest && (mode === 'self' || mode === 'ess') && ['cancelled', 'rejected'].includes(currentStatus))
 
   async function handleApprove() {
     setBusy(true)
@@ -444,7 +449,7 @@ function RequestDetail({ request, mode, onRefresh, onDeleteRequest, onPromptReje
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <RequestStatus status={currentStatus} />
-          {onDeleteRequest && (
+          {onDeleteRequest && canDelete && (
             <button
               type="button"
               className="emp-action-btn delete"
@@ -809,9 +814,27 @@ function RequestDetail({ request, mode, onRefresh, onDeleteRequest, onPromptReje
       {canCancel && (
         <div className="decision-box">
           <p style={{ fontSize: '11px', margin: 0, color: 'var(--muted)' }}>
-            Your request is currently under review. You may cancel it if your plans have changed.
+            {currentStatus === 'approved'
+              ? 'This approved leave can be cancelled if your plans have changed.'
+              : 'Your request is currently under review. You may cancel it if your plans have changed.'}
           </p>
-          <Button variant="secondary" onClick={storeAction(async () => { await hrStore.cancelLeave(request.id); onRefresh() })}>
+          <Button
+            variant="secondary"
+            disabled={busy}
+            onClick={storeAction(async () => {
+              setBusy(true)
+              try {
+                const targetId = request.id || request._id
+                await hrStore.cancelLeave(targetId)
+                setLocalStatus('cancelled')
+                onRefresh()
+              } catch (cancelErr) {
+                setError(cancelErr?.message || 'Failed to cancel leave request.')
+              } finally {
+                setBusy(false)
+              }
+            })}
+          >
             Cancel Leave Request
           </Button>
         </div>
@@ -2305,10 +2328,19 @@ export function LeaveManagementPage({ mode = 'self', route, query: propQuery }) 
   })
 
   const handleDeleteLeave = storeAction(async () => {
-    if (!leaveToDelete?.id) return
-    await hrStore.deleteLeave(leaveToDelete.id)
-    setLeaveToDelete(null)
-    showFeedback('Leave record removed from system.')
+    if (!leaveToDelete?.id && !leaveToDelete?._id) return
+    const targetId = leaveToDelete.id || leaveToDelete._id
+    try {
+      await hrStore.deleteLeave(targetId)
+      if (selected?.id === targetId || selected?._id === targetId) {
+        setSelected(null)
+      }
+      setLeaveToDelete(null)
+      showFeedback('Leave record removed from system.')
+      setRefreshKey((k) => k + 1)
+    } catch (delErr) {
+      alert(delErr?.response?.data?.error?.message || delErr?.message || 'Failed to delete leave request.')
+    }
   })
 
   function handleGrantForEmployee(empId) {
@@ -2932,7 +2964,7 @@ export function LeaveManagementPage({ mode = 'self', route, query: propQuery }) 
                         onSelect={setSelected}
                         onQuickApprove={isManagement ? handleQuickApprove : null}
                         onQuickReject={isManagement ? handleQuickRejectPrompt : null}
-                        onDeleteRequest={isManagement ? setLeaveToDelete : null}
+                        onDeleteRequest={isManagement ? setLeaveToDelete : (isSelf && ['cancelled', 'rejected'].includes(request?.status) ? setLeaveToDelete : null)}
                         key={request?.id || request?._id || idx}
                       />
                     ))
@@ -3093,14 +3125,16 @@ export function LeaveManagementPage({ mode = 'self', route, query: propQuery }) 
                           >
                             <Eye size={12} /> View
                           </button>
-                          <button
-                            type="button"
-                            className="emp-action-btn delete"
-                            onClick={() => setLeaveToDelete(r)}
-                            title="Delete Request"
-                          >
-                            <Trash2 size={12} />
-                          </button>
+                          {(isManagement || (isSelf && ['cancelled', 'rejected'].includes(r.status))) && (
+                            <button
+                              type="button"
+                              className="emp-action-btn delete"
+                              onClick={() => setLeaveToDelete(r)}
+                              title="Delete Request"
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          )}
                         </div>
                       )
                     },
