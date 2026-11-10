@@ -1,7 +1,7 @@
 import { n as __toESM } from "./rolldown-runtime-CO0Nlsmt.js";
 import { $t as Calendar, B as Repeat, Bt as Clock, E as Sparkles, Ft as Download, Gt as CircleAlert, Ht as CircleX, Jt as ChevronLeft, K as Plus, L as Search, Ot as FileSpreadsheet, Pt as ExternalLink, Rt as Copy, Ut as CircleQuestionMark, Wt as CircleCheck, Xt as Check, Y as Pen, _n as require_react, at as MapPin, d as Users, dn as Bell, en as CalendarRange, fn as Award, ft as List, g as Upload, ht as Layers, i as X, n as ZoomIn, qt as ChevronRight, rn as Cake, t as ZoomOut, tn as CalendarDays, u as Video, x as Target, xt as Grid3x3, y as Trash } from "./icons-vendor-CNlTUIuG.js";
 import { a as require_jsx_runtime } from "./motion-vendor-3i60tGNx.js";
-import { I as apiClient, T as hrStore, a as Field, t as Button } from "./index-DZ25qf2r.js";
+import { I as apiClient, T as hrStore, a as Field, t as Button } from "./index-CBp-KtMT.js";
 // src/utils/dobHelper.js
 var import_react = /* @__PURE__ */ __toESM(require_react(), 1);
 /**
@@ -3268,6 +3268,12 @@ function DailyCalendarView({ selectedDate, events = [], onSelectEvent, onQuickCr
 	});
 }
 // src/components/calendar/EnterpriseCalendar.jsx
+function formatLocation(loc) {
+	if (!loc) return "";
+	if (typeof loc === "string") return loc;
+	if (typeof loc === "object") return loc.name || loc.formattedAddress || loc.address || "Office";
+	return String(loc);
+}
 var CATEGORY_COLORS = {
 	"National Holiday": {
 		bg: "#e0f2fe",
@@ -3596,7 +3602,9 @@ function EnterpriseCalendar({ canManage = false, user = null, defaultView = "mon
 		const start = (ev.date || "").replace(/-/g, "");
 		const endDateObj = new Date(ev.endDate || ev.date);
 		endDateObj.setDate(endDateObj.getDate() + 1);
-		return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${start}/${endDateObj.toISOString().split("T")[0].replace(/-/g, "")}&details=${encodeURIComponent(`${ev.description ? ev.description + "\n\n" : ""}Category: ${ev.category || "Holiday"}\nLocation: ${ev.location || "All Offices"}\nEdufyi HR Portal`)}&location=${encodeURIComponent(ev.location || "Edufyi Technologies")}`;
+		const end = endDateObj.toISOString().split("T")[0].replace(/-/g, "");
+		const locText = formatLocation(ev.location) || "All Offices";
+		return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${start}/${end}&details=${encodeURIComponent(`${ev.description ? ev.description + "\n\n" : ""}Category: ${ev.category || "Holiday"}\nLocation: ${locText}\nEdufyi HR Portal`)}&location=${encodeURIComponent(locText || "Edufyi Technologies")}`;
 	};
 	const isLongWeekend = (dateStr) => {
 		if (!dateStr) return false;
@@ -5447,7 +5455,7 @@ function EnterpriseCalendar({ canManage = false, user = null, defaultView = "mon
 											children: [
 												/* @__PURE__ */ (0, import_jsx_runtime.jsx)(MapPin, { size: 11 }),
 												" ",
-												ev.location
+												formatLocation(ev.location)
 											]
 										}), ev.department && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
 											style: {
@@ -5938,7 +5946,7 @@ function EnterpriseCalendar({ canManage = false, user = null, defaultView = "mon
 															children: [
 																/* @__PURE__ */ (0, import_jsx_runtime.jsx)(MapPin, { size: 11 }),
 																" ",
-																ev.location
+																formatLocation(ev.location)
 															]
 														}), ev.department && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
 															style: {
@@ -7718,9 +7726,9 @@ function CalendarWidgets({ user = null }) {
 		"Nov",
 		"Dec"
 	];
-	const todayDateObj = /* @__PURE__ */ new Date();
-	todayDateObj.setHours(0, 0, 0, 0);
-	const allBirthdays = useMemo(() => {
+	const allBirthdays = (0, import_react.useMemo)(() => {
+		const todayDateObj = /* @__PURE__ */ new Date();
+		todayDateObj.setHours(0, 0, 0, 0);
 		return (storeState.employees || []).map((e) => {
 			const dobInfo = extractEmployeeDob(e);
 			if (!dobInfo) return null;
@@ -7749,7 +7757,7 @@ function CalendarWidgets({ user = null }) {
 		storeState.employees,
 		currentYear,
 		currentMonth,
-		todayDateObj
+		todayStr
 	]);
 	const birthdaysThisMonth = widgetsData?.birthdaysThisMonth?.length ? widgetsData.birthdaysThisMonth : allBirthdays.filter((b) => b.isThisMonth);
 	const upcomingBirthdays = widgetsData?.upcomingBirthdays?.length ? widgetsData.upcomingBirthdays : allBirthdays;

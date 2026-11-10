@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { Calendar, Cake, Award, Sparkles, ChevronRight, Clock, Video, ExternalLink, Plus, MapPin } from 'lucide-react'
 import { calendarService } from '../../services/calendarService'
 import { hrStore } from '../../services/hrStore'
@@ -78,10 +78,10 @@ export function CalendarWidgets({ user = null }) {
 
   // 2. Birthdays (Dynamic loop-engineered calculation from MongoDB employee records)
   const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-  const todayDateObj = new Date()
-  todayDateObj.setHours(0, 0, 0, 0)
 
   const allBirthdays = useMemo(() => {
+    const todayDateObj = new Date()
+    todayDateObj.setHours(0, 0, 0, 0)
     return (storeState.employees || [])
       .map((e) => {
         const dobInfo = extractEmployeeDob(e)
@@ -112,7 +112,7 @@ export function CalendarWidgets({ user = null }) {
       })
       .filter(Boolean)
       .sort((a, b) => a.daysRemaining - b.daysRemaining)
-  }, [storeState.employees, currentYear, currentMonth, todayDateObj])
+  }, [storeState.employees, currentYear, currentMonth, todayStr])
 
   const birthdaysThisMonth = widgetsData?.birthdaysThisMonth?.length
     ? widgetsData.birthdaysThisMonth

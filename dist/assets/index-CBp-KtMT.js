@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/LoginPage-CVTHCcEx.js","assets/rolldown-runtime-CO0Nlsmt.js","assets/icons-vendor-CNlTUIuG.js","assets/motion-vendor-3i60tGNx.js","assets/ModulePlaceholder-C5Uponpi.js","assets/EmployeeDashboardPage-DNQlITxO.js","assets/currency-oCUzM0NR.js","assets/CalendarWidgets-BpXozTFf.js","assets/CompanyDocumentsView-B1zh45P3.js","assets/companyDocumentsConstants-DUkgikMQ.js","assets/PayslipPreviewModal-CD2NUsHP.js","assets/react-vendor-B_MMQ54z.js","assets/pdf-vendor-BkGpxo0p.js","assets/payrollMatcher-DYZYv1X2.js","assets/OnboardingDossierView-R9_YP_If.js","assets/AdminDashboardPage-DuLhFEvL.js","assets/EmployeesPage-CYLBpNUP.js","assets/EmployeeComplianceStatusCard-D_eHFEbM.js","assets/OverviewPage-73XRT9xg.js","assets/LeaveManagementPage-B63cBRCk.js","assets/WorkspaceModulePage-D-Su4gnB.js","assets/OrgHierarchyPage-BQPg0cV6.js","assets/PayrollPage-DV9Wha-C.js","assets/EmployeeProfilePage-3TpQQMuA.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/LoginPage-BelJwWHd.js","assets/rolldown-runtime-CO0Nlsmt.js","assets/icons-vendor-CNlTUIuG.js","assets/motion-vendor-3i60tGNx.js","assets/ModulePlaceholder-fhm5_fFF.js","assets/EmployeeDashboardPage-IUa9J3zJ.js","assets/currency-oCUzM0NR.js","assets/CalendarWidgets-kmLq0_jR.js","assets/CompanyDocumentsView-BbcB6feo.js","assets/companyDocumentsConstants-DUkgikMQ.js","assets/PayslipPreviewModal-D1SMhjDp.js","assets/react-vendor-B_MMQ54z.js","assets/pdf-vendor-BkGpxo0p.js","assets/payrollMatcher-DYZYv1X2.js","assets/OnboardingDossierView-B7WXapwM.js","assets/AdminDashboardPage-aFTLZVIq.js","assets/EmployeesPage-D3SYFEOX.js","assets/EmployeeComplianceStatusCard-CJ51EwdA.js","assets/OverviewPage-CQhiVH_T.js","assets/LeaveManagementPage-CpJhlzER.js","assets/WorkspaceModulePage-D91uMOks.js","assets/OrgHierarchyPage-C-r5IJpP.js","assets/PayrollPage-CXL9HwbV.js","assets/EmployeeProfilePage-BGirBFZR.js"])))=>i.map(i=>d[i]);
 import { n as __toESM } from "./rolldown-runtime-CO0Nlsmt.js";
 import { $ as Network, A as ShieldCheck, D as Smartphone, Dt as FileText, E as Sparkles, Et as FingerprintPattern, Ft as Download, Gt as CircleAlert, I as Send, K as Plus, M as Share, Mt as Eye, Nt as EyeOff, P as Settings2, Qt as Camera, Tt as FolderOpen, Ut as CircleQuestionMark, Vt as Clock3, Wt as CircleCheck, Yt as ChevronDown, _n as require_react, an as Building, at as MapPin, b as Ticket, c as VolumeX, cn as Bot, ct as Lock, d as Users, dn as Bell, dt as LoaderCircle, f as User, gt as Laptop, h as UserCheck, i as X, jt as FileChartColumnIncreasing, l as Volume2, ln as BookOpen, m as UserPlus, mt as LayoutDashboard, nt as Menu, rt as Megaphone, s as WalletCards, sn as BriefcaseBusiness, st as LogOut, tn as CalendarDays, vt as KeyRound, w as SquarePlus, x as Target, y as Trash, yt as House } from "./icons-vendor-CNlTUIuG.js";
 import { n as require_client, r as require_react_dom } from "./react-vendor-B_MMQ54z.js";
@@ -17265,19 +17265,19 @@ function ConfirmationDialog({ open, title, message, confirmLabel = "Confirm", on
 	}), document.body);
 }
 // src/main.jsx
-var LoginPage = (0, import_react.lazy)(() => __vitePreload(() => import("./LoginPage-CVTHCcEx.js").then((m) => ({ default: m.LoginPage })), __vite__mapDeps([0,1,2,3])));
-var NotFoundPage = (0, import_react.lazy)(() => __vitePreload(() => import("./ModulePlaceholder-C5Uponpi.js").then((m) => ({ default: m.NotFoundPage })), __vite__mapDeps([4,2,1,3])));
-var EmployeeDashboardPage = (0, import_react.lazy)(() => __vitePreload(() => import("./EmployeeDashboardPage-DNQlITxO.js").then((m) => ({ default: m.EmployeeDashboardPage })), __vite__mapDeps([5,1,2,3,6,7,8,9,10,11,12,13,14])));
-var AccessDeniedPage = (0, import_react.lazy)(() => __vitePreload(() => import("./EmployeeDashboardPage-DNQlITxO.js").then((m) => ({ default: m.AccessDeniedPage })), __vite__mapDeps([5,1,2,3,6,7,8,9,10,11,12,13,14])));
-var AdminDashboardPage = (0, import_react.lazy)(() => __vitePreload(() => import("./AdminDashboardPage-DuLhFEvL.js").then((m) => ({ default: m.AdminDashboardPage })), __vite__mapDeps([15,1,2,11,3,6,7])));
-var AdminUsersModule = (0, import_react.lazy)(() => __vitePreload(() => import("./AdminDashboardPage-DuLhFEvL.js").then((m) => ({ default: m.AdminUsersModule })), __vite__mapDeps([15,1,2,11,3,6,7])));
-var EmployeesPage = (0, import_react.lazy)(() => __vitePreload(() => import("./EmployeesPage-CYLBpNUP.js").then((m) => ({ default: m.EmployeesPage })), __vite__mapDeps([16,1,2,3,6,14,11,13,17,9])));
-var OverviewPage = (0, import_react.lazy)(() => __vitePreload(() => import("./OverviewPage-73XRT9xg.js").then((m) => ({ default: m.OverviewPage })), __vite__mapDeps([18,1,2,3,7])));
-var LeaveManagementPage = (0, import_react.lazy)(() => __vitePreload(() => import("./LeaveManagementPage-B63cBRCk.js").then((m) => ({ default: m.LeaveManagementPage })), __vite__mapDeps([19,1,2,11,3])));
-var WorkspaceModulePage = (0, import_react.lazy)(() => __vitePreload(() => import("./WorkspaceModulePage-D-Su4gnB.js").then((m) => ({ default: m.WorkspaceModulePage })), __vite__mapDeps([20,1,2,11,3,6,7,15,8,9])));
-var OrgHierarchyPage = (0, import_react.lazy)(() => __vitePreload(() => import("./OrgHierarchyPage-BQPg0cV6.js").then((m) => ({ default: m.OrgHierarchyPage })), __vite__mapDeps([21,1,2,3])));
-var PayrollPage = (0, import_react.lazy)(() => __vitePreload(() => import("./PayrollPage-DV9Wha-C.js").then((m) => ({ default: m.PayrollPage })), __vite__mapDeps([22,1,2,3,10,11,12,13])));
-var EmployeeProfilePage = (0, import_react.lazy)(() => __vitePreload(() => import("./EmployeeProfilePage-3TpQQMuA.js").then((m) => ({ default: m.EmployeeProfilePage })), __vite__mapDeps([23,1,2,3,6,14,11,13,17,9])));
+var LoginPage = (0, import_react.lazy)(() => __vitePreload(() => import("./LoginPage-BelJwWHd.js").then((m) => ({ default: m.LoginPage })), __vite__mapDeps([0,1,2,3])));
+var NotFoundPage = (0, import_react.lazy)(() => __vitePreload(() => import("./ModulePlaceholder-fhm5_fFF.js").then((m) => ({ default: m.NotFoundPage })), __vite__mapDeps([4,2,1,3])));
+var EmployeeDashboardPage = (0, import_react.lazy)(() => __vitePreload(() => import("./EmployeeDashboardPage-IUa9J3zJ.js").then((m) => ({ default: m.EmployeeDashboardPage })), __vite__mapDeps([5,1,2,3,6,7,8,9,10,11,12,13,14])));
+var AccessDeniedPage = (0, import_react.lazy)(() => __vitePreload(() => import("./EmployeeDashboardPage-IUa9J3zJ.js").then((m) => ({ default: m.AccessDeniedPage })), __vite__mapDeps([5,1,2,3,6,7,8,9,10,11,12,13,14])));
+var AdminDashboardPage = (0, import_react.lazy)(() => __vitePreload(() => import("./AdminDashboardPage-aFTLZVIq.js").then((m) => ({ default: m.AdminDashboardPage })), __vite__mapDeps([15,1,2,11,3,6,7])));
+var AdminUsersModule = (0, import_react.lazy)(() => __vitePreload(() => import("./AdminDashboardPage-aFTLZVIq.js").then((m) => ({ default: m.AdminUsersModule })), __vite__mapDeps([15,1,2,11,3,6,7])));
+var EmployeesPage = (0, import_react.lazy)(() => __vitePreload(() => import("./EmployeesPage-D3SYFEOX.js").then((m) => ({ default: m.EmployeesPage })), __vite__mapDeps([16,1,2,3,6,14,11,13,17,9])));
+var OverviewPage = (0, import_react.lazy)(() => __vitePreload(() => import("./OverviewPage-CQhiVH_T.js").then((m) => ({ default: m.OverviewPage })), __vite__mapDeps([18,1,2,3,7])));
+var LeaveManagementPage = (0, import_react.lazy)(() => __vitePreload(() => import("./LeaveManagementPage-CpJhlzER.js").then((m) => ({ default: m.LeaveManagementPage })), __vite__mapDeps([19,1,2,11,3])));
+var WorkspaceModulePage = (0, import_react.lazy)(() => __vitePreload(() => import("./WorkspaceModulePage-D91uMOks.js").then((m) => ({ default: m.WorkspaceModulePage })), __vite__mapDeps([20,1,2,11,3,6,7,15,8,9])));
+var OrgHierarchyPage = (0, import_react.lazy)(() => __vitePreload(() => import("./OrgHierarchyPage-C-r5IJpP.js").then((m) => ({ default: m.OrgHierarchyPage })), __vite__mapDeps([21,1,2,3])));
+var PayrollPage = (0, import_react.lazy)(() => __vitePreload(() => import("./PayrollPage-CXL9HwbV.js").then((m) => ({ default: m.PayrollPage })), __vite__mapDeps([22,1,2,3,10,11,12,13])));
+var EmployeeProfilePage = (0, import_react.lazy)(() => __vitePreload(() => import("./EmployeeProfilePage-BGirBFZR.js").then((m) => ({ default: m.EmployeeProfilePage })), __vite__mapDeps([23,1,2,3,6,14,11,13,17,9])));
 var ErrorBoundary = class extends import_react.Component {
 	constructor(props) {
 		super(props);
@@ -17574,7 +17574,7 @@ if (container && (container instanceof Element || container.nodeType === 1)) {
 		children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AuthProvider, { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(App, {}) })
 	}) }) }));
 }
-var ACTIVE_PWA_CACHE = "edufyi-hr-pwa-v30";
+var ACTIVE_PWA_CACHE = "edufyi-hr-pwa-v32";
 function registerServiceWorker() {
 	if (typeof window !== "undefined" && "serviceWorker" in navigator && window.location.protocol.startsWith("http")) {
 		if (typeof caches !== "undefined") caches.keys().then((keys) => {

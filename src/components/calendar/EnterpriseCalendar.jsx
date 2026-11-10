@@ -45,6 +45,15 @@ import { UpcomingEventsView } from './UpcomingEventsView'
 import { WeeklyCalendarView } from './WeeklyCalendarView'
 import { DailyCalendarView } from './DailyCalendarView'
 
+function formatLocation(loc) {
+  if (!loc) return ''
+  if (typeof loc === 'string') return loc
+  if (typeof loc === 'object') {
+    return loc.name || loc.formattedAddress || loc.address || 'Office'
+  }
+  return String(loc)
+}
+
 const CATEGORY_COLORS = {
   'National Holiday': { bg: '#e0f2fe', text: '#0369a1', border: '#bae6fd', badge: 'info' },
   'Public Holiday': { bg: '#e0f2fe', text: '#0284c7', border: '#bae6fd', badge: 'info' },
@@ -255,10 +264,11 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
     const endDateObj = new Date(ev.endDate || ev.date)
     endDateObj.setDate(endDateObj.getDate() + 1)
     const end = endDateObj.toISOString().split('T')[0].replace(/-/g, '')
+    const locText = formatLocation(ev.location) || 'All Offices'
     const details = encodeURIComponent(
-      `${ev.description ? ev.description + '\n\n' : ''}Category: ${ev.category || 'Holiday'}\nLocation: ${ev.location || 'All Offices'}\nEdufyi HR Portal`
+      `${ev.description ? ev.description + '\n\n' : ''}Category: ${ev.category || 'Holiday'}\nLocation: ${locText}\nEdufyi HR Portal`
     )
-    const location = encodeURIComponent(ev.location || 'Edufyi Technologies')
+    const location = encodeURIComponent(locText || 'Edufyi Technologies')
     return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${start}/${end}&details=${details}&location=${location}`
   }
 
@@ -1867,7 +1877,7 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
                       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '11px', opacity: 0.85, flexWrap: 'wrap' }}>
                         {ev.location && (
                           <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
-                            <MapPin size={11} /> {ev.location}
+                            <MapPin size={11} /> {formatLocation(ev.location)}
                           </span>
                         )}
                         {ev.department && (
@@ -2200,7 +2210,7 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '11px', color: 'var(--muted, #64748b)', marginTop: '2px' }}>
                                   {ev.location && (
                                     <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
-                                      <MapPin size={11} /> {ev.location}
+                                      <MapPin size={11} /> {formatLocation(ev.location)}
                                     </span>
                                   )}
                                   {ev.department && (

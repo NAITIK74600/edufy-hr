@@ -3,7 +3,7 @@ import { Dt as FileText, Ft as Download, W as Printer, _n as require_react, i as
 import { r as require_react_dom, t as require_server_browser } from "./react-vendor-B_MMQ54z.js";
 import { a as require_jsx_runtime } from "./motion-vendor-3i60tGNx.js";
 import { n as require_html2canvas, t as E } from "./pdf-vendor-BkGpxo0p.js";
-import { I as apiClient } from "./index-DZ25qf2r.js";
+import { I as apiClient } from "./index-CBp-KtMT.js";
 import { r as unmaskBankAccount } from "./payrollMatcher-DYZYv1X2.js";
 // src/utils/numberToWords.js
 var import_react = /* @__PURE__ */ __toESM(require_react(), 1);
