@@ -1,7 +1,7 @@
 import { n as __toESM } from "./rolldown-runtime-CO0Nlsmt.js";
 import { $t as Calendar, A as ShieldCheck, B as Repeat, Bt as Clock, E as Sparkles, Ft as Download, Gt as CircleAlert, Ht as CircleX, Jt as ChevronLeft, K as Plus, L as Search, Ot as FileSpreadsheet, Pt as ExternalLink, Rt as Copy, Ut as CircleQuestionMark, V as RefreshCw, Wt as CircleCheck, Xt as Check, Y as Pen, _ as TriangleAlert, _n as require_react, at as MapPin, d as Users, dn as Bell, en as CalendarRange, f as User, fn as Award, ft as List, g as Upload, ht as Layers, i as X, n as ZoomIn, qt as ChevronRight, rn as Cake, st as LogOut, t as ZoomOut, tn as CalendarDays, u as Video, x as Target, xt as Grid3x3, y as Trash } from "./icons-vendor-CNlTUIuG.js";
 import { a as require_jsx_runtime } from "./motion-vendor-3i60tGNx.js";
-import { I as apiClient, T as hrStore, a as Field, t as Button } from "./index-_IeDfSQA.js";
+import { I as apiClient, T as hrStore, a as Field, t as Button } from "./index-BPHvYRgC.js";
 // src/utils/dobHelper.js
 var import_react = /* @__PURE__ */ __toESM(require_react(), 1);
 /**
@@ -4958,6 +4958,28 @@ function EnterpriseCalendar({ canManage = false, user = null, defaultView = "mon
 	const [notice, setNotice] = (0, import_react.useState)("");
 	const [showLeaves, setShowLeaves] = (0, import_react.useState)(true);
 	const [copiedNotice, setCopiedNotice] = (0, import_react.useState)(false);
+	const [agendaScope, setAgendaScope] = (0, import_react.useState)("current");
+	const [pendingRsvpOnly, setPendingRsvpOnly] = (0, import_react.useState)(false);
+	const [respondingEventId, setRespondingEventId] = (0, import_react.useState)(null);
+	const handleQuickRsvp = async (eventId, status) => {
+		if (!eventId) return;
+		setRespondingEventId(eventId);
+		try {
+			await calendarService.respondToInvitation(eventId, {
+				status,
+				note: ""
+			});
+			showNotice(`RSVP updated: marked as ${status.toUpperCase()}!`);
+			loadEvents();
+			calendarService.getWidgets().then((res) => {
+				if (res) setWidgetsData(res);
+			}).catch(() => {});
+		} catch (err) {
+			showNotice("Failed to update RSVP: " + (err.message || err));
+		} finally {
+			setRespondingEventId(null);
+		}
+	};
 	const syncCalendarDate = (targetYear, targetMonthIndex, preferredDay = null) => {
 		const targetMonth1 = targetMonthIndex + 1;
 		const daysInTargetMonth = new Date(targetYear, targetMonth1, 0).getDate();
@@ -5108,8 +5130,8 @@ function EnterpriseCalendar({ canManage = false, user = null, defaultView = "mon
 		try {
 			const data = await calendarService.getEvents({
 				year: currentYear,
-				month: viewMode === "year" || viewMode === "agenda" ? null : currentMonth,
-				category: categoryFilter,
+				month: viewMode === "year" || viewMode === "agenda" && agendaScope === "all" || pendingRsvpOnly ? null : currentMonth,
+				category: pendingRsvpOnly ? "all" : categoryFilter,
 				department: departmentFilter,
 				search: searchQuery
 			});
@@ -5140,7 +5162,9 @@ function EnterpriseCalendar({ canManage = false, user = null, defaultView = "mon
 		categoryFilter,
 		departmentFilter,
 		searchQuery,
-		viewMode
+		viewMode,
+		agendaScope,
+		pendingRsvpOnly
 	]);
 	const handlePrev = () => {
 		if (viewMode === "year" || viewMode === "agenda") syncCalendarDate(currentYear - 1, currentDate.getMonth());
@@ -5508,23 +5532,31 @@ function EnterpriseCalendar({ canManage = false, user = null, defaultView = "mon
 	const nextCompanyEvent = (0, import_react.useMemo)(() => {
 		return companyEventsList.filter((ev) => (ev.date || "") >= selectedDate).sort((a, b) => (a.date || "").localeCompare(b.date || ""));
 	}, [companyEventsList, selectedDate])[0] || companyEventsList[0] || null;
-	const currentActorId = user?.id || user?._id || user?.employeeId;
-	const pendingInvitationsCount = (0, import_react.useMemo)(() => {
-		return scopedEvents.filter((ev) => {
-			if (Array.isArray(ev.participants)) {
-				const p = ev.participants.find((part) => part.employeeId === currentActorId);
-				if (p && p.rsvpStatus === "pending") return true;
-			}
-			return false;
-		}).length || widgetsData?.pendingInvitationsCount || widgetsData?.pendingActionsCount || 0;
+	const currentActorId = String(user?.id || user?._id || user?.employeeId || "");
+	const currentActorEmail = (user?.email || "").toLowerCase();
+	const isMyPendingRsvp = (ev) => {
+		if (!ev || !Array.isArray(ev.participants)) return false;
+		const p = ev.participants.find((part) => part.employeeId && String(part.employeeId) === currentActorId || part.email && part.email.toLowerCase() === currentActorEmail);
+		return Boolean(p && p.rsvpStatus === "pending");
+	};
+	const pendingRsvpEvents = (0, import_react.useMemo)(() => {
+		return (events || []).filter(isMyPendingRsvp);
 	}, [
-		scopedEvents,
+		events,
 		currentActorId,
-		widgetsData
+		currentActorEmail
 	]);
+	const pendingInvitationsCount = (0, import_react.useMemo)(() => {
+		return pendingRsvpEvents.length || widgetsData?.pendingInvitationsCount || widgetsData?.pendingActionsCount || 0;
+	}, [pendingRsvpEvents.length, widgetsData]);
+	const selectedYearMonth = `${currentYear}-${String(currentMonth).padStart(2, "0")}`;
 	const groupedAgendaEvents = (0, import_react.useMemo)(() => {
-		const filtered = scopedEvents.filter((ev) => {
+		const filtered = (scopedEvents || []).filter((ev) => {
 			if (!showLeaves && ev.type === "leave") return false;
+			if (pendingRsvpOnly) return isMyPendingRsvp(ev);
+			if (agendaScope === "current") {
+				if (!ev.date || !ev.date.startsWith(selectedYearMonth)) return false;
+			}
 			return true;
 		}).sort((a, b) => (a.date || "").localeCompare(b.date || ""));
 		const groups = {};
@@ -5535,7 +5567,15 @@ function EnterpriseCalendar({ canManage = false, user = null, defaultView = "mon
 			groups[yearMonth].push(ev);
 		});
 		return groups;
-	}, [events, showLeaves]);
+	}, [
+		scopedEvents,
+		showLeaves,
+		agendaScope,
+		selectedYearMonth,
+		pendingRsvpOnly,
+		currentActorId,
+		currentActorEmail
+	]);
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 		className: "enterprise-calendar-module",
 		style: {
@@ -5966,17 +6006,23 @@ function EnterpriseCalendar({ canManage = false, user = null, defaultView = "mon
 						})]
 					}),
 					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-						className: `panel hover-card ${scopeFilter === "my" ? "active-stat-card" : ""}`,
+						className: `panel hover-card ${pendingRsvpOnly ? "active-stat-card" : ""}`,
 						onClick: () => {
-							setScopeFilter(scopeFilter === "my" ? "all" : "my");
-							setViewMode("agenda");
+							const nextPending = !pendingRsvpOnly;
+							setPendingRsvpOnly(nextPending);
+							if (nextPending) {
+								setCategoryFilter("all");
+								setScopeFilter("all");
+								setAgendaScope("all");
+								setViewMode("agenda");
+							} else setAgendaScope("current");
 						},
-						title: "Click to view personal invitations & actions",
+						title: "Click to view pending invitations & RSVP actions",
 						style: {
 							padding: isSmallScreen ? "10px 12px" : "14px 16px",
 							borderRadius: "12px",
-							border: scopeFilter === "my" ? "2px solid #7c3aed" : "1px solid var(--border, #e2e8f0)",
-							background: "var(--card-bg, #ffffff)",
+							border: pendingRsvpOnly ? "2px solid #7c3aed" : "1px solid var(--border, #e2e8f0)",
+							background: pendingRsvpOnly ? "#f5f3ff" : "var(--card-bg, #ffffff)",
 							display: "flex",
 							alignItems: "center",
 							gap: isSmallScreen ? "8px" : "12px",
@@ -7180,30 +7226,82 @@ function EnterpriseCalendar({ canManage = false, user = null, defaultView = "mon
 							color: "var(--teal, #006E6F)",
 							fontWeight: 700
 						},
-						children: "Chronological Schedule & Holidays"
-					}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("h2", {
+						children: pendingRsvpOnly ? "Action Required" : agendaScope === "current" ? `${MONTH_NAMES[currentDate.getMonth()]} ${currentYear} Schedule` : "Full Annual Schedule & Holidays"
+					}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", {
 						style: {
 							margin: "4px 0 0",
 							fontSize: "20px",
 							fontWeight: 800,
 							color: "var(--ink, #0f172a)"
 						},
-						children: [
-							"Upcoming Holidays & Company Events (",
-							Object.values(groupedAgendaEvents).flat().length,
-							")"
-						]
-					})] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+						children: pendingRsvpOnly ? `Pending Event Invitations & RSVPs (${Object.values(groupedAgendaEvents).flat().length})` : agendaScope === "current" ? `${MONTH_NAMES[currentDate.getMonth()]} ${currentYear} Events (${Object.values(groupedAgendaEvents).flat().length})` : `All Upcoming Holidays & Events (${Object.values(groupedAgendaEvents).flat().length})`
+					})] }), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 						style: {
 							display: "flex",
 							alignItems: "center",
-							gap: "8px"
+							gap: "8px",
+							flexWrap: "wrap"
 						},
-						children: canManage && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Button, {
-							variant: "primary",
-							onClick: () => openAddModal(),
-							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Plus, { size: 16 }), " Add Holiday"]
-						})
+						children: [
+							!pendingRsvpOnly && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+								style: {
+									display: "inline-flex",
+									background: "var(--surface-hover, #f1f5f9)",
+									padding: "3px",
+									borderRadius: "8px",
+									border: "1px solid var(--border, #e2e8f0)"
+								},
+								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
+									type: "button",
+									onClick: () => setAgendaScope("current"),
+									style: {
+										padding: "4px 10px",
+										borderRadius: "6px",
+										border: "none",
+										background: agendaScope === "current" ? "#ffffff" : "transparent",
+										color: agendaScope === "current" ? "var(--teal, #006E6F)" : "var(--muted, #64748b)",
+										fontWeight: agendaScope === "current" ? 700 : 500,
+										fontSize: "11.5px",
+										cursor: "pointer",
+										boxShadow: agendaScope === "current" ? "0 1px 2px rgba(0,0,0,0.06)" : "none"
+									},
+									children: [MONTH_NAMES[currentDate.getMonth()], " (This Month)"]
+								}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
+									type: "button",
+									onClick: () => setAgendaScope("all"),
+									style: {
+										padding: "4px 10px",
+										borderRadius: "6px",
+										border: "none",
+										background: agendaScope === "all" ? "#ffffff" : "transparent",
+										color: agendaScope === "all" ? "var(--teal, #006E6F)" : "var(--muted, #64748b)",
+										fontWeight: agendaScope === "all" ? 700 : 500,
+										fontSize: "11.5px",
+										cursor: "pointer",
+										boxShadow: agendaScope === "all" ? "0 1px 2px rgba(0,0,0,0.06)" : "none"
+									},
+									children: [
+										"All Months (",
+										currentYear,
+										")"
+									]
+								})]
+							}),
+							pendingRsvpOnly && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Button, {
+								variant: "outline",
+								onClick: () => {
+									setPendingRsvpOnly(false);
+									setAgendaScope("current");
+								},
+								style: { fontSize: "12px" },
+								children: "✕ Clear Pending Filter"
+							}),
+							canManage && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Button, {
+								variant: "primary",
+								onClick: () => openAddModal(),
+								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Plus, { size: 16 }), " Add Holiday"]
+							})
+						]
 					})]
 				}), Object.keys(groupedAgendaEvents).length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
 					style: {
@@ -7442,9 +7540,80 @@ function EnterpriseCalendar({ canManage = false, user = null, defaultView = "mon
 											style: {
 												display: "flex",
 												alignItems: "center",
-												gap: "8px"
+												gap: "8px",
+												flexWrap: "wrap"
 											},
 											children: [
+												isMyPendingRsvp(ev) && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+													style: {
+														display: "flex",
+														alignItems: "center",
+														gap: "4px",
+														background: "#f5f3ff",
+														padding: "3px 8px",
+														borderRadius: "8px",
+														border: "1px solid #ddd6fe"
+													},
+													children: [
+														/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+															style: {
+																fontSize: "10.5px",
+																fontWeight: 800,
+																color: "#6d28d9",
+																marginRight: "2px"
+															},
+															children: "RSVP:"
+														}),
+														/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+															type: "button",
+															disabled: respondingEventId === (ev.entityId || ev.id),
+															onClick: () => handleQuickRsvp(ev.entityId || ev.id, "accepted"),
+															style: {
+																padding: "4px 10px",
+																fontSize: "11px",
+																fontWeight: 700,
+																borderRadius: "6px",
+																border: "none",
+																background: "#059669",
+																color: "#ffffff",
+																cursor: "pointer"
+															},
+															children: "Accept"
+														}),
+														/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+															type: "button",
+															disabled: respondingEventId === (ev.entityId || ev.id),
+															onClick: () => handleQuickRsvp(ev.entityId || ev.id, "tentative"),
+															style: {
+																padding: "4px 8px",
+																fontSize: "11px",
+																fontWeight: 700,
+																borderRadius: "6px",
+																border: "none",
+																background: "#d97706",
+																color: "#ffffff",
+																cursor: "pointer"
+															},
+															children: "Tentative"
+														}),
+														/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+															type: "button",
+															disabled: respondingEventId === (ev.entityId || ev.id),
+															onClick: () => handleQuickRsvp(ev.entityId || ev.id, "declined"),
+															style: {
+																padding: "4px 8px",
+																fontSize: "11px",
+																fontWeight: 700,
+																borderRadius: "6px",
+																border: "none",
+																background: "#dc2626",
+																color: "#ffffff",
+																cursor: "pointer"
+															},
+															children: "Decline"
+														})
+													]
+												}),
 												/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("a", {
 													href: getGoogleCalendarUrl(ev),
 													target: "_blank",
@@ -7530,14 +7699,24 @@ function EnterpriseCalendar({ canManage = false, user = null, defaultView = "mon
 								fontSize: "15px",
 								fontWeight: 700
 							},
-							children: "No holidays or events found"
+							children: pendingRsvpOnly ? "No pending invitations awaiting your RSVP" : `No holidays or events found for ${MONTH_NAMES[currentDate.getMonth()]} ${currentYear}`
 						}),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 							style: {
-								margin: 0,
+								margin: "0 0 14px",
 								fontSize: "13px"
 							},
-							children: "Try clearing your search query or filters."
+							children: pendingRsvpOnly ? "All event invitations have already been answered." : "Try clearing your search query or switching to All Months."
+						}),
+						agendaScope === "current" && !pendingRsvpOnly && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Button, {
+							variant: "outline",
+							onClick: () => setAgendaScope("all"),
+							style: { fontSize: "12px" },
+							children: [
+								"View All Months (",
+								currentYear,
+								") →"
+							]
 						})
 					]
 				})]

@@ -143,6 +143,27 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
   const [notice, setNotice] = useState('')
   const [showLeaves, setShowLeaves] = useState(true)
   const [copiedNotice, setCopiedNotice] = useState(false)
+  const [agendaScope, setAgendaScope] = useState('current') // 'current' (selected month only) or 'all' (entire year)
+  const [pendingRsvpOnly, setPendingRsvpOnly] = useState(false)
+  const [respondingEventId, setRespondingEventId] = useState(null)
+
+  // Fast RSVP response handler
+  const handleQuickRsvp = async (eventId, status) => {
+    if (!eventId) return
+    setRespondingEventId(eventId)
+    try {
+      await calendarService.respondToInvitation(eventId, { status, note: '' })
+      showNotice(`RSVP updated: marked as ${status.toUpperCase()}!`)
+      loadEvents()
+      calendarService.getWidgets().then((res) => {
+        if (res) setWidgetsData(res)
+      }).catch(() => {})
+    } catch (err) {
+      showNotice('Failed to update RSVP: ' + (err.message || err))
+    } finally {
+      setRespondingEventId(null)
+    }
+  }
 
   // Single authoritative synchronizer ensuring calendar header and agenda never drift apart
   const syncCalendarDate = (targetYear, targetMonthIndex, preferredDay = null) => {
@@ -305,8 +326,8 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
     try {
       const data = await calendarService.getEvents({
         year: currentYear,
-        month: (viewMode === 'year' || viewMode === 'agenda') ? null : currentMonth,
-        category: categoryFilter,
+        month: (viewMode === 'year' || (viewMode === 'agenda' && agendaScope === 'all') || pendingRsvpOnly) ? null : currentMonth,
+        category: pendingRsvpOnly ? 'all' : categoryFilter,
         department: departmentFilter,
         search: searchQuery,
       })
@@ -341,7 +362,7 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
 
   useEffect(() => {
     loadEvents()
-  }, [currentYear, currentMonth, categoryFilter, departmentFilter, searchQuery, viewMode])
+  }, [currentYear, currentMonth, categoryFilter, departmentFilter, searchQuery, viewMode, agendaScope, pendingRsvpOnly])
 
   // Navigation handlers
   const handlePrev = () => {
@@ -802,22 +823,38 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
   const nextCompanyEvent = upcomingCompanyEventsList[0] || companyEventsList[0] || null
 
   // 6. Pending Invitations / Actions
-  const currentActorId = user?.id || user?._id || user?.employeeId
+  const currentActorId = String(user?.id || user?._id || user?.employeeId || '')
+  const currentActorEmail = (user?.email || '').toLowerCase()
+
+  const isMyPendingRsvp = (ev) => {
+    if (!ev || !Array.isArray(ev.participants)) return false
+    const p = ev.participants.find(
+      (part) =>
+        (part.employeeId && String(part.employeeId) === currentActorId) ||
+        (part.email && part.email.toLowerCase() === currentActorEmail)
+    )
+    return Boolean(p && p.rsvpStatus === 'pending')
+  }
+
+  const pendingRsvpEvents = useMemo(() => {
+    return (events || []).filter(isMyPendingRsvp)
+  }, [events, currentActorId, currentActorEmail])
+
   const pendingInvitationsCount = useMemo(() => {
-    const fromEvents = scopedEvents.filter((ev) => {
-      if (Array.isArray(ev.participants)) {
-        const p = ev.participants.find((part) => part.employeeId === currentActorId)
-        if (p && p.rsvpStatus === 'pending') return true
-      }
-      return false
-    }).length
-    return fromEvents || widgetsData?.pendingInvitationsCount || widgetsData?.pendingActionsCount || 0
-  }, [scopedEvents, currentActorId, widgetsData])
+    return pendingRsvpEvents.length || widgetsData?.pendingInvitationsCount || widgetsData?.pendingActionsCount || 0
+  }, [pendingRsvpEvents.length, widgetsData])
 
   // Grouped Agenda Events (chronological by year-month)
+  const selectedYearMonth = `${currentYear}-${String(currentMonth).padStart(2, '0')}`
   const groupedAgendaEvents = useMemo(() => {
-    const filtered = scopedEvents.filter((ev) => {
+    const filtered = (scopedEvents || []).filter((ev) => {
       if (!showLeaves && ev.type === 'leave') return false
+      if (pendingRsvpOnly) {
+        return isMyPendingRsvp(ev)
+      }
+      if (agendaScope === 'current') {
+        if (!ev.date || !ev.date.startsWith(selectedYearMonth)) return false
+      }
       return true
     }).sort((a, b) => (a.date || '').localeCompare(b.date || ''))
 
@@ -829,7 +866,7 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
       groups[yearMonth].push(ev)
     })
     return groups
-  }, [events, showLeaves])
+  }, [scopedEvents, showLeaves, agendaScope, selectedYearMonth, pendingRsvpOnly, currentActorId, currentActorEmail])
 
   return (
     <div className="enterprise-calendar-module" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -1148,17 +1185,25 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
 
         {/* Card 6: Pending Invitations */}
         <div
-          className={`panel hover-card ${scopeFilter === 'my' ? 'active-stat-card' : ''}`}
+          className={`panel hover-card ${pendingRsvpOnly ? 'active-stat-card' : ''}`}
           onClick={() => {
-            setScopeFilter(scopeFilter === 'my' ? 'all' : 'my')
-            setViewMode('agenda')
+            const nextPending = !pendingRsvpOnly
+            setPendingRsvpOnly(nextPending)
+            if (nextPending) {
+              setCategoryFilter('all')
+              setScopeFilter('all')
+              setAgendaScope('all')
+              setViewMode('agenda')
+            } else {
+              setAgendaScope('current')
+            }
           }}
-          title="Click to view personal invitations & actions"
+          title="Click to view pending invitations & RSVP actions"
           style={{
             padding: isSmallScreen ? '10px 12px' : '14px 16px',
             borderRadius: '12px',
-            border: scopeFilter === 'my' ? '2px solid #7c3aed' : '1px solid var(--border, #e2e8f0)',
-            background: 'var(--card-bg, #ffffff)',
+            border: pendingRsvpOnly ? '2px solid #7c3aed' : '1px solid var(--border, #e2e8f0)',
+            background: pendingRsvpOnly ? '#f5f3ff' : 'var(--card-bg, #ffffff)',
             display: 'flex',
             alignItems: 'center',
             gap: isSmallScreen ? '8px' : '12px',
@@ -2088,14 +2133,83 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
             <div>
               <span className="eyebrow" style={{ fontSize: '11px', color: 'var(--teal, #006E6F)', fontWeight: 700 }}>
-                Chronological Schedule & Holidays
+                {pendingRsvpOnly
+                  ? 'Action Required'
+                  : agendaScope === 'current'
+                  ? `${MONTH_NAMES[currentDate.getMonth()]} ${currentYear} Schedule`
+                  : 'Full Annual Schedule & Holidays'}
               </span>
               <h2 style={{ margin: '4px 0 0', fontSize: '20px', fontWeight: 800, color: 'var(--ink, #0f172a)' }}>
-                Upcoming Holidays & Company Events ({Object.values(groupedAgendaEvents).flat().length})
+                {pendingRsvpOnly
+                  ? `Pending Event Invitations & RSVPs (${Object.values(groupedAgendaEvents).flat().length})`
+                  : agendaScope === 'current'
+                  ? `${MONTH_NAMES[currentDate.getMonth()]} ${currentYear} Events (${Object.values(groupedAgendaEvents).flat().length})`
+                  : `All Upcoming Holidays & Events (${Object.values(groupedAgendaEvents).flat().length})`}
               </h2>
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              {/* Scope Switcher between Current Month and All Months */}
+              {!pendingRsvpOnly && (
+                <div
+                  style={{
+                    display: 'inline-flex',
+                    background: 'var(--surface-hover, #f1f5f9)',
+                    padding: '3px',
+                    borderRadius: '8px',
+                    border: '1px solid var(--border, #e2e8f0)',
+                  }}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setAgendaScope('current')}
+                    style={{
+                      padding: '4px 10px',
+                      borderRadius: '6px',
+                      border: 'none',
+                      background: agendaScope === 'current' ? '#ffffff' : 'transparent',
+                      color: agendaScope === 'current' ? 'var(--teal, #006E6F)' : 'var(--muted, #64748b)',
+                      fontWeight: agendaScope === 'current' ? 700 : 500,
+                      fontSize: '11.5px',
+                      cursor: 'pointer',
+                      boxShadow: agendaScope === 'current' ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
+                    }}
+                  >
+                    {MONTH_NAMES[currentDate.getMonth()]} (This Month)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAgendaScope('all')}
+                    style={{
+                      padding: '4px 10px',
+                      borderRadius: '6px',
+                      border: 'none',
+                      background: agendaScope === 'all' ? '#ffffff' : 'transparent',
+                      color: agendaScope === 'all' ? 'var(--teal, #006E6F)' : 'var(--muted, #64748b)',
+                      fontWeight: agendaScope === 'all' ? 700 : 500,
+                      fontSize: '11.5px',
+                      cursor: 'pointer',
+                      boxShadow: agendaScope === 'all' ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
+                    }}
+                  >
+                    All Months ({currentYear})
+                  </button>
+                </div>
+              )}
+
+              {pendingRsvpOnly && (
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setPendingRsvpOnly(false)
+                    setAgendaScope('current')
+                  }}
+                  style={{ fontSize: '12px' }}
+                >
+                  ✕ Clear Pending Filter
+                </Button>
+              )}
+
               {canManage && (
                 <Button variant="primary" onClick={() => openAddModal()}>
                   <Plus size={16} /> Add Holiday
@@ -2252,8 +2366,67 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
                               </div>
                             </div>
 
-                            {/* Actions */}
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            {/* Actions & RSVPs */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                              {isMyPendingRsvp(ev) && (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: '#f5f3ff', padding: '3px 8px', borderRadius: '8px', border: '1px solid #ddd6fe' }}>
+                                  <span style={{ fontSize: '10.5px', fontWeight: 800, color: '#6d28d9', marginRight: '2px' }}>
+                                    RSVP:
+                                  </span>
+                                  <button
+                                    type="button"
+                                    disabled={respondingEventId === (ev.entityId || ev.id)}
+                                    onClick={() => handleQuickRsvp(ev.entityId || ev.id, 'accepted')}
+                                    style={{
+                                      padding: '4px 10px',
+                                      fontSize: '11px',
+                                      fontWeight: 700,
+                                      borderRadius: '6px',
+                                      border: 'none',
+                                      background: '#059669',
+                                      color: '#ffffff',
+                                      cursor: 'pointer',
+                                    }}
+                                  >
+                                    Accept
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={respondingEventId === (ev.entityId || ev.id)}
+                                    onClick={() => handleQuickRsvp(ev.entityId || ev.id, 'tentative')}
+                                    style={{
+                                      padding: '4px 8px',
+                                      fontSize: '11px',
+                                      fontWeight: 700,
+                                      borderRadius: '6px',
+                                      border: 'none',
+                                      background: '#d97706',
+                                      color: '#ffffff',
+                                      cursor: 'pointer',
+                                    }}
+                                  >
+                                    Tentative
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={respondingEventId === (ev.entityId || ev.id)}
+                                    onClick={() => handleQuickRsvp(ev.entityId || ev.id, 'declined')}
+                                    style={{
+                                      padding: '4px 8px',
+                                      fontSize: '11px',
+                                      fontWeight: 700,
+                                      borderRadius: '6px',
+                                      border: 'none',
+                                      background: '#dc2626',
+                                      color: '#ffffff',
+                                      cursor: 'pointer',
+                                    }}
+                                  >
+                                    Decline
+                                  </button>
+                                </div>
+                              )}
+
                               <a
                                 href={getGoogleCalendarUrl(ev)}
                                 target="_blank"
@@ -2314,8 +2487,21 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
           ) : (
             <div style={{ padding: '40px', textAlign: 'center', color: 'var(--muted, #64748b)' }}>
               <CalendarDays size={40} style={{ margin: '0 auto 10px', opacity: 0.3 }} />
-              <h4 style={{ margin: '0 0 4px', fontSize: '15px', fontWeight: 700 }}>No holidays or events found</h4>
-              <p style={{ margin: 0, fontSize: '13px' }}>Try clearing your search query or filters.</p>
+              <h4 style={{ margin: '0 0 4px', fontSize: '15px', fontWeight: 700 }}>
+                {pendingRsvpOnly
+                  ? 'No pending invitations awaiting your RSVP'
+                  : `No holidays or events found for ${MONTH_NAMES[currentDate.getMonth()]} ${currentYear}`}
+              </h4>
+              <p style={{ margin: '0 0 14px', fontSize: '13px' }}>
+                {pendingRsvpOnly
+                  ? 'All event invitations have already been answered.'
+                  : 'Try clearing your search query or switching to All Months.'}
+              </p>
+              {agendaScope === 'current' && !pendingRsvpOnly && (
+                <Button variant="outline" onClick={() => setAgendaScope('all')} style={{ fontSize: '12px' }}>
+                  View All Months ({currentYear}) →
+                </Button>
+              )}
             </div>
           )}
         </div>

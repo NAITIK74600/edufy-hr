@@ -316,6 +316,8 @@ function App() {
       ? <WorkspaceModulePage route={{ ...route, path: '/hr/attendance' }} />
       : route.path === '/admin/hierarchy' || route.path === '/hr/hierarchy' || route.path === '/employee/hierarchy' || route.path === '/employee/organization'
       ? <OrgHierarchyPage />
+      : route.path === '/admin/holidays' || route.path === '/hr/holidays' || route.path === '/employee/holidays' || route.path.endsWith('/holidays') || route.path.endsWith('/calendar')
+      ? <WorkspaceModulePage route={route} />
       : route.workspace
       ? <WorkspaceModulePage route={route} />
       : route.path.startsWith('/admin')
@@ -364,7 +366,7 @@ if (container && (container instanceof Element || container.nodeType === 1)) {
 }
 
 // Register PWA Service Worker for Offline, Mobile App & Background Execution
-const ACTIVE_PWA_CACHE = 'edufyi-hr-pwa-v50'
+const ACTIVE_PWA_CACHE = 'edufyi-hr-pwa-v51'
 function registerServiceWorker() {
   if (typeof window !== 'undefined' && 'serviceWorker' in navigator && window.location.protocol.startsWith('http')) {
     // Proactively purge old PWA caches

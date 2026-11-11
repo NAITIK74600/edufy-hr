@@ -1,10 +1,10 @@
 import { n as __toESM } from "./rolldown-runtime-CO0Nlsmt.js";
 import { A as ShieldCheck, Et as FingerprintPattern, Qt as Camera, Xt as Check, _n as require_react, rn as Cake, vt as KeyRound } from "./icons-vendor-CNlTUIuG.js";
 import { a as require_jsx_runtime } from "./motion-vendor-3i60tGNx.js";
-import { I as apiClient, T as hrStore, l as compressImageFile, m as ChangePasswordModal, o as PageHeader, u as PasskeyModal, x as useAuth } from "./index-_IeDfSQA.js";
+import { I as apiClient, T as hrStore, l as compressImageFile, m as ChangePasswordModal, o as PageHeader, u as PasskeyModal, x as useAuth } from "./index-BPHvYRgC.js";
 import { n as formatINR } from "./currency-oCUzM0NR.js";
-import { t as OnboardingDossierView } from "./OnboardingDossierView-DmC_afjc.js";
-import { t as EmployeeComplianceStatusCard } from "./EmployeeComplianceStatusCard-CVjCxnvm.js";
+import { t as OnboardingDossierView } from "./OnboardingDossierView-DkuZDlt9.js";
+import { t as EmployeeComplianceStatusCard } from "./EmployeeComplianceStatusCard-DjJUN1Fg.js";
 // src/pages/EmployeeProfilePage.jsx
 var import_react = /* @__PURE__ */ __toESM(require_react(), 1);
 var import_jsx_runtime = require_jsx_runtime();

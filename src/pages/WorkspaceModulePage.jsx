@@ -5654,7 +5654,7 @@ export function WorkspaceModulePage({ route }) {
   if (p === '/hr/learning' || p.includes('learning') || p.includes('training')) return <LearningModule />
   if (p === '/hr/helpdesk' || p.includes('helpdesk')) return <HelpDeskModule />
   if (p === '/hr/announcements' || p.includes('announcements')) return <AnnouncementsModule />
-  if (p === '/hr/holidays' || p.includes('holidays')) return <HolidaysModule />
+  if (p === '/hr/holidays' || p.includes('holidays') || p.includes('calendar')) return <HolidaysModule />
   if (p === '/hr/documents' || p.includes('documents')) return <DocumentsModule />
   if (p.includes('policies')) return <CompanyPoliciesView />
   if (p === '/hr/settings' || p.includes('settings')) return <SettingsModule />
