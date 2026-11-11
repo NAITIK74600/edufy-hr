@@ -396,26 +396,14 @@ export function EventDetailModal({
           )
         )}
 
-        {/* Physical Location Card & Google Maps */}
+        {/* Physical Meeting Venue */}
         {event.location?.name && (
-          <div style={{ padding: '12px 14px', borderRadius: '10px', background: '#f8fafc', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <MapPin size={16} color="var(--teal, #006E6F)" />
-              <div>
-                <div style={{ fontSize: '13px', fontWeight: 700 }}>{event.location.name}</div>
-                {event.location.address && <div style={{ fontSize: '11px', color: '#64748b' }}>{event.location.address}</div>}
-              </div>
+          <div style={{ padding: '12px 14px', borderRadius: '10px', background: '#f8fafc', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <MapPin size={16} color="var(--teal, #006E6F)" />
+            <div>
+              <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--ink, #0f172a)' }}>{event.location.name}</div>
+              {event.location.address && <div style={{ fontSize: '11px', color: '#64748b' }}>{event.location.address}</div>}
             </div>
-            {event.location.mapsUrl && (
-              <a
-                href={event.location.mapsUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{ fontSize: '11px', color: '#0284c7', fontWeight: 700, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
-              >
-                Maps <ExternalLink size={11} />
-              </a>
-            )}
           </div>
         )}
 

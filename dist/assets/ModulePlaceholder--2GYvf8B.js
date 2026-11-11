@@ -1,6 +1,6 @@
 import { hn as ArrowLeft } from "./icons-vendor-CNlTUIuG.js";
 import { a as require_jsx_runtime } from "./motion-vendor-3i60tGNx.js";
-import { o as PageHeader, s as StatePanel, t as Button } from "./index-C9_EJn8m.js";
+import { o as PageHeader, s as StatePanel, t as Button } from "./index-hKIImihR.js";
 // src/pages/ModulePlaceholder.jsx
 var import_jsx_runtime = require_jsx_runtime();
 function NotFoundPage() {

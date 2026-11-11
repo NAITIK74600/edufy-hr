@@ -2024,11 +2024,10 @@ export function createCalendarRouter({ auth, useDatabase = true }) {
         name: stateValidation.stateData.userName,
       }
 
-      // 3. Canonical token exchange using canonical callback URL
+      // 3. Token exchange — the redirect_uri must exactly match the one used in getAuthUrl()
       const integration = await googleCalendarService.exchangeCodeForTokens(
         code,
-        actor,
-        'https://edufyione.edufyitech.in/api/v1/calendar/google/callback'
+        actor
       )
 
       res.send(`

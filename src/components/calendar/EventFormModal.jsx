@@ -76,16 +76,10 @@ export function EventFormModal({
   const [recurrenceInterval, setRecurrenceInterval] = useState(initialEvent?.recurrence?.interval || 1)
   const [recurrenceEndDate, setRecurrenceEndDate] = useState(initialEvent?.recurrence?.endDate || '')
 
-  // Physical Location & Google Maps
+  // Physical Location
   const [locationName, setLocationName] = useState(initialEvent?.location?.name || 'Head Office')
   const [locationAddress, setLocationAddress] = useState(initialEvent?.location?.address || '')
-  const [locationFormattedAddress, setLocationFormattedAddress] = useState(initialEvent?.location?.formattedAddress || '')
-  const [latitude, setLatitude] = useState(initialEvent?.location?.latitude || null)
-  const [longitude, setLongitude] = useState(initialEvent?.location?.longitude || null)
   const [isPhysicalLocation, setIsPhysicalLocation] = useState(Boolean(initialEvent?.location?.isPhysical))
-  const [placeQuery, setPlaceQuery] = useState('')
-  const [placeSuggestions, setPlaceSuggestions] = useState([])
-  const [isSearchingPlaces, setIsSearchingPlaces] = useState(false)
 
   const isMeetingCategory = (cat) => Boolean(cat && (cat.includes('Meeting') || cat.includes('Session') || cat.includes('Interview')))
 
@@ -117,36 +111,6 @@ export function EventFormModal({
     return [15, 60]
   })
 
-  // Google Maps Autocomplete Search
-  useEffect(() => {
-    if (!placeQuery || placeQuery.trim().length < 2) {
-      setPlaceSuggestions([])
-      return
-    }
-    const timer = setTimeout(async () => {
-      setIsSearchingPlaces(true)
-      try {
-        const results = await calendarService.searchPlaces(placeQuery)
-        setPlaceSuggestions(results)
-      } catch {
-        setPlaceSuggestions([])
-      } finally {
-        setIsSearchingPlaces(false)
-      }
-    }, 300)
-    return () => clearTimeout(timer)
-  }, [placeQuery])
-
-  const handleSelectPlace = (place) => {
-    setLocationName(place.name || place.mainText || 'Meeting Venue')
-    setLocationAddress(place.address || place.formattedAddress || '')
-    setLocationFormattedAddress(place.formattedAddress || place.description || '')
-    if (place.latitude) setLatitude(place.latitude)
-    if (place.longitude) setLongitude(place.longitude)
-    setIsPhysicalLocation(true)
-    setPlaceQuery('')
-    setPlaceSuggestions([])
-  }
 
   const handleAddParticipant = (emp) => {
     const empId = String(emp.employeeId || emp.id || emp._id)
@@ -269,14 +233,11 @@ export function EventFormModal({
           endDate: recurrenceEndDate || null,
         },
         location: {
-          name: locationName,
-          address: locationAddress,
-          formattedAddress: locationFormattedAddress,
-          latitude,
-          longitude,
-          isPhysical: isPhysicalLocation,
+          name: locationName.trim(),
+          address: locationAddress.trim(),
+          isPhysical: Boolean(locationName.trim() || locationAddress.trim()),
         },
-        isPhysicalLocation,
+        isPhysicalLocation: Boolean(locationName.trim() || locationAddress.trim()),
         meetingLink: {
           url: meetingUrl.trim(),
           provider: meetingProvider,
@@ -386,7 +347,7 @@ export function EventFormModal({
           {[
             { id: 'details', label: '1. Event Details', icon: CalendarIcon },
             { id: 'schedule', label: '2. Timing & Recurrence', icon: Clock },
-            { id: 'location', label: '3. Location & Meet', icon: MapPin },
+            { id: 'location', label: '3. Google Meet & Venue', icon: Video },
             { id: 'participants', label: `4. Participants (${participants.length})`, icon: Users },
             { id: 'reminders', label: '5. Reminders & Notes', icon: Bell },
           ].map((tab) => {
@@ -819,64 +780,15 @@ export function EventFormModal({
                   )}
                 </div>
 
-                {/* Physical Location & Google Maps */}
+                {/* Physical Meeting Venue */}
                 <div style={{ padding: '16px', borderRadius: '12px', background: '#f8fafc', border: '1px solid #e2e8f0' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px' }}>
                     <MapPin size={18} color="var(--teal, #006E6F)" />
-                    <strong style={{ fontSize: '13px', color: 'var(--ink, #0f172a)' }}>Physical Meeting Location & Google Maps</strong>
-                  </div>
-
-                  {/* Google Places search autocomplete */}
-                  <div style={{ position: 'relative', marginBottom: '14px' }}>
-                    <Field label="Search Location / Places">
-                      <input
-                        type="text"
-                        className="ui-input"
-                        placeholder="Search office campuses, conference halls, hotels, client locations..."
-                        value={placeQuery}
-                        onChange={(e) => setPlaceQuery(e.target.value)}
-                      />
-                    </Field>
-
-                    {placeSuggestions.length > 0 && (
-                      <div
-                        style={{
-                          position: 'absolute',
-                          top: '100%',
-                          left: 0,
-                          right: 0,
-                          background: '#ffffff',
-                          borderRadius: '8px',
-                          boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)',
-                          border: '1px solid #e2e8f0',
-                          zIndex: 10,
-                          maxHeight: '220px',
-                          overflowY: 'auto',
-                        }}
-                      >
-                        {placeSuggestions.map((place, idx) => (
-                          <div
-                            key={idx}
-                            onClick={() => handleSelectPlace(place)}
-                            style={{
-                              padding: '10px 14px',
-                              cursor: 'pointer',
-                              borderBottom: '1px solid #f1f5f9',
-                              fontSize: '12px',
-                            }}
-                            onMouseEnter={(e) => (e.currentTarget.style.background = '#f8fafc')}
-                            onMouseLeave={(e) => (e.currentTarget.style.background = '#ffffff')}
-                          >
-                            <div style={{ fontWeight: 700, color: 'var(--ink, #0f172a)' }}>{place.name}</div>
-                            <div style={{ fontSize: '11px', color: 'var(--muted, #64748b)' }}>{place.address}</div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                    <strong style={{ fontSize: '13px', color: 'var(--ink, #0f172a)' }}>Physical Meeting Venue & Room Location</strong>
                   </div>
 
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px' }}>
-                    <Field label="Venue Name">
+                    <Field label="Venue / Conference Room Name">
                       <input
                         type="text"
                         className="ui-input"
@@ -885,11 +797,11 @@ export function EventFormModal({
                           setLocationName(e.target.value)
                           setIsPhysicalLocation(true)
                         }}
-                        placeholder="e.g. Ignite Campus Boardroom"
+                        placeholder="e.g. Ignite Campus Boardroom, Room 302"
                       />
                     </Field>
 
-                    <Field label="Address">
+                    <Field label="Building / Floor / Address">
                       <input
                         type="text"
                         className="ui-input"
@@ -898,23 +810,10 @@ export function EventFormModal({
                           setLocationAddress(e.target.value)
                           setIsPhysicalLocation(true)
                         }}
-                        placeholder="Street, Landmark, City"
+                        placeholder="e.g. 3rd Floor, Main Campus, Bangalore"
                       />
                     </Field>
                   </div>
-
-                  {(locationAddress || locationName) && (
-                    <div style={{ marginTop: '10px' }}>
-                      <a
-                        href={calendarService.searchPlaces ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${locationName}, ${locationAddress}`)}` : '#'}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        style={{ fontSize: '12px', color: '#0284c7', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                      >
-                        <ExternalLink size={13} /> Open in Google Maps
-                      </a>
-                    </div>
-                  )}
                 </div>
               </div>
             )}

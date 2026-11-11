@@ -1,7 +1,7 @@
 import { n as __toESM } from "./rolldown-runtime-CO0Nlsmt.js";
 import { $t as Calendar, A as ShieldCheck, B as Repeat, Bt as Clock, E as Sparkles, Ft as Download, Gt as CircleAlert, Ht as CircleX, Jt as ChevronLeft, K as Plus, L as Search, Ot as FileSpreadsheet, Pt as ExternalLink, Rt as Copy, Ut as CircleQuestionMark, V as RefreshCw, Wt as CircleCheck, Xt as Check, Y as Pen, _ as TriangleAlert, _n as require_react, at as MapPin, d as Users, dn as Bell, en as CalendarRange, f as User, fn as Award, ft as List, g as Upload, ht as Layers, i as X, n as ZoomIn, qt as ChevronRight, rn as Cake, st as LogOut, t as ZoomOut, tn as CalendarDays, u as Video, x as Target, xt as Grid3x3, y as Trash } from "./icons-vendor-CNlTUIuG.js";
 import { a as require_jsx_runtime } from "./motion-vendor-3i60tGNx.js";
-import { I as apiClient, T as hrStore, a as Field, t as Button } from "./index-C9_EJn8m.js";
+import { I as apiClient, T as hrStore, a as Field, t as Button } from "./index-hKIImihR.js";
 // src/utils/dobHelper.js
 var import_react = /* @__PURE__ */ __toESM(require_react(), 1);
 /**
@@ -1037,45 +1037,25 @@ function EventDetailModal({ event: initialEvent, onClose, onEdit, onDeleted, onR
 						border: "1px solid #e2e8f0",
 						display: "flex",
 						alignItems: "center",
-						justifyContent: "space-between"
+						gap: "10px"
 					},
-					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(MapPin, {
+						size: 16,
+						color: "var(--teal, #006E6F)"
+					}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
 						style: {
-							display: "flex",
-							alignItems: "center",
-							gap: "8px"
+							fontSize: "13px",
+							fontWeight: 700,
+							color: "var(--ink, #0f172a)"
 						},
-						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(MapPin, {
-							size: 16,
-							color: "var(--teal, #006E6F)"
-						}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-							style: {
-								fontSize: "13px",
-								fontWeight: 700
-							},
-							children: event.location.name
-						}), event.location.address && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-							style: {
-								fontSize: "11px",
-								color: "#64748b"
-							},
-							children: event.location.address
-						})] })]
-					}), event.location.mapsUrl && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("a", {
-						href: event.location.mapsUrl,
-						target: "_blank",
-						rel: "noopener noreferrer",
+						children: event.location.name
+					}), event.location.address && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
 						style: {
 							fontSize: "11px",
-							color: "#0284c7",
-							fontWeight: 700,
-							textDecoration: "none",
-							display: "inline-flex",
-							alignItems: "center",
-							gap: "3px"
+							color: "#64748b"
 						},
-						children: ["Maps ", /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ExternalLink, { size: 11 })]
-					})]
+						children: event.location.address
+					})] })]
 				}),
 				event.description && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
 					style: {
@@ -1480,13 +1460,7 @@ function EventFormModal({ isOpen, onClose, onSaved, initialEvent = null, employe
 	const [recurrenceEndDate, setRecurrenceEndDate] = (0, import_react.useState)(initialEvent?.recurrence?.endDate || "");
 	const [locationName, setLocationName] = (0, import_react.useState)(initialEvent?.location?.name || "Head Office");
 	const [locationAddress, setLocationAddress] = (0, import_react.useState)(initialEvent?.location?.address || "");
-	const [locationFormattedAddress, setLocationFormattedAddress] = (0, import_react.useState)(initialEvent?.location?.formattedAddress || "");
-	const [latitude, setLatitude] = (0, import_react.useState)(initialEvent?.location?.latitude || null);
-	const [longitude, setLongitude] = (0, import_react.useState)(initialEvent?.location?.longitude || null);
 	const [isPhysicalLocation, setIsPhysicalLocation] = (0, import_react.useState)(Boolean(initialEvent?.location?.isPhysical));
-	const [placeQuery, setPlaceQuery] = (0, import_react.useState)("");
-	const [placeSuggestions, setPlaceSuggestions] = (0, import_react.useState)([]);
-	const [isSearchingPlaces, setIsSearchingPlaces] = (0, import_react.useState)(false);
 	const isMeetingCategory = (cat) => Boolean(cat && (cat.includes("Meeting") || cat.includes("Session") || cat.includes("Interview")));
 	const initialCat = initialEvent?.category || "Company Meeting";
 	const shouldAutoMeet = !initialEvent && isMeetingCategory(initialCat);
@@ -1504,34 +1478,6 @@ function EventFormModal({ isOpen, onClose, onSaved, initialEvent = null, employe
 		if (Array.isArray(initialEvent?.reminders) && initialEvent.reminders.length > 0) return initialEvent.reminders.map((r) => r.minutesBefore);
 		return [15, 60];
 	});
-	(0, import_react.useEffect)(() => {
-		if (!placeQuery || placeQuery.trim().length < 2) {
-			setPlaceSuggestions([]);
-			return;
-		}
-		const timer = setTimeout(async () => {
-			setIsSearchingPlaces(true);
-			try {
-				const results = await calendarService.searchPlaces(placeQuery);
-				setPlaceSuggestions(results);
-			} catch {
-				setPlaceSuggestions([]);
-			} finally {
-				setIsSearchingPlaces(false);
-			}
-		}, 300);
-		return () => clearTimeout(timer);
-	}, [placeQuery]);
-	const handleSelectPlace = (place) => {
-		setLocationName(place.name || place.mainText || "Meeting Venue");
-		setLocationAddress(place.address || place.formattedAddress || "");
-		setLocationFormattedAddress(place.formattedAddress || place.description || "");
-		if (place.latitude) setLatitude(place.latitude);
-		if (place.longitude) setLongitude(place.longitude);
-		setIsPhysicalLocation(true);
-		setPlaceQuery("");
-		setPlaceSuggestions([]);
-	};
 	const handleAddParticipant = (emp) => {
 		const empId = String(emp.employeeId || emp.id || emp._id);
 		if (participants.some((p) => p.employeeId === empId)) return;
@@ -1635,14 +1581,11 @@ function EventFormModal({ isOpen, onClose, onSaved, initialEvent = null, employe
 					endDate: recurrenceEndDate || null
 				},
 				location: {
-					name: locationName,
-					address: locationAddress,
-					formattedAddress: locationFormattedAddress,
-					latitude,
-					longitude,
-					isPhysical: isPhysicalLocation
+					name: locationName.trim(),
+					address: locationAddress.trim(),
+					isPhysical: Boolean(locationName.trim() || locationAddress.trim())
 				},
-				isPhysicalLocation,
+				isPhysicalLocation: Boolean(locationName.trim() || locationAddress.trim()),
 				meetingLink: {
 					url: meetingUrl.trim(),
 					provider: meetingProvider
@@ -1760,8 +1703,8 @@ function EventFormModal({ isOpen, onClose, onSaved, initialEvent = null, employe
 						},
 						{
 							id: "location",
-							label: "3. Location & Meet",
-							icon: MapPin
+							label: "3. Google Meet & Venue",
+							icon: Video
 						},
 						{
 							id: "participants",
@@ -2334,129 +2277,55 @@ function EventFormModal({ isOpen, onClose, onSaved, initialEvent = null, employe
 										background: "#f8fafc",
 										border: "1px solid #e2e8f0"
 									},
-									children: [
-										/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+									children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+										style: {
+											display: "flex",
+											alignItems: "center",
+											gap: "8px",
+											marginBottom: "14px"
+										},
+										children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(MapPin, {
+											size: 18,
+											color: "var(--teal, #006E6F)"
+										}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", {
 											style: {
-												display: "flex",
-												alignItems: "center",
-												gap: "8px",
-												marginBottom: "12px"
+												fontSize: "13px",
+												color: "var(--ink, #0f172a)"
 											},
-											children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(MapPin, {
-												size: 18,
-												color: "var(--teal, #006E6F)"
-											}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", {
-												style: {
-													fontSize: "13px",
-													color: "var(--ink, #0f172a)"
+											children: "Physical Meeting Venue & Room Location"
+										})]
+									}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+										style: {
+											display: "grid",
+											gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+											gap: "14px"
+										},
+										children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, {
+											label: "Venue / Conference Room Name",
+											children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+												type: "text",
+												className: "ui-input",
+												value: locationName,
+												onChange: (e) => {
+													setLocationName(e.target.value);
+													setIsPhysicalLocation(true);
 												},
-												children: "Physical Meeting Location & Google Maps"
-											})]
-										}),
-										/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-											style: {
-												position: "relative",
-												marginBottom: "14px"
-											},
-											children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, {
-												label: "Search Location / Places",
-												children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
-													type: "text",
-													className: "ui-input",
-													placeholder: "Search office campuses, conference halls, hotels, client locations...",
-													value: placeQuery,
-													onChange: (e) => setPlaceQuery(e.target.value)
-												})
-											}), placeSuggestions.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-												style: {
-													position: "absolute",
-													top: "100%",
-													left: 0,
-													right: 0,
-													background: "#ffffff",
-													borderRadius: "8px",
-													boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.1)",
-													border: "1px solid #e2e8f0",
-													zIndex: 10,
-													maxHeight: "220px",
-													overflowY: "auto"
-												},
-												children: placeSuggestions.map((place, idx) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-													onClick: () => handleSelectPlace(place),
-													style: {
-														padding: "10px 14px",
-														cursor: "pointer",
-														borderBottom: "1px solid #f1f5f9",
-														fontSize: "12px"
-													},
-													onMouseEnter: (e) => e.currentTarget.style.background = "#f8fafc",
-													onMouseLeave: (e) => e.currentTarget.style.background = "#ffffff",
-													children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-														style: {
-															fontWeight: 700,
-															color: "var(--ink, #0f172a)"
-														},
-														children: place.name
-													}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-														style: {
-															fontSize: "11px",
-															color: "var(--muted, #64748b)"
-														},
-														children: place.address
-													})]
-												}, idx))
-											})]
-										}),
-										/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-											style: {
-												display: "grid",
-												gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-												gap: "14px"
-											},
-											children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, {
-												label: "Venue Name",
-												children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
-													type: "text",
-													className: "ui-input",
-													value: locationName,
-													onChange: (e) => {
-														setLocationName(e.target.value);
-														setIsPhysicalLocation(true);
-													},
-													placeholder: "e.g. Ignite Campus Boardroom"
-												})
-											}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, {
-												label: "Address",
-												children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
-													type: "text",
-													className: "ui-input",
-													value: locationAddress,
-													onChange: (e) => {
-														setLocationAddress(e.target.value);
-														setIsPhysicalLocation(true);
-													},
-													placeholder: "Street, Landmark, City"
-												})
-											})]
-										}),
-										(locationAddress || locationName) && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-											style: { marginTop: "10px" },
-											children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("a", {
-												href: calendarService.searchPlaces ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${locationName}, ${locationAddress}`)}` : "#",
-												target: "_blank",
-												rel: "noopener noreferrer",
-												style: {
-													fontSize: "12px",
-													color: "#0284c7",
-													fontWeight: 600,
-													display: "inline-flex",
-													alignItems: "center",
-													gap: "4px"
-												},
-												children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ExternalLink, { size: 13 }), " Open in Google Maps"]
+												placeholder: "e.g. Ignite Campus Boardroom, Room 302"
 											})
-										})
-									]
+										}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, {
+											label: "Building / Floor / Address",
+											children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+												type: "text",
+												className: "ui-input",
+												value: locationAddress,
+												onChange: (e) => {
+													setLocationAddress(e.target.value);
+													setIsPhysicalLocation(true);
+												},
+												placeholder: "e.g. 3rd Floor, Main Campus, Bangalore"
+											})
+										})]
+									})]
 								})]
 							}),
 							activeTab === "participants" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
@@ -4592,7 +4461,7 @@ function GoogleAccountSettingsModal({ isOpen, onClose, onIntegrationChanged }) {
 											fontSize: "12px",
 											color: isConnected ? "#14532d" : "#78350f"
 										},
-										children: isConnected ? `Connected as ${status?.email || "Authorized Workspace User"}` : "Connect an authorized Google account to generate genuine Meet conferences and sync meetings."
+										children: isConnected ? `Connected as ${status?.accountEmail || status?.email || "Authorized Workspace User"}` : "Connect an authorized Google account to generate genuine Meet conferences and sync meetings."
 									}),
 									isConnected && status?.lastSync && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("small", {
 										style: {
@@ -4652,7 +4521,7 @@ function GoogleAccountSettingsModal({ isOpen, onClose, onIntegrationChanged }) {
 									},
 									children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Authorized Redirect URI:" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", {
 										style: { color: "var(--ink)" },
-										children: "https://edufyione.edufyitech.in"
+										children: status?.redirectUri || "https://edufyione.edufyitech.in"
 									})]
 								}),
 								/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {

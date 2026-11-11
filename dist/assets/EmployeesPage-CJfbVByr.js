@@ -1,10 +1,10 @@
 import { n as __toESM } from "./rolldown-runtime-CO0Nlsmt.js";
 import { A as ShieldCheck, Bt as Clock, Dt as FileText, G as Power, K as Plus, L as Search, Pt as ExternalLink, Rt as Copy, V as RefreshCw, Wt as CircleCheck, X as PenLine, Xt as Check, _ as TriangleAlert, _n as require_react, d as Users, h as UserCheck, hn as ArrowLeft, kt as FileCheck, m as UserPlus, nn as Calculator, ot as Mail, p as UserX, rn as Cake, y as Trash } from "./icons-vendor-CNlTUIuG.js";
 import { a as require_jsx_runtime } from "./motion-vendor-3i60tGNx.js";
-import { A as copyTextToClipboard, C as INITIAL_ROLES, D as storeAction, I as apiClient, M as generateAutoPassword, N as generateNextEmployeeCode, T as hrStore, a as Field, b as hasPermission, c as StatusBadge, h as getRoleBadgeLabel, i as EmptyState, j as formatCredentialsShareText, n as ConfirmationDialog, o as PageHeader, r as DataTable, s as StatePanel, t as Button, w as getRecommendedRoleConfig, x as useAuth } from "./index-C9_EJn8m.js";
+import { A as copyTextToClipboard, C as INITIAL_ROLES, D as storeAction, I as apiClient, M as generateAutoPassword, N as generateNextEmployeeCode, T as hrStore, a as Field, b as hasPermission, c as StatusBadge, h as getRoleBadgeLabel, i as EmptyState, j as formatCredentialsShareText, n as ConfirmationDialog, o as PageHeader, r as DataTable, s as StatePanel, t as Button, w as getRecommendedRoleConfig, x as useAuth } from "./index-hKIImihR.js";
 import { n as formatINR } from "./currency-oCUzM0NR.js";
-import { t as OnboardingDossierView } from "./OnboardingDossierView-a92vdO5B.js";
-import { t as EmployeeComplianceStatusCard } from "./EmployeeComplianceStatusCard-CsuPXm2b.js";
+import { t as OnboardingDossierView } from "./OnboardingDossierView-CsT-O3H3.js";
+import { t as EmployeeComplianceStatusCard } from "./EmployeeComplianceStatusCard-DHovBu-9.js";
 // src/utils/salaryCalculator.js
 var import_react = /* @__PURE__ */ __toESM(require_react(), 1);
 /**

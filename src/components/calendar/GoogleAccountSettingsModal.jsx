@@ -332,7 +332,7 @@ export function GoogleAccountSettingsModal({ isOpen, onClose, onIntegrationChang
 
                 <p style={{ margin: '4px 0 0', fontSize: '12px', color: isConnected ? '#14532d' : '#78350f' }}>
                   {isConnected
-                    ? `Connected as ${status?.email || 'Authorized Workspace User'}`
+                    ? `Connected as ${status?.accountEmail || status?.email || 'Authorized Workspace User'}`
                     : 'Connect an authorized Google account to generate genuine Meet conferences and sync meetings.'}
                 </p>
 
@@ -379,7 +379,7 @@ export function GoogleAccountSettingsModal({ isOpen, onClose, onIntegrationChang
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748b' }}>
               <span>Authorized Redirect URI:</span>
-              <strong style={{ color: 'var(--ink)' }}>https://edufyione.edufyitech.in</strong>
+              <strong style={{ color: 'var(--ink)' }}>{status?.redirectUri || 'https://edufyione.edufyitech.in'}</strong>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748b' }}>
               <span>Backend Port / Proxy:</span>
