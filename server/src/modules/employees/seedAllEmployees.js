@@ -180,38 +180,25 @@ export async function seedAllEmployees() {
       ],
     })
 
-    // 1b. Purge legacy dummy/fake birthdays (1995-09-20, 1999-02-24) from ALL seeded or test accounts
-    const dummyDobs = [
-      new Date('1995-09-20T00:00:00.000Z'),
-      new Date('1995-09-19T18:30:00.000Z'),
-      '1995-09-20',
-      '1999-02-24',
-      new Date('1999-02-24T00:00:00.000Z'),
-      new Date('1999-02-23T18:30:00.000Z'),
-    ]
+    // 1b. Purge all fake/synthetic dummy birthdays from employees who haven't explicitly verified their real DOB
     await Employee.updateMany(
       {
-        $or: [
-          { dob: { $in: dummyDobs } },
-          { 'identity.dob': { $in: dummyDobs } },
-          { dob: '1995-09-20' },
-          { dob: '1999-02-24' },
-          { 'identity.dob': '1995-09-20' },
-          { 'identity.dob': '1999-02-24' },
-        ],
+        dobVerified: { $ne: true },
+        isRealDob: { $ne: true },
       },
       {
-        $unset: { dob: 1, 'identity.dob': 1 }
+        $unset: { dob: 1, 'identity.dob': 1, dateOfBirth: 1, birthDate: 1 }
       }
     )
 
     const calendarEventsCol = db.collection('calendarevents')
     await calendarEventsCol.deleteMany({
-      sourceType: 'employee_birthday',
       $or: [
-        { sourceId: { $regex: /bday_(EDU-ADM-001|EDU-DIR-001)/ } },
-        { 'sourceData.employeeId': { $in: ['EDU-ADM-001', 'EDU-DIR-001'] } },
-      ]
+        { sourceType: 'employee_birthday' },
+        { category: 'Employee Birthday' },
+        { category: 'Birthday' },
+      ],
+      'sourceData.isRealDob': { $ne: true },
     }).catch(() => {})
 
     // 2. Fetch current employees to map hierarchy

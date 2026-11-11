@@ -78,6 +78,8 @@ export function CalendarWidgets({ user = null }) {
     todayDateObj.setHours(0, 0, 0, 0)
     return (storeState.employees || [])
       .map((e) => {
+        // Only include if employee has genuine / verified DOB
+        if (!e.dobVerified && !e.isRealDob) return null
         const dobInfo = extractEmployeeDob(e)
         if (!dobInfo) return null
         const m = dobInfo.month
@@ -147,8 +149,33 @@ export function CalendarWidgets({ user = null }) {
     return true
   })
 
-  // 4. Upcoming Meetings & Google Meet Video Calls
-  const upcomingMeetings = widgetsData?.upcomingMeetings || []
+  // 4. Upcoming Meetings & Google Meet Video Calls (Strictly meetings/calls only; excludes all leaves/holidays)
+  const rawMeetings = widgetsData?.upcomingMeetings || []
+  const upcomingMeetings = useMemo(() => {
+    return rawMeetings.filter((m) => {
+      if (!m) return false
+      const type = (m.type || '').toLowerCase()
+      const srcType = (m.sourceType || '').toLowerCase()
+      const cat = (m.category || '').toLowerCase()
+      const title = (m.title || '').toLowerCase()
+
+      // Exclude all leave items completely
+      if (type.includes('leave') || srcType.includes('leave') || cat.includes('leave') || title.includes('leave')) {
+        return false
+      }
+      // Exclude holidays, birthdays, anniversaries
+      if (type.includes('holiday') || cat.includes('holiday') || title.includes('holiday')) {
+        return false
+      }
+      if (type.includes('birthday') || cat.includes('birthday') || title.includes('birthday')) {
+        return false
+      }
+      if (type.includes('anniversary') || cat.includes('anniversary') || title.includes('anniversary')) {
+        return false
+      }
+      return true
+    })
+  }, [rawMeetings])
 
   return (
     <div

@@ -1,7 +1,7 @@
 import { n as __toESM } from "./rolldown-runtime-CO0Nlsmt.js";
 import { $t as Calendar, A as ShieldCheck, B as Repeat, Bt as Clock, E as Sparkles, Ft as Download, Gt as CircleAlert, Ht as CircleX, Jt as ChevronLeft, K as Plus, L as Search, Ot as FileSpreadsheet, Pt as ExternalLink, Rt as Copy, Ut as CircleQuestionMark, V as RefreshCw, Wt as CircleCheck, Xt as Check, Y as Pen, _ as TriangleAlert, _n as require_react, at as MapPin, d as Users, dn as Bell, en as CalendarRange, f as User, fn as Award, ft as List, g as Upload, ht as Layers, i as X, n as ZoomIn, qt as ChevronRight, rn as Cake, st as LogOut, t as ZoomOut, tn as CalendarDays, u as Video, x as Target, xt as Grid3x3, y as Trash } from "./icons-vendor-CNlTUIuG.js";
 import { a as require_jsx_runtime } from "./motion-vendor-3i60tGNx.js";
-import { I as apiClient, T as hrStore, a as Field, t as Button } from "./index-hKIImihR.js";
+import { I as apiClient, T as hrStore, a as Field, t as Button } from "./index-_IeDfSQA.js";
 // src/utils/dobHelper.js
 var import_react = /* @__PURE__ */ __toESM(require_react(), 1);
 /**
@@ -5475,7 +5475,18 @@ function EnterpriseCalendar({ canManage = false, user = null, defaultView = "mon
 		return anniversariesList.filter((a) => (a.date || "") >= selectedDate).sort((a, b) => (a.date || "").localeCompare(b.date || ""));
 	}, [anniversariesList, selectedDate])[0] || anniversariesList[0] || null;
 	const meetingsList = (0, import_react.useMemo)(() => {
-		return scopedEvents.filter((e) => e.type === "meeting" || e.category && e.category.toLowerCase().includes("meeting") || Boolean(e.meetingLink?.url));
+		return scopedEvents.filter((e) => {
+			if (!e) return false;
+			const type = (e.type || "").toLowerCase();
+			const srcType = (e.sourceType || "").toLowerCase();
+			const cat = (e.category || "").toLowerCase();
+			const title = (e.title || "").toLowerCase();
+			if (type.includes("leave") || srcType.includes("leave") || cat.includes("leave") || title.includes("leave")) return false;
+			if (type.includes("holiday") || cat.includes("holiday") || title.includes("holiday")) return false;
+			if (type.includes("birthday") || cat.includes("birthday") || title.includes("birthday")) return false;
+			if (type.includes("anniversary") || cat.includes("anniversary") || title.includes("anniversary")) return false;
+			return e.type === "meeting" || cat.includes("meeting") || Boolean(e.meetingLink?.url);
+		});
 	}, [scopedEvents]);
 	const nextMeeting = (0, import_react.useMemo)(() => {
 		return meetingsList.filter((m) => (m.date || "") >= selectedDate).sort((a, b) => (a.date || "").localeCompare(b.date || ""));
@@ -8949,6 +8960,7 @@ function CalendarWidgets({ user = null }) {
 		const todayDateObj = /* @__PURE__ */ new Date();
 		todayDateObj.setHours(0, 0, 0, 0);
 		return (storeState.employees || []).map((e) => {
+			if (!e.dobVerified && !e.isRealDob) return null;
 			const dobInfo = extractEmployeeDob(e);
 			if (!dobInfo) return null;
 			const m = dobInfo.month;
@@ -9002,7 +9014,21 @@ function CalendarWidgets({ user = null }) {
 		seenAnnivWidget.add(key);
 		return true;
 	});
-	const upcomingMeetings = widgetsData?.upcomingMeetings || [];
+	const rawMeetings = widgetsData?.upcomingMeetings || [];
+	const upcomingMeetings = (0, import_react.useMemo)(() => {
+		return rawMeetings.filter((m) => {
+			if (!m) return false;
+			const type = (m.type || "").toLowerCase();
+			const srcType = (m.sourceType || "").toLowerCase();
+			const cat = (m.category || "").toLowerCase();
+			const title = (m.title || "").toLowerCase();
+			if (type.includes("leave") || srcType.includes("leave") || cat.includes("leave") || title.includes("leave")) return false;
+			if (type.includes("holiday") || cat.includes("holiday") || title.includes("holiday")) return false;
+			if (type.includes("birthday") || cat.includes("birthday") || title.includes("birthday")) return false;
+			if (type.includes("anniversary") || cat.includes("anniversary") || title.includes("anniversary")) return false;
+			return true;
+		});
+	}, [rawMeetings]);
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 		style: {
 			display: "grid",

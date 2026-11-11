@@ -1215,7 +1215,7 @@ export function createCalendarRouter({ auth, useDatabase = true }) {
         const activeEmployees = await Employee.find({
           status: { $nin: ['inactive', 'resigned', 'terminated', 'deleted'] },
         })
-          .select('_id employeeId firstName lastName name displayName department designation avatarUrl dob identity dateOfBirth birthDate personalDetails')
+          .select('_id employeeId firstName lastName name displayName department designation avatarUrl dob identity dateOfBirth birthDate personalDetails isRealDob dobVerified')
           .lean()
           .catch(() => [])
 
@@ -1225,6 +1225,9 @@ export function createCalendarRouter({ auth, useDatabase = true }) {
 
         const allMappedBirthdays = []
         for (const emp of activeEmployees) {
+          // Strictly exclude unverified / synthetic mock seed birthdays
+          if (!emp.isRealDob && !emp.dobVerified) continue
+
           const dobInfo = extractEmployeeDob(emp)
           if (!dobInfo) continue
 
@@ -1301,23 +1304,41 @@ export function createCalendarRouter({ auth, useDatabase = true }) {
       }
 
       // 5. Scheduled Meetings (with Google Meet video conference links)
+      // Strictly meeting events only — excludes leave requests, holidays, and celebrations
       let upcomingMeetings = []
       let scheduledMeetingsCount = 0
       try {
-        scheduledMeetingsCount = await CalendarEvent.countDocuments({
+        const meetingQuery = {
           status: { $ne: 'cancelled' },
           date: { $gte: todayStr },
+          type: { $nin: ['leave', 'employee_leave', 'holiday', 'birthday', 'anniversary'] },
+          sourceType: { $nin: ['leave_request', 'employee_birthday', 'company_holiday'] },
+          category: {
+            $nin: [
+              'Company Holiday',
+              'Birthday',
+              'Employee Birthday',
+              'Work Anniversary',
+              'Employee Leave',
+              'Leave',
+              'Sick Leave',
+              'Casual Leave',
+              'Paid Leave',
+              'Unpaid Leave',
+            ],
+            $not: /leave|holiday|birthday|anniversary/i,
+          },
+          title: { $not: /leave|holiday|birthday|anniversary/i },
           $or: [
-            { category: { $regex: /meeting/i } },
             { type: 'meeting' },
+            { category: { $regex: /meeting|sync|call|review|standup|session|interview|demo|1:1|townhall/i } },
             { 'meetingLink.url': { $exists: true, $ne: '' } },
           ],
-        }).catch(() => 0)
+        }
 
-        upcomingMeetings = await CalendarEvent.find({
-          status: { $ne: 'cancelled' },
-          date: { $gte: todayStr },
-        })
+        scheduledMeetingsCount = await CalendarEvent.countDocuments(meetingQuery).catch(() => 0)
+
+        upcomingMeetings = await CalendarEvent.find(meetingQuery)
           .sort({ date: 1, startTime: 1 })
           .limit(5)
           .lean()

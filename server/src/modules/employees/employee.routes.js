@@ -314,8 +314,8 @@ export function createEmployeeRouter({ auth, service, userStore, employeeReposit
       }
 
       const updateOp = dobDate
-        ? { $set: { dob: dobDate, 'identity.dob': dobDate } }
-        : { $unset: { dob: 1, 'identity.dob': 1 } }
+        ? { $set: { dob: dobDate, 'identity.dob': dobDate, dobVerified: true, isRealDob: true } }
+        : { $unset: { dob: 1, 'identity.dob': 1, dobVerified: 1, isRealDob: 1 } }
 
       let updatedEmployee = null
       if (mongoose.connection?.readyState === 1) {

@@ -766,7 +766,18 @@ export function EnterpriseCalendar({ canManage = false, user = null, defaultView
   // 4. Scheduled Meetings
   const meetingsList = useMemo(() => {
     return scopedEvents.filter(
-      (e) => e.type === 'meeting' || (e.category && e.category.toLowerCase().includes('meeting')) || Boolean(e.meetingLink?.url)
+      (e) => {
+        if (!e) return false
+        const type = (e.type || '').toLowerCase()
+        const srcType = (e.sourceType || '').toLowerCase()
+        const cat = (e.category || '').toLowerCase()
+        const title = (e.title || '').toLowerCase()
+        if (type.includes('leave') || srcType.includes('leave') || cat.includes('leave') || title.includes('leave')) return false
+        if (type.includes('holiday') || cat.includes('holiday') || title.includes('holiday')) return false
+        if (type.includes('birthday') || cat.includes('birthday') || title.includes('birthday')) return false
+        if (type.includes('anniversary') || cat.includes('anniversary') || title.includes('anniversary')) return false
+        return e.type === 'meeting' || cat.includes('meeting') || Boolean(e.meetingLink?.url)
+      }
     )
   }, [scopedEvents])
 

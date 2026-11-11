@@ -253,7 +253,7 @@ export function EmployeeProfilePage() {
                   setDobError('')
                   setDobModalOpen(true)
                 }}
-                title="Fill or update your date of birth at any time (no HR verification required)"
+                title="Update Date of Birth"
                 style={{
                   padding: '2px 8px',
                   fontSize: '11px',
@@ -371,9 +371,9 @@ export function EmployeeProfilePage() {
               background: 'var(--card-bg, #ffffff)',
             }}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
               <h3 id="dob-modal-title" style={{ margin: 0, fontSize: '17px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Cake size={20} style={{ color: '#db2777' }} /> My Date of Birth
+                <Cake size={20} style={{ color: '#db2777' }} /> Date of Birth
               </h3>
               <button
                 type="button"
@@ -392,10 +392,6 @@ export function EmployeeProfilePage() {
                 ✕
               </button>
             </div>
-
-            <p style={{ fontSize: '12.5px', color: 'var(--text-secondary)', margin: '0 0 16px', lineHeight: 1.5 }}>
-              Fill or update your birth date at any time. It automatically reflects on team celebrations, calendar widgets, and your official profile — <strong>no HR verification or approval needed</strong>.
-            </p>
 
             {dobError && (
               <div

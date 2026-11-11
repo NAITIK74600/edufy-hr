@@ -1,10 +1,10 @@
 import { n as __toESM } from "./rolldown-runtime-CO0Nlsmt.js";
 import { A as ShieldCheck, Et as FingerprintPattern, Qt as Camera, Xt as Check, _n as require_react, rn as Cake, vt as KeyRound } from "./icons-vendor-CNlTUIuG.js";
 import { a as require_jsx_runtime } from "./motion-vendor-3i60tGNx.js";
-import { I as apiClient, T as hrStore, l as compressImageFile, m as ChangePasswordModal, o as PageHeader, u as PasskeyModal, x as useAuth } from "./index-hKIImihR.js";
+import { I as apiClient, T as hrStore, l as compressImageFile, m as ChangePasswordModal, o as PageHeader, u as PasskeyModal, x as useAuth } from "./index-_IeDfSQA.js";
 import { n as formatINR } from "./currency-oCUzM0NR.js";
-import { t as OnboardingDossierView } from "./OnboardingDossierView-CsT-O3H3.js";
-import { t as EmployeeComplianceStatusCard } from "./EmployeeComplianceStatusCard-DHovBu-9.js";
+import { t as OnboardingDossierView } from "./OnboardingDossierView-DmC_afjc.js";
+import { t as EmployeeComplianceStatusCard } from "./EmployeeComplianceStatusCard-CVjCxnvm.js";
 // src/pages/EmployeeProfilePage.jsx
 var import_react = /* @__PURE__ */ __toESM(require_react(), 1);
 var import_jsx_runtime = require_jsx_runtime();
@@ -338,7 +338,7 @@ function EmployeeProfilePage() {
 										setDobError("");
 										setDobModalOpen(true);
 									},
-									title: "Fill or update your date of birth at any time (no HR verification required)",
+									title: "Update Date of Birth",
 									style: {
 										padding: "2px 8px",
 										fontSize: "11px",
@@ -527,7 +527,7 @@ function EmployeeProfilePage() {
 								display: "flex",
 								justifyContent: "space-between",
 								alignItems: "center",
-								marginBottom: "14px"
+								marginBottom: "16px"
 							},
 							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("h3", {
 								id: "dob-modal-title",
@@ -542,7 +542,7 @@ function EmployeeProfilePage() {
 								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Cake, {
 									size: 20,
 									style: { color: "#db2777" }
-								}), " My Date of Birth"]
+								}), " Date of Birth"]
 							}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
 								type: "button",
 								disabled: savingDob,
@@ -558,19 +558,6 @@ function EmployeeProfilePage() {
 								},
 								children: "✕"
 							})]
-						}),
-						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
-							style: {
-								fontSize: "12.5px",
-								color: "var(--text-secondary)",
-								margin: "0 0 16px",
-								lineHeight: 1.5
-							},
-							children: [
-								"Fill or update your birth date at any time. It automatically reflects on team celebrations, calendar widgets, and your official profile — ",
-								/* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: "no HR verification or approval needed" }),
-								"."
-							]
 						}),
 						dobError && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
 							style: {
